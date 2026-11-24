@@ -7,6 +7,7 @@ import { resolve } from 'node:path';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { excalidrawAssets } from './excalidraw-assets';
 import { buildCsp } from './src/main/security/csp';
 
 const root = import.meta.dirname;
@@ -17,6 +18,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     { name: 'oide:csp', transformIndexHtml: (html) => html.replace('%OIDE_CSP%', buildCsp({ dev: true })) },
+    excalidrawAssets(),
   ],
   server: { port: 5174, strictPort: false },
 });

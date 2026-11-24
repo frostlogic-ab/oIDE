@@ -113,25 +113,26 @@ Failed Stripe webhooks retry with exponential backoff (1s, 2s, 4s … capped at 
 After 8 attempts the event moves to a **dead-letter queue** that an operator can replay.
 `;
 
-const board = (elements: unknown[]) => JSON.stringify({ type: 'excalidraw', version: 2, source: 'oide', elements, appState: { viewBackgroundColor: '#1B1F26' } }, null, 2);
+/** Excalidraw stores light-theme colours; its dark theme (and the preview) invert them. */
+const board = (elements: unknown[]) => JSON.stringify({ type: 'excalidraw', version: 2, source: 'oide', elements, appState: { viewBackgroundColor: '#ffffff' } }, null, 2);
 
 const LIFECYCLE_BOARD = board([
-  { id: 'r1', type: 'rectangle', x: 20, y: 40, width: 120, height: 60, strokeColor: '#9DBBFA', backgroundColor: 'transparent' },
-  { id: 't1', type: 'text', x: 44, y: 62, text: 'Spawned', fontSize: 16, strokeColor: '#E6E8EB' },
-  { id: 'a1', type: 'arrow', x: 140, y: 70, points: [[0, 0], [80, 0]], strokeColor: '#6B7584' },
-  { id: 'e1', type: 'ellipse', x: 220, y: 40, width: 120, height: 60, strokeColor: '#7FC8A9', backgroundColor: 'transparent' },
-  { id: 't2', type: 'text', x: 248, y: 62, text: 'Running', fontSize: 16, strokeColor: '#E6E8EB' },
-  { id: 'a2', type: 'arrow', x: 280, y: 100, points: [[0, 0], [-60, 60]], strokeColor: '#6B7584' },
-  { id: 'd1', type: 'diamond', x: 140, y: 160, width: 140, height: 70, strokeColor: '#F2C078', backgroundColor: '#5A4A2A' },
-  { id: 't3', type: 'text', x: 168, y: 186, text: 'Needs you', fontSize: 16, strokeColor: '#E6E8EB' },
+  { id: 'r1', type: 'rectangle', x: 20, y: 40, width: 120, height: 60, strokeColor: '#1971c2', backgroundColor: 'transparent' },
+  { id: 't1', type: 'text', x: 44, y: 62, text: 'Spawned', fontSize: 16, strokeColor: '#1e1e1e' },
+  { id: 'a1', type: 'arrow', x: 140, y: 70, points: [[0, 0], [80, 0]], strokeColor: '#868e96' },
+  { id: 'e1', type: 'ellipse', x: 220, y: 40, width: 120, height: 60, strokeColor: '#2f9e44', backgroundColor: 'transparent' },
+  { id: 't2', type: 'text', x: 248, y: 62, text: 'Running', fontSize: 16, strokeColor: '#1e1e1e' },
+  { id: 'a2', type: 'arrow', x: 280, y: 100, points: [[0, 0], [-60, 60]], strokeColor: '#868e96' },
+  { id: 'd1', type: 'diamond', x: 140, y: 160, width: 140, height: 70, strokeColor: '#f08c00', backgroundColor: '#ffec99' },
+  { id: 't3', type: 'text', x: 168, y: 186, text: 'Needs you', fontSize: 16, strokeColor: '#1e1e1e' },
 ]);
 
 const IA_BOARD = board([
-  { id: 'r1', type: 'rectangle', x: 20, y: 20, width: 140, height: 50, strokeColor: '#9DBBFA' },
-  { id: 't1', type: 'text', x: 50, y: 36, text: 'Getting started', fontSize: 14, strokeColor: '#E6E8EB' },
-  { id: 'l1', type: 'line', x: 90, y: 70, points: [[0, 0], [0, 40]], strokeColor: '#6B7584' },
-  { id: 'r2', type: 'rectangle', x: 20, y: 110, width: 140, height: 50, strokeColor: '#7FC8A9' },
-  { id: 't2', type: 'text', x: 62, y: 126, text: 'Guides', fontSize: 14, strokeColor: '#E6E8EB' },
+  { id: 'r1', type: 'rectangle', x: 20, y: 20, width: 140, height: 50, strokeColor: '#1971c2' },
+  { id: 't1', type: 'text', x: 50, y: 36, text: 'Getting started', fontSize: 14, strokeColor: '#1e1e1e' },
+  { id: 'l1', type: 'line', x: 90, y: 70, points: [[0, 0], [0, 40]], strokeColor: '#868e96' },
+  { id: 'r2', type: 'rectangle', x: 20, y: 110, width: 140, height: 50, strokeColor: '#2f9e44' },
+  { id: 't2', type: 'text', x: 62, y: 126, text: 'Guides', fontSize: 14, strokeColor: '#1e1e1e' },
 ]);
 
 interface MockArtifact {
@@ -497,8 +498,9 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
       const a = getArt(id);
       return { content: a.snapshots[v] ?? fail('not_found', `No version ${v}`) };
     },
-    'artifacts.save': ({ id, content, note }) => {
+    'artifacts.save': ({ id, content, note, baseVersion }) => {
       const a = getArt(id);
+      if (baseVersion !== undefined && baseVersion !== a.meta.version) fail('conflict', `${a.meta.title} changed since you opened it (now v${a.meta.version}).`);
       if (a.meta.kind === 'whiteboard') {
         try {
           if (typeof JSON.parse(content) !== 'object') throw new Error();
@@ -511,7 +513,13 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
       a.snapshots[next] = content;
       a.versions = [ArtifactVersion.parse({ version: next, ts: Date.now(), author: 'user', note }), ...a.versions];
       a.meta = { ...a.meta, version: next, updatedAt: Date.now() };
-      ctx.emit('artifacts.changed', { id });
+      ctx.emit('artifacts.changed', { id, change: 'saved', version: next, author: 'user' });
+      return a.meta;
+    },
+    'artifacts.rename': ({ id, title }) => {
+      const a = getArt(id);
+      a.meta = { ...a.meta, title, updatedAt: Date.now() };
+      ctx.emit('artifacts.changed', { id, change: 'renamed', version: a.meta.version });
       return a.meta;
     },
     'artifacts.create': ({ title, kind, projectId, location, content }) => {
@@ -551,7 +559,7 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
     'artifacts.delete': ({ id }) => {
       artifacts.delete(id);
       uses = uses.filter((u) => u.artifactId !== id);
-      ctx.emit('artifacts.changed', { id });
+      ctx.emit('artifacts.changed', { id, change: 'deleted' });
       return { ok: true as const };
     },
     'dialog.pickFile': () => '/Users/you/Downloads/pricing-page.html',

@@ -106,14 +106,14 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     db: store.database,
     appDataDir: ctx.userDataDir,
     projectPath: (id) => store.projects.pathOf(id),
-    onChange: (id) => ctx.emit('artifacts.changed', id ? { id } : {}),
+    onChange: (id, info) => ctx.emit('artifacts.changed', id ? { id, ...info } : {}),
   });
   ctx.roots.add(artifacts.root('app-data'), 'artifact');
 
   const mcp = new OideMcpServer({
     appDataDir: ctx.userDataDir,
     artifacts: mcpArtifacts(artifacts, (id) => store.projects.get(id)?.trusted === true),
-    onArtifactUse: (u) => ctx.emit('artifacts.changed', u.artifactId && u.artifactId !== '*' ? { id: u.artifactId } : {}),
+    onArtifactUse: (u) => ctx.emit('artifacts.changed', u.artifactId && u.artifactId !== '*' ? { id: u.artifactId, change: 'used' } : {}),
     log: (m, d) => ctx.log.debug('[mcp]', m, d ?? ''),
     // SEC-11: secret-bearing custom stdio servers start through the launcher (needs an absolute node).
     ...(nodeForLauncher() ? { nodeBinary: nodeForLauncher()! } : {}),

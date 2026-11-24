@@ -1,8 +1,9 @@
 /**
- * Read-only SVG render of an Excalidraw scene (v1). Supports rectangle, ellipse, diamond, line,
- * arrow, freedraw and text; everything else is skipped. Embedding the Excalidraw editor is left
- * for later (bundle size, and it needs a CSP-friendly build); agents and the "Edit source" view
- * change the JSON directly.
+ * Read-only SVG render of an Excalidraw scene (detail-pane preview, so the Excalidraw chunk only
+ * loads when a board is opened). Supports rectangle, ellipse, diamond, line, arrow, freedraw and
+ * text; everything else is skipped. Colours are stored as Excalidraw stores them (light theme) and
+ * drawn through Excalidraw's own dark-theme filter, so the preview matches the editor
+ * (WhiteboardEditor.tsx).
  */
 import { useMemo } from 'react';
 import { cn } from '@oide/ui';
@@ -24,6 +25,9 @@ interface El {
   id?: string;
 }
 
+/** Excalidraw's `--theme-filter` for its dark theme (applied to the canvas there, to the SVG here). */
+export const EXCALIDRAW_DARK_FILTER = 'invert(93%) hue-rotate(180deg)';
+
 const num = (v: unknown, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
 const color = (v: unknown, d: string) => (typeof v === 'string' && /^(#[0-9a-f]{3,8}|transparent|[a-z]+)$/i.test(v) ? v : d);
 
@@ -40,7 +44,7 @@ export function parseScene(json: string): { elements: El[]; background: string; 
         width: num(e.width),
         height: num(e.height),
         angle: num(e.angle),
-        strokeColor: color(e.strokeColor, '#C9CED6'),
+        strokeColor: color(e.strokeColor, '#1e1e1e'),
         backgroundColor: color(e.backgroundColor, 'transparent'),
         strokeWidth: num(e.strokeWidth, 1.5),
         points: Array.isArray(e.points) ? (e.points as unknown[]).filter((p): p is [number, number] => Array.isArray(p) && p.length >= 2).map((p) => [num(p[0]), num(p[1])] as [number, number]) : undefined,
@@ -48,9 +52,9 @@ export function parseScene(json: string): { elements: El[]; background: string; 
         fontSize: num(e.fontSize, 16),
         id: typeof e.id === 'string' ? e.id : undefined,
       }));
-    return { elements, background: color(raw?.appState?.viewBackgroundColor, '#1B1F26') };
+    return { elements, background: color(raw?.appState?.viewBackgroundColor, '#ffffff') };
   } catch (err) {
-    return { elements: [], background: '#1B1F26', error: (err as Error).message };
+    return { elements: [], background: '#ffffff', error: (err as Error).message };
   }
 }
 
@@ -107,7 +111,7 @@ export function WhiteboardSvg({ json, title, className }: { json: string; title:
   const b = useMemo(() => bounds(scene.elements), [scene]);
   if (scene.error) return <div className={cn('flex items-center justify-center p-4 text-[12px] text-bad', className)}>Can't read this whiteboard: {scene.error}</div>;
   return (
-    <svg role="img" aria-label={`Whiteboard: ${title}, ${scene.elements.length} shapes`} viewBox={`${b.x} ${b.y} ${b.w} ${b.h}`} preserveAspectRatio="xMidYMid meet" className={className} style={{ background: scene.background }}>
+    <svg role="img" aria-label={`Whiteboard: ${title}, ${scene.elements.length} shapes`} viewBox={`${b.x} ${b.y} ${b.w} ${b.h}`} preserveAspectRatio="xMidYMid meet" className={className} style={{ background: scene.background, filter: EXCALIDRAW_DARK_FILTER }}>
       <defs>
         {scene.elements.map((e, i) =>
           e.type === 'arrow' ? (
@@ -118,7 +122,7 @@ export function WhiteboardSvg({ json, title, className }: { json: string; title:
         )}
       </defs>
       {scene.elements.length === 0 ? (
-        <text x={b.x + b.w / 2} y={b.y + b.h / 2} textAnchor="middle" fill="#9AA3AE" fontSize={14}>
+        <text x={b.x + b.w / 2} y={b.y + b.h / 2} textAnchor="middle" fill="#59616c" fontSize={14}>
           Empty whiteboard
         </text>
       ) : (

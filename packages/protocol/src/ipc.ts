@@ -161,8 +161,14 @@ export const Commands = {
   'artifacts.list': cmd(z.object({ projectId: Id.optional(), kind: ArtifactKind.optional() }), z.array(ArtifactMeta)),
   'artifacts.get': cmd(z.object({ id: Id }), z.object({ meta: ArtifactMeta, content: z.string(), uses: z.array(ArtifactUse), versions: z.array(ArtifactVersion) })),
   'artifacts.create': cmd(z.object({ title: z.string(), kind: ArtifactKind, projectId: Id.optional(), location: z.enum(['repo', 'app-data']).default('app-data'), content: z.string().optional() }), ArtifactMeta),
-  'artifacts.save': cmd(z.object({ id: Id, content: z.string(), note: z.string().optional() }), ArtifactMeta),
+  /**
+   * Saves a new numbered version. With `baseVersion` (the version the editor started from), main
+   * refuses with code `conflict` when someone (an agent) saved a newer version in the meantime.
+   */
+  'artifacts.save': cmd(z.object({ id: Id, content: z.string(), note: z.string().optional(), baseVersion: z.number().int().positive().optional() }), ArtifactMeta),
   'artifacts.delete': cmd(z.object({ id: Id }), Ok),
+  /** New title (the folder slug stays, so links and git history keep working). */
+  'artifacts.rename': cmd(z.object({ id: Id, title: z.string().trim().min(1).max(200) }), ArtifactMeta),
   'artifacts.import': cmd(z.object({ url: z.string().url().optional(), filePath: z.string().optional(), title: z.string().optional(), kind: ArtifactKind.optional(), projectId: Id.optional(), location: z.enum(['repo', 'app-data']).optional() }), ArtifactMeta),
   /** Uses log for several artifacts at once (the grid's "Read by 2 agents" lines), keyed by artifact id. */
   'artifacts.uses': cmd(z.object({ ids: z.array(Id).max(500) }), z.record(z.string(), z.array(ArtifactUse))),
@@ -212,7 +218,11 @@ export const Events = {
   'extensions.panelMessage': z.object({ extension: z.string(), panelId: z.string(), data: z.unknown() }),
   /** An extension setting changed (Settings › Extensions or host code). Secret values are never sent. */
   'extensions.settingChanged': z.object({ id: Id, key: z.string() }),
-  'artifacts.changed': z.object({ id: Id.optional() }),
+  /**
+   * An artifact (or the list) changed. `change` says what happened; for `saved`, `version` and
+   * `author` (`user` or `agent:<id>`) let an open editor say "updated by <agent>" without a refetch.
+   */
+  'artifacts.changed': z.object({ id: Id.optional(), change: z.enum(['created', 'saved', 'renamed', 'deleted', 'used']).optional(), version: z.number().int().positive().optional(), author: z.string().optional() }),
   'notify': z.object({
     level: z.enum(['info', 'warning', 'error']),
     message: z.string(),

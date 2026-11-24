@@ -40,7 +40,33 @@ export interface ArtifactStoreOptions {
   projectPath: (projectId: string) => string | undefined;
   now?: () => number;
   /** Called after any change (main forwards it as the `artifacts.changed` event). */
-  onChange?: (id?: string) => void;
+  onChange?: (id?: string, info?: ArtifactChange) => void;
+}
+
+/** What changed, passed to `onChange` (the `artifacts.changed` event payload minus the id). */
+export interface ArtifactChange {
+  change: 'created' | 'saved' | 'renamed' | 'deleted';
+  version?: number;
+  author?: string;
+}
+
+export interface SaveOptions {
+  author?: string;
+  note?: string;
+  /** The version the editor started from; refuse (code `conflict`) when the artifact is past it. */
+  baseVersion?: number;
+}
+
+export const MAX_TITLE_LENGTH = 200;
+
+/** Error with a machine-readable code (`conflict`, `invalid_input`), mapped to an IPC error code by main. */
+export class ArtifactError extends Error {
+  readonly code: 'conflict' | 'invalid_input';
+  constructor(message: string, code: 'conflict' | 'invalid_input') {
+    super(message);
+    this.name = 'ArtifactError';
+    this.code = code;
+  }
 }
 
 export interface CreateArtifactInput {
@@ -134,7 +160,7 @@ export class ArtifactStore {
   private readonly appDataDir: string;
   private readonly projectPath: (projectId: string) => string | undefined;
   private readonly now: () => number;
-  private readonly onChange: ((id?: string) => void) | undefined;
+  private readonly onChange: ((id?: string, info?: ArtifactChange) => void) | undefined;
   private readonly locks = new Map<string, Promise<unknown>>();
 
   constructor(opts: ArtifactStoreOptions) {
@@ -335,14 +361,17 @@ export class ArtifactStore {
     await writeAtomic(join(dir, VERSIONS_DIR, 'versions.json'), JSON.stringify([{ version: 1, ts, author, note: 'Created' }], null, 2) + '\n');
     await writeAtomic(join(dir, 'artifact.json'), JSON.stringify(meta, null, 2) + '\n');
     this.index(meta, dir);
-    this.onChange?.(meta.id);
+    this.onChange?.(meta.id, { change: 'created', version: 1, author });
     return meta;
   }
 
   /** Save new content as the next numbered version. */
-  async save(id: string, content: string, opts: { author?: string; note?: string } = {}): Promise<ArtifactMeta> {
+  async save(id: string, content: string, opts: SaveOptions = {}): Promise<ArtifactMeta> {
     return this.withLock(id, async () => {
       const cur = this.metaFromIndex(id);
+      if (opts.baseVersion !== undefined && opts.baseVersion !== cur.version) {
+        throw new ArtifactError(`${cur.title} changed since you opened it (now v${cur.version}, you started from v${opts.baseVersion}).`, 'conflict');
+      }
       validateContent(cur.kind, content);
       const dir = this.dirOf(id);
       const ts = this.now();
@@ -358,17 +387,26 @@ export class ArtifactStore {
       await writeAtomic(join(dir, VERSIONS_DIR, 'versions.json'), JSON.stringify(versions, null, 2) + '\n');
       await writeAtomic(join(dir, 'artifact.json'), JSON.stringify(meta, null, 2) + '\n');
       this.index(meta, dir);
-      this.onChange?.(id);
+      this.onChange?.(id, { change: 'saved', version, author: opts.author ?? 'user' });
       return meta;
     });
   }
 
+  /**
+   * New title. The folder (slug) stays as it is, so repo links, git history and agents that hold the
+   * id keep working; only `artifact.json` and the index change. Does not create a version.
+   */
   async rename(id: string, title: string): Promise<ArtifactMeta> {
+    const next = title.replace(/\s+/g, ' ').trim();
+    if (!next) throw new ArtifactError('Give the artifact a title.', 'invalid_input');
+    if (next.length > MAX_TITLE_LENGTH) throw new ArtifactError(`Titles can be at most ${MAX_TITLE_LENGTH} characters.`, 'invalid_input');
     return this.withLock(id, async () => {
-      const meta = ArtifactMeta.parse({ ...this.metaFromIndex(id), title, updatedAt: this.now() });
+      const cur = this.metaFromIndex(id);
+      if (cur.title === next) return cur;
+      const meta = ArtifactMeta.parse({ ...cur, title: next, updatedAt: this.now() });
       await writeAtomic(join(this.dirOf(id), 'artifact.json'), JSON.stringify(meta, null, 2) + '\n');
       this.index(meta, this.dirOf(id));
-      this.onChange?.(id);
+      this.onChange?.(id, { change: 'renamed', version: meta.version });
       return meta;
     });
   }
@@ -383,7 +421,8 @@ export class ArtifactStore {
       }
       await rm(dir, { recursive: true, force: true, maxRetries: 3 });
       this.d.db.prepare('DELETE FROM artifacts WHERE id = ?').run(id);
-      this.onChange?.(id);
+      this.d.db.prepare('DELETE FROM artifact_uses WHERE artifact_id = ?').run(id);
+      this.onChange?.(id, { change: 'deleted' });
       return true;
     });
   }
