@@ -22,9 +22,13 @@ agent revises and submits again. Unsent comments can be deleted.
 - **Open pull request** creates a PR with `gh` (title and body from the summary and checks) and opens
   it in your browser. With an existing PR the button reads "View pull request #n". It is disabled,
   with the reason, when `gh` is not installed or not signed in.
-- **Merge worktree into main locally** asks for confirmation, then runs `git merge --no-ff`. If there
+- **Merge worktree into main locally** asks for confirmation, commits any uncommitted changes in the
+  worktree on the agent's behalf, then runs `git merge --no-ff`. If there
   are conflicts, main is left untouched and the dialog lists them; **Hand them to a new agent** opens
   Spawn with the files as context.
+
+Extensions that are on for the project can add **deploy targets**: buttons in the summary column,
+above Open pull request, that hand the agent's branch to the extension.
 
 ## Keys
 

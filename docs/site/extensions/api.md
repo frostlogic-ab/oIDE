@@ -6,11 +6,24 @@ call crosses a message channel to oIDE's main process, which checks it against y
 projects your extension is enabled for.
 
 The types are in [`@oide/extension-api`](https://github.com/oide-dev/oide/tree/main/packages/extension-api)
-(no runtime dependencies):
+(no runtime dependencies).
 
-```sh
-npm install --save-dev @oide/extension-api
-```
+## Getting the types
+
+::: warning Not on npm yet
+`@oide/extension-api` is **not published to npm**, and the npm scope `@oide` belongs to an unrelated
+maintainer: do not `npm install @oide/extension-api`, because whatever that name resolves to is not
+this project. The package will be published under a scope the project controls; the name is still
+an open question. Until then, either:
+
+- copy [`packages/extension-api/src/index.ts`](https://github.com/oide-dev/oide/blob/main/packages/extension-api/src/index.ts)
+  into your extension (it is types plus `API_VERSION` and `defineExtension`), or
+- work inside a clone of the oIDE repo and depend on it as a workspace package
+  (`"@oide/extension-api": "workspace:*"`), as the built-in extensions do.
+
+oIDE does not provide this package to extensions at runtime: use type-only imports (or JSDoc), or
+bundle `defineExtension` into your `dist/` code.
+:::
 
 ```ts
 import { defineExtension } from '@oide/extension-api';
@@ -103,8 +116,11 @@ postMessage(panelId: string, data: unknown): Promise<void>
 onMessage(panelId: string, listener: (data: unknown) => void): Disposable
 ```
 
-Panel ids are checked against your manifest. **The app does not display extension panels yet**, so
-`open` and `postMessage` currently do nothing; see [Panels](/extensions/contributions#panels).
+Panel ids are checked against your manifest. `open` shows the panel as a tab in Focus's inspector
+for the given agent (or the agent already in Focus) when its `location` is `inspector`, otherwise as a
+full screen. `postMessage` reaches every loaded frame of that panel (messages are queued until the
+frame loads). A message from a panel starts stopped host code first. See
+[Panels](/extensions/contributions#panels).
 
 ### `ctx.artifacts`
 

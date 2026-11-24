@@ -5,6 +5,12 @@ The v1 marketplace is a static `index.json` in the public
 fetches the index (cached for a day, with a copy bundled in the app for offline use) and installs
 from the npm registry.
 
+::: info Pre-1.0
+The `oide-marketplace` repository is not open for submissions yet; until it is, oIDE uses the index
+bundled with the app, which lists only the built-in extensions. You can already build, test and
+[install your extension from a folder or git](/extensions/developing).
+:::
+
 ## Package rules
 
 - **Bundle everything into `dist/`.** oIDE never runs install scripts and never installs

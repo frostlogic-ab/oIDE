@@ -4,11 +4,16 @@ Types and helpers for writing [oIDE](https://github.com/oide-dev/oide) extension
 
 An oIDE extension is an npm package with an `oide` manifest in its `package.json`. Its main job is
 to give agents new tools through MCP servers; it can also add commands (Ctrl K), panels, settings,
-themes, techniques, artifact types, languages and deploy targets.
+themes, techniques, artifact types, languages (parsed, not started in v1) and deploy targets.
 
-```sh
-npm install --save-dev @oide/extension-api
-```
+> **Not on npm yet.** This package is not published, and the npm scope `@oide` belongs to an
+> unrelated maintainer: do not `npm install @oide/extension-api`, because that name does not resolve
+> to this project. The package will be published under a scope the project controls (the name is
+> an open question, see [open questions](../../docs/wiki/pages/open-questions.md) #15). Until then,
+> copy [`src/index.ts`](src/index.ts) into your extension, or depend on it as a workspace package
+> (`"@oide/extension-api": "workspace:*"`) inside a clone of the oIDE repo, as the built-in
+> extensions do. oIDE does not provide this package to extensions at runtime: use type-only imports
+> or JSDoc, or bundle `defineExtension` into `dist/`.
 
 ## Manifest
 

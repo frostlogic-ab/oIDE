@@ -53,7 +53,8 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 - [pages/review-design.md](pages/review-design.md): design conformance review (2026-11-24): renderer vs the canvas per screen, 0 blocker / 5 major / 21 minor, with evidence and the file to fix.
 - [pages/review-security.md](pages/review-security.md): security review (2026-11-24): 2 critical, 5 high, 9 medium, 11 low findings, PoC tests in `test/security/` (`it.fails` until fixed) and the concrete fix for each.
 - [pages/review-conformance.md](pages/review-conformance.md): brief conformance and gates review (2026-11-24): traceability matrix per brief table, gate results (M1 passed with the real CLI 2.1.325), 1 blocker / 5 major / 10 minor; tests in `test/conformance/`.
+- [pages/review-publication.md](pages/review-publication.md): publication readiness review (2026-11-25): secrets and personal data in tree and history (none secret), licensing and notices, trademark and npm scope, public-doc accuracy, repo hygiene, and the owner's pre-publish checklist.
 
 ## Decisions
 
-- [../adr/](../adr/): ADRs. 0001 node:sqlite, 0002 TS-source packages, 0003 @lydell/node-pty, 0004 artifact versions as numbered snapshots.
+- [../adr/](../adr/): ADRs. 0001 node:sqlite, 0002 TS-source packages, 0003 @lydell/node-pty, 0004 artifact versions as numbered snapshots, 0005 whiteboards as a read-only render in v1 (since overtaken: Excalidraw is now embedded as the editor, see [screen-artifacts](pages/screen-artifacts.md)), 0006 pull requests through `gh` from main, 0007 plan usage meters from rate-limit events, 0008 extension language servers deferred, 0009 extension artifact types use the existing storage kinds.

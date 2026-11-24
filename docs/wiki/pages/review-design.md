@@ -17,8 +17,8 @@ An adversarial check of the built renderer against the chosen Mission Control ca
 - **Probes**: computed-style measurements of matching elements in both renders, a contrast walk over
   every visible text node (alpha and opacity composited), an accessible-name check of every control,
   ARIA roles, and keyboard flows (J/K/N/Y/D/Esc/Ctrl+K on the Wall; J/K/N/Esc/D/Shift+Tab in Focus).
-- **Evidence** lives in the session scratchpad:
-  `C:\Users\Georges\AppData\Local\Temp\claude\23ccfd271218d0ea\fa47d3f8-27dd-4074-a6aa-323ea2d2c966\scratchpad\design-review\shots\`
+- **Evidence** lived in the reviewer's temporary session folder, `<scratchpad>\design-review\shots\`
+  (not committed; gone after a reboot):
   (`d-*.png` = design, `a-*.png` = app at 1440, `m-*.png` = app at 1100×700, `k-*.png` = keyboard).
   The generator (`build.mjs`, `engine.js`) and the screenshot runner (`shoot.mjs`, `probe.js`) are in
   the folder above it; rerun them to regenerate after a reboot. Shot names below are relative to `shots\`.

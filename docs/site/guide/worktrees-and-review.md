@@ -38,7 +38,9 @@ commits count). **Ask an agent to reconcile** spawns an agent that combines the 
 2. In [Review](/guide/screens/review), read the diff and comment on lines.
 3. **Send feedback to agent** sends all comments as one message. The agent revises and submits again.
 4. When you are happy: **Open pull request** (through `gh`) or **Merge worktree into main locally**
-   (`git merge --no-ff`; on conflicts the merge is aborted and main stays untouched).
+   (`git merge --no-ff`; on conflicts the merge is aborted and main stays untouched). Because the
+   diff includes uncommitted work, oIDE first commits any uncommitted changes in the worktree on
+   the agent's behalf (with the `Oide-Agent:` trailer), so what you reviewed is what gets merged.
 
 ## Cleanup
 

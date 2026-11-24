@@ -41,7 +41,7 @@ packages/agent-core/     Supervisor, AgentDriver, stream-json parser, SubagentTr
 packages/git/            Typed git CLI wrapper, worktree manager, overlap detector
 packages/store/          node:sqlite store, migrations, repositories, settings, artifacts store
 packages/mcp-server/     oIDE's own MCP server (permission prompt, submit_for_review, artifacts)
-packages/extension-api/  Public API for extension authors (published to npm)
+packages/extension-api/  Public API for extension authors (to be published to npm; scope open, see open question 15)
 packages/extension-host/ Extension loader, registry, installer, custom tools, utility process
 packages/ui/             Shared React components, icons and design tokens
 extensions/              Built-in extensions (git, browser-preview, themes)

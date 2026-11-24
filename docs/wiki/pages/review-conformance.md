@@ -33,7 +33,7 @@ This used `test/conformance/real-cli.test.ts`: the plain-Node services layer (`c
 real IPC router) with no `cliPathOverride`, a throwaway git repo, and `--model haiku` in Manual mode
 (`default`). The whole run took 18 s for 2 short turns. Timeline:
 
-1. `cli.detect` found `C:\Users\Georges\.local\bin\claude.exe`, version 2.1.325, `inTestedRange: true`, `mode:auto` available.
+1. `cli.detect` found `%USERPROFILE%\.local\bin\claude.exe`, version 2.1.325, `inTestedRange: true`, `mode:auto` available.
 2. `agents.spawn` returned status `queued`, then `starting`. A worktree was created under `<userData>/worktrees/<project>/real-cli-probe`.
 3. After 6.5 s the status was `needs-permission`, with a pending prompt `{toolName: "Bash", input.command: "node -e \"console.log(6*7)\"", summary: "Run node -e …"}` that came from `mcp__oide__permission_prompt`.
 4. `agents.answerPermission` sent `allow` for that exact request id. Next came `permission-resolved`, then `tool-result` with content `42` ("Shell cwd was reset to …worktree"), then `assistant-text` "The command printed 42.", then `result`. The status became `has-question`, as expected: the agent did not call `submit_for_review`, and the goal did not ask it to.

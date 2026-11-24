@@ -63,14 +63,14 @@ See [MCP tools and risk labels](/extensions/tools-and-risk).
 
 | Point | Shape | Status |
 | --- | --- | --- |
-| `commands` | `[{ id, title, keybinding? }]` | Listed in Ctrl/Cmd+K; handled by host code. Ids must be unique. |
-| `settings` | `{ "<key>": { type: "string" \| "number" \| "boolean", secret?: boolean, description?, default? } }` | Read and written by host code; `secret: true` values live in the OS keychain. No Settings UI yet. |
-| `panels` | `[{ id, title, entry, location?: "inspector" \| "screen" }]` | `entry` is an HTML file in the package (must exist). Default location `inspector` (Focus). Not displayed by the app yet. |
-| `themes` | `[{ id, label, tokens: { "<token>": "<colour>" } }]` | Parsed; not applied yet. |
-| `techniques` | `[{ id, name, text, placement: "first-message" \| "system-prompt" }]` | Parsed; not offered in Spawn yet. |
-| `artifactTypes` | `[{ id, label, entry }]` | `entry` must exist. Parsed; not used yet. |
-| `languages` | `[{ id, extensions: string[], command, args? }]` | A language server command for the Files editor. Parsed; not started yet. |
-| `deployTargets` | `[{ id, title }]` | A Review action. Parsed; not shown yet. |
+| `commands` | `[{ id, title, keybinding? }]` | Listed in Ctrl/Cmd+K; handled by host code. Ids must be unique. `keybinding` becomes the command's default shortcut (users can rebind it). |
+| `settings` | `{ "<key>": { type: "string" \| "number" \| "boolean", secret?: boolean, description?, default? } }` | Shown in **Settings › Extensions** and read or written by host code; `secret: true` values live in the OS keychain. |
+| `panels` | `[{ id, title, entry, location?: "inspector" \| "screen" }]` | `entry` is an HTML file in the package (must exist). Default location `inspector` (a tab in Focus's inspector); `screen` adds a full screen with a rail button. Shown in a sandboxed iframe. |
+| `themes` | `[{ id, label, tokens: { "<token>": "<colour>" } }]` | Offered in **Settings › Appearance**. Only the tokens `accent`, `accent-contrast`, `link` and `link-hover` are applied, and only as `#rrggbb` colours. |
+| `techniques` | `[{ id, name, text, placement: "first-message" \| "system-prompt" }]` | Offered (off by default) in Spawn › Advanced techniques; listed read-only in Settings › Techniques. |
+| `artifactTypes` | `[{ id, label, entry }]` | `entry` must exist. Shows artifacts tagged `type: "<your name>:<id>"` in Artifacts › Open, in a sandboxed iframe; storage stays one of the built-in kinds. |
+| `languages` | `[{ id, extensions: string[], command, args? }]` | A language server command for the Files editor. Parsed and shown in the consent dialog; not started in v1. |
+| `deployTargets` | `[{ id, title }]` | A button in Review's summary column; runs the host command registered under the target id. |
 
 ### `capabilities`
 

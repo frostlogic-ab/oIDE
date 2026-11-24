@@ -20,6 +20,23 @@ The detailed build history lives in [docs/wiki/log.md](docs/wiki/log.md).
 - Open-source project files: Code of Conduct (Contributor Covenant 2.1), issue and pull request
   templates, this changelog, generated `THIRD_PARTY_NOTICES.md` (shipped in packaged builds, checked in
   CI with `pnpm licenses:check`) and an original app icon.
+- Artifact editors: embedded Excalidraw for whiteboards (supersedes ADR 0005), Monaco for docs and
+  designs, compare any two versions, rename and delete, and conflict handling when an agent saves
+  while you have unsaved edits.
+- Extension UI contribution points wired: panels (sandboxed `oide-ext://` frames), commands,
+  Settings › Extensions, themes, techniques, deploy targets and artifact types (ADRs 0008, 0009;
+  `languages` is deferred).
+- Toasts, a live status bar, a shortcuts editor, `/` slash commands and the Review comment side
+  (ADRs 0006 and 0007, store migration 2).
+- Reliability: per-service crash isolation, rotating redacted logs, Settings › Diagnostics, ordered
+  shutdown and Windows process-tree cleanup.
+- Milestone gate tests for M2 to M6 (`test/gates/`) and an end-to-end gate spec.
+
+### Security
+
+- All core findings of the 2026-11-24 review are fixed (SEC-01 to SEC-31; one accepted risk), including
+  a custom model env allow-list with value checks and confirmations a renderer cannot spoof.
+- Local merge now keeps uncommitted worktree changes (review blocker B1).
 
 ## [0.1.0] - 2026-11-24
 
@@ -55,13 +72,13 @@ First internal build. Not signed, not published.
 - Adversarial security, brief-conformance and design-conformance reviews before release
   ([review-security](docs/wiki/pages/review-security.md)). Fixed the extension and custom-tool
   findings (native confirmations, origin-bound credentials, per-agent proxy secrets, project-scoped
-  artifact reads); core findings are being fixed.
+  artifact reads); core findings were still open in this build (fixed since, see Unreleased).
 
 ### Known issues
 
-- Merging a worktree locally ignores uncommitted worktree changes (review blocker B1).
+- Merging a worktree locally ignored uncommitted worktree changes (review blocker B1; fixed since).
 - Extension UI contribution points (panels, themes, techniques, languages, deploy targets, artifact
-  types) are not wired yet.
+  types) were not wired yet (wired since, except `languages`).
 - Builds are unsigned: Windows SmartScreen warns, and macOS needs a right-click › Open.
 
 [Unreleased]: https://github.com/oide-dev/oide/compare/v0.1.0...HEAD

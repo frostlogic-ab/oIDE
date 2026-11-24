@@ -423,3 +423,14 @@ M3's full gate is a plain `it` (B1 fixed on main); M4's todo is a passing test: 
 e2e check is no longer skipped; queued agents spawned over IPC already get a summary (ux), so the M2 e2e
 reload workaround is gone. Pages: [testing](pages/testing.md), [milestones](pages/milestones.md),
 [screen-spawn](pages/screen-spawn.md), [protocol](pages/protocol.md).
+
+## [2026-11-25] review | Publication readiness
+Adversarial pre-publication pass over the tree and all 43 commits. No secret in tree or history (every
+token shape is a test fixture), so no history rewrite for secrets. Scrubbed a Windows user name and
+session temp ids from `review-design.md`, `review-conformance.md` and a fake-claude fixture; regenerated
+the stale `THIRD_PARTY_NOTICES.md` (Excalidraw tree; `licenses:check` was failing CI); docs no longer
+tell authors to install from the foreign `@oide` npm scope; CHANGELOG, README, CLAUDE.md, ADR 0005
+(superseded), docs site and wiki brought in line with the merged code; `.gitignore` extended. Code
+issues reported (Excalidraw font notices, recorder slug sanitising, bundled index tarball URLs, dead
+usage-statistics switch, unclaimed `oide-dev` org behind `DEFAULT_INDEX_URL`). Owner checklist in
+[review-publication](pages/review-publication.md).

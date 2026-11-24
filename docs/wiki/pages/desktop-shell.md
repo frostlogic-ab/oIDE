@@ -11,7 +11,7 @@ Packaging: [packaging](packaging.md). Process model: [architecture](architecture
 ```
 apps/desktop/
   electron.vite.config.ts      main (ESM, bundles @oide/*), preload (CJS, sandbox), renderer (React, Tailwind, CSP meta)
-  vite.web.config.ts           renderer-only dev server with the mock bridge (pnpm dev:web)
+  vite.web.config.ts           renderer-only dev server with the mock bridge (pnpm --filter @oide/desktop dev:web)
   electron-builder.yml         installers, fuses, publish config (see packaging.md)
   playwright.config.ts, e2e/   Playwright for Electron smoke tests
   src/main/

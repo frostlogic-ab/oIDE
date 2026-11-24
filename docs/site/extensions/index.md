@@ -3,7 +3,8 @@
 An oIDE extension is an **npm package with an `oide` manifest** in its `package.json`. Its main
 job is to give agents new tools through [MCP](https://modelcontextprotocol.io) servers. It can also
 add commands to the command bar (Ctrl/Cmd+K), settings (including secrets kept in the OS keychain),
-panels, themes, techniques, artifact types, language servers and deploy targets.
+panels, themes, techniques, artifact types and deploy targets (language servers can be declared but
+are not started yet).
 
 oIDE's own Git, Browser preview and Accent themes features ship as extensions
 ([`extensions/`](https://github.com/oide-dev/oide/tree/main/extensions) in the repo), so the API is
@@ -18,7 +19,8 @@ used by oIDE itself.
 | Commands | `oide.contributes.commands` | Handled by your host code; listed in Ctrl/Cmd+K |
 | Settings | `oide.contributes.settings` | Read and written by your host code; `secret` ones live in the OS keychain |
 | Panels | `oide.contributes.panels` | An HTML page in a sandboxed iframe, talking to host code through `postMessage` |
-| Themes, techniques, artifact types, languages, deploy targets | `oide.contributes.*` | Declared and validated; see [what is wired](#what-works-today) |
+| Themes, techniques, deploy targets, artifact types | `oide.contributes.*` | Settings › Appearance, Spawn, Review and Artifacts; see [what is wired](#what-works-today) |
+| Languages | `oide.contributes.languages` | Parsed and shown in the consent dialog; not started in v1 |
 
 An extension with only MCP servers needs no host code at all. That is the most common and most
 useful kind.
@@ -36,11 +38,12 @@ oIDE is pre-1.0 and the extension API is at version `1.0.0`. Honest status:
 | `ctx.settings` (plain and secret), `ctx.agents`, `ctx.artifacts.read`, `ctx.log` | Built |
 | Marketplace index, integrity-checked install, update consent | Built |
 | Add from folder or git, developer mode | Built |
-| Panels: `ctx.panels.open` / `postMessage` / `onMessage` | API exists; **the app does not display extension panels yet** (`open` does nothing) |
-| A Settings UI for contributed settings | Not yet: settings are read and written by host code only |
-| `themes`, `techniques`, `artifactTypes`, `languages`, `deployTargets` | Parsed and validated; **not used by the app yet** |
+| Panels in a sandboxed `oide-ext://` iframe: a Focus inspector tab or a full screen, with `ctx.panels.open` / `postMessage` / `onMessage` | Built |
+| Contributed settings in **Settings › Extensions** (secrets as password fields, kept in the OS keychain) | Built |
+| `themes` (Settings › Appearance), `techniques` (Spawn › Advanced techniques), `deployTargets` (Review), `artifactTypes` (Artifacts › Open) | Built |
+| `languages` (language servers for the Files editor) | Parsed and validated, **not started** in v1 (ADR 0008) |
 | Capability enforcement | **Not enforced**: declared for consent only (see [Capabilities](/extensions/capabilities)) |
-| `@oide/extension-api` on npm | Package ready to publish; until it is, copy the types or depend on the repo |
+| `@oide/extension-api` on npm | **Not published.** The npm scope `@oide` belongs to an unrelated maintainer, so the package will be published under a different scope (an open question). Until then, copy the types or depend on the repo; see [Host API](/extensions/api#getting-the-types) |
 
 Build against what is marked built. The rest is part of the v1 contract and will be wired without
 manifest changes.

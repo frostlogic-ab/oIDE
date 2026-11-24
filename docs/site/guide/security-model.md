@@ -73,8 +73,9 @@ Claude credentials.
   secrets scoped to that extension. **This is separation, not a sandbox**: host code runs as you, with
   full access to files, network and programs. Declared capabilities are shown for consent but are
   not enforced yet.
-- Extension panels are designed to run in sandboxed frames that talk to their host code through
-  `postMessage` only. The app does not display extension panels yet.
+- Extension panels and artifact viewers run in sandboxed frames (`allow-scripts` only, an opaque
+  origin) served from the extension's own folder with a policy that forbids network requests. They
+  talk to their host code only through `postMessage`, which oIDE checks against the manifest.
 - Extensions from a folder or git URL, and custom MCP servers, carry a **not reviewed** badge. oIDE
   asks before it clones a git URL, before it first runs a folder or git extension (listing exactly
   what will run), and before it starts or saves a custom command. Their tools always ask first.
@@ -86,7 +87,9 @@ network access. Doc artifacts are sanitized before rendering.
 
 ## Telemetry
 
-Off by default. Crash reports, when they exist, are opt-in and strip paths, prompts and code.
+oIDE collects no usage statistics (the Privacy switch is off by default and nothing is sent).
+Crash reports are opt-in, stay on your computer with paths, prompts and code removed, and are never
+uploaded; you can copy one into a bug report yourself.
 
 ## Supply chain
 

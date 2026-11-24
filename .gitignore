@@ -18,3 +18,8 @@ docs/site/.vitepress/cache/
 .compat/
 # Test fixture extensions ship prebuilt dist/ (no build step)
 !packages/extension-host/test/fixtures/**/dist/
+# Editor and tool caches, packed tarballs
+.idea/
+.vscode/
+.eslintcache
+*.tgz

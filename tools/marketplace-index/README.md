@@ -4,6 +4,8 @@ oIDE's marketplace in v1 is a static `index.json` in the public
 [`oide-dev/oide-marketplace`](https://github.com/oide-dev/oide-marketplace) repo. The app fetches it
 from `https://raw.githubusercontent.com/oide-dev/oide-marketplace/main/index.json`, caches it for a
 day, and falls back to the copy bundled here (`bundled/index.json`) when offline.
+The `oide-dev` GitHub organisation and the `oide-marketplace` repository are not set up yet (pre-1.0);
+until they are, the app can only use the bundled copy.
 
 | File | What it does |
 | --- | --- |
@@ -20,13 +22,15 @@ node tools/marketplace-index/validate.mjs index.json --schema-only
 ```
 
 Built-in entries are never downloaded by the app (they ship inside it); their `tarball` field is
-the URL npm would serve once published. `extensions/.gitattributes` pins LF line endings so the
+the URL npm would serve once published. Those URLs still use the `@oide` npm scope, which belongs to
+an unrelated maintainer, so the built-ins cannot be published under these names; the scope is an
+open question ([open questions](../../docs/wiki/pages/open-questions.md) #15). `extensions/.gitattributes` pins LF line endings so the
 packed hashes are the same on every OS.
 
 ## Submitting an extension
 
 1. Build your extension as an npm package with an `oide` manifest (see
-   [`@oide/extension-api`](../../packages/extension-api/README.md)). Ship bundled code in `dist/`:
+   [`@oide/extension-api`](../../packages/extension-api/README.md), not on npm yet). Ship bundled code in `dist/`:
    oIDE never runs install scripts and never installs dependencies.
 2. Publish it to npm (`npm publish`, ideally with `--provenance`).
 3. Get the tarball URL and integrity: `npm view <name>@<version> dist.tarball dist.integrity`.

@@ -78,17 +78,34 @@ How each kind of build updates:
 
 Where artifacts live, and a reminder that imports from claude.ai are copies, not synced.
 
+## Extensions
+
+The settings that extensions you turned on contribute (for example Browser preview's default URL).
+Secret fields are password inputs: the value goes to the OS keychain and is never shown again.
+
 ## Keyboard shortcuts
 
-The current key bindings.
+Every shortcut with its key. **Change** records the next key combination (Esc cancels); a combination
+another action already uses shows a warning, and saving takes it from that action. **Reset** goes
+back to the built-in keys.
 
 ## Appearance
 
-The accent colour: blue `#7AA2F7` (default), green, violet or amber.
+The accent colour: blue `#7AA2F7` (default), green, violet or amber, plus any themes from extensions
+you turned on.
 
 ## Privacy
 
-**Share anonymous usage statistics**, off by default. oIDE never reads, stores or sends your Claude
-credentials; prompts, code and paths stay on your computer.
+**Share anonymous usage statistics** and **Crash reports**, both off by default. oIDE does not
+collect usage statistics yet, so the first switch only records your choice. Crash reports stay
+on your computer with paths, prompts and code removed; nothing is uploaded, and you can copy one into
+a bug report yourself. oIDE never reads, stores or sends your Claude credentials; prompts, code and
+paths stay on your computer.
+
+## Diagnostics
+
+What oIDE found at startup: the CLI and whether its version is in the tested range, git (2.38+), `gh`,
+Node, the OS keychain, the database, the MCP port and the logs. **Copy report** copies a redacted
+report that is safe to paste into a bug report; **Open logs folder** opens oIDE's log folder.
 
 Details: [screen-settings](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/screen-settings.md).

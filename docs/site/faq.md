@@ -35,7 +35,7 @@ answer requires one, is a mode that uses your own API key.
 ## Does oIDE send my code or prompts anywhere?
 
 No. oIDE has no server. Prompts, code and paths stay on your computer, between you and the CLI you
-run. Telemetry is off by default; crash reports, if they are added, are opt-in and strip paths,
+run. Telemetry is off by default; crash reports are opt-in, stay on your computer and strip paths,
 prompts and code. Extensions you install and MCP servers you add can reach the network: check their
 declared capabilities.
 

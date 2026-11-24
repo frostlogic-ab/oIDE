@@ -15,7 +15,7 @@ Review > Hand conflicts to a new agent), which pre-fills the context.
 | Mode | **Manual**, **Edit automatically**, **Plan**, **Auto** (default) and, only when Settings > Allow Bypass is on, **Bypass**. See [Agents and permissions](/guide/agents-and-permissions). |
 | Models | Focus presets **Cheap**, **Balanced**, **Quality**, or **Custom**. |
 | Advanced model settings | How models are picked (one model, a separate subagent model, or routed by the lead), model and effort per slot, and model versions (Latest or pinned). |
-| Advanced techniques | Extra instructions such as Adversarial review or Quality gates must pass. Each shows where it goes: the first message or the system prompt. |
+| Advanced techniques | Extra instructions such as Adversarial review or Quality gates must pass, plus techniques from extensions you turned on (off by default). Each shows where it goes: the first message or the system prompt. |
 | Parallel attempts | 1 to 6 agents with the same goal, each in its own worktree, so you can compare. |
 | Tools from extensions | Extension tools for this agent, labelled "read only" or "asks first". |
 

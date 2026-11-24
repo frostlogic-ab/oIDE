@@ -54,7 +54,8 @@ lead, prefixed with the subagent's name. The composer is disabled while the agen
 | Artifacts | Artifacts this agent read or wrote |
 | Terminal | A terminal in the agent's worktree |
 
-The footer lists the extension tools the agent has.
+Extensions that are on for the agent's project can add their own panels as extra tabs (for example
+Browser preview). The footer lists the extension tools the agent has.
 
 **Stop subagent** takes effect at the subagent's next tool call that needs a permission: the CLI has
 no message to stop one subagent, so oIDE denies its next prompt with a stop message.

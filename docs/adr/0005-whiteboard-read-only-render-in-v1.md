@@ -1,6 +1,8 @@
 # ADR 0005: Whiteboards are a read-only render in v1, not an embedded Excalidraw editor
 
-- Status: accepted
+- Status: superseded (2026-11-25) by the embedded Excalidraw 0.18 editor (commit 26389c6:
+  lazy chunk, fonts bundled and served from 'self', no CSP change). The read-only renderer
+  (`screens/Artifacts/Whiteboard.tsx`) remains for previews. The text below is the original decision.
 - Date: 2026-11-24
 - Departs from: build brief, Artifacts integration ("Whiteboard | Excalidraw JSON | Embedded whiteboard component")
 

@@ -10,7 +10,8 @@ name.
 
 The list comes from a public static index (the
 [oide-marketplace](https://github.com/oide-dev/oide-marketplace) repository), refreshed daily, with a
-copy shipped inside oIDE for offline use.
+copy shipped inside oIDE for offline use. Pre-1.0, that repository is not set up yet, so oIDE shows
+the bundled copy, which lists the built-in extensions.
 
 ## Detail
 
