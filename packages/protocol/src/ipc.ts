@@ -21,12 +21,30 @@ const cmd = <I extends z.ZodType, O extends z.ZodType>(input: I, output: O) => (
 const Void = z.void().or(z.undefined()).or(z.null());
 const Ok = z.object({ ok: z.literal(true) });
 
+/** One row of Settings › Diagnostics. Values are redacted (home folder → `~`, no tokens). */
+export const DiagnosticCheck = z.object({
+  id: z.string(),
+  label: z.string(),
+  status: z.enum(['ok', 'warn', 'error', 'info']),
+  value: z.string(),
+  detail: z.string().optional(),
+});
+export type DiagnosticCheck = z.infer<typeof DiagnosticCheck>;
+export const Diagnostics = z.object({ generatedAt: z.string(), checks: z.array(DiagnosticCheck), report: z.string() });
+export type Diagnostics = z.infer<typeof Diagnostics>;
+
 export const Scope = z.union([z.literal('all'), Id]);
 export type Scope = z.infer<typeof Scope>;
 
 export const Commands = {
   // App / CLI
   'app.info': cmd(Void, z.object({ version: z.string(), platform: z.string(), userData: z.string() })),
+  /** Settings › Diagnostics: CLI, git ≥ 2.38, gh, node, keychain, database, MCP port, logs; `report` is the copyable text. */
+  'app.diagnostics': cmd(Void, Diagnostics),
+  /** Settings › Diagnostics › Open logs folder (`<userData>/logs`). */
+  'app.openLogsFolder': cmd(Void, Ok),
+  /** A screen's error boundary caught an error; main writes it (redacted) to the main log. No props, state, prompts or code. */
+  'app.reportError': cmd(z.object({ screen: z.string().max(60), name: z.string().max(120), message: z.string().max(2000), stack: z.string().max(8000).optional(), componentStack: z.string().max(8000).optional() }), Ok),
   'cli.detect': cmd(Void, CliInfo),
   'cli.openSignIn': cmd(Void, z.object({ terminalId: Id })),
 

@@ -1,5 +1,6 @@
 import { connectAgents, useAgents } from '../stores/agents';
 import { connectCli, useCli } from '../stores/cli';
+import { connectExtensionHosts } from '../stores/extensionHosts';
 import { connectProjects, useProjects } from '../stores/projects';
 import { connectScope, useScope } from '../stores/scope';
 import { connectSettings, useSettings } from '../stores/settings';
@@ -46,7 +47,9 @@ export function connectUsage(refresh: () => Promise<unknown>, debounceMs = USAGE
 }
 
 /**
- * Subscribes every store to main's events, then loads initial state. Called once from App.
+ * Subscribes every store to main's events, then loads initial state. Called once from App, and
+ * again after a reload (also the automatic one after a renderer crash): main keeps every agent
+ * running, so `agents.list` and the events from the database rebuild the same picture.
  * Commands that main does not implement yet resolve to empty state (no console errors).
  */
 export function startStores(): () => void {
@@ -61,6 +64,7 @@ export function startStores(): () => void {
     connectScope(),
     connectSettings(),
     connectCli(),
+    connectExtensionHosts(),
     connectNotifications(),
     connectKeybindings(),
     connectUsage(() => quiet(useCli.getState().refreshUsage())),

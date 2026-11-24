@@ -386,8 +386,18 @@ export function runShellCommand(
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let timer: NodeJS.Timeout | undefined;
+    // Setup commands start trees (cmd → npm → node …). On Windows `child.kill()` only ends cmd.exe
+    // and the rest keeps running (and keeps the worktree locked), so end the whole tree.
     const kill = () => {
-      if (child.exitCode === null) child.kill();
+      if (child.exitCode !== null) return;
+      if (isWin && child.pid !== undefined) {
+        try {
+          const tk = spawn(windowsTaskkill(), ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+          tk.on('error', () => child.kill());
+          return;
+        } catch {}
+      }
+      child.kill();
     };
     if (opts.timeoutMs && opts.timeoutMs > 0) timer = setTimeout(kill, opts.timeoutMs);
     opts.signal?.addEventListener('abort', kill, { once: true });
@@ -405,4 +415,10 @@ export function runShellCommand(
       resolve({ exitCode: code, signal });
     });
   });
+}
+
+/** `%SystemRoot%/System32/taskkill.exe` as an absolute path (never a bare name: SEC-01). */
+export function windowsTaskkill(env: Record<string, string | undefined> = process.env): string {
+  const root = env.SystemRoot ?? env.SYSTEMROOT ?? env.windir ?? 'C:\\Windows';
+  return join(root, 'System32', 'taskkill.exe');
 }

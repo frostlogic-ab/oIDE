@@ -12,6 +12,7 @@ import { useRouter } from '../../stores/router';
 import { useSettings } from '../../stores/settings';
 import { AgentsSection } from './AgentsSection';
 import { ClaudeCodeSection } from './ClaudeCodeSection';
+import { DiagnosticsSection } from './DiagnosticsSection';
 import { ModelsSection } from './ModelsSection';
 import { KeysSection } from './KeysSection';
 import { AppearanceSection, ArtifactsSection, PrivacySection, ProjectsSection } from './OtherSections';
@@ -20,7 +21,7 @@ import { TechniquesSection } from './TechniquesSection';
 import { UpdatesSection } from './UpdatesSection';
 import { ExtensionSettingsSection } from '../../extensions/ExtensionSettingsSection';
 
-export type SectionId = 'cli' | 'models' | 'agents' | 'tech' | 'perms' | 'projects' | 'artifacts' | 'ext' | 'keys' | 'look' | 'privacy' | 'updates';
+export type SectionId = 'cli' | 'models' | 'agents' | 'tech' | 'perms' | 'projects' | 'artifacts' | 'ext' | 'keys' | 'look' | 'privacy' | 'updates' | 'diag';
 export interface LoadError {
   projectId?: string;
   file: string;
@@ -41,6 +42,7 @@ export const SECTIONS: Array<{ id: SectionId; label: string; keywords: string }>
   { id: 'look', label: 'Appearance', keywords: 'appearance accent colour color theme' },
   { id: 'privacy', label: 'Privacy', keywords: 'privacy telemetry crash reports usage statistics' },
   { id: 'updates', label: 'Updates', keywords: 'updates version upgrade channel stable beta check now release download install' },
+  { id: 'diag', label: 'Diagnostics', keywords: 'diagnostics logs log folder git version gh node keychain database mcp port report troubleshooting' },
 ];
 
 const isSection = (s: string | undefined): s is SectionId => SECTIONS.some((x) => x.id === s);
@@ -141,6 +143,8 @@ export default function SettingsScreen() {
             <AppearanceSection settings={settings} />
           ) : section === 'updates' ? (
             <UpdatesSection settings={settings} />
+          ) : section === 'diag' ? (
+            <DiagnosticsSection />
           ) : (
             <PrivacySection settings={settings} />
           )}

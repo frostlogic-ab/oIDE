@@ -6,6 +6,7 @@ import { OideMcpServer, type ArtifactsBackend as McpArtifactsBackend } from '@oi
 import type { ArtifactMeta } from '@oide/protocol';
 import { ArtifactStore, SqliteSecretStore, openStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
+import { CleanupQueue } from '../reliability/cleanup-queue.js';
 import { AgentsService } from './agents.js';
 import { CliService } from './cli.js';
 import { ExtensionsService } from './extensions.js';
@@ -30,6 +31,8 @@ export interface Services {
   extensions: ExtensionsService;
   /** Auto-update (Electron only; set by services/index.ts, absent in plain Node). */
   updates?: UpdaterService;
+  /** The oIDE MCP server's loopback port, or undefined when it could not start. */
+  mcpPort(): number | undefined;
   /** Paths the user picked in a native dialog (only these may be imported / loaded as extensions). */
   picked: Set<string>;
   /**
@@ -49,6 +52,8 @@ export interface CoreOptions {
   terminals: TerminalService;
   /** Database file; default `<userData>/oide.db`. `':memory:'` in tests. */
   dbFile?: string;
+  /** An already opened store (main opens it with recovery prompts, reliability/db-recovery.ts). */
+  store?: Store;
   driver?: AgentDriver;
   watch?: WatchFn;
   gh?: GhCli;
@@ -91,7 +96,7 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
  */
 export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   const { ctx, platform } = opts;
-  const store = openStore(opts.dbFile ?? join(ctx.userDataDir, 'oide.db'), { backupDir: join(ctx.userDataDir, 'backups') });
+  const store = opts.store ?? openStore(opts.dbFile ?? join(ctx.userDataDir, 'oide.db'), { backupDir: join(ctx.userDataDir, 'backups') });
   const notices: Services['notices'] = [];
   const settings = store.settings;
   for (const e of settings.loadErrors) notices.push({ level: 'warning', message: e });
@@ -118,13 +123,25 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     // SEC-11: secret-bearing custom stdio servers start through the launcher (needs an absolute node).
     ...(nodeForLauncher() ? { nodeBinary: nodeForLauncher()! } : {}),
   });
-  await mcp.start();
+  // A failed bind (port in use, a firewall or security tool refusing loopback) must not stop the
+  // app: retry, then start without it and tell the user. Agents cannot launch until it works.
+  let mcpPort: number | undefined;
+  for (let attempt = 1; attempt <= 3 && mcpPort === undefined; attempt++) {
+    try {
+      mcpPort = (await mcp.start()).port;
+    } catch (err) {
+      ctx.log.warn('MCP server failed to start', { attempt, error: err });
+      if (attempt < 3) await new Promise((r) => setTimeout(r, 200 * attempt));
+      else notices.push({ level: 'error', message: `oIDE's MCP server could not start (${(err as Error).message}). Agents cannot be started until oIDE restarts. Check that no security tool blocks connections to 127.0.0.1.` });
+    }
+  }
 
   const cli = new CliService({ settings, emit: ctx.emit, override: platform.cliPathOverride });
   const picked = new Set<string>();
   const pickedCli = new Set<string>();
   const projects = new ProjectsService({ ctx, store, platform, picked });
-  const agents = new AgentsService({ ctx, store, settings, secrets, worktrees, mcp, projects, cli, platform, ...(opts.driver ? { driver: opts.driver } : {}) });
+  const cleanup = new CleanupQueue(ctx.userDataDir);
+  const agents = new AgentsService({ ctx, store, settings, secrets, worktrees, mcp, projects, cli, platform, cleanup, mcpReady: () => mcpPort !== undefined, ...(opts.driver ? { driver: opts.driver } : {}) });
   const git = new GitService({
     ctx,
     store,
@@ -150,6 +167,14 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     },
   });
   agents.extensions = extensions;
+  const hostLog = ctx.reliability?.logs.channel('extension-host');
+  extensions.host?.onState((s) => {
+    const line = { extension: s.name, state: s.state, ...(s.error ? { error: s.error } : {}) };
+    if (s.state === 'reloading' || s.state === 'failed') {
+      hostLog?.warn('extension host', line);
+      ctx.reliability?.crashReports.record('extension-host', { process: s.name, ...(s.error ? { reason: s.error } : {}) });
+    } else hostLog?.info('extension host', line);
+  });
   agents.git = git;
 
   // SEC-03: the repo's own git config (hooks, filters, fsmonitor, ...) runs only in trusted checkouts.
@@ -179,6 +204,13 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   // ---------------------------------------------------------------- startup
 
   const list = await projects.restore();
+  // Worktree folders a locked file kept us from deleting last time (Windows).
+  const pending = await cleanup.runPending(async (e) => {
+    if (e.projectPath && existsSync(e.projectPath)) await worktrees.prune(e.projectPath).catch(() => undefined);
+  });
+  if (pending.removed.length) ctx.log.debug('finished removing worktree folders from last run', pending.removed.length);
+  for (const p of pending.stillLocked) notices.push({ level: 'warning', message: `Still could not delete ${p}: a program is using a file in it. Close programs using this folder; oIDE tries again on next start.` });
+  for (const p of pending.gaveUp) notices.push({ level: 'warning', message: `oIDE gave up deleting ${p}. Delete the folder yourself when no program is using it.` });
   for (const p of list) {
     if (!existsSync(p.path)) {
       notices.push({ level: 'warning', message: `Project folder not found: ${p.path}` });
@@ -215,6 +247,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     agents,
     git,
     extensions,
+    mcpPort: () => mcpPort,
     picked,
     pickedCli,
     notices,
@@ -225,6 +258,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
       if (disposed) return;
       disposed = true;
       await agents.shutdown().catch((err) => ctx.log.warn('agent shutdown failed', err));
+      // After agents: closes watchers and waits for in-flight git work, so nothing holds files
+      // in a worktree when the process exits or the caller deletes it.
       await git.dispose().catch(() => undefined);
       await extensions.dispose().catch(() => undefined);
       store.close();

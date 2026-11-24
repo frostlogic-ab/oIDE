@@ -184,6 +184,29 @@ export function PrivacySection({ settings }: { settings: Settings }) {
           </label>
         )}
       </Row>
+      <Row
+        title="Crash reports"
+        desc="Off by default. When on, oIDE saves crash reports on this computer only, with paths, prompts and code removed. Nothing is uploaded; you can copy one into a bug report yourself. Turning this off deletes them."
+      >
+        {({ titleId, descId }) => (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="accent-accent"
+              aria-labelledby={titleId}
+              aria-describedby={descId}
+              disabled={busy}
+              checked={settings.ui.crashReports}
+              onChange={async (e) => {
+                setBusy(true);
+                await savePatch({ ui: { crashReports: e.target.checked } });
+                setBusy(false);
+              }}
+            />
+            Save
+          </label>
+        )}
+      </Row>
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import { AgentEvent, type AgentEventDraft, type AgentSpec, type PermissionMode, type UserMessage } from '@oide/protocol';
 import type { LaunchPlan } from './args.js';
 import { resolveSpawn } from './cli.js';
@@ -93,8 +94,9 @@ export function killTree(child: ChildProcess, platform: NodeJS.Platform = proces
   if (pid === undefined || child.exitCode !== null) return;
   if (platform === 'win32') {
     try {
-      // Absolute, never a bare name (SEC-01).
-      const tk = spawn(`${process.env.SystemRoot ?? 'C:\\Windows'}\\System32\\taskkill.exe`, ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+      // Absolute path: a bare `taskkill` could resolve to a file in the current folder (SEC-01).
+      const taskkill = join(process.env.SystemRoot ?? process.env.windir ?? 'C:\\Windows', 'System32', 'taskkill.exe');
+      const tk = spawn(taskkill, ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
       tk.on('error', () => child.kill());
     } catch {
       child.kill();

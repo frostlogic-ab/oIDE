@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { MIGRATIONS, type Migration } from './migrations.js';
@@ -37,6 +37,19 @@ export function openDatabase(file: string, opts: OpenDatabaseOptions = {}): Data
   if (!memory) mkdirSync(dirname(file), { recursive: true });
   const existed = !memory && existsSync(file) && statSync(file).size > 0;
   const db = new DatabaseSync(file);
+  try {
+    return setUp(db, file, memory, existed, opts);
+  } catch (err) {
+    // Never keep a handle on a file we could not open: on Windows it would stay locked, and the
+    // app could not move a damaged database aside (apps/desktop reliability/db-recovery.ts).
+    try {
+      if (db.isOpen) db.close();
+    } catch {}
+    throw err;
+  }
+}
+
+function setUp(db: DatabaseSync, file: string, memory: boolean, existed: boolean, opts: OpenDatabaseOptions): Database {
   db.exec('PRAGMA foreign_keys = ON');
   db.exec('PRAGMA busy_timeout = 5000');
   if (!memory) {
@@ -88,7 +101,6 @@ export function openDatabase(file: string, opts: OpenDatabaseOptions = {}): Data
   const current = Math.max(0, ...applied);
   const newest = migrations.length ? migrations[migrations.length - 1]!.version : 0;
   if (current > newest) {
-    db.close();
     throw new Error(`Database ${file} is at schema version ${current}, newer than this build (${newest}). Update oIDE.`);
   }
 
@@ -136,7 +148,12 @@ function pruneBackups(dir: string, base: string, keep: number): void {
     .filter((f) => f.startsWith(base + '.v') && f.endsWith('.bak'))
     .map((f) => ({ f, t: statSync(join(dir, f)).mtimeMs }))
     .sort((a, b) => b.t - a.t);
-  for (const { f } of files.slice(keep)) rmSync(join(dir, f), { force: true });
+  // unlinkSync, not rmSync: some Node releases' rmSync silently skips non-ASCII paths on Windows.
+  for (const { f } of files.slice(keep)) {
+    try {
+      unlinkSync(join(dir, f));
+    } catch {}
+  }
 }
 
 /** JSON helpers for TEXT columns. */

@@ -67,6 +67,8 @@ export class GitService {
   private fetchTimer: ReturnType<typeof setInterval> | undefined;
   private fetchMinutes = -1;
   private closed = false;
+  /** Background git work (diff refreshes, periodic fetch) that dispose() waits for. */
+  private readonly inflight = new Set<Promise<unknown>>();
 
   constructor(
     private readonly o: {
@@ -82,6 +84,10 @@ export class GitService {
       background?: boolean | undefined;
       gh?: GhCli;
       debounceMs?: number;
+      /** Test seam for the tile diff counts. */
+      diffStat?: typeof diffStat;
+      /** How long dispose() waits for in-flight git commands (default 5 s). */
+      disposeWaitMs?: number;
     },
   ) {
     this.gh = o.gh ?? new GhCli();
@@ -336,15 +342,35 @@ export class GitService {
   }
 
   async refreshDiff(agentId: string): Promise<void> {
+    if (this.closed) return;
     const a = this.o.agents.get(agentId);
     if (!a?.worktreePath || !a.baseRef || !existsSync(a.worktreePath)) return;
-    try {
-      const stat = await diffStat(a.worktreePath, a.baseRef);
-      this.o.agents.setDiff(agentId, stat);
-      this.changed(a.projectId);
-    } catch (err) {
-      this.o.ctx.log.debug('diff refresh failed', agentId, err);
-    }
+    const worktreePath = a.worktreePath;
+    const baseRef = a.baseRef;
+    await this.track(async () => {
+      try {
+        const stat = await (this.o.diffStat ?? diffStat)(worktreePath, baseRef);
+        if (this.closed) return;
+        this.o.agents.setDiff(agentId, stat);
+        this.changed(a.projectId);
+      } catch (err) {
+        this.o.ctx.log.debug('diff refresh failed', agentId, err);
+      }
+    });
+  }
+
+  /** Run background git work so dispose() can wait for it (a running `git diff` keeps the worktree locked on Windows). */
+  private track<T>(fn: () => Promise<T>): Promise<T> {
+    const p = fn();
+    this.inflight.add(p);
+    const done = () => this.inflight.delete(p);
+    p.then(done, done);
+    return p;
+  }
+
+  /** Background git commands still running (diagnostics, tests). */
+  get pendingWork(): number {
+    return this.inflight.size;
   }
 
   /** Watch a checkout; changes refresh the diff of the agents working there and emit `git.changed`. */
@@ -393,7 +419,13 @@ export class GitService {
 
   /** Background fetch of every project (the only remote command that runs without a click). */
   async fetchAll(): Promise<void> {
+    if (this.closed) return;
+    await this.track(() => this.fetchAllNow());
+  }
+
+  private async fetchAllNow(): Promise<void> {
     for (const p of this.o.projects.list()) {
+      if (this.closed) return;
       // SEC-03: nothing runs on its own in a project the user has not trusted.
       if (!p.trusted) continue;
       const hasRemote = (await new Git({ cwd: p.path }).out(['remote']).catch(() => '')).trim();
@@ -407,6 +439,15 @@ export class GitService {
     if (this.fetchTimer) clearInterval(this.fetchTimer);
     for (const t of this.timers.values()) clearTimeout(t);
     this.timers.clear();
+    // Close watchers and let in-flight git commands finish (capped) before the caller removes
+    // worktrees or exits: on Windows a running `git diff` keeps files in the worktree open.
     await Promise.all([...this.watchers.keys()].map((p) => this.unwatch(p)));
+    if (this.inflight.size) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const cap = new Promise<void>((r) => (timer = setTimeout(r, this.o.disposeWaitMs ?? 5000)));
+      await Promise.race([Promise.allSettled([...this.inflight]), cap]);
+      if (timer) clearTimeout(timer);
+      if (this.inflight.size) this.o.ctx.log.warn('git work still running at shutdown', { pending: this.inflight.size });
+    }
   }
 }

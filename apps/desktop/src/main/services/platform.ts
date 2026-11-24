@@ -20,6 +20,8 @@ export interface Platform {
   confirmTrust(project: { name: string; path: string }): Promise<boolean>;
   /** Desktop notification (Electron `Notification`); `onClick` focuses the window. */
   notify(title: string, body: string, onClick?: () => void): void;
+  /** Open a local folder in the file manager (`shell.openPath`); resolves an error message or ''. */
+  openPath?(path: string): Promise<string>;
   /** System browser (`shell.openExternal`); callers check the URL first. */
   openExternal(url: string): Promise<void>;
   /** Fork for extension host processes (`utilityProcessFork(utilityProcess)`); none = host code off. */

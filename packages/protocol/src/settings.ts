@@ -85,6 +85,8 @@ export const Settings = z.object({
   ui: z.object({
     accent: z.string().default('#7AA2F7'),
     telemetry: z.boolean().default(false),
+    /** Settings › Privacy › Crash reports. Off by default; local only (never uploaded in v1). */
+    crashReports: z.boolean().default(false),
   }),
   /** Settings › Updates (M7). Defaulted as a whole so settings saved before M7 still parse. */
   updates: z

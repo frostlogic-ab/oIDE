@@ -2,6 +2,7 @@ import type { BrowserWindow } from 'electron';
 import type { AgentEvent } from '@oide/protocol';
 import type { Emit, FrameBatcher } from './ipc/emit.js';
 import type { Logger } from './ipc/router.js';
+import type { ReliabilityContext } from './reliability/index.js';
 import type { AllowedRoots } from './security/roots.js';
 
 /**
@@ -22,6 +23,11 @@ export interface MainContext {
   roots: AllowedRoots;
   getWindow(): BrowserWindow | null;
   log: Logger;
-  /** Register cleanup that runs before quit (kill ptys, deny pending permissions, close db). */
-  onQuit(fn: () => void | Promise<void>): void;
+  /**
+   * Register cleanup that runs before quit (kill ptys, deny pending permissions, close db). Hooks
+   * run one after another in registration order, each with a timeout (reliability/shutdown.ts).
+   */
+  onQuit(fn: () => void | Promise<void>, name?: string): void;
+  /** Rotating file logs and opt-in crash reports (the Electron app; absent in plain-Node tests). */
+  reliability?: ReliabilityContext;
 }

@@ -11,7 +11,7 @@ the `.oide/` footer note) and a scrolling main column (padding 22px 32px, conten
 the design's `.row` / `.rl` / `.rt` / `.rd` / `.sec` / `.inp` styles (`ui.tsx`: `Row`, `Rd`, `Sec`,
 `inp`). The section is the route param: `navigate('settings', { section: 'models' })`; clicking a
 section calls `replace('settings', { section })`. Ids: `cli`, `models`, `agents`, `tech`, `perms`,
-`projects`, `artifacts`, `keys`, `look`, `privacy`, `updates`. Search filters the list by section label plus
+`projects`, `artifacts`, `ext`, `keys`, `look`, `privacy`, `updates`, `diag`. Search filters the list by section label plus
 the words of its rows (`SECTIONS[].keywords`); Enter opens the first match.
 
 `settings.loadErrors` (bad JSON or schema errors in the settings document or a project's `.oide/*.json`)
@@ -30,8 +30,9 @@ shows as an amber banner at the top of every section, and per project under Proj
 | Artifacts & claude.ai | where artifacts live, import is a copy (not synced), Open in claude.ai | none (link to the Artifacts screen) |
 | Keyboard shortcuts | every action with its keys; Change records the next combo (Esc cancels), a combo another action uses shows a warning and Save takes it from there; Reset per action and Reset all (`KeysSection.tsx`) | `settings.update { keybindings: { <action>: [combo] \| null } }` |
 | Appearance | accent radiogroup (four `ACCENT_OPTIONS` swatches, arrow keys) | `settings.update({ ui: { accent } })`; the settings store applies it |
-| Privacy | Share anonymous usage statistics (off by default) | `settings.update({ ui: { telemetry } })` |
+| Privacy | Share anonymous usage statistics (off by default); Crash reports (off by default; local only, never uploaded in v1; off deletes them) | `settings.update({ ui: { telemetry } })`, `settings.update({ ui: { crashReports } })` |
 | Updates (M7) | Current version and state line, Channel (Stable / Beta), Check automatically, Check now with "Last checked …", an available-update card (notes, Download, progress bar, Restart to update with an inline confirm that running agents stop), Open release page when the build cannot install itself, the disabled reason otherwise | `updates.status`, `updates.check`, `updates.download`, `updates.install({ consent: true })`, `updates.changed` event, `settings.update({ updates: { channel / checkAutomatically } })` |
+| Diagnostics | Checks (CLI, git ≥ 2.38, gh, node, keychain, database, MCP port, logs), Copy report, Check again, Open logs folder | `app.diagnostics`, `app.openLogsFolder` ([reliability](reliability.md)) |
 
 ## Save and validation rules
 

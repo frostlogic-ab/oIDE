@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import type { Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { createCoreServices, type Services } from './core.js';
 import { electronPlatform, handleArtifactScheme, handleExtensionScheme } from './electron-platform.js';
@@ -12,11 +13,12 @@ export type { Services } from './core.js';
  * (test/integration); this wrapper injects the Electron pieces (`electron-platform.ts`):
  * safeStorage, dialogs, notifications, utility processes, the artifact preview protocol and the
  * auto-updater (`updater.ts`, off in dev builds).
+ * `opts.store` is the database main opened with recovery prompts (reliability/db-recovery.ts).
  */
-export async function createServices(ctx: MainContext): Promise<Services> {
+export async function createServices(ctx: MainContext, opts: { store?: Store } = {}): Promise<Services> {
   const terminals = new TerminalService({ emit: ctx.emit });
-  ctx.onQuit(() => terminals.disposeAll());
-  const services = await createCoreServices({ ctx, platform: electronPlatform(ctx, terminals), terminals });
+  ctx.onQuit(() => terminals.disposeAll(), 'terminals');
+  const services = await createCoreServices({ ctx, platform: electronPlatform(ctx, terminals), terminals, ...(opts.store ? { store: opts.store } : {}) });
   handleArtifactScheme(services.artifacts);
   handleExtensionScheme((origin) => services.extensions.uiSite(origin));
   services.updates = new UpdaterService({
@@ -29,7 +31,9 @@ export async function createServices(ctx: MainContext): Promise<Services> {
     stateFile: join(ctx.userDataDir, 'updates.json'),
   });
   services.updates.start();
-  ctx.onQuit(() => services.updates?.dispose());
-  ctx.onQuit(() => services.dispose());
+  ctx.onQuit(() => services.updates?.dispose(), 'updates');
+  // In order: deny pending prompts and close the MCP server, stop agents (sessions resumable),
+  // git watchers and in-flight git work, extension host, then the database (core.ts dispose()).
+  ctx.onQuit(() => services.dispose(), 'services');
   return services;
 }
