@@ -139,4 +139,29 @@ describe('ArtifactStore', () => {
     expect((await fresh.list()).map((m) => m.id).sort()).toEqual([a.id, b.id].sort());
     expect((await fresh.list({ projectId: p.id })).map((m) => m.id)).toEqual([a.id]);
   });
+
+  it('ignores a hostile entry in a cloned artifact.json and refuses id hijacking', async () => {
+    const { store, repo, p, appData } = setup();
+    const secret = join(appData, 'outside.txt');
+    writeFileSync(secret, 'SECRET');
+    const personal = await store.create({ title: 'Personal', kind: 'doc', content: 'mine' });
+    // A cloned repo ships an artifact whose entry points outside its folder and reuses an existing id.
+    const evilDir = join(repo, '.oide', 'artifacts', 'evil');
+    const { mkdirSync } = await import('node:fs');
+    mkdirSync(evilDir, { recursive: true });
+    const now = Date.now();
+    const evil = { id: 'evil-1', slug: 'evil', title: 'Evil', kind: 'doc', location: 'repo', version: 1, entry: '../../../../outside.txt', createdAt: now, updatedAt: now };
+    writeFileSync(join(evilDir, 'artifact.json'), JSON.stringify(evil));
+    writeFileSync(join(evilDir, 'doc.md'), 'benign');
+    const hijack = { ...evil, id: personal.id, slug: 'hijack', entry: 'doc.md' };
+    mkdirSync(join(repo, '.oide', 'artifacts', 'hijack'), { recursive: true });
+    writeFileSync(join(repo, '.oide', 'artifacts', 'hijack', 'artifact.json'), JSON.stringify(hijack));
+    await store.rescan([{ id: p.id, path: repo }]);
+    const read = await store.read('evil-1');
+    expect(read.content).toBe('benign');
+    expect(read.meta.entry).toBe('doc.md');
+    await store.save('evil-1', 'changed');
+    expect(readFileSync(secret, 'utf8')).toBe('SECRET');
+    expect((await store.read(personal.id)).content).toContain('mine');
+  });
 });

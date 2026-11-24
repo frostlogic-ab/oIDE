@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, extname, join } from 'node:path';
+import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import {
   ArtifactMeta,
   ArtifactUse,
@@ -163,6 +163,18 @@ export class ArtifactStore {
     return String(r.dir);
   }
 
+  /**
+   * Path of an artifact's entry file (or a version snapshot of it). The file name always comes from the
+   * kind, never from `artifact.json`, and the result must stay inside the artifact folder.
+   */
+  private contentPath(id: string, meta: ArtifactMeta, version?: number): string {
+    const dir = resolve(this.dirOf(id));
+    const file = resolve(version === undefined ? join(dir, ENTRY_FILES[meta.kind]) : join(dir, VERSIONS_DIR, String(version), ENTRY_FILES[meta.kind]));
+    const rel = relative(dir, file);
+    if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error('Artifact path escapes its folder');
+    return file;
+  }
+
   /* -------------------------------------------------------------- index */
 
   private index(meta: ArtifactMeta, dir: string): void {
@@ -201,7 +213,11 @@ export class ArtifactStore {
         try {
           const parsed = ArtifactMeta.safeParse(JSON.parse(await readFile(join(dir, 'artifact.json'), 'utf8')));
           if (!parsed.success) continue;
-          const meta: ArtifactMeta = { ...parsed.data, slug: name, location, projectId: location === 'repo' ? projectId : parsed.data.projectId };
+          // Never trust `entry` from disk (a cloned repo could point it outside the folder): derive it from the kind.
+          const meta: ArtifactMeta = { ...parsed.data, entry: ENTRY_FILES[parsed.data.kind], slug: name, location, projectId: location === 'repo' ? projectId : parsed.data.projectId };
+          // An id already indexed at a different folder keeps its folder; a copied artifact.json can't hijack it.
+          const sameId = this.d.db.prepare('SELECT dir_key FROM artifacts WHERE id = ?').get(meta.id) as Row | undefined;
+          if (sameId && String(sameId.dir_key) !== pathKey(dir) && existsSync(join(this.dirOf(meta.id), 'artifact.json'))) continue;
           const clash = this.d.db.prepare('SELECT id FROM artifacts WHERE dir_key = ? AND id != ?').get(pathKey(dir), meta.id) as Row | undefined;
           if (clash) this.d.db.prepare('DELETE FROM artifacts WHERE id = ?').run(String(clash.id));
           this.index(meta, dir);
@@ -241,7 +257,7 @@ export class ArtifactStore {
 
   async read(id: string, agentId?: string): Promise<ArtifactContent> {
     const meta = this.metaFromIndex(id);
-    const content = await readFile(join(this.dirOf(id), meta.entry), 'utf8');
+    const content = await readFile(this.contentPath(id, meta), 'utf8');
     if (agentId) this.recordUse(id, agentId, 'read');
     return { meta, content };
   }
@@ -265,7 +281,7 @@ export class ArtifactStore {
   async readVersion(id: string, version: number): Promise<string> {
     const meta = this.metaFromIndex(id);
     if (!Number.isInteger(version) || version < 1) throw new Error('Bad version');
-    return readFile(join(this.dirOf(id), VERSIONS_DIR, String(version), meta.entry), 'utf8');
+    return readFile(this.contentPath(id, meta, version), 'utf8');
   }
 
   /* -------------------------------------------------------------- write */
@@ -316,8 +332,8 @@ export class ArtifactStore {
       const version = cur.version + 1;
       const meta = ArtifactMeta.parse({ ...cur, version, updatedAt: ts });
       await mkdir(join(dir, VERSIONS_DIR, String(version)), { recursive: true });
-      await writeFile(join(dir, VERSIONS_DIR, String(version), meta.entry), content, 'utf8');
-      await writeAtomic(join(dir, meta.entry), content);
+      await writeFile(this.contentPath(id, meta, version), content, 'utf8');
+      await writeAtomic(this.contentPath(id, meta), content);
       const versions = await this.versions(id);
       versions.push(ArtifactVersion.parse({ version, ts, author: opts.author ?? 'user', note: opts.note }));
       versions.sort((a, b) => a.version - b.version);
