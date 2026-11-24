@@ -5,6 +5,7 @@ import { app, dialog, Notification, protocol, safeStorage, shell, utilityProcess
 import { utilityProcessFork } from '@oide/extension-host';
 import type { ArtifactStore } from '@oide/store';
 import type { MainContext } from '../context.js';
+import { trustPromptText } from '../security/confirm.js';
 import { ARTIFACT_CSP, ARTIFACT_SCHEME, resolveArtifactUrl } from './core.js';
 import { EXTENSION_SCHEME, resolveExtensionUrl, type ExtensionUiLookup } from './extension-ui.js';
 import type { Platform } from './platform.js';
@@ -122,8 +123,7 @@ export function electronPlatform(ctx: MainContext, terminals: TerminalService): 
       const options: Electron.MessageBoxOptions = {
         type: 'question',
         title: 'Trust this project?',
-        message: `Do you trust the files in ${name}?`,
-        detail: `${path}\n\n${TRUST_DETAIL}`,
+        ...trustPromptText(name, path, TRUST_DETAIL),
         buttons: ['Trust project', 'Not now'],
         defaultId: 1,
         cancelId: 1,

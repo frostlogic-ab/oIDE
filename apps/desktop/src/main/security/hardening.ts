@@ -7,7 +7,18 @@ import { buildCsp } from './csp.js';
  * from the app, refuses window.open and <webview>, and opens allow-listed https links in the
  * system browser. Permissions are denied except clipboard writes.
  */
-export function hardenApp(opts: { isAppUrl: (url: string) => boolean; dev: boolean }): void {
+/**
+ * Proxy of the default session (the app window, artifact previews and extension panels; the
+ * updater has its own session). SEC-33: `disable_non_proxied_udp` still lets WebRTC reach a TURN
+ * server over TCP (checked on Electron 45: a sandboxed iframe connected to `turn:…?transport=tcp`),
+ * and CSP does not cover WebRTC, so a preview or panel could send data anywhere. Every non-loopback
+ * connection of this session therefore goes to a proxy that does not exist and fails. Loopback
+ * (the dev server, Browser preview's localhost frames) is bypassed implicitly by Chromium. Nothing
+ * the window shows may load remote content anyway (CSP), so this blocks no feature.
+ */
+export const NO_NETWORK_PROXY = { mode: 'fixed_servers', proxyRules: 'http://127.0.0.1:9', proxyBypassRules: '' } as const;
+
+export async function hardenApp(opts: { isAppUrl: (url: string) => boolean; dev: boolean }): Promise<void> {
   const openIfAllowed = (url: string) => {
     if (isAllowedExternalUrl(url)) void shell.openExternal(url);
   };
@@ -36,6 +47,7 @@ export function hardenApp(opts: { isAppUrl: (url: string) => boolean; dev: boole
   const allowed = new Set(['clipboard-sanitized-write']);
   ses.setPermissionRequestHandler((_wc, permission, callback) => callback(allowed.has(permission)));
   ses.setPermissionCheckHandler((_wc, permission) => allowed.has(permission));
+  await ses.setProxy({ ...NO_NETWORK_PROXY });
 
   // Header CSP for http(s) responses (the dev server). Packaged builds load file:// where the
   // <meta> tag injected at build time applies.

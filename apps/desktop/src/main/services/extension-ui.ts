@@ -136,7 +136,12 @@ export function resolveExtensionUrl(
       .split(/[\\/]/)
       .filter(Boolean)
       .some((seg) => seg === '..' || seg.startsWith('.') || fold(seg) === 'node_modules' || fold(seg) === '');
-  if (!rel || rel.includes('\0') || rel.includes(':') || denied(rel)) return null;
+  // SEC-32: `%5C` decodes to a backslash, so `/%5C%5Chost%5Cshare` would be a UNC path. Refuse
+  // backslashes and anything not lexically inside the folder before the file system is touched
+  // (realpath of `\\host\share` is an SMB connection that hands over the user's NTLM hash).
+  if (!rel || rel.includes('\0') || rel.includes(':') || rel.includes('\\') || denied(rel)) return null;
+  const lexical = relative(resolve(site.dir), resolve(site.dir, rel));
+  if (!lexical || lexical.startsWith('..') || isAbsolute(lexical)) return null;
   let root: string;
   let real: string;
   try {

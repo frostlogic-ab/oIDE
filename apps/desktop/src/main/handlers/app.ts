@@ -6,6 +6,9 @@ import { collectDiagnostics } from '../reliability/diagnostics.js';
 import { Redactor } from '../reliability/redact.js';
 import type { Services } from '../services/index.js';
 
+/** Screen error reports written per minute; more are dropped. */
+export const REPORTS_PER_MINUTE = 20;
+
 export function registerAppHandlers(router: IpcRouter, services: Services, ctx: MainContext): void {
   router.register('app.info', () => ({
     version: ctx.appVersion,
@@ -41,7 +44,13 @@ export function registerAppHandlers(router: IpcRouter, services: Services, ctx: 
 
   // Renderer error boundaries: the page sends only the error and component stack (no props,
   // state, prompts or code); it is redacted again here before it reaches the log file.
+  // At most REPORTS_PER_MINUTE reports reach the log, so a renderer stuck in a crash loop (or a
+  // compromised one) cannot flood it and rotate the useful lines away (SEC-35).
+  let budget = { start: 0, n: 0 };
   router.register('app.reportError', ({ screen, name, message, stack, componentStack }) => {
+    const now = Date.now();
+    if (now - budget.start >= 60_000) budget = { start: now, n: 0 };
+    if (++budget.n > REPORTS_PER_MINUTE) return { ok: true as const };
     const log = ctx.reliability?.logs.channel('renderer') ?? ctx.log;
     log.error(`screen "${screen}" crashed`, { name, message, ...(stack ? { stack } : {}), ...(componentStack ? { componentStack } : {}) });
     return { ok: true as const };

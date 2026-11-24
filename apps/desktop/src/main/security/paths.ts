@@ -61,6 +61,10 @@ function normalizeForCompare(p: string, platform: NodeJS.Platform): string {
 export function isInside(root: string, candidate: string, opts: PathGuardOptions = {}): boolean {
   const platform = opts.platform ?? process.platform;
   if (!root || typeof candidate !== 'string' || candidate.includes('\0')) return false;
+  // SEC-39: never realpath a UNC or device path (`\\host\share`, `\\?\…`) under a local root:
+  // resolving it is an SMB connection that hands the user's NTLM hash to that host.
+  const unc = (p: string) => /^[\\/]{2}/.test(p);
+  if (platform === 'win32' && unc(candidate) && !unc(root)) return false;
   const realRoot = resolveReal(root);
   const realCandidate = resolveReal(isAbsolute(candidate) ? candidate : join(realRoot, candidate));
   const r = normalizeForCompare(realRoot, platform);

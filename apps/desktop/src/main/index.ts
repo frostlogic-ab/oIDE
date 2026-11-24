@@ -140,7 +140,7 @@ async function start(): Promise<void> {
 
   await app.whenReady();
 
-  hardenApp({ isAppUrl, dev: Boolean(devServerUrl) });
+  await hardenApp({ isAppUrl, dev: Boolean(devServerUrl) });
   setMenu();
 
   const userDataDir = app.getPath('userData');

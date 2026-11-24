@@ -120,6 +120,12 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
 - `codeql.yml` (javascript-typescript; push, PR, weekly), `.github/dependabot.yml` (npm and actions
   weekly, grouped; Electron majors ignored and done by hand), `docs.yml` (VitePress site to GitHub
   Pages; Pages source must be "GitHub Actions").
+- Supply chain (security round 2, SEC-34): every `uses:` is pinned to a full commit SHA with a
+  `# vN` comment (Dependabot's `github-actions` updates keep both current), release jobs restore no
+  dependency cache, and no workflow uses `pull_request_target` or expands PR titles or branch names
+  in a `run:` step. `test/security/round2-workflows.test.ts` fails when a new workflow breaks one of
+  these rules. Unsigned Windows betas install updates without a publisher check (SEC-40): sign
+  stable releases.
 
 ## Icon, licences and the docs site
 

@@ -434,3 +434,21 @@ tell authors to install from the foreign `@oide` npm scope; CHANGELOG, README, C
 issues reported (Excalidraw font notices, recorder slug sanitising, bundled index tarball URLs, dead
 usage-statistics switch, unclaimed `oide-dev` org behind `DEFAULT_INDEX_URL`). Owner checklist in
 [review-publication](pages/review-publication.md).
+
+## [2026-11-25] review | Security round 2
+
+Second adversarial pass over everything merged since round 1 (extension UI and the `oide-ext://`
+bridge, artifact editors, reliability, updater, workflows and `record.mjs`, `settings.forProject`,
+custom-model env, `safeDialogText`, keymap) and every IPC command added since. The reviewer also
+fixed what it found. Findings in [review-security](pages/review-security.md#round-2-2026-11-25):
+3 medium, 8 low, none critical or high. Fixed: SEC-32 (preview and panel URLs with `%5C` made main
+realpath a UNC path, an NTLM hash leak), SEC-33 (WebRTC still reached TURN over TCP despite
+SEC-18; the window session now has a dead fixed proxy, loopback direct), SEC-34 (actions pinned by
+SHA, no cache in release jobs), SEC-35 (log entry forging, report rate limit), SEC-36 (project
+techniques reusing a default-on id), SEC-37 (more invisible characters escaped in dialogs), SEC-38
+(trust dialog escapes name and path), SEC-39 (path guard refuses UNC candidates). Accepted or
+documented: SEC-40 (unsigned Windows updates have no publisher check), SEC-41 (an artifact viewer
+can relay to its own panels), SEC-42 (opt-in compat recordings list the runner's MCP names). All
+round-1 PoCs still pass; spot checks of SEC-01/02/03/05/08/16/28 found no merge damage. PoCs:
+`test/security/round2-*.test.ts`. Pages updated: [security](pages/security.md),
+[reliability](pages/reliability.md), [packaging](pages/packaging.md).

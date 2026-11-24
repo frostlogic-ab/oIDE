@@ -200,7 +200,9 @@ export class Redactor {
       .map((a) => {
         if (typeof a === 'string') return this.string(a);
         const v = this.value(a);
-        if (v && typeof v === 'object' && 'stack' in (v as Record<string, unknown>) && typeof (v as { stack?: unknown }).stack === 'string') {
+        // An Error prints as its stack. A plain object that merely has a `stack` field (a screen
+        // error report) stays JSON, so its name and message are kept (SEC-35).
+        if (a instanceof Error && v && typeof v === 'object' && typeof (v as { stack?: unknown }).stack === 'string') {
           return (v as { stack: string }).stack;
         }
         try {

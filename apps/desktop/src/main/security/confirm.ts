@@ -20,10 +20,15 @@ export type ConfirmFn = (opts: ConfirmOptions) => boolean | Promise<boolean>;
 /**
  * Characters that could fake or hide lines in a native dialog: C0/C1 controls (newlines, CR, tab,
  * escape, …), DEL, Unicode line/paragraph separators, bidi embeddings, overrides and isolates,
- * zero-width characters and the BOM.
+ * zero-width characters and the BOM. Round 2 (SEC-37) adds the other characters that render as
+ * nothing: soft hyphen, combining grapheme joiner, Hangul and Khmer fillers, Mongolian free
+ * variation selectors and vowel separator, deprecated format characters, variation selectors,
+ * interlinear annotation marks and the tag characters (U+E0000 block), which can carry a hidden
+ * copy of any ASCII text.
  */
-// eslint-disable-next-line no-control-regex
-const UNSAFE_DIALOG_CHARS = /[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028-\u202e\u2060-\u2069\ufeff]/g;
+const UNSAFE_DIALOG_CHARS =
+  // eslint-disable-next-line no-control-regex, no-misleading-character-class
+  /[\u0000-\u001f\u007f-\u009f\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u2028-\u202e\u2060-\u206f\u3164\ufe00-\ufe0f\ufeff\uffa0\ufff9-\ufffb\u{e0000}-\u{e0fff}]/gu;
 const NAMED_ESCAPES: Record<string, string> = { '\n': '\\n', '\r': '\\r', '\t': '\\t' };
 
 /**
@@ -51,6 +56,18 @@ export function dialogOrigin(url: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * Message and detail of the native "Trust this project?" dialog (SEC-38). The folder name and path
+ * come from the file system, which on macOS and Linux allows newlines and everywhere allows bidi
+ * and invisible characters, so a folder could otherwise fake another project's name or path.
+ */
+export function trustPromptText(name: string, path: string, explanation: string): { message: string; detail: string } {
+  return {
+    message: `Do you trust the files in ${safeDialogText(name, { max: 80 })}?`,
+    detail: `${safeDialogText(path)}\n\n${explanation}`,
+  };
 }
 
 /** Defence in depth: whatever a caller passes, no field can carry hidden or reordering characters. */

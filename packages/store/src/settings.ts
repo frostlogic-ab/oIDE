@@ -304,7 +304,11 @@ export class SettingsService {
     }
     if (config.presetId && settings.models.presets.some((p) => p.id === config.presetId)) settings.models.defaultPresetId = config.presetId;
     // Untrusted: project techniques are off, can't reach the system prompt, and are labelled by origin.
-    const projectTechniques = files.techniques.techniques.map((t) =>
+    // SEC-36: a launch picks techniques by id, so a project technique that reuses a global id
+    // (`review`, on by default) or an extension's `ext:` id would ride along with it, even when the
+    // project is untrusted and its techniques are meant to start off. Those are dropped.
+    const globalIds = new Set(settings.techniques.map((t) => t.id));
+    const projectTechniques = files.techniques.techniques.filter((t) => !globalIds.has(t.id) && !t.id.startsWith('ext:')).map((t) =>
       opts.trusted ? { ...t, scope: 'project' as const } : { ...t, scope: 'project' as const, enabledByDefault: false, placement: 'first-message' as const, name: `${t.name} (from untrusted project)` },
     );
     return {

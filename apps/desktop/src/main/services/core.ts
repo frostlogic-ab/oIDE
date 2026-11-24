@@ -342,8 +342,13 @@ export function resolveArtifactUrl(artifacts: ArtifactStore, url: string): { fil
     const segs = p.split(/[\\/]/).filter(Boolean).map(fold);
     return segs.some((seg) => seg === '..' || seg === '.versions') || (segs.length === 1 && segs[0] === 'artifact.json');
   };
-  if (!rel || rel.includes('\0') || denied(rel)) return null;
+  // SEC-32: `%5C` decodes to a backslash, so `/%5C%5Chost%5Cshare` would be a UNC path. Refuse
+  // backslashes and anything not lexically inside the folder before the file system is touched
+  // (realpath of `\\host\share` is an SMB connection that hands over the user's NTLM hash).
+  if (!rel || rel.includes('\0') || rel.includes('\\') || denied(rel)) return null;
   const candidate = resolve(dir, rel);
+  const lexical = relative(dir, candidate);
+  if (!lexical || lexical.startsWith('..') || isAbsolute(lexical)) return null;
   let real: string;
   try {
     real = realpathSync(candidate);

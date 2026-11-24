@@ -155,6 +155,10 @@ export class LogManager {
     } catch {
       text = '[unformattable log message]';
     }
+    // SEC-35: a value with line breaks (a renderer error report, a branch name, a CLI message)
+    // must not start a line that looks like a log entry of its own. Continuation lines are
+    // indented; every entry starts with its timestamp in column 0.
+    text = text.replace(/\r\n|[\r\n\u0085\u2028\u2029]/g, '\n    ');
     const ts = new Date((this.o.now ?? Date.now)()).toISOString();
     const line = `${ts} ${level.toUpperCase().padEnd(5)} [${tag}] ${text}\n`;
     if (this.o.console || level === 'error' || level === 'warn') {

@@ -24,8 +24,12 @@ rules in [constraints](constraints.md). Where things live: [desktop-shell](deskt
 - Electron fuses in packaged builds: `RunAsNode` off, `NODE_OPTIONS` and `--inspect` off, asar
   integrity, load only from asar (`electron-builder.yml`). `grantFileProtocolExtraPrivileges` stays
   on until the renderer moves to an `app://` protocol (accepted risk, SEC-25).
-- WebRTC: every webContents uses `disable_non_proxied_udp`, so an artifact preview cannot leak data
-  to a STUN/TURN host (CSP does not cover WebRTC).
+- WebRTC and other non-CSP traffic: every webContents uses `disable_non_proxied_udp`, and the
+  default session (app window, artifact previews, extension panels) has a fixed proxy that does not
+  exist (`NO_NETWORK_PROXY` in `security/hardening.ts`, no direct fallback), so a preview or panel
+  cannot reach a STUN or TURN host over UDP or TCP (CSP does not cover WebRTC; SEC-18, SEC-33).
+  Loopback stays direct (Chromium bypasses it implicitly), so the dev server and Browser preview's
+  localhost frames work. The updater uses electron-updater's own session.
 - `githubusercontent.com` is not on the external-link allow-list (anyone can host there); hosts
   are `github.com`, `gitlab.com`, `bitbucket.org`, `claude.ai`, `anthropic.com`, `claude.com`,
   `npmjs.com`, `modelcontextprotocol.io`, `oide.dev` and project remotes added at runtime.
@@ -56,7 +60,8 @@ rules in [constraints](constraints.md). Where things live: [desktop-shell](deskt
 - `files.*`, `terminal.create`, `shell.revealPath` resolve the path (`..`, symlinks via realpath of the
   longest existing prefix, case-insensitive on Windows/macOS) and require it inside an allowed root of
   the right kind; `files.*` also refuse anything inside `.git`, and the tree hides symlinks pointing
-  out of the checkout.
+  out of the checkout. On Windows a UNC or device path (`\\host\share`, `\\?\…`) under a local root
+  is refused before it is resolved, since resolving it would connect to that host (SEC-39).
 - `terminal.create` takes no command (interactive shell only) and only a `project` or `worktree`
   root as cwd. The sign-in terminal (`cli.openSignIn`) is started by main itself.
 - Paths that would be dangerous to take from the renderer are only accepted when the user picked
@@ -68,7 +73,10 @@ rules in [constraints](constraints.md). Where things live: [desktop-shell](deskt
 ## Artifact preview protocol
 
 `oide-artifact://<artifact-id>/<file>` is a privileged standard scheme (`services/electron-platform.ts`).
-`resolveArtifactUrl` (`services/core.ts`) serves only real files inside that artifact's folder:
+`resolveArtifactUrl` (`services/core.ts`) serves only real files inside that artifact's folder.
+A decoded path with a backslash (`%5C`, which would make `/%5C%5Chost%5Cshare` a UNC path) or one
+that is not lexically inside the folder is refused before the file system is touched (SEC-32: a
+realpath of `\\host\share` is an SMB connection carrying the user's NTLM hash). Then
 `..` segments, `.versions/`, `artifact.json` (compared case-insensitively, trailing dots and spaces
 ignored, checked again on the real path) and symlinks that resolve outside the folder answer 404.
 Every response carries `Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline' 'self'; …;
@@ -87,8 +95,10 @@ in the app's document and never reach IPC directly.
   origin is a hash of the extension name, so each extension has its own. `resolveExtensionUrl`
   serves only real files inside that extension's folder, and only for extensions that are on
   somewhere: `..`, dot files and folders (`.git`, `.env`), `node_modules`, `:` (alternate data
-  streams), symlinks that resolve outside the folder and any type outside a small MIME table (HTML,
-  CSS, JS, JSON, images, fonts, wasm) answer 404. Deny checks fold case and trailing dots (SEC-17).
+  streams), backslashes and paths not lexically inside the folder (checked before any file system
+  call, SEC-32), symlinks that resolve outside the folder and any type outside a small MIME table
+  (HTML, CSS, JS, JSON, images, fonts, wasm) answer 404. Deny checks fold case and trailing dots
+  (SEC-17).
 - **CSP on every response:** `default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'
   'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none';
   object-src 'none'; form-action 'none'; base-uri 'none'`, plus `nosniff`, `no-store`,
@@ -146,7 +156,9 @@ in the app's document and never reach IPC directly.
 - Untrusted projects: `.oide/setup` never runs (checked in the WorktreeProvider's `runSetup`), allow
   rules in `.oide/permissions.json` are dropped (ask/deny still apply), `.oide/config.json` cannot set
   the default mode, project MCP servers (`.mcp.json` custom servers) are skipped, `.oide/extensions.json`
-  cannot enable extensions, project techniques start off and stay in the first message.
+  cannot enable extensions, project techniques start off and stay in the first message. In every
+  project, a project technique that reuses a global technique's id or an `ext:` id is dropped, so
+  it cannot ride along with a technique that is on by default (SEC-36).
 - Untrusted projects, Claude Code itself: agents start with `--setting-sources user
   --strict-mcp-config` (`claude -p` skips the CLI's own trust dialog), so the repo's
   `.claude/settings.json` and `.claude/settings.local.json` (hooks, permissions, env,
@@ -234,9 +246,11 @@ Only one agent at a time may hold the project folder (`conflict`).
 - Native confirmations go through `security/confirm.ts` (`confirmNative`): Cancel is the default,
   plain Node answers no, and only unpackaged builds honour `OIDE_E2E_CONFIRM=accept|deny`.
   Every interpolated value goes through `safeDialogText()`, which shows newlines, other control
-  characters, Unicode line separators, bidi and zero-width characters as visible escapes, so a
-  value cannot add or reorder lines; only display names are shortened (from the middle). The
-  custom model confirmation shows the endpoint origin in full on its own line (SEC-31).
+  characters, Unicode line separators, bidi and zero-width characters, and every other character
+  that renders as nothing (soft hyphen, fillers, variation selectors, the tag block; SEC-37) as
+  visible escapes, so a value cannot add, hide or reorder text; only display names are shortened
+  (from the middle). The custom model confirmation shows the endpoint origin in full on its own
+  line (SEC-31). The trust dialog escapes the folder name and path the same way (SEC-38).
 
 ## Custom model test ("Test connection")
 
@@ -299,8 +313,10 @@ or credentials. Every line passes `Redactor` (`apps/desktop/src/main/reliability
 
 Per-agent logs record status changes, exit codes and error codes only, never prompts, transcript
 text or tool output. Screen error reports from the renderer (`app.reportError`) carry only the error
-name, a sanitized message and reduced stack frames (no props, state, prompts or code) and are
-redacted again in main. The diagnostics report uses the same redaction.
+name, a sanitized message and reduced stack frames (no props, state, prompts or code), are
+redacted again in main and are limited to 20 a minute. Line breaks inside a logged value are
+indented, so only real entries start with a timestamp in column 0 and no value can forge one
+(SEC-35). The diagnostics report uses the same redaction.
 
 ## Crash reports
 
@@ -311,3 +327,15 @@ with `uploadToServer: false`; its minidumps (which can contain process memory) s
 `crash-reports/native/`, only the newest 5 are kept, and turning the setting off deletes every local
 report. **v1 uploads nothing**: there is no crash endpoint; a user can copy a summary into an issue.
 Usage statistics (`ui.telemetry`) are also off by default, and v1 sends none.
+
+## Updates and release pipeline
+
+- The updater (`services/updater.ts`) never downloads or installs without a click, offers
+  prereleases only on the beta channel and never offers a downgrade. Windows installers are checked
+  against the Authenticode publisher only for signed builds (electron-updater reads it from
+  `app-update.yml`); unsigned betas rely on the sha512 in the same GitHub release (accepted,
+  SEC-40). See [packaging](packaging.md).
+- Every GitHub Action is pinned to a commit SHA (Dependabot updates the pins), release jobs use no
+  dependency cache, no workflow runs on `pull_request_target`, and no `run:` step expands PR
+  titles or branch names (SEC-34, checked by `test/security/round2-workflows.test.ts`). The
+  self-hosted real-CLI jobs run only on schedule or dispatch, never for pull requests.

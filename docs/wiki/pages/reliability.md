@@ -63,6 +63,9 @@ agents/<agentId>.log     per-agent supervisor log: status changes, exit codes, e
   when it is registered with the MCP server (`guardedBroker`), and every keychain value read in main
   (`redactSecretReads` over the secret store: custom model keys, extension secrets, MCP OAuth tokens,
   custom server env secrets; token JSON registers its secret-looking fields).
+- Line breaks inside a logged value (`\n`, `\r`, U+0085, U+2028, U+2029) become an indented
+  continuation line, so every entry, and only an entry, starts with its timestamp; screen error
+  reports are capped at 20 a minute (SEC-35).
 - Settings › Diagnostics › **Open logs folder** (`app.openLogsFolder`).
 
 ## Crash reports (opt-in, local only)
