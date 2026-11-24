@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oIDE · Files</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1013;color:#E6E8EB;font-family:Inter,system-ui,sans-serif;font-size:13px}
+input,select,textarea{font-family:inherit}
+a{color:#9DBBFA}a:hover{color:#C4D6FC}
+button{font-family:inherit;cursor:pointer}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.rail{width:40px;height:40px;border-radius:10px;color:#9AA3AE;display:flex;align-items:center;justify-content:center}
+.tr{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:5px;color:#C9CED6;font-size:12px}
+.ln{display:flex;min-height:20px}
+.ln .n{width:44px;flex:0 0 44px;text-align:right;padding-right:14px;color:#5E6774}
+.ln .c{flex:1;white-space:pre}
+.k{color:#C4A7E7}.s{color:#A8E0C6}.f{color:#9DBBFA}.cm{color:#7A8494}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 900px; display: flex; flex-direction: column; background: #0E1013; color: #E6E8EB; font-family: Inter, system-ui, sans-serif; font-size: 13px;">
+
+  <header style="height: 44px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #232830; background: #0B0D10;">
+    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px;"><span style="width: 20px; height: 20px; border-radius: 6px; border: 2px solid {{accent}}; box-sizing: border-box; display: inline-block;"></span>oIDE</div>
+    <span style="color: #E6E8EB; font-size: 12.5px;">Files</span>
+    <div style="flex: 1;"></div>
+    <div role="radiogroup" aria-label="Project scope" style="display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 9px; background: #15181D; border: 1px solid #262B33;">
+      <sc-for list="{{ scopes }}" as="sc" hint-placeholder-count="4">
+        <button type="button" role="radio" aria-checked="{{ sc.sel }}" onClick="{{ sc.pick }}" style="height: 26px; padding: 0 10px; border: none; border-radius: 6px; background: {{ sc.bg }}; color: {{ sc.color }}; font-size: 12px;">{{ sc.label }}</button>
+      </sc-for>
+    </div>
+  </header>
+
+  <div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0;">
+    <nav aria-label="Primary" style="flex: 0 0 56px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: #0B0D10; border-right: 1px solid #232830;">
+      <a href="Main.dc.html" class="rail" aria-label="Agents"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></a>
+      <a href="Artifacts.dc.html" class="rail" aria-label="Artifacts"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"></path><path d="M3 13l9 5 9-5"></path></svg></a>
+      <a href="Files.dc.html" class="rail" aria-label="Files" aria-current="page" style="background: #1E2430; color: {{accent}};"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"></path><path d="M14 3v5h5"></path></svg></a>
+      <a href="SourceControl.dc.html" class="rail" aria-label="Source control"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="8" r="2"></circle><path d="M6 7v10"></path><path d="M18 10c0 4-6 3-12 7"></path></svg></a>
+      <div style="flex: 1;"></div>
+      <a href="Marketplace.dc.html" class="rail" aria-label="Extension marketplace"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"></rect><rect x="3" y="13" width="8" height="8" rx="1.5"></rect><rect x="13" y="13" width="8" height="8" rx="1.5"></rect><path d="M17 3v8"></path><path d="M13 7h8"></path></svg></a>
+      <a href="Settings.dc.html" class="rail" aria-label="Settings"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg></a>
+    </nav>
+
+    <!-- Tree with agent markers -->
+    <aside aria-label="File tree" style="flex: 0 0 270px; display: flex; flex-direction: column; gap: 1px; padding: 12px 8px; background: #111418; border-right: 1px solid #232830; box-sizing: border-box;">
+      <sc-if value="{{ show_oide }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 1px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 2px;">
+            <button type="button" aria-expanded="{{ exp_oide }}" onClick="{{ toggle_oide }}" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; border: none; background: transparent; color: #E6E8EB; font-size: 12px; font-weight: 600; padding: 2px 4px; text-align: left; white-space: nowrap;"><span aria-hidden="true" style="color: #9AA3AE; font-size: 10px; width: 10px;">{{ chev_oide }}</span>oide<span style="font-weight: 400; color: #9AA3AE; font-size: 11px;">{{ dots_oide }}</span></button>
+            <select aria-label="Branch or worktree shown for oide" class="mono" style="height: 24px; width: 96px; flex: 0 0 96px; padding: 0 4px; border-radius: 6px; border: 1px solid #343A44; background: #15181D; color: #C9CED6; font-size: 10.5px;"><option>main</option><option>shell-layout</option><option>cli-bridge</option><option>ext-manifest</option></select>
+          </div>
+          <sc-if value="{{ open_oide }}" hint-placeholder-val="{{ false }}">
+      <span class="tr">▾ src</span>
+      <span class="tr" style="padding-left: 22px;">▾ main/cli</span>
+      <span class="tr" style="padding-left: 38px;"><span style="flex: 1;">SessionHost.ts</span><span title="Being edited by Claude CLI bridge" style="width: 7px; height: 7px; border-radius: 50%; background: #F2C078;"></span></span>
+      <span class="tr" style="padding-left: 38px;"><span style="flex: 1;">parser.ts</span><span title="Being edited by Claude CLI bridge" style="width: 7px; height: 7px; border-radius: 50%; background: #F2C078;"></span></span>
+      <span class="tr" style="padding-left: 22px;">▾ shell</span>
+      <span class="tr" style="padding-left: 38px;"><span style="flex: 1;">Layout.tsx</span><span title="Being edited by Window shell layout" style="width: 7px; height: 7px; border-radius: 50%; background: #7FC8A9;"></span></span>
+      <span class="tr" style="padding-left: 38px;"><span style="flex: 1;">SessionGrid.tsx</span><span title="Being edited by Window shell layout" style="width: 7px; height: 7px; border-radius: 50%; background: #7FC8A9;"></span></span>
+      <span class="tr" style="padding-left: 38px; background: #1E2430; color: #E6E8EB;"><span style="flex: 1;">StatusBar.tsx</span><span title="Being edited by Window shell layout" style="width: 7px; height: 7px; border-radius: 50%; background: #7FC8A9;"></span></span>
+      <span class="tr" style="padding-left: 38px;">Rail.tsx</span>
+      <span class="tr" style="padding-left: 22px;">▸ extensions</span>
+      <span class="tr">▾ docs/rfc</span>
+      <span class="tr" style="padding-left: 22px;"><span style="flex: 1;">extension-manifest.md</span><span title="Being written by Extension manifest" style="width: 7px; height: 7px; border-radius: 50%; background: #7FC8A9;"></span></span>
+      <span class="tr">package.json</span>
+      <span class="tr">CLAUDE.md</span>
+          </sc-if>
+        </div>
+      </sc-if>
+      <sc-if value="{{ show_billing }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 1px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 2px;">
+            <button type="button" aria-expanded="{{ exp_billing }}" onClick="{{ toggle_billing }}" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; border: none; background: transparent; color: #E6E8EB; font-size: 12px; font-weight: 600; padding: 2px 4px; text-align: left; white-space: nowrap;"><span aria-hidden="true" style="color: #9AA3AE; font-size: 10px; width: 10px;">{{ chev_billing }}</span>billing-api<span style="font-weight: 400; color: #9AA3AE; font-size: 11px;">{{ dots_billing }}</span></button>
+            <select aria-label="Branch or worktree shown for billing-api" class="mono" style="height: 24px; width: 96px; flex: 0 0 96px; padding: 0 4px; border-radius: 6px; border: 1px solid #343A44; background: #15181D; color: #C9CED6; font-size: 10.5px;"><option>main</option><option>webhook-retry</option><option>invoice-test</option></select>
+          </div>
+          <sc-if value="{{ open_billing }}" hint-placeholder-val="{{ false }}">
+      <span class="tr">▾ src/webhooks</span>
+      <span class="tr" style="padding-left: 22px;"><span style="flex: 1;">retry.ts</span><span title="Ready for review: Webhook retries" style="width: 7px; height: 7px; border-radius: 50%; background: #9DBBFA;"></span></span>
+      <span class="tr" style="padding-left: 22px;"><span style="flex: 1;">handler.ts</span><span title="Ready for review: Webhook retries" style="width: 7px; height: 7px; border-radius: 50%; background: #9DBBFA;"></span></span>
+      <span class="tr">▸ src/invoices</span>
+      <span class="tr">▸ test</span>
+      <span class="tr">package.json</span>
+          </sc-if>
+        </div>
+      </sc-if>
+      <sc-if value="{{ show_docs }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 1px; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 2px;">
+            <button type="button" aria-expanded="{{ exp_docs }}" onClick="{{ toggle_docs }}" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; border: none; background: transparent; color: #E6E8EB; font-size: 12px; font-weight: 600; padding: 2px 4px; text-align: left; white-space: nowrap;"><span aria-hidden="true" style="color: #9AA3AE; font-size: 10px; width: 10px;">{{ chev_docs }}</span>docs-site<span style="font-weight: 400; color: #9AA3AE; font-size: 11px;">{{ dots_docs }}</span></button>
+            <select aria-label="Branch or worktree shown for docs-site" class="mono" style="height: 24px; width: 96px; flex: 0 0 96px; padding: 0 4px; border-radius: 6px; border: 1px solid #343A44; background: #15181D; color: #C9CED6; font-size: 10.5px;"><option>main</option><option>getting-started</option></select>
+          </div>
+          <sc-if value="{{ open_docs }}" hint-placeholder-val="{{ false }}">
+      <span class="tr">▾ content/docs/start</span>
+      <span class="tr" style="padding-left: 22px;"><span style="flex: 1;">install.mdx</span><span title="Being edited by Getting-started rewrite" style="width: 7px; height: 7px; border-radius: 50%; background: #7FC8A9;"></span></span>
+      <span class="tr" style="padding-left: 22px;">quickstart.mdx</span>
+      <span class="tr">astro.config.mjs</span>
+          </sc-if>
+        </div>
+      </sc-if>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 10px; border: 1px solid #262B33; font-size: 11.5px; color: #9AA3AE;">
+        <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #7FC8A9;"></span>An agent is changing this file</span>
+        <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #F2C078;"></span>That agent is waiting on you</span>
+        <span style="line-height: 1.45; margin-top: 2px;">Each project shows its own branch or agent worktree. The menu next to a project switches it.</span>
+      </div>
+    </aside>
+
+    <!-- Editor -->
+    <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column;">
+      <div role="tablist" aria-label="Open files" style="display: flex; background: #0B0D10; border-bottom: 1px solid #232830;">
+        <button type="button" role="tab" aria-selected="true" class="mono" style="height: 36px; padding: 0 14px; border: none; border-top: 2px solid {{accent}}; background: #0E1013; color: #E6E8EB; font-size: 12px;"><span style="color: #9AA3AE;">oide ›</span> StatusBar.tsx</button>
+        <button type="button" role="tab" aria-selected="false" class="mono" style="height: 36px; padding: 0 14px; border: none; border-top: 2px solid transparent; background: transparent; color: #9AA3AE; font-size: 12px;">oide › CLAUDE.md</button>
+        <button type="button" role="tab" aria-selected="false" class="mono" style="height: 36px; padding: 0 14px; border: none; border-top: 2px solid transparent; background: transparent; color: #9AA3AE; font-size: 12px;">billing-api › retry.ts</button>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px; margin: 12px 16px 0; padding: 10px 12px; border-radius: 10px; background: #12201B; border: 1px solid #22463A; flex-wrap: wrap;">
+        <span style="width: 8px; height: 8px; border-radius: 50%; background: #7FC8A9;"></span>
+        <span style="flex: 1; min-width: 240px; color: #C9E9DA;">The <b>Window shell layout</b> agent is changing this file in its worktree. You're viewing <span class="mono" style="font-size: 12px;">main</span>, so your edits won't clash.</span>
+        <button type="button" style="height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #22463A; background: transparent; color: #C9E9DA; font-size: 12px;">See agent's version</button>
+        <a href="Focus.dc.html" style="font-size: 12px; color: #A8E0C6;">Open agent</a>
+      </div>
+
+      <div class="mono" style="position: relative; flex: 1; font-size: 12.5px; line-height: 20px; padding: 12px 0;">
+        <div class="ln"><span class="n">1</span><span class="c"><span class="k">import</span> { usePlanUsage } <span class="k">from</span> <span class="s">'../usage'</span>;</span></div>
+        <div class="ln"><span class="n">2</span><span class="c"><span class="k">import</span> { Meter } <span class="k">from</span> <span class="s">'./Meter'</span>;</span></div>
+        <div class="ln"><span class="n">3</span><span class="c"></span></div>
+        <div class="ln"><span class="n">4</span><span class="c"><span class="k">export function</span> <span class="f">StatusBar</span>() {</span></div>
+        <div class="ln" style="background: #1B2333;"><span class="n">5</span><span class="c">  <span class="k">const</span> { session, week } = <span class="f">usePlanUsage</span>();</span></div>
+        <div class="ln" style="background: #1B2333;"><span class="n">6</span><span class="c">  <span class="k">const</span> agents = <span class="f">useSessions</span>().<span class="f">filter</span>((s) =&gt; s.running);</span></div>
+        <div class="ln"><span class="n">7</span><span class="c">  <span class="k">return</span> (</span></div>
+        <div class="ln"><span class="n">8</span><span class="c">    &lt;<span class="f">footer</span> className=<span class="s">"status"</span>&gt;</span></div>
+        <div class="ln"><span class="n">9</span><span class="c">      &lt;<span class="f">CliStatus</span> /&gt;</span></div>
+        <div class="ln"><span class="n">10</span><span class="c">      &lt;<span class="f">Meter</span> label=<span class="s">"Session"</span> value={session.used} resetsAt={session.resetsAt} /&gt;</span></div>
+        <div class="ln"><span class="n">11</span><span class="c">      &lt;<span class="f">Meter</span> label=<span class="s">"Week"</span> value={week.used} resetsAt={week.resetsAt} /&gt;</span></div>
+        <div class="ln"><span class="n">12</span><span class="c">    &lt;/<span class="f">footer</span>&gt;</span></div>
+        <div class="ln"><span class="n">13</span><span class="c">  );</span></div>
+        <div class="ln"><span class="n">14</span><span class="c">}</span></div>
+
+        <!-- Selection action -->
+        <div style="position: absolute; left: 330px; top: 64px; display: flex; gap: 4px; padding: 4px; border-radius: 9px; background: #15181D; border: 1px solid #343A44; box-shadow: 0 8px 24px rgba(0,0,0,0.45); font-family: Inter, system-ui, sans-serif;">
+          <a href="Spawn.dc.html" style="height: 28px; padding: 0 10px; border-radius: 6px; background: {{accent}}; color: #0B0D10; font-weight: 600; font-size: 12px; display: flex; align-items: center; text-decoration: none;">Ask an agent about this</a>
+          <button type="button" style="height: 28px; padding: 0 10px; border-radius: 6px; border: none; background: transparent; color: #E6E8EB; font-size: 12px;">Send to Window shell layout</button>
+        </div>
+      </div>
+    </main>
+
+    <!-- File activity -->
+    <aside aria-label="File activity" style="flex: 1 1 260px; max-width: 300px; display: flex; flex-direction: column; gap: 12px; padding: 16px; background: #111418; border-left: 1px solid #232830; box-sizing: border-box;">
+      <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">This file's history</span>
+      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 12.5px; color: #C9CED6;">
+        <span style="display: flex; flex-direction: column; gap: 2px;"><span>Window shell layout agent</span><span style="font-size: 11.5px; color: #9AA3AE;">editing now · worktree shell-layout</span></span>
+        <span style="display: flex; flex-direction: column; gap: 2px;"><span>You</span><span style="font-size: 11.5px; color: #9AA3AE;">committed on main · yesterday</span></span>
+        <span style="display: flex; flex-direction: column; gap: 2px;"><span>Scaffold agent</span><span style="font-size: 11.5px; color: #9AA3AE;">created · 3 days ago</span></span>
+      </div>
+      <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE; margin-top: 8px;">Mentioned in</span>
+      <span style="font-size: 12.5px; color: #C9CED6;">Main window v2 · design</span>
+      <div style="flex: 1;"></div>
+      <span style="font-size: 12px; color: #9AA3AE; line-height: 1.5;">A full editor is here when you need it. Language servers come from extensions.</span>
+    </aside>
+  </div>
+
+  <footer style="height: 26px; display: flex; align-items: center; gap: 16px; padding: 0 14px; background: #0B0D10; border-top: 1px solid #232830; color: #9AA3AE; font-size: 11.5px;">
+    <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #7FC8A9;"></span>Claude Code CLI connected</span>
+    <span class="mono">Ln 6, Col 18 · TypeScript</span>
+    <div style="flex: 1;"></div>
+    <span>Max plan · Session 62% · Week 38%</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#7AA2F7","options":["#7AA2F7","#7FC8A9","#C4A7E7","#F2C078"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { scope: 'all', open: { oide: true, billing: false, docs: false } }; }
+  renderVals() {
+    const S = this.state;
+    const v = { accent: this.props.accent ?? '#7AA2F7' };
+    const roots = { oide: ['oide', '3'], billing: ['billing-api', '2'], docs: ['docs-site', '1'] };
+    Object.keys(roots).forEach((k) => {
+      const show = S.scope === 'all' || S.scope === roots[k][0];
+      const open = S.scope === 'all' ? S.open[k] : show;
+      v['show_' + k] = show; v['open_' + k] = open;
+      v['exp_' + k] = open ? 'true' : 'false'; v['chev_' + k] = open ? '▾' : '▸';
+      v['dots_' + k] = roots[k][1];
+      v['toggle_' + k] = () => this.setState({ open: { ...S.open, [k]: !open } });
+    });
+    const scopes = [['all', 'All projects'], ['oide', 'oide'], ['billing-api', 'billing-api'], ['docs-site', 'docs-site']];
+    v.scopes = scopes.map(([k, label]) => ({ label, sel: S.scope === k ? 'true' : 'false', bg: S.scope === k ? '#1E2430' : 'transparent', color: S.scope === k ? '#E6E8EB' : '#9AA3AE', pick: () => this.setState({ scope: k }) }));
+    return v;
+  }
+}
+</script>
+</body>
+</html>

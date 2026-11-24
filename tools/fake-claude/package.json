@@ -1,0 +1,1 @@
+{ "name": "@oide/fake-claude", "version": "0.1.0", "private": true, "license": "MIT", "type": "module", "dependencies": { "@oide/protocol": "workspace:*", "zod": "^4.6.7" } }

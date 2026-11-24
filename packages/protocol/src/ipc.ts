@@ -1,0 +1,181 @@
+import { z } from 'zod';
+import { AgentSpec, AgentSummary, Id, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
+import { ArtifactKind, ArtifactMeta, ArtifactUse, ArtifactVersion } from './artifacts.js';
+import { AgentEvent } from './events.js';
+import { CustomServer, InstalledExtension, MarketplaceEntry } from './extensions.js';
+import { CommitInfo, FileDiff, FileNode, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
+import { CliInfo, CustomModel, Settings, Technique } from './settings.js';
+
+/**
+ * The IPC contract. Every renderer → main command is a request/response pair, validated with Zod
+ * in main (input) and optionally in the renderer (output). Every main → renderer event is streamed.
+ *
+ * Preload exposes exactly one object, `window.oide`:
+ *   window.oide.invoke(command, input) → Promise<output>
+ *   window.oide.on(event, listener) → unsubscribe
+ * No `ipcRenderer` leaks into React code.
+ */
+
+const cmd = <I extends z.ZodType, O extends z.ZodType>(input: I, output: O) => ({ input, output });
+const Void = z.void().or(z.undefined()).or(z.null());
+const Ok = z.object({ ok: z.literal(true) });
+
+export const Scope = z.union([z.literal('all'), Id]);
+export type Scope = z.infer<typeof Scope>;
+
+export const Commands = {
+  // App / CLI
+  'app.info': cmd(Void, z.object({ version: z.string(), platform: z.string(), userData: z.string() })),
+  'cli.detect': cmd(Void, CliInfo),
+  'cli.openSignIn': cmd(Void, z.object({ terminalId: Id })),
+
+  // Projects
+  'projects.list': cmd(Void, z.array(Project)),
+  'projects.open': cmd(z.object({ path: z.string().optional() }), Project.nullable()),
+  'projects.remove': cmd(z.object({ projectId: Id }), Ok),
+  'projects.trust': cmd(z.object({ projectId: Id, trusted: z.boolean() }), Project),
+  'scope.get': cmd(Void, Scope),
+  'scope.set': cmd(z.object({ scope: Scope }), Scope),
+
+  // Agents
+  'agents.list': cmd(Void, z.array(AgentSummary)),
+  'agents.spawn': cmd(AgentSpec, z.array(AgentSummary)),
+  'agents.send': cmd(z.object({ agentId: Id, message: UserMessage }), Ok),
+  'agents.answerPermission': cmd(z.object({ agentId: Id, answer: PermissionAnswer }), Ok),
+  'agents.setMode': cmd(z.object({ agentId: Id, mode: PermissionMode }), Ok),
+  'agents.stop': cmd(z.object({ agentId: Id }), Ok),
+  'agents.pause': cmd(z.object({ agentId: Id }), Ok),
+  'agents.resume': cmd(z.object({ agentId: Id }), Ok),
+  'agents.compact': cmd(z.object({ agentId: Id }), Ok),
+  'agents.remove': cmd(z.object({ agentId: Id, deleteWorktree: z.boolean().default(false) }), Ok),
+  'agents.events': cmd(
+    z.object({ agentId: Id, beforeSeq: z.number().int().optional(), limit: z.number().int().min(1).max(5000).default(500) }),
+    z.array(AgentEvent),
+  ),
+  'agents.stopSubagent': cmd(z.object({ agentId: Id, subagentId: Id }), Ok),
+
+  // Git / source control
+  'git.sync': cmd(z.object({ projectId: Id }), SyncState),
+  'git.fetch': cmd(z.object({ projectId: Id }), SyncState),
+  'git.pull': cmd(z.object({ projectId: Id }), SyncState),
+  'git.push': cmd(z.object({ projectId: Id }), SyncState),
+  'git.commit': cmd(z.object({ projectId: Id, message: z.string().min(1), files: z.array(z.string()).optional() }), CommitInfo),
+  'git.log': cmd(z.object({ projectId: Id, ref: z.string().default('HEAD'), limit: z.number().int().default(20) }), z.array(CommitInfo)),
+  'git.worktrees': cmd(z.object({ projectId: Id }), z.array(WorktreeInfo)),
+  'git.overlaps': cmd(z.object({ projectId: Id }), z.array(OverlapWarning)),
+  'git.diff': cmd(z.object({ agentId: Id }), z.array(FileDiff)),
+  'git.mergeLocal': cmd(z.object({ agentId: Id }), z.object({ ok: z.boolean(), conflicts: z.array(z.string()).default([]) })),
+  'git.openPr': cmd(z.object({ agentId: Id, title: z.string(), body: z.string().default('') }), z.object({ url: z.string() })),
+  'git.reconcile': cmd(z.object({ projectId: Id, agentIds: z.tuple([Id, Id]) }), z.array(AgentSummary)),
+  'git.pruneOrphans': cmd(z.object({ projectId: Id }), z.object({ removed: z.array(z.string()) })),
+
+  // Review
+  'review.comments': cmd(z.object({ agentId: Id }), z.array(ReviewComment)),
+  'review.addComment': cmd(z.object({ agentId: Id, path: z.string(), line: z.number().int().optional(), body: z.string().min(1) }), ReviewComment),
+  'review.deleteComment': cmd(z.object({ commentId: Id }), Ok),
+  'review.sendFeedback': cmd(z.object({ agentId: Id, note: z.string().optional() }), Ok),
+  'review.setViewed': cmd(z.object({ agentId: Id, path: z.string(), viewed: z.boolean() }), Ok),
+  'review.viewed': cmd(z.object({ agentId: Id }), z.array(z.string())),
+
+  // Files
+  'files.tree': cmd(z.object({ root: z.string(), dir: z.string().default('') }), z.array(FileNode)),
+  'files.read': cmd(z.object({ root: z.string(), path: z.string() }), z.object({ content: z.string(), binary: z.boolean() })),
+  'files.write': cmd(z.object({ root: z.string(), path: z.string(), content: z.string() }), Ok),
+  'files.history': cmd(z.object({ root: z.string(), path: z.string() }), z.array(CommitInfo)),
+  'files.editingAgents': cmd(z.object({ path: z.string() }), z.array(Id)),
+
+  // Terminals
+  'terminal.create': cmd(z.object({ cwd: z.string(), command: z.string().optional(), cols: z.number().int().default(100), rows: z.number().int().default(30) }), z.object({ terminalId: Id })),
+  'terminal.write': cmd(z.object({ terminalId: Id, data: z.string() }), Ok),
+  'terminal.resize': cmd(z.object({ terminalId: Id, cols: z.number().int(), rows: z.number().int() }), Ok),
+  'terminal.kill': cmd(z.object({ terminalId: Id }), Ok),
+
+  // Settings
+  'settings.get': cmd(Void, Settings),
+  'settings.update': cmd(z.object({ patch: z.record(z.string(), z.unknown()) }), Settings),
+  'settings.techniques': cmd(z.object({ projectId: Id.optional() }), z.array(Technique)),
+  'settings.saveTechnique': cmd(z.object({ technique: Technique, projectId: Id.optional() }), Technique),
+  'settings.deleteTechnique': cmd(z.object({ id: Id, projectId: Id.optional() }), Ok),
+  'settings.saveCustomModel': cmd(z.object({ model: CustomModel, apiKey: z.string().optional() }), CustomModel),
+  'settings.deleteCustomModel': cmd(z.object({ id: Id }), Ok),
+  'settings.testCustomModel': cmd(z.object({ id: Id }), z.object({ ok: z.boolean(), detail: z.string() })),
+  'settings.projectPermissions': cmd(z.object({ projectId: Id }), z.object({ allow: z.array(z.string()), ask: z.array(z.string()), deny: z.array(z.string()) })),
+  'settings.saveProjectPermissions': cmd(z.object({ projectId: Id, allow: z.array(z.string()), ask: z.array(z.string()), deny: z.array(z.string()) }), Ok),
+
+  // Usage
+  'usage.summary': cmd(Void, z.object({
+    sessions: z.number().int(),
+    worktrees: z.number().int(),
+    subagentsActive: z.number().int(),
+    projectsOpen: z.number().int(),
+    tokensToday: z.number().int(),
+    rateLimitResetAt: z.number().optional(),
+  })),
+
+  // Extensions & marketplace
+  'extensions.installed': cmd(Void, z.array(InstalledExtension)),
+  'extensions.index': cmd(z.object({ refresh: z.boolean().default(false) }), z.array(MarketplaceEntry)),
+  'extensions.install': cmd(z.object({ name: z.string(), version: z.string().optional() }), InstalledExtension),
+  'extensions.uninstall': cmd(z.object({ id: Id }), Ok),
+  'extensions.setEnabled': cmd(z.object({ id: Id, projectId: Id.optional(), enabled: z.boolean() }), InstalledExtension),
+  'extensions.addFromFolder': cmd(z.object({ path: z.string().optional(), devMode: z.boolean().default(false) }), InstalledExtension.nullable()),
+  'extensions.runCommand': cmd(z.object({ commandId: z.string(), args: z.array(z.unknown()).default([]) }), z.unknown()),
+  'custom.list': cmd(Void, z.array(CustomServer)),
+  'custom.probeUrl': cmd(z.object({ url: z.string().url() }), z.object({ reached: z.boolean(), transport: z.string().optional(), serverInfo: z.string().optional(), needsAuth: z.boolean().default(false), tools: z.array(z.object({ name: z.string(), description: z.string().optional(), readOnlyHint: z.boolean().optional(), destructiveHint: z.boolean().optional() })).default([]), error: z.string().optional() })),
+  'custom.probeCommand': cmd(z.object({ command: z.string(), args: z.array(z.string()).default([]), env: z.record(z.string(), z.string()).default({}) }), z.object({ started: z.boolean(), tools: z.array(z.object({ name: z.string(), description: z.string().optional(), readOnlyHint: z.boolean().optional(), destructiveHint: z.boolean().optional() })).default([]), error: z.string().optional() })),
+  'custom.scanImports': cmd(Void, z.array(z.object({ source: z.string(), file: z.string(), name: z.string(), alreadyAdded: z.boolean(), config: z.unknown() }))),
+  'custom.save': cmd(z.object({ server: CustomServer, secrets: z.record(z.string(), z.string()).default({}) }), CustomServer),
+  'custom.remove': cmd(z.object({ id: Id }), Ok),
+  'custom.authorize': cmd(z.object({ id: Id }), z.object({ ok: z.boolean(), error: z.string().optional() })),
+
+  // Artifacts
+  'artifacts.list': cmd(z.object({ projectId: Id.optional(), kind: ArtifactKind.optional() }), z.array(ArtifactMeta)),
+  'artifacts.get': cmd(z.object({ id: Id }), z.object({ meta: ArtifactMeta, content: z.string(), uses: z.array(ArtifactUse), versions: z.array(ArtifactVersion) })),
+  'artifacts.create': cmd(z.object({ title: z.string(), kind: ArtifactKind, projectId: Id.optional(), location: z.enum(['repo', 'app-data']).default('app-data'), content: z.string().optional() }), ArtifactMeta),
+  'artifacts.save': cmd(z.object({ id: Id, content: z.string(), note: z.string().optional() }), ArtifactMeta),
+  'artifacts.delete': cmd(z.object({ id: Id }), Ok),
+  'artifacts.import': cmd(z.object({ url: z.string().url().optional(), filePath: z.string().optional(), title: z.string().optional(), kind: ArtifactKind.optional() }), ArtifactMeta),
+  'artifacts.previewUrl': cmd(z.object({ id: Id }), z.object({ url: z.string() })),
+
+  // Shell helpers
+  'shell.openExternal': cmd(z.object({ url: z.string().url() }), Ok),
+  'shell.revealPath': cmd(z.object({ path: z.string() }), Ok),
+  'dialog.pickFolder': cmd(z.object({ title: z.string().optional() }), z.string().nullable()),
+} as const;
+
+export type CommandName = keyof typeof Commands;
+export type CommandInput<K extends CommandName> = z.input<(typeof Commands)[K]['input']>;
+export type CommandOutput<K extends CommandName> = z.output<(typeof Commands)[K]['output']>;
+
+/** Main → renderer streamed events. Agent events are batched per animation frame. */
+export const Events = {
+  'agents.batch': z.object({ events: z.array(AgentEvent) }),
+  'agents.summary': AgentSummary,
+  'agents.removed': z.object({ agentId: Id }),
+  'projects.changed': z.array(Project),
+  'scope.changed': Scope,
+  'git.changed': z.object({ projectId: Id }),
+  'settings.changed': Settings,
+  'cli.changed': CliInfo,
+  'terminal.data': z.object({ terminalId: Id, data: z.string() }),
+  'terminal.exit': z.object({ terminalId: Id, code: z.number().nullable() }),
+  'extensions.changed': z.array(InstalledExtension),
+  'artifacts.changed': z.object({ id: Id.optional() }),
+  'notify': z.object({ level: z.enum(['info', 'warning', 'error']), message: z.string(), agentId: Id.optional() }),
+  'command.invoke': z.object({ commandId: z.string() }),
+} as const;
+
+export type EventName = keyof typeof Events;
+export type EventPayload<K extends EventName> = z.output<(typeof Events)[K]>;
+
+export const IPC_INVOKE_CHANNEL = 'oide:invoke';
+export const IPC_EVENT_CHANNEL = 'oide:event';
+
+export type IpcResult<T> = { ok: true; value: T } | { ok: false; error: { message: string; code?: string } };
+
+/** Shape of `window.oide`, implemented by preload. */
+export interface OideBridge {
+  invoke<K extends CommandName>(command: K, input: CommandInput<K>): Promise<CommandOutput<K>>;
+  on<K extends EventName>(event: K, listener: (payload: EventPayload<K>) => void): () => void;
+  platform: string;
+}

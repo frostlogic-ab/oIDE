@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oIDE · Spawn agent</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1013;color:#E6E8EB;font-family:Inter,system-ui,sans-serif;font-size:13px}
+input,select,textarea{font-family:inherit}
+a{color:#9DBBFA}a:hover{color:#C4D6FC}
+button{font-family:inherit;cursor:pointer}
+.ico{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.kbd{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;padding:1px 5px;border:1px solid #343A44;border-radius:4px;color:#9AA3AE}
+.lbl{font-size:12px;font-weight:600;color:#C9CED6}
+</style>
+</helmet>
+<div style="position: relative; width: 100%; min-height: 1500px; display: flex; flex-direction: column; background: #0E1013; color: #E6E8EB; font-family: Inter, system-ui, sans-serif; font-size: 13px; overflow: hidden;">
+
+  <!-- Dimmed wall behind -->
+  <div aria-hidden="true" style="display: flex; flex-direction: column; min-height: 1500px; opacity: 0.35;">
+    <div style="height: 44px; background: #0B0D10; border-bottom: 1px solid #232830;"></div>
+    <div style="flex: 1; display: flex;">
+      <div style="width: 56px; background: #0B0D10; border-right: 1px solid #232830;"></div>
+      <div style="width: 248px; background: #111418; border-right: 1px solid #232830;"></div>
+      <div style="flex: 1; padding: 60px 20px 20px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-content: start;">
+        <div style="height: 230px; background: #15181D; border: 1px solid #262B33; border-radius: 12px;"></div>
+        <div style="height: 230px; background: #15181D; border: 1px solid #262B33; border-radius: 12px;"></div>
+        <div style="height: 230px; background: #15181D; border: 1px solid #262B33; border-radius: 12px;"></div>
+        <div style="height: 230px; background: #15181D; border: 1px solid #262B33; border-radius: 12px;"></div>
+        <div style="height: 230px; background: #15181D; border: 1px solid #262B33; border-radius: 12px;"></div>
+        <div style="height: 230px; background: #15181D; border: 1px solid #262B33; border-radius: 12px;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dialog -->
+  <div style="position: absolute; inset: 0; background: rgba(5,6,8,0.55); display: flex; align-items: flex-start; justify-content: center; padding: 64px 16px 16px; box-sizing: border-box;">
+    <div role="dialog" aria-modal="true" aria-labelledby="spawn-title" style="width: 720px; max-width: 100%; display: flex; flex-direction: column; background: #15181D; border: 1px solid #343A44; border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,0.55); overflow: hidden;">
+
+      <div style="display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid #232830;">
+        <h1 id="spawn-title" style="margin: 0; font-size: 16px; font-weight: 600; flex: 1;">Spawn an agent</h1>
+        <a href="Main.dc.html" aria-label="Close" style="width: 32px; height: 32px; border-radius: 8px; color: #9AA3AE; display: flex; align-items: center; justify-content: center;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></a>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 18px; padding: 18px 20px;">
+        <!-- Goal -->
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <label for="goal" class="lbl">Goal</label>
+          <textarea id="goal" rows="3" style="resize: none; padding: 10px 12px; border-radius: 10px; border: 1px solid {{accent}}; background: #0B0D10; color: #E6E8EB; font-size: 14px; line-height: 1.5; font-family: inherit;">Add a usage panel that opens from the status bar and breaks plan usage down per agent session.</textarea>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center;">
+            <span style="font-size: 12px; color: #9AA3AE;">Context:</span>
+            <span style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: 13px; background: #1E2430; font-size: 12px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 13px; height: 13px; color: #9DBBFA;"><path d="M12 3l9 5-9 5-9-5z"></path><path d="M3 13l9 5 9-5"></path></svg>Main window v2</span>
+            <span style="display: flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: 13px; background: #1E2430; font-size: 12px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 13px; height: 13px; color: #9AA3AE;"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"></path><path d="M14 3v5h5"></path></svg>src/shell/StatusBar.tsx</span>
+            <button type="button" style="height: 26px; padding: 0 10px; border-radius: 13px; border: 1px dashed #4A515C; background: transparent; color: #C9CED6; font-size: 12px;">+ Artifact, file or URL</button>
+          </div>
+        </div>
+
+        <!-- Project + workspace -->
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label for="proj" class="lbl">Project</label>
+            <select id="proj" style="height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid #343A44; background: #0B0D10; color: #E6E8EB; font-size: 13px; font-family: inherit;">
+              <option>oide</option><option>billing-api</option><option>docs-site</option>
+            </select>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label for="base" class="lbl">Work in</label>
+            <select id="base" style="height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid #343A44; background: #0B0D10; color: #E6E8EB; font-size: 13px; font-family: inherit;">
+              <option>New worktree from main</option><option>New worktree from current branch</option><option>Project folder directly</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Mode -->
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: baseline; gap: 10px;">
+            <span class="lbl" id="mode-lbl" style="flex: 1;">Mode</span>
+            <span style="font-size: 12px; color: #9AA3AE;">Shift + Tab switches mode on a running agent</span>
+          </div>
+          <div role="radiogroup" aria-labelledby="mode-lbl" style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px;">
+            <sc-for list="{{ modes }}" as="m" hint-placeholder-count="5">
+              <button type="button" role="radio" aria-checked="{{ m.sel }}" onClick="{{ m.pick }}" style="display: flex; flex-direction: column; gap: 4px; padding: 10px; border-radius: 10px; text-align: left; color: #E6E8EB; font-size: 12.5px; border: 1.5px solid {{ m.border }}; background: {{ m.bg }};">
+                <span style="font-weight: 600;">{{ m.label }}</span>
+                <span style="font-size: 11.5px; color: #9AA3AE; line-height: 1.35;">{{ m.desc }}</span>
+              </button>
+            </sc-for>
+          </div>
+          <sc-if value="{{ isBypass }}" hint-placeholder-val="{{ false }}">
+            <div role="alert" style="display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; border: 1px solid #6B3434; background: #241517; color: #F4B8B8; font-size: 12.5px; line-height: 1.45;">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="margin-top: 1px;"><path d="M12 4l9 16H3z"></path><path d="M12 10v4M12 17v.5"></path></svg>
+              <span>Claude will not ask before running potentially dangerous commands. Keep this agent in its own worktree and avoid it on projects with production credentials.</span>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- Models -->
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;">
+            <span class="lbl" id="focus-lbl">Models</span>
+            <span style="flex: 1; text-align: right; font-size: 12px; color: #9AA3AE;">{{ summary }}</span>
+            <a href="Settings.dc.html#models" style="font-size: 12px;">Edit presets</a>
+          </div>
+          <div role="radiogroup" aria-labelledby="focus-lbl" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
+            <sc-for list="{{ focuses }}" as="f" hint-placeholder-count="4">
+              <button type="button" role="radio" aria-checked="{{ f.sel }}" onClick="{{ f.pick }}" style="display: flex; flex-direction: column; gap: 3px; padding: 10px; border-radius: 10px; text-align: left; color: #E6E8EB; font-size: 13px; border: 1.5px solid {{ f.border }}; background: {{ f.bg }};">
+                <span style="font-weight: 600;">{{ f.label }}</span>
+                <span style="font-size: 11.5px; color: #9AA3AE; line-height: 1.35;">{{ f.hint }}</span>
+              </button>
+            </sc-for>
+          </div>
+
+          <button type="button" aria-expanded="{{ advExp }}" aria-controls="adv" onClick="{{ toggleAdv }}" style="align-self: flex-start; height: 30px; padding: 0 8px 0 4px; border: none; border-radius: 6px; background: transparent; color: #C9CED6; font-size: 12.5px; display: flex; align-items: center; gap: 6px;">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="transform: rotate({{ chevron }}deg);"><path d="M9 6l6 6-6 6"></path></svg>Advanced model settings
+          </button>
+
+          <sc-if value="{{ advOpen }}" hint-placeholder-val="{{ true }}">
+            <div id="adv" style="display: flex; flex-direction: column; gap: 14px; padding: 14px; border-radius: 12px; border: 1px solid #262B33; background: #111418;">
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <span class="lbl" id="strat-lbl">How agents pick models</span>
+                <div role="radiogroup" aria-labelledby="strat-lbl" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+                  <sc-for list="{{ strategies }}" as="s" hint-placeholder-count="3">
+                    <button type="button" role="radio" aria-checked="{{ s.sel }}" onClick="{{ s.pick }}" style="display: flex; flex-direction: column; gap: 3px; padding: 10px; border-radius: 10px; text-align: left; color: #E6E8EB; font-size: 12.5px; border: 1.5px solid {{ s.border }}; background: {{ s.bg }};">
+                      <span style="font-weight: 600;">{{ s.label }}</span>
+                      <span style="font-size: 11.5px; color: #9AA3AE; line-height: 1.35;">{{ s.desc }}</span>
+                    </button>
+                  </sc-for>
+                </div>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 8px;">
+                <sc-for list="{{ rows }}" as="r" hint-placeholder-count="2">
+                  <div role="radiogroup" aria-label="{{ r.label }}" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <span style="width: 160px; font-size: 12.5px; color: #C9CED6;">{{ r.label }}</span>
+                    <div style="display: flex; gap: 4px; padding: 3px; border-radius: 8px; background: #0B0D10; border: 1px solid #262B33;">
+                      <sc-for list="{{ r.pills }}" as="p" hint-placeholder-count="4">
+                        <button type="button" role="radio" aria-checked="{{ p.sel }}" onClick="{{ p.pick }}" style="height: 26px; padding: 0 12px; border-radius: 6px; border: none; background: {{ p.bg }}; color: {{ p.color }}; font-size: 12px; font-weight: {{ p.weight }};">{{ p.name }}</button>
+                      </sc-for>
+                    </div>
+                    <select aria-label="{{ r.effortLabel }}" value="{{ r.effort }}" onChange="{{ r.setEffort }}" style="height: 32px; padding: 0 8px; border-radius: 8px; border: 1px solid #343A44; background: #0B0D10; color: #E6E8EB; font-size: 12px; font-family: inherit;">
+                      <option value="low">Effort: Low</option><option value="medium">Effort: Medium</option><option value="high">Effort: High</option><option value="xhigh">Effort: X-High</option><option value="max">Effort: Max</option>
+                    </select>
+                  </div>
+                </sc-for>
+                <sc-if value="{{ isRouted }}" hint-placeholder-val="{{ false }}">
+                  <span style="font-size: 12px; color: #9AA3AE; line-height: 1.45;">The orchestrator rates each subagent task as simple, standard or complex, and starts it on the model you picked for that level.</span>
+                </sc-if>
+              </div>
+
+              <span style="font-size: 12px; color: #9AA3AE; line-height: 1.45; padding-top: 10px; border-top: 1px solid #1E232A;">Picking a focus preset resets these. Changing them so they no longer match a preset switches the focus to Custom.</span>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- Advanced techniques -->
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button type="button" aria-expanded="{{ techExp }}" aria-controls="tech" onClick="{{ toggleTech }}" style="align-self: stretch; height: 34px; padding: 0 10px 0 4px; border: none; border-radius: 6px; background: transparent; color: #E6E8EB; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; text-align: left;">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="transform: rotate({{ techChevron }}deg);"><path d="M9 6l6 6-6 6"></path></svg>
+            <span style="flex: 1;">Advanced techniques</span>
+            <span style="font-size: 12px; font-weight: 400; color: {{ techCountColor }};">{{ techCount }}</span>
+          </button>
+          <sc-if value="{{ techOpen }}" hint-placeholder-val="{{ false }}">
+            <div id="tech" style="display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 12px; border: 1px solid #262B33; background: #111418;">
+              <span style="font-size: 12px; color: #9AA3AE; line-height: 1.45;">Each one adds instructions to the agent's prompt when it starts. You don't see them in the goal, but they show in the agent's first message.</span>
+              <sc-for list="{{ techs }}" as="t" hint-placeholder-count="3">
+                <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 10px; border: 1px solid {{ t.border }}; background: #15181D;">
+                  <label style="display: flex; align-items: flex-start; gap: 10px; cursor: pointer;">
+                    <input type="checkbox" checked="{{ t.on }}" onChange="{{ t.toggle }}" style="accent-color: {{accent}}; width: 16px; height: 16px; margin-top: 2px;">
+                    <span style="display: flex; flex-direction: column; gap: 2px;">
+                      <span style="font-weight: 600;">{{ t.label }}</span>
+                      <span style="font-size: 12px; color: #9AA3AE;">{{ t.desc }}</span>
+                    </span>
+                  </label>
+                  <sc-if value="{{ t.on }}" hint-placeholder-val="{{ false }}">
+                    <div class="mono" style="margin-left: 26px; padding: 8px 10px; border-radius: 8px; background: #0B0D10; font-size: 11.5px; line-height: 1.6; color: #B8BFC9; white-space: pre-wrap;">{{ t.prompt }}</div>
+                  </sc-if>
+                </div>
+              </sc-for>
+              <a href="Settings.dc.html#tech" style="align-self: flex-start; font-size: 12px;">Edit the text or add your own techniques in Settings</a>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- Permissions + parallel -->
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <span class="lbl" id="par-lbl">Parallel attempts</span>
+            <div role="group" aria-labelledby="par-lbl" style="display: flex; align-items: center; gap: 8px;">
+              <button type="button" aria-label="Fewer attempts" onClick="{{ dec }}" style="width: 36px; height: 36px; border-radius: 8px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 16px;">−</button>
+              <span class="mono" style="width: 28px; text-align: center; font-size: 15px;">{{ n }}</span>
+              <button type="button" aria-label="More attempts" onClick="{{ inc }}" style="width: 36px; height: 36px; border-radius: 8px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 16px;">+</button>
+              <span style="font-size: 12px; color: #9AA3AE; line-height: 1.4;">{{ parHint }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tools -->
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <span class="lbl">Tools from extensions</span>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+            <label style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px; background: #1E2430; font-size: 12.5px;"><input type="checkbox" checked="checked" style="accent-color: {{accent}};">Git</label>
+            <label style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px; background: #1E2430; font-size: 12.5px;"><input type="checkbox" checked="checked" style="accent-color: {{accent}};">Browser preview</label>
+            <label style="display: flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: 8px; background: #1E2430; font-size: 12.5px;"><input type="checkbox" style="accent-color: {{accent}};">Postgres inspector</label>
+            <a href="Marketplace.dc.html" style="display: flex; align-items: center; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px dashed #4A515C; font-size: 12.5px; color: #C9CED6; text-decoration: none; box-sizing: border-box;">+ Find more in Marketplace</a>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-top: 1px solid #232830; background: #111418; flex-wrap: wrap;">
+        <span style="font-size: 12px; color: #9AA3AE; display: flex; align-items: center; gap: 6px;">Runs <span class="mono" style="color: #C9CED6;">claude</span> CLI in its own terminal</span>
+        <div style="flex: 1;"></div>
+        <a href="Main.dc.html" style="height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid #343A44; color: #E6E8EB; font-size: 13px; display: flex; align-items: center; text-decoration: none; box-sizing: border-box;">Cancel</a>
+        <a href="Focus.dc.html" style="height: 34px; padding: 0 16px; border-radius: 8px; background: {{accent}}; color: #0B0D10; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 8px; text-decoration: none; box-sizing: border-box;">{{ spawnLabel }} <span class="kbd" style="color: #0B0D10; border-color: rgba(11,13,16,0.35);">Ctrl ↵</span></a>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#7AA2F7","options":["#7AA2F7","#7FC8A9","#C4A7E7","#F2C078"]},"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { mode: 'auto', n: 1, adv: true, customPicked: false, techOpen: false, tech: { review: true, docs: false, gates: true },
+      cfg: { strategy: 'routed', orch: 'Opus', orchE: 'high', sub: 'Sonnet', subE: 'medium',
+        simple: 'Haiku', simpleE: 'low', standard: 'Sonnet', standardE: 'medium', complex: 'Opus', complexE: 'high' } };
+  }
+  renderVals() {
+    const accent = this.props.accent ?? '#7AA2F7';
+    const n = this.state.n;
+
+    const mDefs = [
+      ['manual', 'Manual', 'Asks before every edit.'],
+      ['edit', 'Edit automatically', 'Edits files without asking.'],
+      ['plan', 'Plan', 'Explores, then presents a plan first.'],
+      ['auto', 'Auto', 'Approves safe actions, pauses on risky ones.'],
+      ['bypass', 'Bypass permissions', 'Never asks. Use with care.'],
+    ];
+    const modes = mDefs.map(([id, label, desc]) => {
+      const on = this.state.mode === id;
+      const danger = id === 'bypass';
+      return { label, desc, sel: on ? 'true' : 'false',
+        border: on ? (danger ? '#F08A8A' : accent) : '#343A44', bg: on ? (danger ? '#241517' : '#1A2130') : 'transparent',
+        pick: () => this.setState({ mode: id }) };
+    });
+
+    // Focus presets. Only the fields a strategy uses are compared.
+    const PRESETS = {
+      cheap:    { strategy: 'separate', orch: 'Sonnet', orchE: 'medium', sub: 'Haiku', subE: 'low' },
+      balanced: { strategy: 'routed', orch: 'Opus', orchE: 'high', simple: 'Haiku', simpleE: 'low', standard: 'Sonnet', standardE: 'medium', complex: 'Opus', complexE: 'high' },
+      quality:  { strategy: 'single', orch: 'Opus', orchE: 'max' },
+    };
+    const cfg = this.state.cfg;
+    const matches = (p) => Object.keys(p).every((k) => cfg[k] === p[k]);
+    let focus = 'custom';
+    if (!this.state.customPicked) { for (const id of Object.keys(PRESETS)) if (matches(PRESETS[id])) focus = id; }
+    const setCfg = (patch) => this.setState({ cfg: { ...cfg, ...patch }, customPicked: false });
+    const applyPreset = (id) => this.setState({ cfg: { ...cfg, ...PRESETS[id] }, customPicked: false });
+
+    const fDefs = [
+      ['cheap', 'Cheap', 'Lowest usage. Haiku does most subagent work.'],
+      ['balanced', 'Balanced', 'Opus leads and routes subagents by task size.'],
+      ['quality', 'Quality', 'Opus at max effort for everything.'],
+      ['custom', 'Custom', 'Your own mix, set under Advanced.'],
+    ];
+    const card = (on) => ({ border: on ? accent : '#343A44', bg: on ? '#1A2130' : 'transparent', sel: on ? 'true' : 'false' });
+    const focuses = fDefs.map(([id, label, hint]) => ({ label, hint, ...card(focus === id),
+      pick: id === 'custom' ? () => this.setState({ adv: true, customPicked: true }) : () => applyPreset(id) }));
+
+    const sDefs = [
+      ['single', 'One model', 'Orchestrator and subagents use the same model.'],
+      ['separate', 'Separate subagent model', 'Subagents always use their own model.'],
+      ['routed', 'Routed by orchestrator', 'The orchestrator picks a model per subagent task.'],
+    ];
+    const strategies = sDefs.map(([id, label, desc]) => ({ label, desc, ...card(cfg.strategy === id), pick: () => setCfg({ strategy: id }) }));
+
+    const MODELS = ['Haiku', 'Sonnet', 'Opus', 'Fable', 'local-coder'];
+    const row = (label, key) => ({ label, effort: cfg[key + 'E'], effortLabel: label + ' effort',
+      setEffort: (e) => setCfg({ [key + 'E']: e.target.value }),
+      pills: MODELS.map((m) => {
+        const on = cfg[key] === m;
+        return { name: m, sel: on ? 'true' : 'false', bg: on ? '#1E2430' : 'transparent', color: on ? '#E6E8EB' : '#9AA3AE', weight: on ? '600' : '400', pick: () => setCfg({ [key]: m }) };
+      }) });
+    const EL = { low: 'low', medium: 'medium', high: 'high', xhigh: 'x-high', max: 'max' };
+    const me = (k) => cfg[k] + ' (' + EL[cfg[k + 'E']] + ')';
+    const rows = [row(cfg.strategy === 'single' ? 'All agents' : 'Orchestrator', 'orch')];
+    if (cfg.strategy === 'separate') rows.push(row('Subagents', 'sub'));
+    if (cfg.strategy === 'routed') { rows.push(row('Simple subagent tasks', 'simple')); rows.push(row('Standard subagent tasks', 'standard')); rows.push(row('Complex subagent tasks', 'complex')); }
+
+    const summary = cfg.strategy === 'single' ? me('orch') + ' for everything'
+      : cfg.strategy === 'separate' ? 'Orchestrator ' + me('orch') + ' · subagents ' + me('sub')
+      : 'Orchestrator ' + me('orch') + ' · subagents routed ' + cfg.simple + ' / ' + cfg.standard + ' / ' + cfg.complex;
+
+    return {
+      accent,
+      focuses, strategies, rows, summary,
+      isRouted: cfg.strategy === 'routed',
+      advOpen: this.state.adv, advExp: this.state.adv ? 'true' : 'false', chevron: this.state.adv ? 90 : 0,
+      toggleAdv: () => this.setState({ adv: !this.state.adv }),
+      modes, isBypass: this.state.mode === 'bypass',
+      ...this.techVals(accent),
+      n,
+      inc: () => this.setState({ n: Math.min(6, n + 1) }),
+      dec: () => this.setState({ n: Math.max(1, n - 1) }),
+      parHint: n === 1 ? 'One agent' : n + ' agents try the same goal in separate worktrees; keep the best',
+      spawnLabel: n === 1 ? 'Spawn agent' : 'Spawn ' + n + ' agents',
+    };
+  }
+  techVals(accent) {
+    const T = this.state.tech;
+    const defs = [
+      ['review', 'Adversarial review', 'A separate subagent tries to break your changes before you see them.',
+        'When your changes are complete, start a separate reviewer subagent whose only job is to find bugs, regressions, security issues and missed requirements in your diff. Fix what it finds and repeat until it reports nothing significant.'],
+      ['docs', 'Full documentation and tests', 'Ends with docs and tests for everything that changed.',
+        'Before you finish, update or write documentation for everything you changed, and add tests that cover the new behaviour and its edge cases.'],
+      ['gates', 'Quality gates must pass', 'Build, tests, lint and other checks must be green before it reports done.',
+        'You are not done until the build, the full test suite, lint, type checks and every other quality gate in this project pass. Run them, fix any failures, and report the results.'],
+    ];
+    const on = defs.filter(([id]) => T[id]).length;
+    return {
+      techOpen: this.state.techOpen, techExp: this.state.techOpen ? 'true' : 'false', techChevron: this.state.techOpen ? 90 : 0,
+      toggleTech: () => this.setState({ techOpen: !this.state.techOpen }),
+      techCount: on === 0 ? 'None on' : on + ' of ' + defs.length + ' on',
+      techCountColor: on ? '#7FC8A9' : '#9AA3AE',
+      techs: defs.map(([id, label, desc, prompt]) => ({ label, desc, prompt, on: !!T[id],
+        border: T[id] ? '#343A44' : '#262B33',
+        toggle: () => this.setState({ tech: { ...T, [id]: !T[id] } }) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

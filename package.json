@@ -1,0 +1,39 @@
+{
+  "name": "oide-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "oIDE: run many Claude Code CLI agents in parallel, across many projects, in one window.",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@9.6.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "pnpm --filter @oide/desktop dev",
+    "typecheck": "turbo run typecheck",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "pnpm --filter @oide/desktop e2e",
+    "wiki:lint": "node tools/wiki-lint.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.7",
+    "eslint": "^10.15.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.14.0",
+    "jsdom": "^31.0.1",
+    "prettier": "^3.10.1",
+    "turbo": "^2.11.13",
+    "typescript": "~5.9",
+    "typescript-eslint": "^8.74.0",
+    "vitest": "^5.1.1",
+    "zod": "^4.6.7"
+  }
+}

@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oIDE · Source control</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1013;color:#E6E8EB;font-family:Inter,system-ui,sans-serif;font-size:13px}
+input,select,textarea{font-family:inherit}
+a{color:#9DBBFA}a:hover{color:#C4D6FC}
+button{font-family:inherit;cursor:pointer}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.rail{width:40px;height:40px;border-radius:10px;color:#9AA3AE;display:flex;align-items:center;justify-content:center}
+.btn{height:28px;padding:0 10px;border-radius:6px;border:1px solid #343A44;background:transparent;color:#E6E8EB;font-size:12px;display:inline-flex;align-items:center;text-decoration:none;box-sizing:border-box;white-space:nowrap}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 1000px; display: flex; flex-direction: column; background: #0E1013; color: #E6E8EB; font-family: Inter, system-ui, sans-serif; font-size: 13px;">
+
+  <header style="height: 44px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #232830; background: #0B0D10; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px;"><span style="width: 20px; height: 20px; border-radius: 6px; border: 2px solid {{accent}}; box-sizing: border-box; display: inline-block;"></span>oIDE</div>
+    <span style="color: #E6E8EB; font-size: 12.5px;">Source control</span>
+    <div style="flex: 1;"></div>
+    <div role="radiogroup" aria-label="Project scope" style="display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 9px; background: #15181D; border: 1px solid #262B33;">
+      <sc-for list="{{ scopes }}" as="sc" hint-placeholder-count="4">
+        <button type="button" role="radio" aria-checked="{{ sc.sel }}" onClick="{{ sc.pick }}" style="height: 26px; padding: 0 10px; border: none; border-radius: 6px; background: {{ sc.bg }}; color: {{ sc.color }}; font-size: 12px;">{{ sc.label }}</button>
+      </sc-for>
+    </div>
+  </header>
+
+  <div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0;">
+    <nav aria-label="Primary" style="flex: 0 0 56px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: #0B0D10; border-right: 1px solid #232830;">
+      <a href="Main.dc.html" class="rail" aria-label="Agents"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></a>
+      <a href="Artifacts.dc.html" class="rail" aria-label="Artifacts"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"></path><path d="M3 13l9 5 9-5"></path></svg></a>
+      <a href="Files.dc.html" class="rail" aria-label="Files"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"></path><path d="M14 3v5h5"></path></svg></a>
+      <a href="SourceControl.dc.html" class="rail" aria-label="Source control" aria-current="page" style="background: #1E2430; color: {{accent}};"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="8" r="2"></circle><path d="M6 7v10"></path><path d="M18 10c0 4-6 3-12 7"></path></svg></a>
+      <div style="flex: 1;"></div>
+      <a href="Marketplace.dc.html" class="rail" aria-label="Extension marketplace"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"></rect><rect x="3" y="13" width="8" height="8" rx="1.5"></rect><rect x="13" y="13" width="8" height="8" rx="1.5"></rect><path d="M17 3v8"></path><path d="M13 7h8"></path></svg></a>
+      <a href="Settings.dc.html" class="rail" aria-label="Settings"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg></a>
+    </nav>
+
+    <main style="flex: 999 1 640px; min-width: 0; padding: 20px 24px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px;">
+      <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+        <h1 style="margin: 0; font-size: 18px; font-weight: 600;">{{ title }}</h1>
+        <span style="font-size: 12.5px; color: #9AA3AE;">{{ summary }}</span>
+      </div>
+      <span style="font-size: 12.5px; color: #9AA3AE; line-height: 1.5; margin-top: -6px;">Each project is its own git repository. Every agent works on its own branch in a worktree, so your main branch only changes when you merge.</span>
+
+      <sc-for list="{{ projects }}" as="p" hint-placeholder-count="3">
+        <section aria-label="{{ p.name }}" style="display: flex; flex-direction: column; border: 1px solid #262B33; border-radius: 12px; background: #111418; overflow: hidden;">
+          <div style="display: flex; align-items: center; gap: 10px; padding: 12px 14px; flex-wrap: wrap;">
+            <button type="button" aria-expanded="{{ p.exp }}" onClick="{{ p.toggle }}" style="display: flex; align-items: center; gap: 8px; border: none; background: transparent; color: #E6E8EB; padding: 0; font-size: 14px; font-weight: 600;">
+              <span aria-hidden="true" style="color: #9AA3AE; font-size: 11px; width: 10px;">{{ p.chev }}</span>
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #9AA3AE; width: 16px; height: 16px;"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+              {{ p.name }}
+            </button>
+            <span class="mono" style="font-size: 11.5px; color: #9AA3AE;">{{ p.path }}</span>
+            <div style="flex: 1;"></div>
+            <span class="mono" style="font-size: 11.5px; padding: 2px 8px; border-radius: 6px; background: #1E2430; color: #C9CED6;">main</span>
+            <span style="font-size: 12px; color: {{ p.syncColor }};">{{ p.sync }}</span>
+            <button type="button" class="btn">{{ p.syncAction }}</button>
+            <a href="Files.dc.html" class="btn">Files</a>
+          </div>
+          <sc-if value="{{ p.open }}" hint-placeholder-val="{{ true }}">
+            <sc-if value="{{ p.hasLocal }}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-top: 1px solid #1E232A; flex-wrap: wrap;">
+                <span style="width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #C9CED6; box-sizing: border-box;"></span>
+                <span style="flex: 1; min-width: 220px;"><b style="font-weight: 600;">Your changes on main</b> <span style="color: #9AA3AE; font-size: 12px;">· {{ p.local }}</span></span>
+                <button type="button" class="btn">Commit…</button>
+              </div>
+            </sc-if>
+            <div style="padding: 8px 14px 4px; border-top: 1px solid #1E232A; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">Agent worktrees · {{ p.wtCount }}</div>
+            <sc-for list="{{ p.wts }}" as="w" hint-placeholder-count="3">
+              <div style="display: flex; align-items: center; gap: 12px; padding: 9px 14px; border-top: 1px solid #1A1E24; flex-wrap: wrap;">
+                <span style="width: 8px; height: 8px; border-radius: 50%; background: {{ w.color }}; flex: 0 0 auto;"></span>
+                <div style="flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 2px;">
+                  <a href="Focus.dc.html" style="color: #E6E8EB; text-decoration: none; font-weight: 500;">{{ w.agent }}</a>
+                  <span class="mono" style="font-size: 11px; color: #9AA3AE;">{{ w.branch }} · {{ w.base }}</span>
+                </div>
+                <span style="flex: 0 0 120px; font-size: 12px; color: {{ w.color }};">{{ w.status }}</span>
+                <span class="mono" style="flex: 0 0 130px; font-size: 11.5px; color: #9AA3AE;">{{ w.files }} · <span style="color: #7FC8A9;">{{ w.add }}</span> <span style="color: #F08A8A;">{{ w.del }}</span></span>
+                <span style="flex: 0 0 110px; font-size: 12px; color: {{ w.prColor }};">{{ w.pr }}</span>
+                <div style="display: flex; gap: 6px;">
+                  <a href="Review.dc.html" class="btn" style="border-color: {{ w.reviewBorder }}; color: {{ w.reviewColor }};">Review</a>
+                  <button type="button" class="btn" aria-label="More actions for {{ w.agent }}">···</button>
+                </div>
+              </div>
+            </sc-for>
+            <button type="button" onClick="{{ p.toggleLog }}" aria-expanded="{{ p.logExp }}" style="display: flex; align-items: center; gap: 6px; padding: 9px 14px; border: none; border-top: 1px solid #1E232A; background: transparent; color: #9AA3AE; font-size: 12px; text-align: left;"><span aria-hidden="true" style="font-size: 11px; width: 10px;">{{ p.logChev }}</span>Recent commits on main</button>
+            <sc-if value="{{ p.logOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; flex-direction: column; padding: 0 14px 10px 30px;">
+                <sc-for list="{{ p.log }}" as="c" hint-placeholder-count="3">
+                  <div style="display: flex; align-items: center; gap: 10px; padding: 5px 0; font-size: 12px; color: #C9CED6; flex-wrap: wrap;">
+                    <span class="mono" style="color: #9AA3AE; font-size: 11px;">{{ c.sha }}</span>
+                    <span style="flex: 1; min-width: 200px;">{{ c.msg }}</span>
+                    <span style="color: #9AA3AE;">{{ c.who }} · {{ c.when }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </sc-if>
+        </section>
+      </sc-for>
+    </main>
+
+    <aside aria-label="Needs you" style="flex: 1 1 280px; max-width: 320px; display: flex; flex-direction: column; gap: 12px; padding: 18px 16px; background: #111418; border-left: 1px solid #232830; box-sizing: border-box;">
+      <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">Ready to review</span>
+      <a href="Review.dc.html" style="display: flex; flex-direction: column; gap: 3px; padding: 10px; border-radius: 10px; border: 1px solid #2C3A55; background: #131822; text-decoration: none; color: #E6E8EB;">
+        <span style="font-weight: 600;">Retry failed Stripe webhooks</span>
+        <span style="font-size: 11.5px; color: #9AA3AE;">billing-api · 8 files · checks passed</span>
+      </a>
+      <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE; margin-top: 6px;">Heads-up</span>
+      <div style="display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 10px; border: 1px solid #5A4A2A; background: #1A1813; font-size: 12.5px; line-height: 1.5; color: #E6E8EB;">
+        <span style="color: #F2C078; font-weight: 600;">Two worktrees change the same file</span>
+        <span>In <b>oide</b>, Window shell layout and Claude CLI bridge both edit <span class="mono" style="font-size: 11.5px;">package.json</span>. Merging the second one may need a fix.</span>
+        <button type="button" class="btn" style="align-self: flex-start; border-color: #5A4A2A;">Ask an agent to reconcile</button>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 10px; border: 1px solid #262B33; font-size: 12.5px; line-height: 1.5; color: #C9CED6;">
+        <span style="font-weight: 600; color: #E6E8EB;">docs-site has 1 unpushed commit</span>
+        <span>Your commit on main isn't on the remote yet.</span>
+        <button type="button" class="btn" style="align-self: flex-start;">Push</button>
+      </div>
+      <div style="flex: 1;"></div>
+      <span style="font-size: 12px; color: #9AA3AE; line-height: 1.5;">Project scope is shared: picking a project here also scopes the agent wall and Files.</span>
+    </aside>
+  </div>
+
+  <footer style="height: 26px; display: flex; align-items: center; gap: 16px; padding: 0 14px; background: #0B0D10; border-top: 1px solid #232830; color: #9AA3AE; font-size: 11.5px;">
+    <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #7FC8A9;"></span>Claude Code CLI connected</span>
+    <span>6 sessions · 6 worktrees</span>
+    <div style="flex: 1;"></div>
+    <span>Max plan · Session 62% · Week 38%</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#7AA2F7","options":["#7AA2F7","#7FC8A9","#C4A7E7","#F2C078"]},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { scope: 'all', closed: {}, logs: { oide: true } }; }
+  renderVals() {
+    const accent = this.props.accent ?? '#7AA2F7';
+    const S = this.state;
+    const ST = { run: ['#7FC8A9', 'Running'], need: ['#F2C078', 'Needs you'], review: ['#9DBBFA', 'Ready for review'] };
+    const DATA = [
+      { name: 'oide', path: '~/code/oide', sync: '2 behind origin', syncColor: '#F2C078', syncAction: 'Pull', local: '1 uncommitted file (CLAUDE.md)',
+        wts: [
+          ['Build the window shell layout', 'oide/shell-layout', 'from main · up to date', 'run', '7 files', '+214', '−37', 'No PR'],
+          ['Wire the Claude Code CLI bridge', 'oide/cli-bridge', 'from main · 2 behind', 'need', '3 files', '+127', '−4', 'No PR'],
+          ['Draft the extension manifest schema', 'oide/ext-manifest', 'from main · up to date', 'run', '2 files', '+310', '', 'No PR'],
+        ],
+        log: [['a41c9e2', 'Add focus view keyboard shortcuts', 'You', '2 h ago'], ['7d03b15', 'Merge oide/status-bar: plan usage meters', 'You, from an agent', 'yesterday'], ['c9e2210', 'Scaffold the desktop shell', 'Scaffold agent', '3 days ago']] },
+      { name: 'billing-api', path: '~/code/billing-api', sync: 'Up to date', syncColor: '#7FC8A9', syncAction: 'Fetch', local: '',
+        wts: [
+          ['Retry failed Stripe webhooks', 'billing/webhook-retry', 'from main · up to date', 'review', '8 files', '+342', '−58', 'Ready to open'],
+          ['Fix the flaky invoice test', 'billing/invoice-test', 'from main · up to date', 'need', '1 file', '+6', '−2', 'No PR'],
+        ],
+        log: [['5be8d01', 'Bump Stripe SDK', 'You', '4 days ago'], ['19af7c3', 'Add invoice PDF export', 'Invoice agent', 'last week']] },
+      { name: 'docs-site', path: '~/code/docs-site', sync: '1 to push', syncColor: '#F2C078', syncAction: 'Push', local: '',
+        wts: [
+          ['Rewrite the getting-started guide', 'docs/getting-started', 'from main · up to date', 'run', '4 files', '+120', '−96', 'Draft PR #18'],
+        ],
+        log: [['e02d4aa', 'Fix typo in install page', 'You', '1 h ago'], ['b7710c2', 'Add search', 'Search agent', '2 weeks ago']] },
+    ];
+    const shown = DATA.filter((p) => S.scope === 'all' || S.scope === p.name);
+    const projects = shown.map((p) => {
+      const open = !S.closed[p.name];
+      const logOpen = !!S.logs[p.name];
+      return { ...p, open, exp: open ? 'true' : 'false', chev: open ? '▾' : '▸',
+        hasLocal: !!p.local, wtCount: p.wts.length,
+        logOpen, logExp: logOpen ? 'true' : 'false', logChev: logOpen ? '▾' : '▸',
+        toggle: () => this.setState({ closed: { ...S.closed, [p.name]: open } }),
+        toggleLog: () => this.setState({ logs: { ...S.logs, [p.name]: !logOpen } }),
+        log: p.log.map(([sha, msg, who, when]) => ({ sha, msg, who, when })),
+        wts: p.wts.map(([agent, branch, base, st, files, add, del, pr]) => ({ agent, branch, base, files, add, del, pr,
+          color: ST[st][0], status: ST[st][1],
+          prColor: pr === 'No PR' ? '#6B7584' : '#9DBBFA',
+          reviewBorder: st === 'review' ? '#9DBBFA' : '#343A44', reviewColor: st === 'review' ? '#9DBBFA' : '#E6E8EB' })) };
+    });
+    const wts = shown.reduce((n, p) => n + p.wts.length, 0);
+    const scopes = [['all', 'All projects'], ['oide', 'oide'], ['billing-api', 'billing-api'], ['docs-site', 'docs-site']];
+    return {
+      accent, projects,
+      title: S.scope === 'all' ? 'All projects' : S.scope,
+      summary: shown.length + (shown.length === 1 ? ' project · ' : ' projects · ') + wts + ' agent worktrees',
+      scopes: scopes.map(([k, label]) => ({ label, sel: S.scope === k ? 'true' : 'false', bg: S.scope === k ? '#1E2430' : 'transparent', color: S.scope === k ? '#E6E8EB' : '#9AA3AE', pick: () => this.setState({ scope: k }) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

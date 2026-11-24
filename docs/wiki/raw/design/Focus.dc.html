@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oIDE · Mission Control focus view</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1013;color:#E6E8EB;font-family:Inter,system-ui,sans-serif;font-size:13px}
+input,select,textarea{font-family:inherit}
+a{color:#9DBBFA}a:hover{color:#C4D6FC}
+button{font-family:inherit;cursor:pointer}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.kbd{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;padding:1px 5px;border:1px solid #343A44;border-radius:4px;color:#9AA3AE}
+.lim{position:relative}.lim:hover,.lim:focus-visible{background:#1E2430 !important;color:#E6E8EB !important}.tip{display:none;position:absolute;right:0;bottom:30px;white-space:nowrap;padding:7px 10px;border-radius:7px;background:#E6E8EB;color:#0B0D10;font-size:12px;font-weight:500;box-shadow:0 6px 20px rgba(0,0,0,.4);z-index:10}.lim:hover .tip,.lim:focus-visible .tip{display:block}
+.ctx{position:relative}.ctx:hover,.ctx:focus-visible{border-color:#343A44 !important;background:#1E2430 !important}.ctx .tip{right:auto;left:50%;transform:translateX(-50%);bottom:32px}.ctx:hover .tip,.ctx:focus-visible .tip{display:block}
+</style>
+</helmet>
+<div style="position: relative; width: 100%; min-height: 1100px; display: flex; flex-direction: column; background: #0E1013; color: #E6E8EB; font-family: Inter, system-ui, sans-serif; font-size: 13px;">
+
+  <!-- Title bar (same as the wall) -->
+  <header style="height: 44px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #232830; background: #0B0D10; flex-wrap: wrap;">
+    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; letter-spacing: -0.01em; font-size: 14px;">
+      <span style="width: 20px; height: 20px; border-radius: 6px; border: 2px solid {{accent}}; box-sizing: border-box; display: inline-block;"></span>
+      oIDE
+    </div>
+    <button type="button" style="flex: 1 1 320px; max-width: 560px; margin: 0 auto; height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: #15181D; border: 1px solid #262B33; border-radius: 8px; color: #9AA3AE; font-size: 13px; text-align: left;">
+      <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+      <span style="flex: 1;">Spawn an agent, jump to a session, or run a command</span>
+      <span class="kbd">Ctrl K</span>
+    </button>
+    <div style="display: flex; align-items: center; gap: 12px; color: #9AA3AE; font-size: 12px;">
+      <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #7FC8A9;"></span>4 running</span>
+      <span style="display: flex; align-items: center; gap: 6px; color: #F2C078;"><span style="width: 8px; height: 8px; border-radius: 50%; background: #F2C078;"></span>2 need you</span>
+    </div>
+  </header>
+
+  <div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0;">
+
+    <!-- Activity rail -->
+    <nav aria-label="Primary" style="flex: 0 0 56px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: #0B0D10; border-right: 1px solid #232830;">
+      <a href="Main.dc.html" aria-label="Agent wall" style="width: 40px; height: 40px; border-radius: 10px; background: #1E2430; color: {{accent}}; display: flex; align-items: center; justify-content: center;">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
+      </a>
+      <a href="Artifacts.dc.html" aria-label="Artifacts" style="width: 40px; height: 40px; border-radius: 10px; border: none; background: transparent; color: #9AA3AE; display: flex; align-items: center; justify-content: center;">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"></path><path d="M3 13l9 5 9-5"></path></svg>
+      </a>
+      <a href="Files.dc.html" aria-label="Files" style="width: 40px; height: 40px; border-radius: 10px; border: none; background: transparent; color: #9AA3AE; display: flex; align-items: center; justify-content: center;">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"></path><path d="M14 3v5h5"></path></svg>
+      </a>
+      <a href="SourceControl.dc.html" aria-label="Source control" style="width: 40px; height: 40px; border-radius: 10px; border: none; background: transparent; color: #9AA3AE; display: flex; align-items: center; justify-content: center;">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="8" r="2"></circle><path d="M6 7v10"></path><path d="M18 10c0 4-6 3-12 7"></path></svg>
+      </a>
+      <div style="flex: 1;"></div>
+      <a href="Marketplace.dc.html" aria-label="Extension marketplace" style="width: 40px; height: 40px; border-radius: 10px; border: none; background: transparent; color: #9AA3AE; display: flex; align-items: center; justify-content: center;">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"></rect><rect x="3" y="13" width="8" height="8" rx="1.5"></rect><rect x="13" y="13" width="8" height="8" rx="1.5"></rect><path d="M17 3v8"></path><path d="M13 7h8"></path></svg>
+      </a>
+      <a href="Settings.dc.html" aria-label="Settings" style="width: 40px; height: 40px; border-radius: 10px; border: none; background: transparent; color: #9AA3AE; display: flex; align-items: center; justify-content: center;">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg>
+      </a>
+    </nav>
+
+    <!-- Mini wall: the other agents stay visible -->
+    <aside aria-label="Other agents" style="flex: 0 0 216px; display: flex; flex-direction: column; gap: 6px; padding: 12px 10px; background: #111418; border-right: 1px solid #232830; box-sizing: border-box;">
+      <a href="Main.dc.html" style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; color: #C9CED6; text-decoration: none; font-size: 12px;">
+        <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 15px; height: 15px;"><path d="M15 6l-6 6 6 6"></path></svg>
+        <span style="flex: 1;">Back to wall</span><span class="kbd">Esc</span>
+      </a>
+      <span style="padding: 6px 8px 2px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">Agents</span>
+
+      <div style="padding: 8px; border-radius: 8px; background: #1E2430; border: 1px solid #343A44; display: flex; flex-direction: column; gap: 3px;">
+        <span style="display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #F2C078;"></span><span style="flex: 1;">Claude CLI bridge</span><span title="Context 81% full" style="display: flex; align-items: center; gap: 3px; font-weight: 400; font-size: 10.5px; color: #9AA3AE;"><svg width="14" height="14" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" fill="none" stroke="#2B313B" stroke-width="5"></circle><circle cx="18" cy="18" r="14" fill="none" stroke="#F2C078" stroke-width="5" pathLength="100" stroke-dasharray="81 100" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg><span class="mono">81%</span></span></span>
+        <span class="mono" style="font-size: 10.5px; color: #9AA3AE;">oide · viewing</span>
+      </div>
+      <div role="group" aria-label="Lead agent and its subagents" style="display: flex; flex-direction: column; gap: 1px; margin: -2px 0 6px 12px; padding-left: 8px; border-left: 1px solid #343A44;">
+        <button type="button" onClick="{{ pickLead }}" aria-current="{{ leadCur }}" style="height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 6px; border: none; border-radius: 6px; background: {{ leadBg }}; color: #E6E8EB; font-size: 11.5px; text-align: left;"><span style="flex: 1;">Lead agent</span><span class="mono" style="font-size: 9.5px; color: #9AA3AE;">O</span></button>
+        <sc-for list="{{ subs }}" as="t" hint-placeholder-count="3">
+          <button type="button" onClick="{{ t.view }}" aria-current="{{ t.cur }}" style="height: 26px; display: flex; align-items: center; gap: 6px; padding: 0 6px; border: none; border-radius: 6px; background: {{ t.rowBg }}; color: {{ t.rowColor }}; font-size: 11.5px; text-align: left;"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{ t.color }}; flex: 0 0 auto;"></span><span style="flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ t.name }}</span><span class="mono" style="font-size: 9.5px; color: #9AA3AE;">{{ t.letter }}</span></button>
+        </sc-for>
+      </div>
+      <button type="button" style="padding: 8px; border-radius: 8px; background: #1A1813; border: 1px solid #5A4A2A; display: flex; flex-direction: column; gap: 3px; text-align: left; color: #E6E8EB;">
+        <span style="display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #F2C078;"></span><span style="flex: 1;">Flaky invoice test</span><span title="Context 92% full" style="display: flex; align-items: center; gap: 3px; font-weight: 400; font-size: 10.5px; color: #9AA3AE;"><svg width="14" height="14" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" fill="none" stroke="#2B313B" stroke-width="5"></circle><circle cx="18" cy="18" r="14" fill="none" stroke="#F08A8A" stroke-width="5" pathLength="100" stroke-dasharray="92 100" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg><span class="mono">92%</span></span></span>
+        <span style="font-size: 11px; color: #F2C078;">Has a question</span>
+      </button>
+      <button type="button" style="padding: 8px; border-radius: 8px; background: transparent; border: 1px solid #262B33; display: flex; flex-direction: column; gap: 3px; text-align: left; color: #E6E8EB;">
+        <span style="display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #9DBBFA;"></span><span style="flex: 1;">Webhook retries</span><span title="Context 67% full" style="display: flex; align-items: center; gap: 3px; font-weight: 400; font-size: 10.5px; color: #9AA3AE;"><svg width="14" height="14" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" fill="none" stroke="#2B313B" stroke-width="5"></circle><circle cx="18" cy="18" r="14" fill="none" stroke="#F2C078" stroke-width="5" pathLength="100" stroke-dasharray="67 100" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg><span class="mono">67%</span></span></span>
+        <span style="font-size: 11px; color: #9AA3AE;">Ready for review · 3 subagents done</span>
+      </button>
+      <button type="button" style="padding: 8px; border-radius: 8px; background: transparent; border: 1px solid #262B33; display: flex; flex-direction: column; gap: 3px; text-align: left; color: #E6E8EB;">
+        <span style="display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #7FC8A9;"></span><span style="flex: 1;">Window shell layout</span><span title="Context 54% full" style="display: flex; align-items: center; gap: 3px; font-weight: 400; font-size: 10.5px; color: #9AA3AE;"><svg width="14" height="14" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" fill="none" stroke="#2B313B" stroke-width="5"></circle><circle cx="18" cy="18" r="14" fill="none" stroke="#7AA2F7" stroke-width="5" pathLength="100" stroke-dasharray="54 100" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg><span class="mono">54%</span></span></span>
+        <span class="mono" style="font-size: 10.5px; color: #9AA3AE;">Writing SessionGrid.tsx · 2 sub</span>
+      </button>
+      <button type="button" style="padding: 8px; border-radius: 8px; background: transparent; border: 1px solid #262B33; display: flex; flex-direction: column; gap: 3px; text-align: left; color: #E6E8EB;">
+        <span style="display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #7FC8A9;"></span><span style="flex: 1;">Extension manifest</span><span title="Context 23% full" style="display: flex; align-items: center; gap: 3px; font-weight: 400; font-size: 10.5px; color: #9AA3AE;"><svg width="14" height="14" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" fill="none" stroke="#2B313B" stroke-width="5"></circle><circle cx="18" cy="18" r="14" fill="none" stroke="#7AA2F7" stroke-width="5" pathLength="100" stroke-dasharray="23 100" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg><span class="mono">23%</span></span></span>
+        <span class="mono" style="font-size: 10.5px; color: #9AA3AE;">Writing the RFC</span>
+      </button>
+      <button type="button" style="padding: 8px; border-radius: 8px; background: transparent; border: 1px solid #262B33; display: flex; flex-direction: column; gap: 3px; text-align: left; color: #E6E8EB;">
+        <span style="display: flex; align-items: center; gap: 6px; font-weight: 600; font-size: 12.5px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #7FC8A9;"></span><span style="flex: 1;">Getting-started rewrite</span><span title="Context 41% full" style="display: flex; align-items: center; gap: 3px; font-weight: 400; font-size: 10.5px; color: #9AA3AE;"><svg width="14" height="14" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" fill="none" stroke="#2B313B" stroke-width="5"></circle><circle cx="18" cy="18" r="14" fill="none" stroke="#7AA2F7" stroke-width="5" pathLength="100" stroke-dasharray="41 100" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg><span class="mono">41%</span></span></span>
+        <span class="mono" style="font-size: 10.5px; color: #9AA3AE;">Checking links · 1 sub</span>
+      </button>
+
+      <div style="flex: 1;"></div>
+      <div style="display: flex; flex-direction: column; gap: 6px; padding: 8px; font-size: 11.5px; color: #9AA3AE;">
+        <span style="display: flex; justify-content: space-between;">Next agent <span class="kbd">J</span></span>
+        <span style="display: flex; justify-content: space-between;">Previous agent <span class="kbd">K</span></span>
+        <span style="display: flex; justify-content: space-between;">Next that needs you <span class="kbd">N</span></span>
+      </div>
+    </aside>
+
+    <!-- Session -->
+    <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column;">
+      <sc-if value="{{ isLead }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #232830; flex-wrap: wrap;">
+        <div style="display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 240px;">
+          <h1 style="margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em;">Wire the Claude Code CLI bridge</h1>
+          <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #9AA3AE; flex-wrap: wrap;">
+            <span>oide</span><span aria-hidden="true">·</span>
+            <span class="mono">worktree cli-bridge</span><span aria-hidden="true">·</span>
+            <span>Auto mode</span><span aria-hidden="true">·</span>
+            <span>running 19m</span>
+          </span>
+        </div>
+        <button type="button" class="ctx" onClick="{{ c1 }}" aria-label="Context 81% full. Compact this session" style="height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 5px; border: 1px solid #343A44; border-radius: 15px; background: transparent; color: #E6E8EB; font-size: 12px;"><svg width="22" height="22" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" fill="none" stroke="#2B313B" stroke-width="5"></circle><circle cx="18" cy="18" r="14" fill="none" stroke="#F2C078" stroke-width="5" pathLength="100" stroke-dasharray="81 100" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg><span>Context <span class="mono">81%</span></span><span class="tip">Click to /compact this session</span></button>
+        <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12px; display: flex; align-items: center; gap: 6px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 15px; height: 15px;"><path d="M4 6l6 6-6 6"></path><path d="M12 18h8"></path></svg>Raw terminal</button>
+        <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12px; display: flex; align-items: center; gap: 6px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 15px; height: 15px;"><path d="M8 5v14M16 5v14"></path></svg>Pause</button>
+        <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #4A2A2A; background: transparent; color: #F08A8A; font-size: 12px;">Stop</button>
+      </div>
+
+      </sc-if>
+      <sc-if value="{{ isLead }}" hint-placeholder-val="{{ true }}">
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; max-width: 860px; width: 100%; box-sizing: border-box; margin: 0 auto;">
+        <div style="align-self: flex-end; max-width: 80%; padding: 10px 14px; background: #1E2430; border-radius: 12px 12px 4px 12px; line-height: 1.5; color: #E6E8EB;">
+          Spawn each session as a real <span class="mono" style="font-size: 12px;">claude</span> CLI process in its own worktree and stream its events into the tiles. Follow the Main window v2 design.
+        </div>
+
+        <div style="line-height: 1.55; color: #D5D9DF;">I'll host each CLI in a pseudo-terminal so it behaves like your shell, and parse its streaming JSON for the tiles. SessionHost is done. Next is the terminal dependency.</div>
+
+        <div style="display: flex; flex-direction: column; border: 1px solid #262B33; border-radius: 10px; overflow: hidden; background: #15181D;">
+          <div class="mono" style="display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 12px; color: #B8BFC9;">
+            <span style="color: #7FC8A9;">●</span><span style="flex: 1;">Read 4 files</span><span style="color: #9AA3AE; font-size: 11px;">package.json, src/main/…</span>
+          </div>
+          <div class="mono" style="display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 12px; color: #B8BFC9; border-top: 1px solid #232830;">
+            <span style="color: #7FC8A9;">●</span><span style="flex: 1;">Edit src/main/cli/SessionHost.ts</span><span><span style="color: #7FC8A9;">+86</span> <span style="color: #F08A8A;">−4</span></span>
+          </div>
+          <div class="mono" style="border-top: 1px solid #232830; font-size: 11.5px; line-height: 1.7; background: #0B0D10;">
+            <div style="padding: 0 12px; background: #12261D; color: #A8E0C6;">+ const pty = spawn('claude', ['--output-format', 'stream-json'], {</div>
+            <div style="padding: 0 12px; background: #12261D; color: #A8E0C6;">+   cwd: worktree.path, env: session.env,</div>
+            <div style="padding: 0 12px; background: #12261D; color: #A8E0C6;">+ });</div>
+            <div style="padding: 0 12px; color: #9AA3AE;">  pty.onData((chunk) =&gt; this.parser.feed(chunk));</div>
+          </div>
+          <div class="mono" style="display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 12px; color: #B8BFC9; border-top: 1px solid #232830;">
+            <span style="color: #7FC8A9;">●</span><span style="flex: 1;">Bash npm run typecheck</span><span style="color: #9AA3AE; font-size: 11px;">0 errors</span>
+          </div>
+        </div>
+
+        <div style="line-height: 1.55; color: #D5D9DF;">I've split the remaining work into three subagents so they can run side by side.</div>
+        <sc-for list="{{ subs }}" as="t" hint-placeholder-count="3">
+          <div style="display: flex; flex-direction: column; border: 1px solid {{ t.border }}; border-radius: 10px; overflow: hidden; background: #15181D;">
+            <div style="display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px 6px; flex-wrap: wrap;">
+              <button type="button" aria-expanded="{{ t.exp }}" onClick="{{ t.toggle }}" style="flex: 1; min-width: 240px; display: flex; align-items: center; gap: 8px; border: none; background: transparent; color: #E6E8EB; text-align: left; font-size: 12.5px; padding: 2px 4px;">
+                <span aria-hidden="true" style="color: #9AA3AE; width: 10px; font-size: 11px;">{{ t.chev }}</span>
+                <span style="width: 7px; height: 7px; border-radius: 50%; background: {{ t.color }}; flex: 0 0 auto;"></span>
+                <span style="font-size: 11px; color: #9AA3AE;">Subagent</span>
+                <span style="font-weight: 600;">{{ t.name }}</span>
+                <span class="mono" style="font-size: 10.5px; padding: 1px 6px; border-radius: 5px; background: #1E2430; color: #C9CED6;">{{ t.model }} · {{ t.eff }}</span>
+                <span style="font-size: 11.5px; color: #9AA3AE;">routed as {{ t.route }}</span>
+              </button>
+              <span style="font-size: 11.5px; color: {{ t.color }}; white-space: nowrap;">{{ t.stLabel }} {{ t.time }}</span>
+              <button type="button" onClick="{{ t.view }}" style="height: 26px; padding: 0 9px; border-radius: 6px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 11.5px;">Open</button>
+            </div>
+            <sc-if value="{{ t.closed }}" hint-placeholder-val="{{ true }}">
+              <div class="mono" style="padding: 0 12px 9px 34px; font-size: 11.5px; color: #9AA3AE;">{{ t.latest }}</div>
+            </sc-if>
+            <sc-if value="{{ t.open }}" hint-placeholder-val="{{ false }}">
+              <div style="display: flex; flex-direction: column; border-top: 1px solid #232830; background: #111418;">
+                <sc-for list="{{ t.steps }}" as="st" hint-placeholder-count="3">
+                  <div class="mono" style="display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 34px; font-size: 11.5px; color: #B8BFC9;">
+                    <span style="color: {{ st.color }};">{{ st.icon }}</span><span style="flex: 1;">{{ st.text }}</span><span style="color: #9AA3AE; font-size: 11px;">{{ st.meta }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      </sc-if>
+      <sc-if value="{{ isSub }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #232830; flex-wrap: wrap;">
+        <div style="display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 240px;">
+          <nav aria-label="Breadcrumb" style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #9AA3AE;">
+            <button type="button" onClick="{{ pickLead }}" style="border: none; background: transparent; padding: 0; color: #9DBBFA; font-size: 12px;">Wire the Claude Code CLI bridge</button><span aria-hidden="true">›</span><span>Subagent</span>
+          </nav>
+          <h1 style="margin: 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px;"><span style="width: 8px; height: 8px; border-radius: 50%; background: {{ sel.color }};"></span>{{ sel.name }}</h1>
+          <span style="display: flex; align-items: center; gap: 8px; font-size: 12px; color: #9AA3AE; flex-wrap: wrap;">
+            <span>{{ sel.model }}, {{ sel.eff }} effort</span><span aria-hidden="true">·</span>
+            <span>routed as {{ sel.route }}</span><span aria-hidden="true">·</span>
+            <span style="color: {{ sel.color }};">{{ sel.stLabel }} {{ sel.time }}</span><span aria-hidden="true">·</span>
+            <span>{{ sel.tokens }} tokens</span>
+          </span>
+        </div>
+        <span class="ctx" tabindex="0" aria-label="Subagent context {{ sel.ctx }}% full" style="height: 30px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 5px; border: 1px solid #262B33; border-radius: 15px; color: #C9CED6; font-size: 12px;"><svg width="22" height="22" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" fill="none" stroke="#2B313B" stroke-width="5"></circle><circle cx="18" cy="18" r="14" fill="none" stroke="#7AA2F7" stroke-width="5" pathLength="100" stroke-dasharray="{{ sel.dash }}" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg><span>Own context <span class="mono">{{ sel.ctx }}%</span></span><span class="tip">A subagent has its own context. It is discarded when the subagent reports back.</span></span>
+        <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #4A2A2A; background: transparent; color: #F08A8A; font-size: 12px;">Stop subagent</button>
+      </div>
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; max-width: 860px; width: 100%; box-sizing: border-box; margin: 0 auto;">
+        <div style="display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 10px; border: 1px solid #262B33; background: #111418; font-size: 12.5px; color: #C9CED6; line-height: 1.5;">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px; color: #9AA3AE; margin-top: 1px;"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg>
+          <span>A subagent works on one task from the lead agent and reports back to it. To steer this one, message the lead agent below.</span>
+        </div>
+        <div style="align-self: flex-end; max-width: 80%; display: flex; flex-direction: column; gap: 4px;">
+          <span style="align-self: flex-end; font-size: 11px; color: #9AA3AE;">Task from the lead agent</span>
+          <div style="padding: 10px 14px; background: #1E2430; border-radius: 12px 12px 4px 12px; line-height: 1.5; color: #E6E8EB;">{{ sel.task }}</div>
+        </div>
+        <div style="display: flex; flex-direction: column; border: 1px solid #262B33; border-radius: 10px; overflow: hidden; background: #15181D;">
+          <sc-for list="{{ sel.steps }}" as="st" hint-placeholder-count="3">
+            <div class="mono" style="display: flex; align-items: center; gap: 8px; padding: 7px 12px; font-size: 12px; color: #B8BFC9; border-top: 1px solid #232830; margin-top: -1px;">
+              <span style="color: {{ st.color }};">{{ st.icon }}</span><span style="flex: 1;">{{ st.text }}</span><span style="color: #9AA3AE; font-size: 11px;">{{ st.meta }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <span style="font-size: 12px; color: #9AA3AE;">When it finishes, its report appears in the lead agent's transcript.</span>
+      </div>
+      </sc-if>
+
+      <!-- Pinned permission prompt + composer -->
+      <div style="padding: 0 20px 16px;">
+        <div style="max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid #5A4A2A; background: #1A1813; border-radius: 12px; flex-wrap: wrap;">
+            <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 220px;">
+              <span style="font-size: 12px; color: #F2C078; font-weight: 600;">Subagent <button type="button" onClick="{{ viewDeps }}" style="border: none; background: transparent; padding: 0; color: #F2C078; font-weight: 600; font-size: 12px; text-decoration: underline;">Dependency setup</button> wants to run a command</span>
+              <span class="mono" style="font-size: 12.5px; color: #E6E8EB;">npm install node-pty</span>
+            </div>
+            <button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: none; background: #F2C078; color: #1A1813; font-weight: 600; font-size: 12.5px; display: flex; align-items: center; gap: 6px;">Allow once <span class="kbd" style="color: #1A1813; border-color: #8A6A30;">Y</span></button>
+            <button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #5A4A2A; background: transparent; color: #E6E8EB; font-size: 12.5px;">Always in oide</button>
+            <button type="button" style="height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #5A4A2A; background: transparent; color: #E6E8EB; font-size: 12.5px; display: flex; align-items: center; gap: 6px;">Deny <span class="kbd">D</span></button>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; border: 1px solid #343A44; background: #15181D; border-radius: 12px;">
+            <label for="steer" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">Message this agent</label>
+            <input id="steer" type="text" placeholder="{{ composerPh }}" style="flex: 1; min-width: 0; border: none; outline: none; background: transparent; color: #E6E8EB; font-size: 13.5px; font-family: inherit;">
+            <button type="button" style="height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid #343A44; background: transparent; color: #C9CED6; font-size: 12px; display: flex; align-items: center; gap: 5px;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px;"><path d="M12 3l9 5-9 5-9-5z"></path><path d="M3 13l9 5 9-5"></path></svg>Attach artifact</button>
+            <button type="button" aria-label="Send" style="width: 32px; height: 32px; border-radius: 8px; border: none; background: {{accent}}; color: #0B0D10; display: flex; align-items: center; justify-content: center;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5"></path><path d="M6 11l6-6 6 6"></path></svg></button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Inspector -->
+    <aside aria-label="Inspector" style="flex: 1 1 300px; max-width: 340px; display: flex; flex-direction: column; background: #111418; border-left: 1px solid #232830; box-sizing: border-box;">
+      <div role="tablist" aria-label="Inspector" style="display: flex; gap: 0; padding: 8px 8px 0; border-bottom: 1px solid #232830; overflow-x: auto;">
+        <sc-for list="{{ itabs }}" as="it" hint-placeholder-count="5">
+          <button type="button" role="tab" aria-selected="{{ it.sel }}" onClick="{{ it.pick }}" style="height: 34px; padding: 0 6px; border: none; border-bottom: 2px solid {{ it.line }}; background: transparent; color: {{ it.color }}; font-weight: {{ it.weight }}; font-size: 12px; white-space: nowrap;">{{ it.label }}</button>
+        </sc-for>
+      </div>
+
+      <sc-if value="{{ inspSubs }}" hint-placeholder-val="{{ true }}">
+        <div style="display: flex; flex-direction: column; gap: 12px; padding: 14px 16px;">
+          <span style="font-size: 12.5px; color: #C9CED6;">3 subagents · <span style="color: #F2C078;">1 needs you</span> · 1 running · 1 done</span>
+          <span style="font-size: 11.5px; color: #9AA3AE; line-height: 1.5;">Balanced focus: Opus leads and routes each task. Simple goes to Haiku, standard to Sonnet, complex to Opus.</span>
+
+          <div role="img" aria-label="Timeline of subagents over this agent's 19 minutes" style="display: flex; flex-direction: column; gap: 5px; padding: 10px; border-radius: 10px; border: 1px solid #262B33; background: #15181D;">
+            <div style="display: flex; align-items: center; gap: 8px; font-size: 10.5px; color: #9AA3AE;"><span style="width: 92px;">Lead · Opus</span><span style="flex: 1; height: 6px; border-radius: 3px; background: #343A44; position: relative;"><span style="position: absolute; inset: 0; border-radius: 3px; background: #4A5568;"></span></span></div>
+            <sc-for list="{{ subs }}" as="t" hint-placeholder-count="3">
+              <div style="display: flex; align-items: center; gap: 8px; font-size: 10.5px; color: #C9CED6;"><span style="width: 92px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ t.name }}</span><span style="flex: 1; height: 6px; border-radius: 3px; background: #1E232A; position: relative;"><span style="position: absolute; top: 0; bottom: 0; left: {{ t.left }}; width: {{ t.width }}; border-radius: 3px; background: {{ t.color }};"></span></span></div>
+            </sc-for>
+            <div class="mono" style="display: flex; justify-content: space-between; padding-left: 100px; font-size: 10px; color: #6B7584;"><span>0m</span><span>10m</span><span>now 19m</span></div>
+          </div>
+
+          <sc-for list="{{ subs }}" as="t" hint-placeholder-count="3">
+            <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: 10px; border: 1px solid {{ t.border }}; background: {{ t.cardBg }};">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="width: 7px; height: 7px; border-radius: 50%; background: {{ t.color }};"></span>
+                <span style="flex: 1; font-weight: 600; font-size: 12.5px;">{{ t.name }}</span>
+                <span title="Subagent context" style="display: flex; align-items: center; gap: 3px; font-size: 10.5px; color: #9AA3AE;"><svg width="14" height="14" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" fill="none" stroke="#2B313B" stroke-width="5"></circle><circle cx="18" cy="18" r="14" fill="none" stroke="#7AA2F7" stroke-width="5" pathLength="100" stroke-dasharray="{{ t.dash }}" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg><span class="mono">{{ t.ctx }}%</span></span>
+              </div>
+              <span style="font-size: 11.5px; color: #9AA3AE;">{{ t.model }}, {{ t.eff }} effort · routed as {{ t.route }}</span>
+              <span style="font-size: 11.5px; color: {{ t.color }};">{{ t.stLabel }} {{ t.time }} · <span style="color: #9AA3AE;">{{ t.tokens }} tokens · {{ t.files }}</span></span>
+              <div style="display: flex; gap: 6px;">
+                <button type="button" onClick="{{ t.view }}" style="height: 26px; padding: 0 9px; border-radius: 6px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 11.5px;">Open</button>
+                <sc-if value="{{ t.active }}" hint-placeholder-val="{{ false }}"><button type="button" style="height: 26px; padding: 0 9px; border-radius: 6px; border: 1px solid #4A2A2A; background: transparent; color: #F08A8A; font-size: 11.5px;">Stop</button></sc-if>
+              </div>
+            </div>
+          </sc-for>
+          <span style="font-size: 11.5px; color: #9AA3AE;">Subagents have used 38% of this agent's tokens so far.</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ inspPlan }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 9px; padding: 14px 16px;">
+        <span style="display: flex; gap: 8px; align-items: flex-start; color: #C9CED6;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #7FC8A9; width: 16px; height: 16px;"><path d="M5 12l5 5 9-10"></path></svg>Find how sessions start today</span>
+        <span style="display: flex; gap: 8px; align-items: flex-start; color: #C9CED6;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #7FC8A9; width: 16px; height: 16px;"><path d="M5 12l5 5 9-10"></path></svg>SessionHost spawns one CLI per worktree</span>
+        <span style="display: flex; gap: 8px; align-items: flex-start; font-weight: 600;"><span style="width: 16px; height: 16px; border-radius: 50%; border: 2px solid #F2C078; box-sizing: border-box; flex: 0 0 auto;"></span>Add the node-pty dependency</span>
+        <span style="display: flex; gap: 8px; align-items: flex-start; color: #9AA3AE;"><span style="width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #4A515C; box-sizing: border-box; flex: 0 0 auto;"></span>Parse stream-json events</span>
+        <span style="display: flex; gap: 8px; align-items: flex-start; color: #9AA3AE;"><span style="width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #4A515C; box-sizing: border-box; flex: 0 0 auto;"></span>Route permission prompts to tiles</span>
+      </div>
+
+      <div style="padding: 8px 16px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">Changed files</div>
+      <div class="mono" style="display: flex; flex-direction: column; gap: 2px; padding: 0 10px 12px; font-size: 11.5px;">
+        <button type="button" style="display: flex; gap: 8px; padding: 6px; border: none; border-radius: 6px; background: transparent; color: #C9CED6; text-align: left; font-family: inherit; font-size: inherit;"><span style="flex: 1;">src/main/cli/SessionHost.ts</span><span style="color: #7FC8A9;">+86</span></button>
+        <button type="button" style="display: flex; gap: 8px; padding: 6px; border: none; border-radius: 6px; background: transparent; color: #C9CED6; text-align: left; font-family: inherit; font-size: inherit;"><span style="flex: 1;">src/main/cli/parser.ts</span><span style="color: #7FC8A9;">+41</span></button>
+        <button type="button" style="display: flex; gap: 8px; padding: 6px; border: none; border-radius: 6px; background: transparent; color: #C9CED6; text-align: left; font-family: inherit; font-size: inherit;"><span style="flex: 1;">package.json</span><span style="color: #9AA3AE;">pending</span></button>
+      </div>
+
+      <div style="padding: 4px 16px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">Artifacts in use</div>
+      <div style="display: flex; flex-direction: column; gap: 8px; padding: 4px 16px 12px;">
+        <div style="display: flex; gap: 10px; align-items: center; padding: 8px; border: 1px solid #262B33; border-radius: 10px; background: #15181D;">
+          <div style="width: 50px; height: 36px; border-radius: 6px; background: #1B1F26; display: flex; gap: 3px; padding: 5px; box-sizing: border-box;"><div style="width: 30%; background: #343A44; border-radius: 2px;"></div><div style="flex: 1; background: #2B3240; border-radius: 2px;"></div></div>
+          <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;"><span style="font-weight: 600;">Main window v2</span><span style="font-size: 11.5px; color: #9AA3AE;">Design · read</span></div>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center; padding: 8px; border: 1px solid #262B33; border-radius: 10px; background: #15181D;">
+          <div style="width: 50px; height: 36px; border-radius: 6px; background: #1B1F26; position: relative;"><div style="position: absolute; left: 5px; top: 11px; width: 15px; height: 12px; border: 1.5px solid #9DBBFA; border-radius: 3px;"></div><div style="position: absolute; left: 20px; top: 17px; width: 10px; height: 1.5px; background: #6B7584;"></div><div style="position: absolute; left: 30px; top: 11px; width: 15px; height: 12px; border: 1.5px solid #7FC8A9; border-radius: 6px;"></div></div>
+          <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;"><span style="font-weight: 600;">Session lifecycle</span><span style="font-size: 11.5px; color: #9AA3AE;">Whiteboard · read</span></div>
+        </div>
+      </div>
+
+      </sc-if>
+      <div style="flex: 1;"></div>
+      <div style="padding: 12px 16px; border-top: 1px solid #232830; display: flex; flex-direction: column; gap: 8px;">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">Agent tools</span>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <span style="padding: 3px 8px; border-radius: 6px; background: #1E2430; font-size: 12px; color: #C9CED6;">Git</span>
+          <span style="padding: 3px 8px; border-radius: 6px; background: #1E2430; font-size: 12px; color: #C9CED6;">Browser preview</span>
+          <span style="padding: 3px 8px; border-radius: 6px; background: #1E2430; font-size: 12px; color: #C9CED6;">Postgres inspector</span>
+          <button type="button" style="padding: 3px 8px; border-radius: 6px; border: 1px dashed #4A515C; background: transparent; font-size: 12px; color: #C9CED6;">+ Marketplace</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Status bar -->
+  <footer style="height: 26px; display: flex; align-items: center; gap: 16px; padding: 0 14px; background: #0B0D10; border-top: 1px solid #232830; color: #9AA3AE; font-size: 11.5px; flex-wrap: wrap;">
+    <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #7FC8A9;"></span>Claude Code CLI connected</span>
+    <span>6 sessions · 6 worktrees · 6 subagents active</span>
+    <div style="flex: 1;"></div>
+    <div role="group" aria-label="Claude plan usage" style="height: 22px; display: flex; align-items: center; gap: 4px; color: #9AA3AE; font-size: 11.5px;">
+      <span style="color: #C9CED6; padding: 0 6px;">Max plan</span>
+      <button type="button" class="lim" aria-describedby="tip-session" style="height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border: none; border-radius: 5px; background: transparent; color: #9AA3AE; font-size: 11.5px;">Session <span style="width: 64px; height: 5px; border-radius: 3px; background: #262B33; display: inline-block; overflow: hidden;"><span style="display: block; width: 62%; height: 5px; background: #F2C078;"></span></span><span style="color: #E6E8EB;">62%</span>
+        <span id="tip-session" role="tooltip" class="tip">Session limit resets today at 4:00 PM (in 1 h 01 min)</span>
+      </button>
+      <button type="button" class="lim" aria-describedby="tip-week" style="height: 22px; display: flex; align-items: center; gap: 6px; padding: 0 8px; border: none; border-radius: 5px; background: transparent; color: #9AA3AE; font-size: 11.5px;">Week <span style="width: 64px; height: 5px; border-radius: 3px; background: #262B33; display: inline-block; overflow: hidden;"><span style="display: block; width: 38%; height: 5px; background: {{accent}};"></span></span><span style="color: #E6E8EB;">38%</span>
+        <span id="tip-week" role="tooltip" class="tip">Weekly limit resets Mon 30 Nov at 9:00 AM (in 6 days)</span>
+      </button>
+    </div>
+    <span>3 projects open</span>
+  </footer>
+</div>
+
+  <sc-if value="{{ confirming }}" hint-placeholder-val="{{ false }}">
+    <div style="position: absolute; inset: 0; z-index: 50; background: rgba(5,6,8,0.62); display: flex; align-items: center; justify-content: center; padding: 16px;">
+      <div role="dialog" aria-modal="true" aria-labelledby="compact-title" style="width: 440px; max-width: 100%; display: flex; flex-direction: column; gap: 14px; padding: 20px; background: #15181D; border: 1px solid #343A44; border-radius: 14px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); box-sizing: border-box;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center;">
+            <svg width="44" height="44" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" fill="none" stroke="#2B313B" stroke-width="4"></circle><circle cx="18" cy="18" r="14" fill="none" stroke="{{ pendingColor }}" stroke-width="4" pathLength="100" stroke-dasharray="{{ pendingDash }}" stroke-linecap="round" transform="rotate(-90 18 18)"></circle></svg>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 3px;">
+            <h2 id="compact-title" style="margin: 0; font-size: 15px; font-weight: 600;">Compact this session?</h2>
+            <span style="font-size: 12.5px; color: #9AA3AE;">{{ pendingName }} · context {{ pendingPct }}% full</span>
+          </div>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #C9CED6;">oIDE will send <span class="mono" style="font-size: 12px; color: #E6E8EB;">/compact</span> to this agent. Claude summarizes the conversation so far and continues from the summary, freeing up context. Earlier messages are replaced by that summary.</p>
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="button" onClick="{{ cancel }}" style="height: 32px; padding: 0 14px; border-radius: 8px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 13px;">Cancel</button>
+          <button type="button" onClick="{{ confirm }}" style="height: 32px; padding: 0 14px; border-radius: 8px; border: none; background: {{accent}}; color: #0B0D10; font-weight: 600; font-size: 13px;">Compact</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div role="status" style="position: absolute; right: 20px; bottom: 40px; z-index: 40; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px; background: #E6E8EB; color: #0B0D10; border-radius: 10px; font-size: 12.5px; box-shadow: 0 10px 30px rgba(0,0,0,0.4);">
+      <span>Sent <span class="mono" style="font-size: 12px;">/compact</span> to {{ toastName }}. Compacting…</span>
+      <button type="button" onClick="{{ dismiss }}" style="height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid #9AA3AE; background: transparent; color: #0B0D10; font-size: 12px;">Dismiss</button>
+    </div>
+  </sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#7AA2F7","options":["#7AA2F7","#7FC8A9","#C4A7E7","#F2C078"]},"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { pending: null, toastName: null, view: null, open: { parser: true }, insp: 'subs' }; }
+  subVals() {
+    const accent = this.props.accent ?? '#7AA2F7';
+    const S = this.state;
+    const ST = { done: ['#7FC8A9', 'Done in'], run: [accent, 'Running'], need: ['#F2C078', 'Needs permission ·'] };
+    const STEP = { done: ['●', '#7FC8A9'], run: ['◐', accent], need: ['●', '#F2C078'] };
+    const raw = [
+      { id: 'flags', name: 'CLI flags', model: 'Haiku', eff: 'low', route: 'simple', st: 'done', time: '2m', start: 5, end: 16, ctx: 31, tokens: '18k', files: 'read 6 files',
+        task: 'List every claude CLI flag oIDE needs for headless sessions: output format, permission mode, model and resume. Report each name with a one-line meaning.',
+        steps: [['done', 'Bash claude --help', ''], ['done', 'Read docs/cli-reference.md', ''], ['done', 'Reported 9 flags to the lead agent', '']] },
+      { id: 'deps', name: 'Dependency setup', model: 'Sonnet', eff: 'medium', route: 'standard', st: 'need', time: '8m', start: 58, end: 100, ctx: 12, tokens: '9k', files: 'package.json',
+        task: 'Add node-pty to the project and make sure it builds on Linux, Windows and macOS.',
+        steps: [['done', 'Read package.json', ''], ['done', 'Fetch node-pty install notes', ''], ['need', 'Bash npm install node-pty', 'waiting for you']] },
+      { id: 'parser', name: 'Parser tests', model: 'Sonnet', eff: 'medium', route: 'standard', st: 'run', time: '5m', start: 74, end: 100, ctx: 34, tokens: '41k', files: '2 files',
+        task: 'Write tests for src/main/cli/parser.ts covering partial chunks, multi-line JSON events and unknown event types.',
+        steps: [['done', 'Read src/main/cli/parser.ts', ''], ['done', 'Write src/main/cli/parser.test.ts', '+112'], ['done', 'Bash npx vitest parser', '7 passed, 1 failed'], ['run', 'Fixing the split-chunk case…', '']] },
+    ];
+    const subs = raw.map((t) => {
+      const open = !!S.open[t.id];
+      const cur = S.view === t.id;
+      return { ...t, color: ST[t.st][0], stLabel: ST[t.st][1], letter: t.model[0],
+        border: t.st === 'need' ? '#5A4A2A' : '#262B33', cardBg: t.st === 'need' ? '#1A1813' : '#15181D',
+        active: t.st !== 'done', open, closed: !open, exp: open ? 'true' : 'false', chev: open ? '▾' : '▸',
+        latest: t.steps[t.steps.length - 1][1],
+        steps: t.steps.map(([k, text, meta]) => ({ icon: STEP[k][0], color: STEP[k][1], text, meta })),
+        left: t.start + '%', width: (t.end - t.start) + '%', dash: t.ctx + ' 100',
+        cur: cur ? 'true' : 'false', rowBg: cur ? '#1E2430' : 'transparent', rowColor: cur ? '#E6E8EB' : '#C9CED6',
+        toggle: () => this.setState({ open: { ...S.open, [t.id]: !open } }),
+        view: () => this.setState({ view: t.id }) };
+    });
+    const sel = subs.find((t) => t.id === S.view) || null;
+    const tabs = [['plan', 'Plan'], ['subs', 'Subagents 3'], ['changes', 'Changes'], ['artifacts', 'Artifacts'], ['term', 'Terminal']];
+    return {
+      subs, sel: sel || subs[0], isSub: !!sel, isLead: !sel,
+      leadCur: sel ? 'false' : 'true', leadBg: sel ? 'transparent' : '#1E2430',
+      pickLead: () => this.setState({ view: null }),
+      viewDeps: () => this.setState({ view: 'deps' }),
+      composerPh: sel ? 'Message the lead agent about ' + sel.name : 'Steer this agent, or type / for commands',
+      itabs: tabs.map(([k, label]) => ({ label, sel: S.insp === k ? 'true' : 'false', line: S.insp === k ? accent : 'transparent',
+        color: S.insp === k ? '#E6E8EB' : '#9AA3AE', weight: S.insp === k ? '600' : '400', pick: () => this.setState({ insp: k }) })),
+      inspSubs: S.insp === 'subs', inspPlan: S.insp !== 'subs',
+    };
+  }
+  renderVals() {
+    const agents = [{name:"Wire the Claude Code CLI bridge",pct:81}];
+    const color = (p) => p >= 85 ? '#F08A8A' : (p >= 65 ? '#F2C078' : '#7AA2F7');
+    const ask = (i) => () => this.setState({ pending: i });
+    const a = this.state.pending == null ? null : agents[this.state.pending];
+    const vals = {
+      ...this.subVals(),
+      accent: this.props.accent ?? '#7AA2F7',
+      confirming: a != null,
+      pendingName: a ? a.name : '',
+      pendingPct: a ? a.pct : 0,
+      pendingDash: a ? a.pct + ' 100' : '0 100',
+      pendingColor: a ? color(a.pct) : '#7AA2F7',
+      cancel: () => this.setState({ pending: null }),
+      confirm: () => this.setState({ pending: null, toastName: a ? a.name : null }),
+      toast: this.state.toastName != null,
+      toastName: this.state.toastName || '',
+      dismiss: () => this.setState({ toastName: null }),
+    };
+    agents.forEach((_, i) => { vals['c' + (i + 1)] = ask(i); });
+    return vals;
+  }
+}
+</script>
+</body>
+</html>

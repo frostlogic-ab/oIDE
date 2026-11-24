@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oIDE · Settings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1013;color:#E6E8EB;font-family:Inter,system-ui,sans-serif;font-size:13px}
+input,select,textarea{font-family:inherit}
+a{color:#9DBBFA}a:hover{color:#C4D6FC}
+button{font-family:inherit;cursor:pointer}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.rail{width:40px;height:40px;border-radius:10px;color:#9AA3AE;display:flex;align-items:center;justify-content:center}
+.row{display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid #1E232A;flex-wrap:wrap}
+.rl{flex:1;min-width:260px;display:flex;flex-direction:column;gap:3px}
+.rt{font-weight:600}
+.rd{font-size:12.5px;color:#9AA3AE;line-height:1.45}
+.inp{height:34px;padding:0 10px;border-radius:8px;border:1px solid #343A44;background:#15181D;color:#E6E8EB;font-size:13px;font-family:inherit}
+.sec{font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#9AA3AE;margin-top:22px}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 900px; display: flex; flex-direction: column; background: #0E1013; color: #E6E8EB; font-family: Inter, system-ui, sans-serif; font-size: 13px;">
+
+  <header style="height: 44px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #232830; background: #0B0D10;">
+    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px;"><span style="width: 20px; height: 20px; border-radius: 6px; border: 2px solid {{accent}}; box-sizing: border-box; display: inline-block;"></span>oIDE</div>
+    <span style="color: #E6E8EB; font-size: 12.5px;">Settings</span>
+  </header>
+
+  <div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0;">
+    <nav aria-label="Primary" style="flex: 0 0 56px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: #0B0D10; border-right: 1px solid #232830;">
+      <a href="Main.dc.html" class="rail" aria-label="Agents"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></a>
+      <a href="Artifacts.dc.html" class="rail" aria-label="Artifacts"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"></path><path d="M3 13l9 5 9-5"></path></svg></a>
+      <a href="Files.dc.html" class="rail" aria-label="Files"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"></path><path d="M14 3v5h5"></path></svg></a>
+      <a href="SourceControl.dc.html" class="rail" aria-label="Source control"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="8" r="2"></circle><path d="M6 7v10"></path><path d="M18 10c0 4-6 3-12 7"></path></svg></a>
+      <div style="flex: 1;"></div>
+      <a href="Marketplace.dc.html" class="rail" aria-label="Extension marketplace"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"></rect><rect x="3" y="13" width="8" height="8" rx="1.5"></rect><rect x="13" y="13" width="8" height="8" rx="1.5"></rect><path d="M17 3v8"></path><path d="M13 7h8"></path></svg></a>
+      <a href="Settings.dc.html" class="rail" aria-label="Settings" aria-current="page" style="background: #1E2430; color: {{accent}};"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg></a>
+    </nav>
+
+    <aside aria-label="Settings sections" style="flex: 0 0 230px; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px; background: #111418; border-right: 1px solid #232830; box-sizing: border-box;">
+      <label for="sset" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">Search settings</label>
+      <input id="sset" type="text" placeholder="Search settings" class="inp" style="margin-bottom: 10px;">
+      <sc-for list="{{ secs }}" as="s" hint-placeholder-count="9">
+        <button type="button" onClick="{{ s.pick }}" aria-current="{{ s.cur }}" style="height: 32px; padding: 0 10px; border: none; border-radius: 7px; background: {{ s.bg }}; color: {{ s.color }}; text-align: left; font-size: 13px;">{{ s.label }}</button>
+      </sc-for>
+      <div style="flex: 1;"></div>
+      <span style="padding: 8px 10px; font-size: 11.5px; color: #9AA3AE; line-height: 1.5;">Settings sync with a project's <span class="mono">.oide/</span> folder when set per project.</span>
+    </aside>
+
+    <main style="flex: 999 1 560px; min-width: 0; padding: 22px 32px; box-sizing: border-box;">
+      <div style="max-width: 760px; display: flex; flex-direction: column;">
+
+        <sc-if value="{{ isCli }}" hint-placeholder-val="{{ true }}">
+          <h1 style="margin: 0 0 6px; font-size: 20px; font-weight: 600;">Claude Code</h1>
+          <span class="rd">oIDE runs your installed Claude Code CLI for every agent. It uses your own sign-in and plan.</span>
+
+          <div style="display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 14px; border-radius: 12px; border: 1px solid #22463A; background: #12201B; flex-wrap: wrap;">
+            <span style="width: 9px; height: 9px; border-radius: 50%; background: #7FC8A9;"></span>
+            <div style="flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 2px;">
+              <span style="font-weight: 600; color: #C9E9DA;">CLI found and signed in</span>
+              <span class="mono" style="font-size: 12px; color: #A8C9BA;">~/.local/bin/claude · [CLI VERSION]</span>
+            </div>
+            <button type="button" style="height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #22463A; background: transparent; color: #C9E9DA; font-size: 12.5px;">Check for update</button>
+          </div>
+
+          <span class="sec">Account</span>
+          <div class="row"><div class="rl"><span class="rt">Plan</span><span class="rd">Read from the CLI. Shown in the status bar with session and weekly limits.</span></div><span>Max plan</span></div>
+          <div class="row"><div class="rl"><span class="rt">CLI path</span><span class="rd">Leave empty to find claude on your PATH.</span></div><input type="text" aria-label="CLI path" class="inp mono" placeholder="auto-detect" style="width: 260px; font-size: 12px;"></div>
+
+          <span class="sec">Defaults for new agents</span>
+          <div class="row"><div class="rl"><span class="rt">Models</span><span class="rd">Focus presets and the default focus live in their own section.</span></div><button type="button" onClick="{{ goModels }}" style="height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12.5px;">Open Models settings</button></div>
+          <div class="row"><div class="rl"><span class="rt">Default mode</span><span class="rd">The permission mode new agents start in. Shift + Tab switches it on a running agent.</span></div><select aria-label="Default mode" class="inp"><option>Auto: approves safe actions, pauses on risky ones</option><option>Manual: asks before every edit</option><option>Edit automatically</option><option>Plan</option><option>Bypass permissions</option></select></div>
+          <div class="row"><div class="rl"><span class="rt">Allow Bypass permissions</span><span class="rd">Shows Bypass in the mode list. Agents in this mode never ask before running commands, so oIDE keeps them in a worktree.</span></div><label style="display: flex; align-items: center; gap: 8px;"><input type="checkbox" checked="checked" style="accent-color: {{accent}};">Allowed</label></div>
+          <div class="row"><div class="rl"><span class="rt">Extra CLI flags</span><span class="rd">Added to every session.</span></div><input type="text" aria-label="Extra CLI flags" class="inp mono" placeholder="--verbose" style="width: 260px; font-size: 12px;"></div>
+        </sc-if>
+
+        <sc-if value="{{ isModels }}" hint-placeholder-val="{{ false }}">
+          <h1 style="margin: 0 0 6px; font-size: 20px; font-weight: 600;">Models</h1>
+          <span class="rd">Edit what each focus preset does. Spawn agent uses these, and you can still override them per agent under Advanced.</span>
+
+          <div class="row"><div class="rl"><span class="rt">Default focus</span><span class="rd">Preselected when you spawn an agent.</span></div>
+            <div role="radiogroup" aria-label="Default focus" style="display: flex; gap: 4px; padding: 3px; border-radius: 8px; background: #0B0D10; border: 1px solid #262B33;">
+              <sc-for list="{{ defaults }}" as="d" hint-placeholder-count="4">
+                <button type="button" role="radio" aria-checked="{{ d.sel }}" onClick="{{ d.pick }}" style="height: 28px; padding: 0 12px; border-radius: 6px; border: none; background: {{ d.bg }}; color: {{ d.color }}; font-size: 12.5px; font-weight: {{ d.weight }};">{{ d.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+
+          <span class="sec">Presets</span>
+          <div role="tablist" aria-label="Preset" style="display: flex; gap: 6px; margin-top: 10px;">
+            <sc-for list="{{ ptabs }}" as="t" hint-placeholder-count="3">
+              <button type="button" role="tab" aria-selected="{{ t.sel }}" onClick="{{ t.pick }}" style="height: 32px; padding: 0 14px; border-radius: 8px; border: 1px solid {{ t.border }}; background: {{ t.bg }}; color: #E6E8EB; font-size: 13px; display: flex; align-items: center; gap: 8px;">{{ t.label }}<sc-if value="{{ t.changed }}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; color: #F2C078;">edited</span></sc-if></button>
+            </sc-for>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 14px; margin-top: 12px; padding: 16px; border-radius: 12px; border: 1px solid #262B33; background: #111418;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+              <span style="flex: 1; font-size: 12.5px; color: #9AA3AE;">{{ psummary }}</span>
+              <button type="button" onClick="{{ resetPreset }}" style="height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #343A44; background: transparent; color: #C9CED6; font-size: 12px;">Reset to default</button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <span style="font-size: 12px; font-weight: 600; color: #C9CED6;" id="pstrat">How agents pick models</span>
+              <div role="radiogroup" aria-labelledby="pstrat" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;">
+                <sc-for list="{{ pstrats }}" as="s" hint-placeholder-count="3">
+                  <button type="button" role="radio" aria-checked="{{ s.sel }}" onClick="{{ s.pick }}" style="display: flex; flex-direction: column; gap: 3px; padding: 10px; border-radius: 10px; text-align: left; color: #E6E8EB; font-size: 12.5px; border: 1.5px solid {{ s.border }}; background: {{ s.bg }};">
+                    <span style="font-weight: 600;">{{ s.label }}</span>
+                    <span style="font-size: 11.5px; color: #9AA3AE; line-height: 1.35;">{{ s.desc }}</span>
+                  </button>
+                </sc-for>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <sc-for list="{{ prows }}" as="r" hint-placeholder-count="2">
+                <div role="radiogroup" aria-label="{{ r.label }}" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                  <span style="width: 170px; font-size: 12.5px; color: #C9CED6;">{{ r.label }}</span>
+                  <div style="display: flex; gap: 4px; padding: 3px; border-radius: 8px; background: #0B0D10; border: 1px solid #262B33;">
+                    <sc-for list="{{ r.pills }}" as="p" hint-placeholder-count="4">
+                      <button type="button" role="radio" aria-checked="{{ p.sel }}" onClick="{{ p.pick }}" style="height: 26px; padding: 0 12px; border-radius: 6px; border: none; background: {{ p.bg }}; color: {{ p.color }}; font-size: 12px; font-weight: {{ p.weight }};">{{ p.name }}</button>
+                    </sc-for>
+                  </div>
+                  <select aria-label="{{ r.effortLabel }}" value="{{ r.effort }}" onChange="{{ r.setEffort }}" class="inp" style="height: 32px; font-size: 12px;">
+                    <option value="low">Effort: Low</option><option value="medium">Effort: Medium</option><option value="high">Effort: High</option><option value="xhigh">Effort: X-High</option><option value="max">Effort: Max</option>
+                  </select>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <span class="rd" style="margin-top: 10px;">Changes apply to agents you spawn from now on. Running agents keep their models.</span>
+
+          <span class="sec">Model versions</span>
+          <span class="rd" style="margin-top: 6px;">Presets and Spawn refer to a model family. Pick which version each family means. "Latest" follows new releases. Pinning keeps a version fixed. The list comes from the CLI.</span>
+          <sc-for list="{{ families }}" as="fm" hint-placeholder-count="4">
+            <div class="row">
+              <div class="rl"><span class="rt">{{ fm.name }}</span><span class="rd mono" style="font-size: 11.5px;">uses {{ fm.resolved }}</span></div>
+              <select aria-label="{{ fm.label }}" class="inp" value="{{ fm.value }}" onChange="{{ fm.change }}" style="width: 220px;">
+                <sc-for list="{{ fm.options }}" as="o" hint-placeholder-count="2">
+                  <option value="{{ o.v }}">{{ o.t }}</option>
+                </sc-for>
+              </select>
+            </div>
+          </sc-for>
+
+          <div style="display: flex; align-items: center; gap: 10px; margin-top: 22px;">
+            <span class="sec" style="margin-top: 0; flex: 1;">Your models</span>
+            <button type="button" onClick="{{ openForm }}" style="height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12.5px;">+ Add model</button>
+          </div>
+          <span class="rd" style="margin-top: 6px;">Run agents on a local model or a provider outside Anthropic. oIDE starts that agent's CLI with the endpoint's environment variables. Models must support tool use to work well as agents.</span>
+
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
+            <sc-for list="{{ customs }}" as="c" hint-placeholder-count="1">
+              <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 10px; border: 1px solid #262B33; background: #15181D;">
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                  <span style="font-weight: 600;">{{ c.name }}</span>
+                  <span style="padding: 2px 8px; border-radius: 6px; background: #1E2430; font-size: 11.5px; color: #C9CED6;">{{ c.provider }}</span>
+                  <span style="font-size: 12px; color: {{ c.statusColor }};">{{ c.status }}</span>
+                  <div style="flex: 1;"></div>
+                  <button type="button" onClick="{{ c.test }}" style="height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12px;">Test connection</button>
+                  <button type="button" onClick="{{ c.remove }}" style="height: 28px; padding: 0 10px; border-radius: 6px; border: none; background: transparent; color: #9AA3AE; font-size: 12px;">Remove</button>
+                </div>
+                <div class="mono" style="font-size: 11.5px; line-height: 1.7; color: #9AA3AE; padding: 8px 10px; border-radius: 8px; background: #0B0D10;">
+                  <sc-for list="{{ c.env }}" as="ev" hint-placeholder-count="3">
+                    <div>{{ ev.k }}=<span style="color: #C9CED6;">{{ ev.v }}</span></div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <sc-if value="{{ formOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 10px; padding: 16px; border-radius: 12px; border: 1px solid {{accent}}; background: #111418;">
+              <span style="font-weight: 600;">Add a model</span>
+              <div role="radiogroup" aria-label="Provider" style="display: flex; gap: 4px; padding: 3px; border-radius: 8px; background: #0B0D10; border: 1px solid #262B33; flex-wrap: wrap; align-self: flex-start;">
+                <sc-for list="{{ providers }}" as="pv" hint-placeholder-count="4">
+                  <button type="button" role="radio" aria-checked="{{ pv.sel }}" onClick="{{ pv.pick }}" style="height: 28px; padding: 0 12px; border-radius: 6px; border: none; background: {{ pv.bg }}; color: {{ pv.color }}; font-size: 12.5px; font-weight: {{ pv.weight }};">{{ pv.label }}</button>
+                </sc-for>
+              </div>
+              <span class="rd">{{ providerHint }}</span>
+              <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px;">
+                <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">Display name<input type="text" class="inp" value="{{ fName }}" onChange="{{ setName }}" placeholder="local-coder"></label>
+                <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">Model ID<input type="text" class="inp mono" value="{{ fId }}" onChange="{{ setId }}" placeholder="[MODEL ID]" style="font-size: 12px;"></label>
+                <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">Base URL<input type="text" class="inp mono" value="{{ fUrl }}" onChange="{{ setUrl }}" style="font-size: 12px;"></label>
+                <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">API key or token<input type="password" class="inp" placeholder="Stored in your OS keychain"></label>
+              </div>
+              <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                <button type="button" onClick="{{ closeForm }}" style="height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12.5px;">Cancel</button>
+                <button type="button" onClick="{{ addModel }}" style="height: 32px; padding: 0 14px; border-radius: 8px; border: none; background: {{accent}}; color: #0B0D10; font-weight: 600; font-size: 12.5px;">Add model</button>
+              </div>
+            </div>
+          </sc-if>
+          <span class="rd" style="margin-top: 10px;">Your models show up next to Haiku, Sonnet, Opus and Fable in presets and in Spawn agent.</span>
+        </sc-if>
+
+        <sc-if value="{{ isAgents }}" hint-placeholder-val="{{ false }}">
+          <h1 style="margin: 0 0 6px; font-size: 20px; font-weight: 600;">Agents</h1>
+          <span class="rd">How oIDE runs many sessions at once.</span>
+          <span class="sec">Running</span>
+          <div class="row"><div class="rl"><span class="rt">Max agents running at once</span><span class="rd">Extra agents wait in a queue on the wall.</span></div><input type="number" aria-label="Max agents" class="inp" value="8" style="width: 80px;"></div>
+          <div class="row"><div class="rl"><span class="rt">Worktree location</span><span class="rd">Where each agent's git worktree is created.</span></div><input type="text" aria-label="Worktree location" class="inp mono" value="~/.oide/worktrees" style="width: 260px; font-size: 12px;"></div>
+          <div class="row"><div class="rl"><span class="rt">Clean up worktrees</span><span class="rd">After an agent's work is merged or discarded.</span></div><select aria-label="Clean up worktrees" class="inp"><option>After 7 days</option><option>Right away</option><option>Never</option></select></div>
+          <span class="sec">Context</span>
+          <div class="row"><div class="rl"><span class="rt">Context ring turns amber at</span><span class="rd">The ring on each tile changes colour as context fills.</span></div><input type="number" aria-label="Amber threshold" class="inp" value="65" style="width: 80px;"></div>
+          <div class="row"><div class="rl"><span class="rt">Suggest /compact at</span><span class="rd">The tile shows a compact hint. oIDE never compacts without you confirming.</span></div><input type="number" aria-label="Compact threshold" class="inp" value="85" style="width: 80px;"></div>
+          <span class="sec">Notifications</span>
+          <div class="row"><div class="rl"><span class="rt">Notify me when an agent</span><span class="rd">Desktop notifications while oIDE is in the background.</span></div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <label style="display: flex; gap: 8px; align-items: center;"><input type="checkbox" checked="checked" style="accent-color: {{accent}};">needs permission or has a question</label>
+              <label style="display: flex; gap: 8px; align-items: center;"><input type="checkbox" checked="checked" style="accent-color: {{accent}};">is ready for review</label>
+              <label style="display: flex; gap: 8px; align-items: center;"><input type="checkbox" style="accent-color: {{accent}};">hits an error</label>
+            </div>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isTech }}" hint-placeholder-val="{{ false }}">
+          <h1 style="margin: 0 0 6px; font-size: 20px; font-weight: 600;">Techniques</h1>
+          <span class="rd">Instructions oIDE adds to an agent's prompt behind the scenes when you spawn it. They show up under Advanced techniques in Spawn agent, where you can switch each one on or off for that agent.</span>
+
+          <div class="row"><div class="rl"><span class="rt">Save techniques for</span><span class="rd">Project techniques are stored in the project's <span class="mono">.oide/techniques.json</span>, so they can be shared with your team through git.</span></div><select aria-label="Save techniques for" class="inp"><option>All projects</option><option>This project: oide</option></select></div>
+
+          <div style="display: flex; align-items: center; gap: 10px; margin-top: 22px;">
+            <span class="sec" style="margin-top: 0; flex: 1;">{{ techCountLabel }}</span>
+            <button type="button" onClick="{{ addTech }}" style="height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12.5px;">+ Add technique</button>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+            <sc-for list="{{ techList }}" as="t" hint-placeholder-count="3">
+              <div style="display: flex; flex-direction: column; border-radius: 12px; border: 1px solid {{ t.border }}; background: {{ t.bg }};">
+                <button type="button" aria-expanded="{{ t.exp }}" onClick="{{ t.pick }}" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: none; background: transparent; color: #E6E8EB; text-align: left; font-size: 13px;">
+                  <span style="width: 8px; height: 8px; border-radius: 50%; background: {{ t.dot }}; flex: 0 0 auto;"></span>
+                  <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;">
+                    <span style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;"><span style="font-weight: 600;">{{ t.name }}</span><span style="font-size: 11px; padding: 1px 7px; border-radius: 9px; border: 1px solid #343A44; color: #9AA3AE;">{{ t.kind }}</span><sc-if value="{{ t.edited }}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; color: #F2C078;">edited</span></sc-if></span>
+                    <span style="font-size: 12px; color: #9AA3AE;">{{ t.desc }}</span>
+                  </span>
+                  <span style="font-size: 12px; color: #9AA3AE; white-space: nowrap;">{{ t.onLabel }}</span>
+                  <span aria-hidden="true" style="color: #9AA3AE; font-size: 12px; width: 12px;">{{ t.chev }}</span>
+                </button>
+                <sc-if value="{{ t.open }}" hint-placeholder-val="{{ false }}">
+                  <div style="display: flex; flex-direction: column; gap: 12px; padding: 4px 14px 14px; border-top: 1px solid #262B33;">
+                    <div style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 10px;">
+                      <label style="flex: 1 1 220px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">Name<input type="text" class="inp" value="{{ t.name }}" onChange="{{ t.setName }}"></label>
+                      <label style="flex: 2 1 300px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">Short description (shown in Spawn agent)<input type="text" class="inp" value="{{ t.desc }}" onChange="{{ t.setDesc }}"></label>
+                    </div>
+                    <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">Text added to the prompt
+                      <textarea class="inp mono" rows="5" value="{{ t.prompt }}" onChange="{{ t.setPrompt }}" style="height: auto; padding: 10px; font-size: 12px; line-height: 1.55; resize: vertical;"></textarea>
+                    </label>
+                    <div style="display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-end;">
+                      <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">Add it to
+                        <select class="inp" value="{{ t.where }}" onChange="{{ t.setWhere }}" style="width: 300px;">
+                          <option value="message">End of the agent's first message</option>
+                          <option value="system">System prompt (--append-system-prompt)</option>
+                        </select>
+                      </label>
+                      <button type="button" role="switch" aria-checked="{{ t.exp2 }}" onClick="{{ t.toggle }}" style="height: 34px; display: flex; align-items: center; gap: 10px; border: none; background: transparent; color: #E6E8EB; font-size: 13px; padding: 0;"><span style="width: 34px; height: 20px; border-radius: 10px; background: {{ t.trk }}; display: flex; align-items: center; justify-content: {{ t.knobPos }}; padding: 0 3px; box-sizing: border-box;"><span style="width: 14px; height: 14px; border-radius: 50%; background: #E6E8EB;"></span></span>On by default for new agents</button>
+                    </div>
+                    <span style="font-size: 12px; color: #9AA3AE; line-height: 1.45;">{{ t.whereHint }}</span>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                      <sc-if value="{{ t.canReset }}" hint-placeholder-val="{{ false }}">
+                        <button type="button" onClick="{{ t.reset }}" style="height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12.5px;">Reset to default</button>
+                      </sc-if>
+                      <sc-if value="{{ t.custom }}" hint-placeholder-val="{{ false }}">
+                        <button type="button" onClick="{{ t.remove }}" style="height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #5A2E33; background: transparent; color: #F08A8A; font-size: 12.5px;">Delete technique</button>
+                      </sc-if>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+
+          <span class="sec">What a new agent receives</span>
+          <span class="rd" style="margin-top: 6px;">With the techniques that are on by default. Your goal comes first, then each technique in the order above.</span>
+          <div class="mono" style="margin-top: 10px; padding: 14px; border-radius: 12px; border: 1px solid #262B33; background: #0B0D10; font-size: 12px; line-height: 1.6; color: #C9CED6; display: flex; flex-direction: column; gap: 10px;">
+            <span style="color: #9AA3AE;">First message</span>
+            <span style="color: #E6E8EB;">[Your goal from Spawn agent]</span>
+            <sc-for list="{{ previewMsg }}" as="p" hint-placeholder-count="2">
+              <span style="padding-left: 10px; border-left: 2px solid #7AA2F7;">{{ p.text }}</span>
+            </sc-for>
+            <sc-if value="{{ hasSys }}" hint-placeholder-val="{{ false }}">
+              <span style="color: #9AA3AE; margin-top: 4px;">Appended to the system prompt</span>
+              <sc-for list="{{ previewSys }}" as="p" hint-placeholder-count="1">
+                <span style="padding-left: 10px; border-left: 2px solid #C4A7E7;">{{ p.text }}</span>
+              </sc-for>
+            </sc-if>
+          </div>
+          <span class="rd" style="margin-top: 10px;">The agent's transcript shows which techniques were added, so nothing is hidden from you after spawning.</span>
+        </sc-if>
+
+        <sc-if value="{{ isPerms }}" hint-placeholder-val="{{ false }}">
+          <h1 style="margin: 0 0 6px; font-size: 20px; font-weight: 600;">Permissions</h1>
+          <span class="rd">What agents may do without asking. Project rules override these.</span>
+          <span class="sec">Defaults</span>
+          <div class="row"><div class="rl"><span class="rt">Edit files in its worktree</span></div><select aria-label="Edit files" class="inp"><option>Allow</option><option>Ask</option></select></div>
+          <div class="row"><div class="rl"><span class="rt">Run shell commands</span></div><select aria-label="Run commands" class="inp"><option>Ask</option><option>Allow</option></select></div>
+          <div class="row"><div class="rl"><span class="rt">Network access</span></div><select aria-label="Network access" class="inp"><option>Ask</option><option>Allow</option><option>Block</option></select></div>
+          <span class="sec">Always allowed in oide</span>
+          <div style="display: flex; flex-direction: column; gap: 6px; margin-top: 10px;">
+            <span class="mono" style="display: flex; justify-content: space-between; padding: 8px 12px; border-radius: 8px; background: #15181D; border: 1px solid #262B33; font-size: 12px;">npm run typecheck<button type="button" style="border: none; background: transparent; color: #9AA3AE; font-size: 12px; font-family: Inter, sans-serif;">Remove</button></span>
+            <span class="mono" style="display: flex; justify-content: space-between; padding: 8px 12px; border-radius: 8px; background: #15181D; border: 1px solid #262B33; font-size: 12px;">npm test<button type="button" style="border: none; background: transparent; color: #9AA3AE; font-size: 12px; font-family: Inter, sans-serif;">Remove</button></span>
+            <span class="mono" style="display: flex; justify-content: space-between; padding: 8px 12px; border-radius: 8px; background: #15181D; border: 1px solid #262B33; font-size: 12px;">npm install *<button type="button" style="border: none; background: transparent; color: #9AA3AE; font-size: 12px; font-family: Inter, sans-serif;">Remove</button></span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isOther }}" hint-placeholder-val="{{ false }}">
+          <h1 style="margin: 0 0 6px; font-size: 20px; font-weight: 600;">{{ curLabel }}</h1>
+          <span class="rd">Not designed yet.</span>
+        </sc-if>
+      </div>
+    </main>
+  </div>
+
+  <footer style="height: 26px; display: flex; align-items: center; gap: 16px; padding: 0 14px; background: #0B0D10; border-top: 1px solid #232830; color: #9AA3AE; font-size: 11.5px;">
+    <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #7FC8A9;"></span>Claude Code CLI connected</span>
+    <span>6 sessions · 6 worktrees</span>
+    <div style="flex: 1;"></div>
+    <span>Max plan · Session 62% · Week 38%</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#7AA2F7","options":["#7AA2F7","#7FC8A9","#C4A7E7","#F2C078"]},"$preview":{"width":1440,"height":1800}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const hash = (typeof location !== 'undefined' && location.hash) ? location.hash.slice(1) : '';
+    this.state = { sec: ['cli', 'models', 'agents', 'tech', 'perms'].includes(hash) ? hash : 'models', techs: Component.techDefaults(), techSel: 'review', techN: 1, def: 'balanced', edit: 'balanced', presets: Component.defaults(),
+      versions: { Haiku: 'latest', Sonnet: 'latest', Opus: 'latest', Fable: 'latest' },
+      customs: [{ name: 'local-coder', provider: 'Local', url: 'http://localhost:11434', id: '[MODEL ID]', tested: true }],
+      form: false, prov: 'Local', fName: '', fId: '', fUrl: 'http://localhost:11434' };
+  }
+  static defaults() {
+    return {
+      cheap:    { strategy: 'separate', orch: 'Sonnet', orchE: 'medium', sub: 'Haiku', subE: 'low', simple: 'Haiku', simpleE: 'low', standard: 'Haiku', standardE: 'medium', complex: 'Sonnet', complexE: 'medium' },
+      balanced: { strategy: 'routed', orch: 'Opus', orchE: 'high', sub: 'Sonnet', subE: 'medium', simple: 'Haiku', simpleE: 'low', standard: 'Sonnet', standardE: 'medium', complex: 'Opus', complexE: 'high' },
+      quality:  { strategy: 'single', orch: 'Opus', orchE: 'max', sub: 'Opus', subE: 'high', simple: 'Sonnet', simpleE: 'high', standard: 'Opus', standardE: 'high', complex: 'Opus', complexE: 'max' },
+    };
+  }
+  modelVals() {
+    const accent = this.props.accent ?? '#7AA2F7';
+    const D = Component.defaults();
+    const P = this.state.presets;
+    const id = this.state.edit;
+    const cfg = P[id];
+    const used = (c) => c.strategy === 'single' ? ['strategy', 'orch', 'orchE'] : c.strategy === 'separate' ? ['strategy', 'orch', 'orchE', 'sub', 'subE'] : ['strategy', 'orch', 'orchE', 'simple', 'simpleE', 'standard', 'standardE', 'complex', 'complexE'];
+    const changed = (k) => used(P[k]).some((f) => P[k][f] !== D[k][f]);
+    const setCfg = (patch) => this.setState({ presets: { ...P, [id]: { ...cfg, ...patch } } });
+    const names = { cheap: 'Cheap', balanced: 'Balanced', quality: 'Quality' };
+    const card = (on) => ({ border: on ? accent : '#343A44', bg: on ? '#1A2130' : 'transparent', sel: on ? 'true' : 'false' });
+    const pill = (on) => ({ sel: on ? 'true' : 'false', bg: on ? '#1E2430' : 'transparent', color: on ? '#E6E8EB' : '#9AA3AE', weight: on ? '600' : '400' });
+    const MODELS = ['Haiku', 'Sonnet', 'Opus', 'Fable'].concat(this.state.customs.map((c) => c.name));
+    const row = (label, key) => ({ label, effort: cfg[key + 'E'], effortLabel: label + ' effort', setEffort: (e) => setCfg({ [key + 'E']: e.target.value }),
+      pills: MODELS.map((m) => ({ name: m, ...pill(cfg[key] === m), pick: () => setCfg({ [key]: m }) })) });
+    const EL = { low: 'low', medium: 'medium', high: 'high', xhigh: 'x-high', max: 'max' };
+    const me = (k) => cfg[k] + ' (' + EL[cfg[k + 'E']] + ')';
+    const prows = [row(cfg.strategy === 'single' ? 'All agents' : 'Orchestrator', 'orch')];
+    if (cfg.strategy === 'separate') prows.push(row('Subagents', 'sub'));
+    if (cfg.strategy === 'routed') { prows.push(row('Simple subagent tasks', 'simple')); prows.push(row('Standard subagent tasks', 'standard')); prows.push(row('Complex subagent tasks', 'complex')); }
+    const sDefs = [['single', 'One model', 'Orchestrator and subagents share one model.'], ['separate', 'Separate subagent model', 'Subagents always use their own model.'], ['routed', 'Routed by orchestrator', 'The orchestrator picks a model per subagent task.']];
+    return {
+      defaults: [['cheap', 'Cheap'], ['balanced', 'Balanced'], ['quality', 'Quality'], ['custom', 'Custom (last used)']].map(([k, label]) => ({ label, ...pill(this.state.def === k), pick: () => this.setState({ def: k }) })),
+      ptabs: Object.keys(names).map((k) => ({ label: names[k], changed: changed(k), border: k === id ? accent : '#343A44', bg: k === id ? '#1A2130' : 'transparent', sel: k === id ? 'true' : 'false', pick: () => this.setState({ edit: k }) })),
+      pstrats: sDefs.map(([s, label, desc]) => ({ label, desc, ...card(cfg.strategy === s), pick: () => setCfg({ strategy: s }) })),
+      prows,
+      psummary: names[id] + ': ' + (cfg.strategy === 'single' ? me('orch') + ' for everything' : cfg.strategy === 'separate' ? 'orchestrator ' + me('orch') + ', subagents ' + me('sub') : 'orchestrator ' + me('orch') + ', subagents routed ' + me('simple') + ' / ' + me('standard') + ' / ' + me('complex')),
+      resetPreset: () => this.setState({ presets: { ...P, [id]: { ...D[id] } } }),
+      goModels: () => this.setState({ sec: 'models' }),
+      ...this.extraVals(pill),
+    };
+  }
+  extraVals(pill) {
+    const S = this.state;
+    // Versions known to this mock; the real list comes from the CLI.
+    const VER = {
+      Haiku: [['5.5', 'claude-haiku-5-5']],
+      Sonnet: [['5.5', 'claude-sonnet-5-5']],
+      Opus: [['5.5', 'claude-opus-5-5'], ['5', 'claude-opus-5'], ['4.8', 'claude-opus-4-8']],
+      Fable: [['5.2', 'claude-fable-5-2']],
+    };
+    const families = Object.keys(VER).map((fam) => {
+      const v = S.versions[fam];
+      const list = VER[fam];
+      const resolved = v === 'latest' ? list[0][1] + ' (latest)' : (list.find((x) => x[0] === v) || list[0])[1];
+      return {
+        name: fam, label: fam + ' version', value: v, resolved,
+        options: [{ v: 'latest', t: 'Latest (auto-update)' }].concat(list.map(([n]) => ({ v: n, t: fam + ' ' + n }))),
+        change: (e) => this.setState({ versions: { ...S.versions, [fam]: e.target.value } }),
+      };
+    });
+    const PROV = {
+      'Local': ['http://localhost:11434', 'A model served on this computer through an Anthropic-compatible endpoint, for example a local gateway.'],
+      'Compatible API': ['https://[YOUR ENDPOINT]', 'Any hosted endpoint that speaks the Anthropic Messages API, such as a gateway or proxy.'],
+      'Amazon Bedrock': ['(uses AWS credentials)', 'Claude models through your AWS account. oIDE sets the CLI to use Bedrock.'],
+      'Google Vertex AI': ['(uses Google Cloud credentials)', 'Claude models through your Google Cloud project. oIDE sets the CLI to use Vertex AI.'],
+    };
+    return {
+      families,
+      customs: S.customs.map((c, i) => ({ ...c,
+        env: c.provider === 'Amazon Bedrock' ? [{ k: 'CLAUDE_CODE_USE_BEDROCK', v: '1' }, { k: 'ANTHROPIC_MODEL', v: c.id }, { k: 'AWS_REGION', v: '[REGION]' }]
+          : c.provider === 'Google Vertex AI' ? [{ k: 'CLAUDE_CODE_USE_VERTEX', v: '1' }, { k: 'ANTHROPIC_MODEL', v: c.id }, { k: 'CLOUD_ML_REGION', v: '[REGION]' }]
+          : [{ k: 'ANTHROPIC_BASE_URL', v: c.url }, { k: 'ANTHROPIC_MODEL', v: c.id }, { k: 'ANTHROPIC_AUTH_TOKEN', v: c.provider === 'Local' ? '(none)' : '•••• from keychain' }],
+        status: c.tested ? 'Connected' : 'Not tested', statusColor: c.tested ? '#7FC8A9' : '#9AA3AE',
+        test: () => this.setState({ customs: S.customs.map((x, j) => j === i ? { ...x, tested: true } : x) }),
+        remove: () => this.setState({ customs: S.customs.filter((_, j) => j !== i) }) })),
+      formOpen: S.form,
+      openForm: () => this.setState({ form: true }),
+      closeForm: () => this.setState({ form: false }),
+      providers: Object.keys(PROV).map((p) => ({ label: p, ...pill(S.prov === p), pick: () => this.setState({ prov: p, fUrl: PROV[p][0] }) })),
+      providerHint: PROV[S.prov][1],
+      fName: S.fName, fId: S.fId, fUrl: S.fUrl,
+      setName: (e) => this.setState({ fName: e.target.value }),
+      setId: (e) => this.setState({ fId: e.target.value }),
+      setUrl: (e) => this.setState({ fUrl: e.target.value }),
+      addModel: () => this.setState({ form: false, fName: '', fId: '',
+        customs: S.customs.concat([{ name: S.fName || 'my-model', provider: S.prov, url: S.fUrl, id: S.fId || '[MODEL ID]', tested: false }]) }),
+    };
+  }
+  static techDefaults() {
+    return [
+      { id: 'review', builtin: true, where: 'message', on: true, name: 'Adversarial review', desc: 'A reviewer subagent hunts for problems in the diff before the agent finishes.',
+        prompt: 'When your changes are complete, start a separate reviewer subagent whose only job is to find bugs, regressions, security issues and missed requirements in your diff. Fix what it finds and repeat until it reports nothing significant.' },
+      { id: 'docs', builtin: true, where: 'message', on: false, name: 'Full docs and tests', desc: 'Documentation and tests for everything changed, written at the end.',
+        prompt: 'Before you finish, update or write documentation for everything you changed, and add tests that cover the new behaviour and its edge cases.' },
+      { id: 'gates', builtin: true, where: 'message', on: true, name: 'Quality gates must pass', desc: 'Build, tests, lint and type checks all pass before the agent says it is done.',
+        prompt: 'You are not done until the build, the full test suite, lint, type checks and every other quality gate in this project pass. Run them, fix any failures, and report the results.' },
+    ];
+  }
+  techVals() {
+    const S = this.state;
+    const accent = this.props.accent ?? '#7AA2F7';
+    const D = Component.techDefaults();
+    const T = S.techs;
+    const upd = (i, patch) => this.setState({ techs: T.map((x, j) => j === i ? { ...x, ...patch } : x) });
+    const edited = (t) => { const d = D.find((x) => x.id === t.id); return !!d && ['name', 'desc', 'prompt', 'where', 'on'].some((f) => d[f] !== t[f]); };
+    const techList = T.map((t, i) => {
+      const open = S.techSel === t.id;
+      return { ...t, open, exp: open ? 'true' : 'false', chev: open ? '▾' : '▸',
+        border: open ? accent : '#262B33', bg: open ? '#131A26' : '#111418',
+        dot: t.on ? '#7FC8A9' : '#4A515C', exp2: t.on ? 'true' : 'false', trk: t.on ? accent : '#343A44', knobPos: t.on ? 'flex-end' : 'flex-start', onLabel: t.on ? 'On by default' : 'Off by default',
+        kind: t.builtin ? 'Built in' : 'Yours', custom: !t.builtin, edited: edited(t), canReset: t.builtin && edited(t),
+        whereHint: t.where === 'system'
+          ? 'Passed to the Claude Code CLI with --append-system-prompt, so it applies for the whole session and is not visible as part of the first message.'
+          : 'Appended after your goal in the first message the agent receives. Good for instructions about how to finish the task.',
+        pick: () => this.setState({ techSel: open ? '' : t.id }),
+        setName: (e) => upd(i, { name: e.target.value }),
+        setDesc: (e) => upd(i, { desc: e.target.value }),
+        setPrompt: (e) => upd(i, { prompt: e.target.value }),
+        setWhere: (e) => upd(i, { where: e.target.value }),
+        toggle: () => upd(i, { on: !t.on }),
+        reset: () => upd(i, { ...D.find((x) => x.id === t.id) }),
+        remove: () => this.setState({ techs: T.filter((_, j) => j !== i), techSel: '' }),
+      };
+    });
+    const onT = T.filter((t) => t.on);
+    const previewSys = onT.filter((t) => t.where === 'system').map((t) => ({ text: t.prompt }));
+    return {
+      techList,
+      techCountLabel: T.length + ' techniques · ' + onT.length + ' on by default',
+      addTech: () => { const id = 'custom' + S.techN; this.setState({ techN: S.techN + 1, techSel: id,
+        techs: T.concat([{ id, builtin: false, where: 'message', on: false, name: 'New technique', desc: 'Describe what it makes the agent do.', prompt: '' }]) }); },
+      previewMsg: onT.filter((t) => t.where === 'message').map((t) => ({ text: t.prompt || '(empty)' })),
+      previewSys, hasSys: previewSys.length > 0,
+    };
+  }
+  renderVals() {
+    const defs = [['cli', 'Claude Code'], ['models', 'Models'], ['agents', 'Agents'], ['tech', 'Techniques'], ['perms', 'Permissions'], ['projects', 'Projects'], ['artifacts', 'Artifacts &amp; claude.ai'], ['keys', 'Keyboard shortcuts'], ['look', 'Appearance']];
+    const cur = this.state.sec;
+    const secs = defs.map(([id, label]) => ({
+      label: label.replace('&amp;', '&'), cur: cur === id ? 'page' : 'false',
+      bg: cur === id ? '#1E2430' : 'transparent', color: cur === id ? '#E6E8EB' : '#C9CED6',
+      pick: () => this.setState({ sec: id }),
+    }));
+    const curDef = defs.find(([id]) => id === cur);
+    return {
+      ...this.modelVals(),
+      accent: this.props.accent ?? '#7AA2F7',
+      secs,
+      isCli: cur === 'cli', isModels: cur === 'models', isAgents: cur === 'agents', isPerms: cur === 'perms', isTech: cur === 'tech',
+      isOther: !['cli', 'models', 'agents', 'perms', 'tech'].includes(cur),
+      ...this.techVals(),
+      curLabel: curDef ? curDef[1].replace('&amp;', '&') : '',
+    };
+  }
+}
+</script>
+</body>
+</html>

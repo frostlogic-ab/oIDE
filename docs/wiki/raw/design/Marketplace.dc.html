@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oIDE · Extension marketplace</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1013;color:#E6E8EB;font-family:Inter,system-ui,sans-serif;font-size:13px}
+input,select,textarea{font-family:inherit}
+a{color:#9DBBFA}a:hover{color:#C4D6FC}
+button{font-family:inherit;cursor:pointer}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.rail{width:40px;height:40px;border-radius:10px;color:#9AA3AE;display:flex;align-items:center;justify-content:center}
+.inp{height:34px;padding:0 10px;border-radius:8px;border:1px solid #343A44;background:#0B0D10;color:#E6E8EB;font-size:13px;font-family:inherit;box-sizing:border-box}
+.sec{font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:#9AA3AE}
+.cat{display:flex;justify-content:space-between;padding:7px 10px;border-radius:7px;color:#C9CED6;font-size:12.5px}
+</style>
+</helmet>
+<div style="position: relative; width: 100%; min-height: 1000px; display: flex; flex-direction: column; background: #0E1013; color: #E6E8EB; font-family: Inter, system-ui, sans-serif; font-size: 13px;">
+
+  <header style="height: 44px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #232830; background: #0B0D10;">
+    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px;"><span style="width: 20px; height: 20px; border-radius: 6px; border: 2px solid {{accent}}; box-sizing: border-box; display: inline-block;"></span>oIDE</div>
+    <span style="color: #E6E8EB; font-size: 12.5px;">Marketplace</span>
+  </header>
+
+  <div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0;">
+    <nav aria-label="Primary" style="flex: 0 0 56px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: #0B0D10; border-right: 1px solid #232830;">
+      <a href="Main.dc.html" class="rail" aria-label="Agents"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></a>
+      <a href="Artifacts.dc.html" class="rail" aria-label="Artifacts"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"></path><path d="M3 13l9 5 9-5"></path></svg></a>
+      <a href="Files.dc.html" class="rail" aria-label="Files"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"></path><path d="M14 3v5h5"></path></svg></a>
+      <a href="SourceControl.dc.html" class="rail" aria-label="Source control"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="8" r="2"></circle><path d="M6 7v10"></path><path d="M18 10c0 4-6 3-12 7"></path></svg></a>
+      <div style="flex: 1;"></div>
+      <a href="Marketplace.dc.html" class="rail" aria-label="Extension marketplace" aria-current="page" style="background: #1E2430; color: {{accent}};"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"></rect><rect x="3" y="13" width="8" height="8" rx="1.5"></rect><rect x="13" y="13" width="8" height="8" rx="1.5"></rect><path d="M17 3v8"></path><path d="M13 7h8"></path></svg></a>
+      <a href="Settings.dc.html" class="rail" aria-label="Settings"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg></a>
+    </nav>
+
+    <!-- Categories -->
+    <aside aria-label="Categories" style="flex: 0 0 220px; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px; background: #111418; border-right: 1px solid #232830; box-sizing: border-box;">
+      <span style="padding: 0 10px 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">Browse</span>
+      <span class="cat" style="background: #1E2430; color: #E6E8EB;">Agent tools <span style="color: #9AA3AE;">MCP</span></span>
+      <span class="cat">Review &amp; testing</span>
+      <span class="cat">Deploy targets</span>
+      <span class="cat">Artifact types</span>
+      <span class="cat">Views &amp; panels</span>
+      <span class="cat">Themes</span>
+      <span class="cat">Languages</span>
+      <span style="padding: 16px 10px 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">Yours</span>
+      <span class="cat">Installed <span style="color: #9AA3AE;">{{ installedCount }}</span></span>
+      <span class="cat">Custom <span style="color: #9AA3AE;">1</span></span>
+      <span class="cat">Updates <span style="color: #9AA3AE;">1</span></span>
+      <button type="button" onClick="{{ openDlg }}" style="margin-top: 8px; height: 32px; border-radius: 8px; border: 1px dashed #4A515C; background: transparent; color: #E6E8EB; font-size: 12.5px;">+ Add custom</button>
+      <div style="flex: 1;"></div>
+      <div style="padding: 10px; border-radius: 10px; border: 1px solid #262B33; font-size: 12px; color: #9AA3AE; line-height: 1.5;">Extensions are open source and declare exactly which tools they hand to agents.</div>
+    </aside>
+
+    <!-- List -->
+    <main style="flex: 999 1 460px; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 18px 20px; box-sizing: border-box;">
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <label for="msearch" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">Search extensions</label>
+        <div style="flex: 1; min-width: 240px; display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px; border-radius: 10px; border: 1px solid #343A44; background: #15181D; color: #9AA3AE;">
+          <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
+          <input id="msearch" type="text" placeholder="Search agent tools, views, themes" style="flex: 1; border: none; outline: none; background: transparent; color: #E6E8EB; font-size: 13px; font-family: inherit;">
+        </div>
+        <label for="msort" style="font-size: 12px; color: #9AA3AE;">Sort</label>
+        <select id="msort" style="height: 36px; padding: 0 8px; border-radius: 8px; border: 1px solid #343A44; background: #15181D; color: #E6E8EB; font-size: 12.5px; font-family: inherit;"><option>Most installed</option><option>Recently updated</option><option>Name</option></select>
+        <button type="button" onClick="{{ openDlg }}" style="height: 36px; padding: 0 14px; border-radius: 8px; border: none; background: {{accent}}; color: #0B0D10; font-weight: 600; font-size: 13px;">+ Add custom</button>
+      </div>
+      <h1 style="margin: 0; font-size: 16px; font-weight: 600;">Agent tools</h1>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <sc-for list="{{ exts }}" as="e" hint-placeholder-count="6">
+          <button type="button" onClick="{{ e.pick }}" style="display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; border: 1px solid {{ e.border }}; background: #15181D; text-align: left; color: #E6E8EB;">
+            <span style="width: 40px; height: 40px; flex: 0 0 40px; border-radius: 10px; background: {{ e.tint }}; color: #0B0D10; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center;">{{ e.mono }}</span>
+            <span style="flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0;">
+              <span style="font-weight: 600; display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">{{ e.name }} <span style="font-weight: 400; color: #9AA3AE; font-size: 12px;">· {{ e.author }}</span><sc-if value="{{ e.custom }}" hint-placeholder-val="{{ false }}"><span style="font-size: 10.5px; font-weight: 500; padding: 1px 7px; border-radius: 9px; border: 1px solid #4A3F66; color: #C4A7E7;">Custom</span></sc-if></span>
+              <span style="font-size: 12.5px; color: #C9CED6;">{{ e.desc }}</span>
+            </span>
+            <span style="font-size: 12px; color: {{ e.stateColor }}; white-space: nowrap;">{{ e.state }}</span>
+          </button>
+        </sc-for>
+      </div>
+    </main>
+
+    <!-- Detail -->
+    <aside aria-label="Extension details" style="flex: 1 1 320px; max-width: 380px; display: flex; flex-direction: column; gap: 16px; padding: 18px 16px; background: #111418; border-left: 1px solid #232830; box-sizing: border-box;">
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <span style="width: 52px; height: 52px; border-radius: 12px; background: {{ sel.tint }}; color: #0B0D10; font-weight: 700; font-size: 20px; display: flex; align-items: center; justify-content: center;">{{ sel.mono }}</span>
+        <div style="display: flex; flex-direction: column; gap: 3px;">
+          <h2 style="margin: 0; font-size: 16px; font-weight: 600;">{{ sel.name }}</h2>
+          <span style="font-size: 12px; color: #9AA3AE;">{{ sel.authorLine }}</span>
+        </div>
+      </div>
+      <span style="line-height: 1.5; color: #C9CED6;">{{ sel.desc }}</span>
+      <button type="button" onClick="{{ toggle }}" style="height: 36px; border-radius: 8px; border: {{ btnBorder }}; background: {{ btnBg }}; color: {{ btnColor }}; font-weight: 600; font-size: 13px;">{{ btnLabel }}</button>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">Tools it gives agents</span>
+        <sc-for list="{{ sel.tools }}" as="t" hint-placeholder-count="3">
+          <span class="mono" style="display: flex; justify-content: space-between; gap: 8px; padding: 7px 10px; border-radius: 7px; background: #15181D; border: 1px solid #262B33; font-size: 12px;"><span>{{ t.name }}</span><span style="color: {{ t.color }}; font-family: Inter, sans-serif;">{{ t.risk }}</span></span>
+        </sc-for>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">Enabled for</span>
+        <label style="display: flex; align-items: center; gap: 8px;"><input type="checkbox" checked="checked" style="accent-color: {{accent}};">billing-api</label>
+        <label style="display: flex; align-items: center; gap: 8px;"><input type="checkbox" style="accent-color: {{accent}};">oide</label>
+        <label style="display: flex; align-items: center; gap: 8px;"><input type="checkbox" style="accent-color: {{accent}};">docs-site</label>
+      </div>
+      <sc-if value="{{ sel.custom }}" hint-placeholder-val="{{ false }}">
+        <div style="display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 10px; border: 1px solid #262B33; font-size: 12px; color: #C9CED6; line-height: 1.5;">
+          <span class="mono" style="font-size: 11px; color: #9AA3AE;">{{ sel.source }}</span>
+          <span>Added by you, not from the marketplace. oIDE passes it to each agent's Claude Code session as an MCP server.</span>
+          <div style="display: flex; gap: 6px; flex-wrap: wrap;"><button type="button" style="height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12px;">Edit</button><button type="button" style="height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12px;">Publish to marketplace</button></div>
+        </div>
+      </sc-if>
+      <span style="font-size: 12px; color: #9AA3AE; line-height: 1.5;">Tools marked "asks first" always show a permission prompt on the agent's tile.</span>
+    </aside>
+  </div>
+
+  <footer style="height: 26px; display: flex; align-items: center; gap: 16px; padding: 0 14px; background: #0B0D10; border-top: 1px solid #232830; color: #9AA3AE; font-size: 11.5px;">
+    <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #7FC8A9;"></span>Claude Code CLI connected</span>
+    <span>6 sessions · 6 worktrees</span>
+    <div style="flex: 1;"></div>
+    <span>Max plan · Session 62% · Week 38%</span>
+  </footer>
+</div>
+
+  <sc-if value="{{ dlg }}" hint-placeholder-val="{{ true }}">
+    <div style="position: absolute; inset: 0; z-index: 50; background: rgba(5,6,8,0.62); display: flex; align-items: flex-start; justify-content: center; padding: 56px 16px 16px; box-sizing: border-box;">
+      <div role="dialog" aria-modal="true" aria-labelledby="add-title" style="width: 720px; max-width: 100%; display: flex; flex-direction: column; background: #15181D; border: 1px solid #343A44; border-radius: 16px; box-shadow: 0 24px 80px rgba(0,0,0,0.55); overflow: hidden;">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 16px 20px 12px;">
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 3px;">
+            <h2 id="add-title" style="margin: 0; font-size: 16px; font-weight: 600;">Add a custom tool</h2>
+            <span style="font-size: 12.5px; color: #9AA3AE;">Any MCP server or oIDE extension, even if it isn't in the marketplace.</span>
+          </div>
+          <button type="button" onClick="{{ closeDlg }}" aria-label="Close" style="width: 30px; height: 30px; border-radius: 7px; border: none; background: transparent; color: #9AA3AE; font-size: 16px;">✕</button>
+        </div>
+        <div role="tablist" aria-label="How to add" style="display: flex; gap: 2px; padding: 0 16px; border-bottom: 1px solid #262B33; flex-wrap: wrap;">
+          <sc-for list="{{ methods }}" as="m" hint-placeholder-count="4">
+            <button type="button" role="tab" aria-selected="{{ m.sel }}" onClick="{{ m.pick }}" style="height: 36px; padding: 0 10px; border: none; border-bottom: 2px solid {{ m.line }}; background: transparent; color: {{ m.color }}; font-weight: {{ m.weight }}; font-size: 12.5px;">{{ m.label }}</button>
+          </sc-for>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 14px; padding: 16px 20px;">
+
+          <sc-if value="{{ mUrl }}" hint-placeholder-val="{{ true }}">
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">MCP server URL
+              <div style="display: flex; gap: 8px;">
+                <input type="text" class="inp mono" value="{{ url }}" onChange="{{ setUrl }}" style="flex: 1; font-size: 12.5px;" placeholder="https://mcp.example.com/mcp">
+                <button type="button" onClick="{{ discover }}" style="height: 34px; padding: 0 14px; border-radius: 8px; border: none; background: {{accent}}; color: #0B0D10; font-weight: 600; font-size: 13px;">{{ discoverLabel }}</button>
+              </div>
+            </label>
+            <span style="font-size: 12px; color: #9AA3AE; margin-top: -6px;">Paste the address and oIDE works out the rest: how to talk to it, how to sign in, and what tools it has.</span>
+
+            <sc-if value="{{ found }}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; border: 1px solid #262B33; background: #111418;">
+                <span class="sec">What oIDE found</span>
+                <span style="display: flex; gap: 8px; align-items: center;"><span style="color: #7FC8A9;">✓</span>Reached <b style="font-weight: 600;">Metrics API</b> <span style="color: #9AA3AE; font-size: 12px;">· Streamable HTTP · server v2.3</span></span>
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <span style="color: {{ authColor }};">{{ authIcon }}</span>
+                  <span style="flex: 1; min-width: 220px;">{{ authText }}</span>
+                  <sc-if value="{{ needSignIn }}" hint-placeholder-val="{{ true }}"><button type="button" onClick="{{ signIn }}" style="height: 28px; padding: 0 12px; border-radius: 6px; border: 1px solid #343A44; background: #1E2430; color: #E6E8EB; font-size: 12px;">Sign in in your browser</button></sc-if>
+                </div>
+                <span style="display: flex; gap: 8px; align-items: center;"><span style="color: #7FC8A9;">✓</span>{{ toolCount }}</span>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <div style="display: flex; align-items: baseline; gap: 8px;"><span class="sec">Tools agents can use</span><span style="font-size: 11.5px; color: #9AA3AE;">Labels come from the server's own hints. Click one to change it.</span></div>
+                <sc-for list="{{ tools }}" as="t" hint-placeholder-count="5">
+                  <div style="display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 8px; background: #111418; border: 1px solid #232830;">
+                    <button type="button" role="checkbox" aria-checked="{{ t.onAria }}" aria-label="Allow {{ t.name }}" onClick="{{ t.toggle }}" style="width: 18px; height: 18px; flex: 0 0 18px; padding: 0; border-radius: 5px; border: 1.5px solid {{ t.onBorder }}; background: {{ t.onBg }}; color: #0B0D10; font-size: 11px; font-weight: 700; line-height: 1;">{{ t.onMark }}</button>
+                    <span class="mono" style="flex: 1; font-size: 12px; color: {{ t.nameColor }};">{{ t.name }}</span>
+                    <span style="font-size: 11.5px; color: #9AA3AE;">{{ t.desc }}</span>
+                    <button type="button" onClick="{{ t.cycle }}" style="height: 22px; padding: 0 8px; border-radius: 11px; border: 1px solid {{ t.riskColor }}; background: transparent; color: {{ t.riskColor }}; font-size: 11px; white-space: nowrap;">{{ t.risk }}</button>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+                <label style="flex: 1 1 200px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">Name<input type="text" class="inp" value="Metrics API"></label>
+                <label style="flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">Save it in
+                  <select class="inp"><option>My settings (all my projects)</option><option>Project .mcp.json (shared through git)</option></select>
+                </label>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <span style="font-size: 12px; color: #C9CED6;">Turn on for</span>
+                <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+                  <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" checked="checked" style="accent-color: {{accent}};">oide</label>
+                  <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" checked="checked" style="accent-color: {{accent}};">billing-api</label>
+                  <label style="display: flex; align-items: center; gap: 6px;"><input type="checkbox" style="accent-color: {{accent}};">docs-site</label>
+                </div>
+              </div>
+            </sc-if>
+          </sc-if>
+
+          <sc-if value="{{ mFound }}" hint-placeholder-val="{{ false }}">
+            <span style="font-size: 12.5px; color: #C9CED6; line-height: 1.5;">oIDE looked through the MCP settings other apps on this computer already use. Pick what to bring in. Nothing is changed in those apps.</span>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <sc-for list="{{ local }}" as="l" hint-placeholder-count="5">
+                <div style="display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: #111418; border: 1px solid #232830;">
+                  <button type="button" role="checkbox" aria-checked="{{ l.onAria }}" aria-label="Import {{ l.name }}" onClick="{{ l.toggle }}" style="width: 18px; height: 18px; flex: 0 0 18px; padding: 0; border-radius: 5px; border: 1.5px solid {{ l.onBorder }}; background: {{ l.onBg }}; color: #0B0D10; font-size: 11px; font-weight: 700; line-height: 1;">{{ l.onMark }}</button>
+                  <span style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0;"><span style="font-weight: 600;">{{ l.name }}</span><span class="mono" style="font-size: 11px; color: #9AA3AE;">{{ l.cmd }}</span></span>
+                  <span style="font-size: 11.5px; color: #9AA3AE; text-align: right;">{{ l.from }}</span>
+                  <span style="font-size: 11.5px; color: {{ l.noteColor }}; width: 110px; text-align: right;">{{ l.note }}</span>
+                </div>
+              </sc-for>
+            </div>
+            <span style="font-size: 12px; color: #9AA3AE;">Searched: Claude Desktop, Claude Code (your settings and each open project's .mcp.json), and other editors' MCP settings.</span>
+          </sc-if>
+
+          <sc-if value="{{ mCmd }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; gap: 6px; padding: 3px; border-radius: 8px; background: #111418; align-self: flex-start;">
+              <button type="button" onClick="{{ cmdForm }}" style="height: 26px; padding: 0 10px; border: none; border-radius: 6px; background: {{ formBg }}; color: #E6E8EB; font-size: 12px;">Fill in</button>
+              <button type="button" onClick="{{ cmdJson }}" style="height: 26px; padding: 0 10px; border: none; border-radius: 6px; background: {{ jsonBg }}; color: #E6E8EB; font-size: 12px;">Paste JSON</button>
+            </div>
+            <sc-if value="{{ isForm }}" hint-placeholder-val="{{ true }}">
+              <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <label style="flex: 1 1 180px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">Name<input type="text" class="inp" value="local-search"></label>
+                <label style="flex: 2 1 300px; display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">Command<input type="text" class="inp mono" value="npx -y @example/search-mcp --root ." style="font-size: 12px;"></label>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 6px;">
+                <span style="font-size: 12px; color: #C9CED6;">Environment variables</span>
+                <div style="display: flex; gap: 8px;"><input type="text" class="inp mono" value="SEARCH_API_KEY" style="flex: 1; font-size: 12px;"><input type="text" class="inp mono" value="•••••••• stored in your keychain" style="flex: 1.4; font-size: 12px;"></div>
+                <button type="button" style="align-self: flex-start; border: none; background: transparent; color: #9DBBFA; font-size: 12px; padding: 0;">+ Add variable</button>
+              </div>
+            </sc-if>
+            <sc-if value="{{ isJson }}" hint-placeholder-val="{{ false }}">
+              <textarea class="inp mono" rows="8" style="height: auto; padding: 10px; font-size: 12px; line-height: 1.55; resize: vertical;">{ "mcpServers": { "local-search": { "command": "npx", "args": ["-y", "@example/search-mcp", "--root", "."], "env": { "SEARCH_API_KEY": "..." } } } }</textarea>
+              <span style="font-size: 12px; color: #7FC8A9;">✓ Recognised 1 server in the standard mcpServers format. Secrets move to your keychain.</span>
+            </sc-if>
+            <div style="display: flex; align-items: center; gap: 10px;"><button type="button" style="height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12.5px;">Test it</button><span style="font-size: 12px; color: #9AA3AE;">Starts it once and lists its tools, like a URL server.</span></div>
+          </sc-if>
+
+          <sc-if value="{{ mExt }}" hint-placeholder-val="{{ false }}">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 22px; border-radius: 12px; border: 1.5px dashed #4A515C; text-align: center; color: #C9CED6;">
+              <span style="font-weight: 600;">Drop an extension folder or package here</span>
+              <span style="font-size: 12px; color: #9AA3AE;">or</span>
+              <button type="button" style="height: 30px; padding: 0 12px; border-radius: 7px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12.5px;">Choose a folder…</button>
+            </div>
+            <label style="display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: #C9CED6;">Or a git repository
+              <input type="text" class="inp mono" placeholder="https://github.com/you/your-extension" style="font-size: 12.5px;">
+            </label>
+            <label style="display: flex; align-items: center; gap: 8px; font-size: 12.5px;"><input type="checkbox" checked="checked" style="accent-color: {{accent}};">Developer mode: reload when its files change</label>
+            <span style="font-size: 12px; color: #9AA3AE; line-height: 1.5;">oIDE reads the extension's manifest and shows its tools and permissions before anything runs.</span>
+          </sc-if>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid #262B33; background: #111418;">
+          <span style="flex: 1; font-size: 12px; color: #9AA3AE;">Custom tools aren't reviewed by the marketplace. Only add ones you trust.</span>
+          <button type="button" onClick="{{ closeDlg }}" style="height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 13px;">Cancel</button>
+          <button type="button" onClick="{{ add }}" style="height: 34px; padding: 0 16px; border-radius: 8px; border: none; background: {{accent}}; color: #0B0D10; font-weight: 600; font-size: 13px;">{{ addLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#7AA2F7","options":["#7AA2F7","#7FC8A9","#C4A7E7","#F2C078"]},"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { sel: 0, installed: { 1: true, 3: true, 5: true }, dlg: true, method: 'url', url: 'https://mcp.example.com/mcp', found: true, signed: false, cmdMode: 'form', toolsOff: { 'alerts.silence': true }, risk: {}, imp: { 0: true, 2: true } }; }
+  dlgVals(accent) {
+    const S = this.state;
+    const R = { read: ['read only', '#7FC8A9'], ask: ['asks first', '#F2C078'] };
+    const TOOLS = [['metrics.query', 'Run a metrics query', 'read'], ['metrics.dashboards', 'List dashboards', 'read'], ['alerts.list', 'List open alerts', 'read'], ['alerts.silence', 'Silence an alert', 'ask'], ['annotations.create', 'Mark a deploy on graphs', 'ask'], ['metrics.export', 'Export a time series', 'read']];
+    const LOCAL = [
+      ['filesystem', 'npx -y @modelcontextprotocol/server-filesystem ~/code', 'Claude Desktop', ''],
+      ['postgres-local', 'docker run mcp/postgres postgresql://localhost/billing', 'billing-api/.mcp.json', ''],
+      ['issue-tracker', 'https://mcp.tracker.example/mcp', 'Claude Code · your settings', 'needs sign-in'],
+      ['playwright', 'npx @playwright/mcp', 'Claude Code · your settings', 'already added'],
+      ['notes', 'uvx notes-mcp', 'Another editor', ''],
+    ];
+    const methods = [['url', 'From a URL'], ['found', 'Found on this computer · 5'], ['cmd', 'Local command or JSON'], ['ext', 'Extension from folder or git']];
+    const m = S.method;
+    const ck = (v) => ({ onAria: v ? 'true' : 'false', onBorder: v ? accent : '#4A515C', onBg: v ? accent : 'transparent', onMark: v ? '✓' : '' });
+    const on = TOOLS.filter(([n]) => !S.toolsOff[n]).length;
+    const nImp = LOCAL.filter((_, i) => S.imp[i]).length;
+    return {
+      dlg: S.dlg,
+      openDlg: () => this.setState({ dlg: true }),
+      closeDlg: () => this.setState({ dlg: false }),
+      methods: methods.map(([k, label]) => ({ label, sel: m === k ? 'true' : 'false', line: m === k ? accent : 'transparent', color: m === k ? '#E6E8EB' : '#9AA3AE', weight: m === k ? '600' : '400', pick: () => this.setState({ method: k }) })),
+      mUrl: m === 'url', mFound: m === 'found', mCmd: m === 'cmd', mExt: m === 'ext',
+      url: S.url, setUrl: (e) => this.setState({ url: e.target.value, found: false, signed: false }),
+      discover: () => this.setState({ found: true }),
+      discoverLabel: S.found ? 'Check again' : 'Connect',
+      found: S.found,
+      needSignIn: !S.signed,
+      signIn: () => this.setState({ signed: true }),
+      authIcon: S.signed ? '✓' : '●', authColor: S.signed ? '#7FC8A9' : '#F2C078',
+      authText: S.signed ? 'Signed in. oIDE keeps the token in your system keychain.' : 'It uses OAuth sign-in. No key to copy: sign in once in your browser.',
+      toolCount: TOOLS.length + ' tools found · ' + on + ' turned on',
+      tools: TOOLS.map(([name, desc, r0]) => { const r = S.risk[name] || r0; const off = !!S.toolsOff[name]; return { name, desc, ...ck(!off), on: !off, nameColor: off ? '#6B7584' : '#E6E8EB', risk: R[r][0], riskColor: R[r][1],
+        toggle: () => this.setState({ toolsOff: { ...S.toolsOff, [name]: !off } }),
+        cycle: () => this.setState({ risk: { ...S.risk, [name]: r === 'read' ? 'ask' : 'read' } }) }; }),
+      local: LOCAL.map(([name, cmd, from, note], i) => ({ name, cmd, from, note, ...ck(!!S.imp[i]), noteColor: note === 'needs sign-in' ? '#F2C078' : '#9AA3AE',
+        toggle: () => this.setState({ imp: { ...S.imp, [i]: !S.imp[i] } }) })),
+      isForm: S.cmdMode === 'form', isJson: S.cmdMode === 'json',
+      cmdForm: () => this.setState({ cmdMode: 'form' }), cmdJson: () => this.setState({ cmdMode: 'json' }),
+      formBg: S.cmdMode === 'form' ? '#1E2430' : 'transparent', jsonBg: S.cmdMode === 'json' ? '#1E2430' : 'transparent',
+      addLabel: m === 'found' ? 'Import ' + nImp : m === 'ext' ? 'Install extension' : 'Add tool',
+      add: () => this.setState({ dlg: false }),
+    };
+  }
+  renderVals() {
+    const accent = this.props.accent ?? '#7AA2F7';
+    const R = { read: ['read only', '#7FC8A9'], ask: ['asks first', '#F2C078'] };
+    const defs = [
+      { name: 'Postgres inspector', author: 'oide-community', mono: 'Pg', tint: '#9DBBFA', desc: 'Lets agents look at your database schema and run read-only queries while they work.',
+        tools: [['db.schema', 'read'], ['db.query (read-only)', 'read'], ['db.explain', 'read']] },
+      { name: 'Browser preview', author: 'oide', mono: 'Bp', tint: '#7FC8A9', desc: 'Agents open your dev server, take screenshots and read the console to check UI changes.',
+        tools: [['browser.open', 'read'], ['browser.screenshot', 'read'], ['browser.click', 'ask']] },
+      { name: 'Preview deploys', author: 'community', mono: 'Pd', tint: '#E6E8EB', desc: 'Agents create preview deployments from their worktree and report the URL on the tile.',
+        tools: [['deploy.preview', 'ask'], ['deploy.logs', 'read']] },
+      { name: 'Git', author: 'oide', mono: 'G', tint: '#F2C078', desc: 'Branches, worktrees, commits and pull requests for every agent session.',
+        tools: [['git.worktree', 'read'], ['git.commit', 'ask'], ['git.push', 'ask']] },
+      { name: 'Error tracker', author: 'community', mono: 'Er', tint: '#C4A7E7', desc: 'Agents pull the stack traces of an error before trying to fix it.',
+        tools: [['errors.issue', 'read'], ['errors.events', 'read']] },
+      { name: 'Team wiki', author: 'You', mono: 'Tw', tint: '#C4A7E7', custom: true, source: 'https://wiki.internal.example/mcp · signed in', desc: "Your company's internal wiki, added by URL. Agents look up how things are done before changing them.",
+        tools: [['wiki.search', 'read'], ['wiki.page', 'read'], ['wiki.comment', 'ask']] },
+    ];
+    const inst = this.state.installed;
+    const exts = defs.map((d, i) => ({
+      ...d,
+      border: this.state.sel === i ? accent : '#262B33',
+      state: inst[i] ? 'Installed' : 'Install',
+      stateColor: inst[i] ? '#7FC8A9' : '#9DBBFA',
+      pick: () => this.setState({ sel: i }),
+    }));
+    const s = defs[this.state.sel];
+    const on = !!inst[this.state.sel];
+    return {
+      ...this.dlgVals(accent),
+      accent, exts,
+      installedCount: Object.values(inst).filter(Boolean).length,
+      sel: { ...s, custom: !!s.custom, authorLine: s.custom ? 'Added by you · custom' : s.author + ' · open source', tools: s.tools.map(([name, r]) => ({ name, risk: R[r][0], color: R[r][1] })) },
+      toggle: () => this.setState({ installed: { ...inst, [this.state.sel]: !on } }),
+      btnLabel: on ? 'Uninstall' : 'Install',
+      btnBg: on ? 'transparent' : accent,
+      btnColor: on ? '#E6E8EB' : '#0B0D10',
+      btnBorder: on ? '1px solid #343A44' : 'none',
+    };
+  }
+}
+</script>
+</body>
+</html>

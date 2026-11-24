@@ -1,0 +1,52 @@
+# oIDE wiki: index
+
+The product knowledge base for oIDE, maintained by the agents that build it (see the "wiki" section
+of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in [log.md](log.md).
+
+## Sources (raw, immutable)
+
+- [raw/build-brief.md](raw/build-brief.md): the architecture and build brief (M0 to M7, stack, constraints).
+- [raw/design/](raw/design/): the Mission Control design screens (Main, Focus, Spawn, SourceControl, Review, Artifacts, Marketplace, Files, Settings).
+- [raw/claude-cli-help-2.1.325.txt](raw/claude-cli-help-2.1.325.txt): `claude --help` of the CLI version oIDE was first built against.
+
+## Overview
+
+- [pages/overview.md](pages/overview.md): what oIDE is, who it is for, the core loop.
+- [pages/constraints.md](pages/constraints.md): the hard rules from Anthropic's terms and what they mean in code.
+- [pages/architecture.md](pages/architecture.md): process model, packages and how they connect.
+- [pages/milestones.md](pages/milestones.md): M0 to M7 with gates and current status.
+- [pages/open-questions.md](pages/open-questions.md): open questions and risks, with defaults and findings.
+- [pages/design-system.md](pages/design-system.md): colours, type, spacing, components from the canvas.
+
+## Packages
+
+- [pages/protocol.md](pages/protocol.md): the Zod contract (IPC, events, manifest, `.oide/`).
+- [pages/agent-supervisor.md](pages/agent-supervisor.md): AgentDriver, stream-json, supervisor, queue.
+- [pages/cli-integration.md](pages/cli-integration.md): verified CLI flags, event shapes and fallbacks.
+- [pages/subagents.md](pages/subagents.md): SubagentTracker and what each subagent view is built from.
+- [pages/mcp-server.md](pages/mcp-server.md): oIDE's MCP server (permission prompt, submit_for_review, artifacts).
+- [pages/git-worktrees.md](pages/git-worktrees.md): worktree manager, diffs, overlaps, merge, cleanup.
+- [pages/storage.md](pages/storage.md): node:sqlite schema, migrations, `.oide/` files, keychain.
+- [pages/extensions.md](pages/extensions.md): manifest, extension host, API, risk labels.
+- [pages/marketplace.md](pages/marketplace.md): the static index, install flow, Add custom.
+- [pages/artifacts.md](pages/artifacts.md): local artifacts, kinds, versions, MCP tools.
+- [pages/desktop-shell.md](pages/desktop-shell.md): Electron main, preload bridge, renderer shell, keymap.
+- [pages/security.md](pages/security.md): hardening, trust, bypass guard rails, credential test.
+- [pages/testing.md](pages/testing.md): Vitest, fake-claude fixtures, Playwright e2e.
+- [pages/packaging.md](pages/packaging.md): electron-builder, CI matrix, updates, signing.
+
+## Screens
+
+- [pages/screen-wall.md](pages/screen-wall.md): Mission Control wall (Main).
+- [pages/screen-focus.md](pages/screen-focus.md): Focus view.
+- [pages/screen-spawn.md](pages/screen-spawn.md): Spawn agent.
+- [pages/screen-source-control.md](pages/screen-source-control.md): Source control.
+- [pages/screen-review.md](pages/screen-review.md): Review changes.
+- [pages/screen-files.md](pages/screen-files.md): Files.
+- [pages/screen-artifacts.md](pages/screen-artifacts.md): Artifacts library.
+- [pages/screen-marketplace.md](pages/screen-marketplace.md): Extension marketplace.
+- [pages/screen-settings.md](pages/screen-settings.md): Settings.
+
+## Decisions
+
+- [../adr/](../adr/): ADRs. 0001 node:sqlite, 0002 TS-source packages, 0003 @lydell/node-pty.

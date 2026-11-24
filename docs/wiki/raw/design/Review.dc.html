@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oIDE · Review changes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0E1013;color:#E6E8EB;font-family:Inter,system-ui,sans-serif;font-size:13px}
+input,select,textarea{font-family:inherit}
+a{color:#9DBBFA}a:hover{color:#C4D6FC}
+button{font-family:inherit;cursor:pointer}
+.ico{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.rail{width:40px;height:40px;border-radius:10px;color:#9AA3AE;display:flex;align-items:center;justify-content:center}
+.ln{display:flex;gap:0;min-height:20px}
+.ln .n{width:44px;flex:0 0 44px;text-align:right;padding-right:10px;color:#5E6774;user-select:none}
+.ln .c{flex:1;white-space:pre;padding-left:10px}
+</style>
+</helmet>
+<div style="width: 100%; min-height: 900px; display: flex; flex-direction: column; background: #0E1013; color: #E6E8EB; font-family: Inter, system-ui, sans-serif; font-size: 13px;">
+
+  <header style="height: 44px; display: flex; align-items: center; gap: 16px; padding: 0 16px; border-bottom: 1px solid #232830; background: #0B0D10;">
+    <div style="display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px;"><span style="width: 20px; height: 20px; border-radius: 6px; border: 2px solid {{accent}}; box-sizing: border-box; display: inline-block;"></span>oIDE</div>
+    <nav aria-label="Breadcrumb" style="color: #9AA3AE; font-size: 12.5px; display: flex; gap: 6px; align-items: center;"><a href="SourceControl.dc.html" style="color: #9DBBFA; text-decoration: none;">Source control</a><span aria-hidden="true">/</span><span>billing-api</span><span aria-hidden="true">/</span><span style="color: #E6E8EB;">Review: Retry failed Stripe webhooks</span></nav>
+  </header>
+
+  <div style="flex: 1; display: flex; flex-wrap: wrap; min-height: 0;">
+    <nav aria-label="Primary" style="flex: 0 0 56px; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 0; background: #0B0D10; border-right: 1px solid #232830;">
+      <a href="Main.dc.html" class="rail" aria-label="Agents"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg></a>
+      <a href="Artifacts.dc.html" class="rail" aria-label="Artifacts"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5z"></path><path d="M3 13l9 5 9-5"></path></svg></a>
+      <a href="Files.dc.html" class="rail" aria-label="Files"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"></path><path d="M14 3v5h5"></path></svg></a>
+      <a href="SourceControl.dc.html" class="rail" aria-label="Source control" aria-current="page" style="background: #1E2430; color: {{accent}};"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2"></circle><circle cx="6" cy="19" r="2"></circle><circle cx="18" cy="8" r="2"></circle><path d="M6 7v10"></path><path d="M18 10c0 4-6 3-12 7"></path></svg></a>
+      <div style="flex: 1;"></div>
+      <a href="Marketplace.dc.html" class="rail" aria-label="Extension marketplace"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="1.5"></rect><rect x="3" y="13" width="8" height="8" rx="1.5"></rect><rect x="13" y="13" width="8" height="8" rx="1.5"></rect><path d="M17 3v8"></path><path d="M13 7h8"></path></svg></a>
+      <a href="Settings.dc.html" class="rail" aria-label="Settings"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"></path></svg></a>
+    </nav>
+
+    <!-- Changed files -->
+    <aside aria-label="Changed files" style="flex: 0 0 260px; display: flex; flex-direction: column; gap: 2px; padding: 14px 10px; background: #111418; border-right: 1px solid #232830; box-sizing: border-box;">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 6px 8px;">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">8 files changed</span>
+        <span class="mono" style="font-size: 11px;"><span style="color: #7FC8A9;">+342</span> <span style="color: #F08A8A;">−58</span></span>
+      </div>
+      <div class="mono" style="display: flex; flex-direction: column; gap: 1px; font-size: 11.5px;">
+        <button type="button" style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: none; border-radius: 6px; background: #1E2430; color: #E6E8EB; text-align: left; font-family: inherit; font-size: inherit;"><span style="width: 6px; height: 6px; border-radius: 50%; background: {{accent}};"></span><span style="flex: 1;">webhooks/retry.ts</span><span style="color: #7FC8A9;">+118</span></button>
+        <button type="button" style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: none; border-radius: 6px; background: transparent; color: #C9CED6; text-align: left; font-family: inherit; font-size: inherit;"><span style="width: 6px; height: 6px;"></span><span style="flex: 1;">webhooks/handler.ts</span><span style="color: #7FC8A9;">+24</span> <span style="color: #F08A8A;">−31</span></button>
+        <button type="button" style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: none; border-radius: 6px; background: transparent; color: #C9CED6; text-align: left; font-family: inherit; font-size: inherit;"><span style="width: 6px; height: 6px;"></span><span style="flex: 1;">queue/deadLetter.ts</span><span style="color: #7FC8A9;">+76</span></button>
+        <button type="button" style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: none; border-radius: 6px; background: transparent; color: #C9CED6; text-align: left; font-family: inherit; font-size: inherit;"><span style="width: 6px; height: 6px;"></span><span style="flex: 1;">db/migrations/0042.sql</span><span style="color: #7FC8A9;">+18</span></button>
+        <button type="button" style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: none; border-radius: 6px; background: transparent; color: #C9CED6; text-align: left; font-family: inherit; font-size: inherit;"><span style="width: 6px; height: 6px;"></span><span style="flex: 1;">config/stripe.ts</span><span style="color: #7FC8A9;">+6</span> <span style="color: #F08A8A;">−2</span></button>
+        <button type="button" style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: none; border-radius: 6px; background: transparent; color: #C9CED6; text-align: left; font-family: inherit; font-size: inherit;"><span style="width: 6px; height: 6px;"></span><span style="flex: 1;">test/retry.test.ts</span><span style="color: #7FC8A9;">+84</span></button>
+        <button type="button" style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: none; border-radius: 6px; background: transparent; color: #C9CED6; text-align: left; font-family: inherit; font-size: inherit;"><span style="width: 6px; height: 6px;"></span><span style="flex: 1;">test/handler.test.ts</span><span style="color: #7FC8A9;">+12</span> <span style="color: #F08A8A;">−25</span></button>
+        <button type="button" style="display: flex; gap: 8px; align-items: center; padding: 6px 8px; border: none; border-radius: 6px; background: transparent; color: #C9CED6; text-align: left; font-family: inherit; font-size: inherit;"><span style="width: 6px; height: 6px;"></span><span style="flex: 1;">README.md</span><span style="color: #7FC8A9;">+4</span></button>
+      </div>
+      <div style="flex: 1;"></div>
+      <div role="group" aria-label="Diff view" style="display: flex; gap: 4px; padding: 4px; border-radius: 8px; background: #15181D;">
+        <button type="button" style="flex: 1; height: 28px; border: none; border-radius: 6px; background: #1E2430; color: #E6E8EB; font-size: 12px;">Unified</button>
+        <button type="button" style="flex: 1; height: 28px; border: none; border-radius: 6px; background: transparent; color: #9AA3AE; font-size: 12px;">Split</button>
+      </div>
+    </aside>
+
+    <!-- Diff -->
+    <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column;">
+      <div style="display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid #232830; flex-wrap: wrap;">
+        <span class="mono" style="font-size: 12.5px; flex: 1;">src/webhooks/retry.ts</span>
+        <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #C9CED6;"><input type="checkbox" checked="checked" style="accent-color: {{accent}};">Viewed</label>
+        <a href="Files.dc.html" style="font-size: 12px;">Open in editor</a>
+      </div>
+      <div class="mono" style="flex: 1; overflow: auto; font-size: 12px; line-height: 20px; padding: 10px 0;">
+        <div class="ln" style="color: #9AA3AE; background: #131822;"><span class="n"></span><span class="c">@@ -1,6 +1,48 @@</span></div>
+        <div class="ln" style="color: #B8BFC9;"><span class="n">1</span><span class="c">  import { stripe } from '../config/stripe';</span></div>
+        <div class="ln" style="background: #12261D; color: #A8E0C6;"><span class="n">2</span><span class="c">+ import { deadLetter } from '../queue/deadLetter';</span></div>
+        <div class="ln" style="color: #B8BFC9;"><span class="n">3</span><span class="c"></span></div>
+        <div class="ln" style="background: #12261D; color: #A8E0C6;"><span class="n">4</span><span class="c">+ const MAX_ATTEMPTS = 6;</span></div>
+        <div class="ln" style="background: #12261D; color: #A8E0C6;"><span class="n">5</span><span class="c">+ const BASE_DELAY_MS = 30_000;</span></div>
+        <div class="ln" style="color: #B8BFC9;"><span class="n">6</span><span class="c"></span></div>
+        <div class="ln" style="background: #2A1618; color: #F4B8B8;"><span class="n"></span><span class="c">- export async function retry(event) {</span></div>
+        <div class="ln" style="background: #2A1618; color: #F4B8B8;"><span class="n"></span><span class="c">-   return handle(event);</span></div>
+        <div class="ln" style="background: #12261D; color: #A8E0C6;"><span class="n">7</span><span class="c">+ export async function retry(event, attempt = 1) {</span></div>
+        <div class="ln" style="background: #12261D; color: #A8E0C6;"><span class="n">8</span><span class="c">+   try {</span></div>
+        <div class="ln" style="background: #12261D; color: #A8E0C6;"><span class="n">9</span><span class="c">+     return await handle(event);</span></div>
+        <div class="ln" style="background: #12261D; color: #A8E0C6;"><span class="n">10</span><span class="c">+   } catch (err) {</span></div>
+        <div class="ln" style="background: #12261D; color: #A8E0C6;"><span class="n">11</span><span class="c">+     if (attempt &gt;= MAX_ATTEMPTS) return deadLetter.push(event, err);</span></div>
+        <div class="ln" style="background: #12261D; color: #A8E0C6;"><span class="n">12</span><span class="c">+     const delay = BASE_DELAY_MS * 2 ** (attempt - 1);</span></div>
+
+        <!-- Inline comment to the agent -->
+        <div style="margin: 6px 20px 6px 54px; padding: 12px; border: 1px solid #343A44; border-radius: 10px; background: #15181D; font-family: Inter, system-ui, sans-serif; font-size: 13px; display: flex; flex-direction: column; gap: 8px; white-space: normal;">
+          <span style="font-size: 12px; color: #9AA3AE;">Your comment on line 12 · goes to the agent</span>
+          <label for="c12" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">Comment for the agent</label>
+          <textarea id="c12" rows="2" style="resize: none; padding: 8px 10px; border-radius: 8px; border: 1px solid #343A44; background: #0B0D10; color: #E6E8EB; font-size: 13px; font-family: inherit;">Add jitter so retries from many events don't line up.</textarea>
+          <div style="display: flex; gap: 8px; justify-content: flex-end;">
+            <button type="button" style="height: 28px; padding: 0 10px; border-radius: 6px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 12px;">Cancel</button>
+            <button type="button" style="height: 28px; padding: 0 10px; border-radius: 6px; border: none; background: {{accent}}; color: #0B0D10; font-weight: 600; font-size: 12px;">Add to feedback</button>
+          </div>
+        </div>
+
+        <div class="ln" style="background: #12261D; color: #A8E0C6;"><span class="n">13</span><span class="c">+     await schedule(() =&gt; retry(event, attempt + 1), delay);</span></div>
+        <div class="ln" style="background: #12261D; color: #A8E0C6;"><span class="n">14</span><span class="c">+   }</span></div>
+        <div class="ln" style="background: #12261D; color: #A8E0C6;"><span class="n">15</span><span class="c">+ }</span></div>
+      </div>
+    </main>
+
+    <!-- Summary + decision -->
+    <aside aria-label="Review summary" style="flex: 1 1 300px; max-width: 340px; display: flex; flex-direction: column; gap: 14px; padding: 16px; background: #111418; border-left: 1px solid #232830; box-sizing: border-box;">
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11px; color: #9DBBFA; font-weight: 600; display: flex; align-items: center; gap: 6px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #9DBBFA;"></span>Ready for review</span>
+        <h1 style="margin: 0; font-size: 16px; font-weight: 600;">Retry failed Stripe webhooks</h1>
+        <span class="mono" style="font-size: 11.5px; color: #9AA3AE;">worktree webhook-retry → main</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 10px; background: #15181D; border: 1px solid #262B33; line-height: 1.5;">
+        <span style="font-size: 12px; font-weight: 600; color: #C9CED6;">Agent's summary</span>
+        <span style="color: #C9CED6;">Failed webhook events now retry up to 6 times with exponential backoff, then land in a dead-letter queue with the error. Added a migration for the queue table.</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">Checks the agent ran</span>
+        <span style="display: flex; gap: 8px; align-items: center;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #7FC8A9; width: 16px; height: 16px;"><path d="M5 12l5 5 9-10"></path></svg>Tests · 18 passed</span>
+        <span style="display: flex; gap: 8px; align-items: center;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color: #7FC8A9; width: 16px; height: 16px;"><path d="M5 12l5 5 9-10"></path></svg>Typecheck · clean</span>
+        <span style="display: flex; gap: 8px; align-items: center; color: #F2C078;"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width: 16px; height: 16px;"><path d="M12 8v5M12 16.5v.5"></path><circle cx="12" cy="12" r="9"></circle></svg>Migration not run against staging</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #9AA3AE;">Your feedback · 1 comment</span>
+        <span style="font-size: 12.5px; color: #C9CED6;">retry.ts:12 · Add jitter so retries…</span>
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <button type="button" onClick="{{ send }}" style="height: 36px; border-radius: 8px; border: 1px solid #343A44; background: transparent; color: #E6E8EB; font-size: 13px;">{{ sendLabel }}</button>
+        <button type="button" style="height: 36px; border-radius: 8px; border: none; background: {{accent}}; color: #0B0D10; font-weight: 600; font-size: 13px;">Open pull request</button>
+        <button type="button" style="height: 32px; border-radius: 8px; border: none; background: transparent; color: #9AA3AE; font-size: 12.5px;">Merge worktree into main locally</button>
+      </div>
+    </aside>
+  </div>
+
+  <footer style="height: 26px; display: flex; align-items: center; gap: 16px; padding: 0 14px; background: #0B0D10; border-top: 1px solid #232830; color: #9AA3AE; font-size: 11.5px;">
+    <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #7FC8A9;"></span>Claude Code CLI connected</span>
+    <span>6 sessions · 6 worktrees</span>
+    <div style="flex: 1;"></div>
+    <span>Max plan · Session 62% · Week 38%</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#7AA2F7","options":["#7AA2F7","#7FC8A9","#C4A7E7","#F2C078"]},"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { sent: false }; }
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#7AA2F7',
+      send: () => this.setState({ sent: true }),
+      sendLabel: this.state.sent ? 'Feedback sent · agent is revising' : 'Send feedback to agent',
+    };
+  }
+}
+</script>
+</body>
+</html>
