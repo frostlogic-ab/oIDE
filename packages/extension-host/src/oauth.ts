@@ -35,6 +35,16 @@ export interface ProviderOptions {
   now?: () => number;
 }
 
+/**
+ * The authorization URL comes from a remote server's metadata. Only open https URLs (or http on
+ * loopback for local servers) without embedded credentials, never `file:` or custom protocol handlers.
+ */
+export function assertSafeAuthorizationUrl(u: URL): void {
+  const loopback = ['127.0.0.1', 'localhost', '[::1]', '::1'].includes(u.hostname);
+  if (!(u.protocol === 'https:' || (u.protocol === 'http:' && loopback))) throw new Error(`Refusing to open a non-https authorization URL (${u.protocol})`);
+  if (u.username || u.password) throw new Error('Refusing an authorization URL with embedded credentials');
+}
+
 async function readJson<T>(s: SecretStore, key: string): Promise<T | undefined> {
   const raw = await s.get(key);
   if (!raw) return undefined;
@@ -219,6 +229,7 @@ export async function authorize(o: AuthorizeOptions): Promise<{ ok: boolean; err
       secrets: o.secrets,
       redirectUrl: loop.redirectUrl,
       onRedirect: async (u) => {
+        assertSafeAuthorizationUrl(u);
         redirected = true;
         await o.openExternal(u.toString());
       },
