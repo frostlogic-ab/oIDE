@@ -132,10 +132,12 @@ Only one agent at a time may hold the project folder (`conflict`).
   `ext:<extension>/<key>`, `mcp:<server-id>/…` (the extension host's `extension/…` and `custom/…` keys
   are mapped onto these by `hostSecretAdapter`). Claude credentials have no slot and are never read.
 - Custom model keys go in with `settings.saveCustomModel({ apiKey })` and never come back over IPC
-  (`hasKey` only); they reach only that agent's process env. A key is bound to the origin of the
-  base URL it was entered for (`model:<id>:origin`, `security/model-keys.ts`) and is used only
-  while the model still points there; moving the model elsewhere (also through a raw
-  `settings.update`) needs the key again.
+  (`hasKey` only); they reach only that agent's process env. A key is bound to a SHA-256 of the
+  base URL's origin, the provider and the model's whole `extraEnv` as they were when it was
+  entered (`model:<id>:binding`, `security/model-keys.ts`) and is used only while all of them are
+  unchanged; re-pointing the model or changing its env (also through a raw `settings.update`)
+  needs the key again (SEC-09, SEC-30). Keys stored with the older origin-only binding must be
+  entered again.
 - Each agent's mcp.json holds no secret: the oIDE server header is `${OIDE_MCP_HANDSHAKE}` and other
   header values (the proxy secret) become `${OIDE_MCP_HEADER_n}`; the values are only in that
   agent's env, and the CLI expands them (verified in the 2.1.325 binary: `--mcp-config` files are
@@ -194,11 +196,27 @@ redirects, 15 s timeout. Bedrock and Vertex are not tested (oIDE does not read c
 ## Settings that run programs
 
 `settings.update` asks through `confirmNative`, showing the exact value, before it sets a
-non-empty `claude.cliPath` (`cli.detect` runs it at once) unless that path was picked in
-`dialog.pickFile` this session, and before it changes `claude.extraFlags`. Extra flags can never set
+non-empty `claude.cliPath` (`cli.detect` runs it at once) and before it changes
+`claude.extraFlags`. Only a path picked in Settings › Claude Code › CLI path › Browse…
+(`dialog.pickCli`, which fills its own main-owned set `services.pickedCli`) skips the CLI path
+confirmation, once; paths picked for other purposes (`services.picked`) never do (SEC-29). Extra flags can never set
 what oIDE controls or what would undo its isolation (`RESERVED_FLAGS` in agent-core: settings
 sources, `--settings`, MCP config, `--add-dir`, plugins, tool lists, permission flags, system
 prompt, `--safe-mode`/`--restricted`/`--bare`), whatever their spelling or number of values.
+
+## Custom model env ("Your models")
+
+- A custom model's `extraEnv` may not set names in `DENIED_MODEL_ENV` (agent-core; upper-cased,
+  prefix-aware): loaders and runtime options (`LD_*`, `DYLD_*`, `NODE_*`, `ELECTRON_*`, `PYTHON*`,
+  …), program lookup and shells (`PATH`, `PATHEXT`, `COMSPEC`, `GIT_*`, `SSH_*`, `HOME`, …),
+  traffic (`*_PROXY`, `SSL_*`, CA bundles, `AWS_ENDPOINT_URL*`) and what oIDE or Claude Code
+  control (`ANTHROPIC_*`, `CLAUDE_CODE_*`, `CLAUDE_CONFIG_DIR`, `OIDE_*`, `MCP_*`), except a few
+  model ids and tuning names (`ANTHROPIC_VERTEX_PROJECT_ID`, `ANTHROPIC_DEFAULT_*_MODEL`,
+  `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, …). `settings.saveCustomModel` and `settings.update` refuse
+  them (`invalid_input`); `customModelEnv` drops them at launch with a warning (SEC-28).
+- A new model, or a change to a model's base URL, provider or `extraEnv`, needs a native
+  confirmation in main (`confirmExecSettings`) showing the new values; env values whose names look
+  secret (`KEY`, `TOKEN`, `SECRET`, `PASS`, …) are shown as names only.
 
 ## Agent environment and sign-in
 

@@ -12,7 +12,8 @@ green. Once a fix lands, change `it.fails` to `it` in its test.
 Run them from a cwd on an uppercase drive letter (a lowercase `c:\` breaks vitest):
 `Set-Location 'C:\…\oide'; node node_modules/vitest/vitest.mjs run test/security`.
 
-**Counts:** 2 critical, 5 high, 9 medium, 11 low. `pnpm audit --prod` reports no known
+**Counts:** 2 critical, 5 high, 9 medium, 11 low. A follow-up scan of the fixes added 1 high and
+2 medium (SEC-28..30, fixed). `pnpm audit --prod` reports no known
 vulnerabilities.
 
 ## Critical
@@ -511,6 +512,52 @@ spellings: `--settings`, `--setting-sources`, `--strict-mcp-config`, `--mcp-conf
 `--disallowed-tools`/`--disallowedTools`, `--agents`, `--agent`, the system-prompt flags,
 `--safe-mode`, `--restricted`, `--bare`, `--inherit-permission-mode`, `--fork-session`, besides the
 existing permission flags. File: `packages/agent-core/src/args.ts`. Test: `args.test.ts`.
+
+## Follow-up scan of the fixes (2026-11-24)
+
+An automated scan of the committed fixes found three more gaps. All three are fixed, with tests in
+`test/security/custom-model-env.test.ts` and `packages/agent-core/src/args.test.ts`.
+
+### SEC-28 (high) A custom model's `extraEnv` reaches the agent env with no limits or confirmation
+
+`customModelEnv` copied every well-formed `extraEnv` name into the agent's process env, and
+`settings.saveCustomModel` (or a raw `settings.update` of `models.custom`) stored any env without a
+confirmation. A compromised renderer, or a careless edit, could set `NODE_OPTIONS`, `PATH`,
+`*_PROXY`, `LD_*`/`DYLD_*`, `ELECTRON_*`, `CLAUDE_CODE_*` or `ANTHROPIC_*` overrides: code
+execution in the agent, or its traffic sent elsewhere.
+**Status:** **fixed.** `DENIED_MODEL_ENV` in agent-core (case-insensitive, prefix-aware): loaders
+and runtime options (`LD_`, `DYLD_`, `NODE_`, `ELECTRON_`, `NPM_CONFIG_`, `PYTHON*`, `PERL5*`,
+`DOTNET_`, `COR_`, Java options, …), program lookup and shells (`PATH`, `PATHEXT`, `COMSPEC`,
+`SHELL`, `BASH_ENV`, `GIT_`, `SSH_`, `EDITOR`, `HOME`, `TEMP`, `XDG_`, …), traffic (`*_PROXY`,
+`SSL_`, CA bundles, `AWS_ENDPOINT_URL*`, `CLOUDSDK_`, …) and what oIDE and Claude Code control
+(`ANTHROPIC_`, `CLAUDE_CODE_`, `CLAUDE_CONFIG_DIR`, `OIDE_`, `MCP_`). A few model ids and plain
+tuning names stay allowed (`ANTHROPIC_VERTEX_PROJECT_ID`, `ANTHROPIC_DEFAULT_*_MODEL`,
+`ANTHROPIC_SMALL_FAST_MODEL`, `CLAUDE_CODE_MAX_OUTPUT_TOKENS`). `customModelEnv` drops denied
+names (with a launch warning), and main refuses them at save time (`invalid_input`). A model whose
+base URL, provider or `extraEnv` changes (a new model too) needs a native confirmation in main
+(`confirmExecSettings`), which shows the provider, base URL and env, secret-looking values as names
+only. Files: `packages/agent-core/src/args.ts`, `apps/desktop/src/main/handlers/settings.ts`.
+
+### SEC-29 (medium) The CLI path confirmation is skipped for paths picked for other purposes
+
+`confirmExecSettings` skipped the CLI path confirmation when the path was in `services.picked`,
+which also holds paths picked for an artifact import, a folder extension or a project. A renderer
+could ask for a file pick for one purpose and use the path as the CLI.
+**Status:** **fixed.** A separate main-owned set, `services.pickedCli`, is filled only by the new
+`dialog.pickCli` command (Settings › Claude Code › CLI path › Browse…). Only a path in it skips the
+confirmation, and only once; every other CLI path change asks. Files: `handlers/dialog.ts`,
+`handlers/settings.ts`, `services/core.ts`, `packages/protocol/src/ipc.ts`, `ClaudeCodeSection.tsx`.
+
+### SEC-30 (medium) A model key is bound only to the endpoint origin
+
+The SEC-09 binding covered the origin only, so a changed `extraEnv` (a proxy,
+`NODE_TLS_REJECT_UNAUTHORIZED`, `NODE_EXTRA_CA_CERTS`) could still let the key leave on its way to
+the same origin.
+**Status:** **fixed.** `security/model-keys.ts` binds the key to a SHA-256 of origin, provider and
+the whole sorted `extraEnv` (`model:<id>:binding`), stored at save time, and releases it only while
+that hash matches; `saveCustomModel` deletes the key when the binding changes without a new key.
+Keys stored with the old origin-only binding are not released and must be entered again. Together
+with the SEC-28 denylist.
 
 ## What held
 

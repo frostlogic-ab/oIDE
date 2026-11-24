@@ -165,6 +165,8 @@ export const Commands = {
   'dialog.pickFolder': cmd(z.object({ title: z.string().optional() }), z.string().nullable()),
   /** Native open-file dialog (Import from claude.ai › pick a file). Main remembers the picked path for the follow-up command. */
   'dialog.pickFile': cmd(z.object({ title: z.string().optional(), filters: z.array(z.object({ name: z.string(), extensions: z.array(z.string()) })).default([]) }), z.string().nullable()),
+  /** Native open-file dialog for Settings › Claude Code › CLI path. Only a path picked here skips the CLI path confirmation (SEC-29). */
+  'dialog.pickCli': cmd(Void, z.string().nullable()),
 } as const;
 
 export type CommandName = keyof typeof Commands;

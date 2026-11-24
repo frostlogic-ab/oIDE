@@ -29,6 +29,11 @@ export interface Services {
   extensions: ExtensionsService;
   /** Paths the user picked in a native dialog (only these may be imported / loaded as extensions). */
   picked: Set<string>;
+  /**
+   * SEC-29: CLI binaries the user picked in `dialog.pickCli` this session (and nowhere else). Only
+   * these skip the CLI path confirmation, once each; picks for other purposes never count.
+   */
+  pickedCli: Set<string>;
   /** Notices raised before the window could show them (sent after load). */
   notices: Array<{ level: 'info' | 'warning' | 'error'; message: string }>;
   flushNotices(): void;
@@ -114,6 +119,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
 
   const cli = new CliService({ settings, emit: ctx.emit, override: platform.cliPathOverride });
   const picked = new Set<string>();
+  const pickedCli = new Set<string>();
   const projects = new ProjectsService({ ctx, store, platform, picked });
   const agents = new AgentsService({ ctx, store, settings, secrets, worktrees, mcp, projects, cli, platform, ...(opts.driver ? { driver: opts.driver } : {}) });
   const git = new GitService({
@@ -207,6 +213,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     git,
     extensions,
     picked,
+    pickedCli,
     notices,
     flushNotices() {
       for (const n of notices.splice(0)) ctx.emit('notify', n);

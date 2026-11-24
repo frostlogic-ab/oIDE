@@ -1,4 +1,5 @@
 import { resolve } from 'node:path';
+import { deniedModelEnvKeys } from '@oide/agent-core';
 import { pathKey, samePath } from '@oide/git';
 import type { CustomModel, Settings } from '@oide/protocol';
 import { BUILTIN_PRESETS, BUILTIN_TECHNIQUES, readOideFile } from '@oide/store';
@@ -6,7 +7,7 @@ import { ZodError } from 'zod';
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
 import { confirmNative } from '../security/confirm.js';
-import { boundModelKey, deleteModelKey, endpointOrigin, hasBoundKey, storeModelKey } from '../security/model-keys.js';
+import { boundModelKey, deleteModelKey, hasBoundKey, modelBinding, storeModelKey } from '../security/model-keys.js';
 import type { Services } from '../services/index.js';
 
 const OK = { ok: true as const };
@@ -87,9 +88,12 @@ export function registerSettingsHandlers(router: IpcRouter, s: Services, ctx: Ma
     return OK;
   });
   // The key goes to the keychain store only and never comes back over IPC (hasKey says it exists).
-  // SEC-09: a key is bound to the endpoint origin it was entered for; pointing the model at another
-  // origin without a new key in the same call deletes the old one.
-  router.register('settings.saveCustomModel', ({ model, apiKey }) => {
+  // SEC-09 / SEC-30: a key is bound to the endpoint origin, provider and extraEnv it was entered
+  // for; changing any of them without a new key in the same call deletes the old one.
+  // SEC-28: denied extraEnv names are refused, and a changed endpoint, provider or env needs a
+  // native confirmation in main (confirmExecSettings).
+  router.register('settings.saveCustomModel', async ({ model, apiKey }) => {
+    await confirmExecSettings(s, ctx, { models: { custom: [model] } });
     const prev = svc.get().models.custom.find((m) => m.id === model.id);
     if (apiKey !== undefined && apiKey !== '') {
       try {
@@ -97,7 +101,7 @@ export function registerSettingsHandlers(router: IpcRouter, s: Services, ctx: Ma
       } catch (err) {
         throw new IpcError((err as Error).message, /valid base URL/.test((err as Error).message) ? 'invalid_input' : 'secure_storage_unavailable');
       }
-    } else if (prev && endpointOrigin(prev) !== endpointOrigin(model)) {
+    } else if (prev && modelBinding(prev) !== modelBinding(model)) {
       deleteModelKey(s.secrets, model.id);
     }
     const list = svc.get().models.custom.filter((m) => m.id !== model.id);
@@ -156,16 +160,23 @@ export function registerSettingsHandlers(router: IpcRouter, s: Services, ctx: Ma
 /**
  * SEC-07: settings that make main execute something (the CLI path, which `cli.detect` runs at once;
  * extra CLI flags, passed to every agent) are changed from the renderer only after a native
- * confirmation in main that shows the exact value. A CLI path the user picked in the file dialog
- * this session needs no second confirmation. Clearing either value needs none.
+ * confirmation in main that shows the exact value. SEC-29: only a CLI path picked in the dedicated
+ * `dialog.pickCli` flow this session skips it (once); paths picked for anything else do not.
+ * Clearing either value needs none.
+ *
+ * SEC-28: custom models (`models.custom`, also through `settings.saveCustomModel`) may not set
+ * denied env names (`deniedModelEnvKeys`, refused as `invalid_input`), and a model whose base URL,
+ * provider or extraEnv changes (a new model included) needs a native confirmation that shows the
+ * new values, secret-looking env values as names only.
  */
 export async function confirmExecSettings(s: Services, ctx: MainContext, patch: Record<string, unknown>): Promise<void> {
+  await confirmCustomModels(s, ctx, patch.models);
   const claude = patch.claude;
   if (!claude || typeof claude !== 'object') return;
   const cur = s.store.settings.get().claude;
   const c = claude as { cliPath?: unknown; extraFlags?: unknown };
   if (typeof c.cliPath === 'string' && c.cliPath.trim() && c.cliPath !== cur.cliPath) {
-    const picked = s.picked.has(pathKey(resolve(c.cliPath)));
+    const picked = s.pickedCli.delete(pathKey(resolve(c.cliPath)));
     const ok =
       picked ||
       (await confirmNative(ctx, {
@@ -187,4 +198,59 @@ export async function confirmExecSettings(s: Services, ctx: MainContext, patch: 
     });
     if (!ok) throw new IpcError('The extra CLI flags were not changed.', 'forbidden');
   }
+}
+
+/** Env names whose values a confirmation shows as the name only. */
+const SECRET_ENV_NAME = /KEY|TOKEN|SECRET|PASS|CRED|AUTH|COOKIE|SESSION|SIGNATURE|PRIVATE/i;
+
+export interface ModelLike {
+  id: string;
+  name?: unknown;
+  provider?: unknown;
+  baseUrl?: unknown;
+  extraEnv: Record<string, unknown>;
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+const envJson = (env: Record<string, unknown> | undefined) => JSON.stringify(Object.entries(env ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+const clip = (v: unknown, n = 200) => {
+  const t = typeof v === 'string' ? v : v === undefined || v === null ? '' : JSON.stringify(v);
+  return t.length > n ? `${t.slice(0, n)}…` : t;
+};
+
+/** The confirmation text for one custom model: where its agents' traffic goes, and with what env. */
+export function describeCustomModel(m: ModelLike): string {
+  const env = Object.entries(m.extraEnv);
+  return [
+    clip(m.name, 80) || m.id,
+    `  Provider: ${clip(m.provider, 40)}`,
+    ...(typeof m.baseUrl === 'string' && m.baseUrl ? [`  Base URL: ${clip(m.baseUrl)}`] : []),
+    `  Env:${env.length ? '' : ' (none)'}`,
+    ...env.map(([k, v]) => (SECRET_ENV_NAME.test(k) ? `    ${k} (value hidden)` : `    ${k}=${clip(v)}`)),
+  ].join('\n');
+}
+
+async function confirmCustomModels(s: Services, ctx: MainContext, models: unknown): Promise<void> {
+  if (!isObj(models) || !Array.isArray(models.custom)) return;
+  const next: ModelLike[] = models.custom
+    .filter((m): m is Record<string, unknown> & { id: string } => isObj(m) && typeof m.id === 'string')
+    .map((m) => ({ ...m, extraEnv: isObj(m.extraEnv) ? m.extraEnv : {} }));
+  const denied = [...new Set(next.flatMap((m) => deniedModelEnvKeys(m.extraEnv as Record<string, string>)))];
+  if (denied.length) {
+    throw new IpcError(`A custom model may not set these environment variables (they can run code, redirect traffic or override what oIDE controls): ${denied.join(', ')}`, 'invalid_input');
+  }
+  const cur = new Map(s.store.settings.get().models.custom.map((m) => [m.id, m]));
+  const changed = next.filter((m) => {
+    const prev = cur.get(m.id);
+    return !prev || prev.provider !== m.provider || (prev.baseUrl ?? '') !== (m.baseUrl ?? '') || envJson(prev.extraEnv) !== envJson(m.extraEnv);
+  });
+  if (!changed.length) return;
+  const ok = await confirmNative(ctx, {
+    title: 'Use this model endpoint?',
+    message: `Agents that use ${changed.length === 1 ? 'this model' : 'these models'} will send your code and prompts to the endpoint below, with these environment variables.`,
+    detail: `${changed.map(describeCustomModel).join('\n\n')}\n\nOnly continue if you entered these values yourself.`,
+    confirmLabel: 'Use this model',
+    danger: true,
+  });
+  if (!ok) throw new IpcError('The custom model was not changed.', 'forbidden');
 }

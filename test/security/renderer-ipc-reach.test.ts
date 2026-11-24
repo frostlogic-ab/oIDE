@@ -18,8 +18,8 @@ afterEach(async () => {
   while (servers.length) await new Promise((r) => servers.pop()!.close(r));
   cleanup(...dirs.splice(0));
 });
-async function harness(): Promise<Harness> {
-  const h = await startHarness();
+async function harness(opts: Parameters<typeof startHarness>[0] = {}): Promise<Harness> {
+  const h = await startHarness(opts);
   open.push(h);
   dirs.push(h.userData);
   return h;
@@ -61,7 +61,7 @@ describe('compromised renderer → main', () => {
   // SEC-09 (medium): a stored custom-model key can be exfiltrated by re-pointing baseUrl and
   // pressing "Test connection" (the key is kept when apiKey is omitted).
   it('settings.testCustomModel does not send a stored key to a changed base URL', async () => {
-    const h = await harness();
+    const h = await harness({ confirm: 'accept' }); // even when the user accepts the new endpoint
     let seen: string | undefined;
     const srv = createServer((req, res) => {
       seen = String(req.headers['x-api-key'] ?? '');

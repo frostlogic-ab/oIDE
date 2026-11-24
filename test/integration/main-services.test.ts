@@ -217,7 +217,7 @@ describe('main services (plain Node, fake-claude)', () => {
   });
 
   it('artifacts: create, preview URL, custom model keys never cross IPC', async () => {
-    const h = await harness();
+    const h = await harness({ confirm: 'accept' }); // a new custom model endpoint asks first (SEC-28)
     const art = await h.call('artifacts.create', { title: 'Landing', kind: 'design', content: '<h1>Hi</h1>' });
     expect((await h.call('artifacts.previewUrl', { id: art.id })).url).toBe(`oide-artifact://${art.id}/index.html`);
     const { resolveArtifactUrl } = await import('../../apps/desktop/src/main/services/core.js');

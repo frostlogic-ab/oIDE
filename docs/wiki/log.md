@@ -235,3 +235,15 @@ secrets go through a one-time launcher, prompts are capped at 5 per agent. Edits
 (dev repo root for built-in extensions, with an e2e check). PoCs flipped: SEC-01, 02 (2), 03, 05,
 08, 09, 17, conformance B1 (2); new `test/security/core-fixes.test.ts`. Pages updated: security,
 review-security, review-conformance.
+
+## [2026-11-24] build | Security fixes (custom model env, CLI path)
+
+Fixed three findings from an automated scan of the core security fixes (review-security SEC-28..30).
+SEC-28 (high): a custom model's `extraEnv` can no longer set loader, interpreter, PATH, proxy, TLS,
+Electron, `ANTHROPIC_*`, `CLAUDE_CODE_*` or `OIDE_*` variables (`DENIED_MODEL_ENV` in agent-core,
+case-insensitive and prefix-aware); main refuses them at save time and asks through a native
+confirmation whenever a model's base URL, provider or env changes. SEC-29 (medium): only a path
+picked in the new `dialog.pickCli` (Settings › Claude Code › CLI path › Browse…) skips the CLI path
+confirmation, once; other dialog picks no longer count. SEC-30 (medium): custom model keys are bound
+to a hash of origin, provider and the whole `extraEnv`. New `test/security/custom-model-env.test.ts`
+and agent-core denylist tests. Pages updated: security, review-security.
