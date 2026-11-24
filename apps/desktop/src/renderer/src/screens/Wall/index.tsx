@@ -1,110 +1,219 @@
 /**
- * PLACEHOLDER: the Mission Control wall (docs/wiki/raw/design/Main.dc.html) is implemented in
- * wave 2. This stand-in lists agents from the store with the shared components so the frame,
- * stores and mock bridge can be checked end to end.
+ * The Wall: Mission Control main screen (docs/wiki/raw/design/Main.dc.html).
+ * Page: docs/wiki/pages/screen-wall.md.
+ *
+ * Projects sidebar (scope switcher) · filter chips · one tile per agent · Artifacts / Marketplace
+ * teasers. Keys: J / K move between tiles, N jumps to the next tile that needs you, Enter opens
+ * Focus, Y / D answer the focused tile's permission prompt, Esc clears the selection.
+ *
+ * Re-render budget: this component subscribes to the visible id list and the counts (both
+ * shallow-compared), so an activity line on one agent re-renders only that agent's tile.
  */
+import { useEffect, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import type { AgentSummary } from '@oide/protocol';
-import { Badge, Card, ContextRingButton, DiffStat, EmptyState, LinkButton, ModelLetterChip, StatusLabel, agentStatusMeta, contextFraction, modelFamily } from '@oide/ui';
-import { formatDuration } from '../../lib/format';
-import { useAgentsInScope } from '../../stores/agents';
+import { Button, EmptyState, FilterChip, Kbd, buttonClass, cn } from '@oide/ui';
+import { useKeymapScope, useShortcutLabel } from '../../lib/useKeymap';
+import { nextNeedsYou, stepAgent, useAgents } from '../../stores/agents';
 import { projectName, useProjects } from '../../stores/projects';
 import { navigate } from '../../stores/router';
 import { useScope } from '../../stores/scope';
-import { useSetting } from '../../stores/settings';
+import { toast } from '../../stores/ui';
+import { answerPermission } from './actions';
+import { AgentTile, tileDomId } from './components/AgentTile';
+import { ArtifactsAside } from './components/ArtifactsAside';
+import { CompactDialog } from './components/CompactDialog';
+import { ProjectSidebar, openProject } from './components/ProjectSidebar';
+import { filterCounts, matchesFilter } from './logic';
+import { useWall, type WallFilter } from './wallState';
+
+const FILTERS: Array<{ id: WallFilter; label: string; tone?: 'warn' }> = [
+  { id: 'all', label: 'All' },
+  { id: 'needs', label: 'Needs you', tone: 'warn' },
+  { id: 'running', label: 'Running' },
+  { id: 'review', label: 'Review' },
+];
+
+/** Move DOM focus (and the selection) to a tile. */
+export function focusTile(agentId: string): void {
+  useWall.getState().setFocused(agentId);
+  const el = document.getElementById(tileDomId(agentId));
+  if (el) {
+    el.focus({ preventScroll: true });
+    el.scrollIntoView?.({ block: 'nearest' });
+  }
+}
+
+/** Visible agents in display order (scope + filter), read at call time for key handlers. */
+function visibleAgents(): AgentSummary[] {
+  const { byId, order } = useAgents.getState();
+  const scope = useScope.getState().scope;
+  const filter = useWall.getState().filter;
+  const out: AgentSummary[] = [];
+  for (const id of order) {
+    const a = byId[id];
+    if (a && (scope === 'all' || a.projectId === scope) && matchesFilter(a, filter)) out.push(a);
+  }
+  return out;
+}
+
+/** N: the next agent that needs you, after the focused one. Widens the filter if it hides them. */
+export function jumpToNextNeedsYou(): boolean {
+  const focused = useWall.getState().focusedId ?? undefined;
+  let next = nextNeedsYou(visibleAgents(), focused);
+  if (!next && useWall.getState().filter !== 'all') {
+    useWall.getState().setFilter('all');
+    next = nextNeedsYou(visibleAgents(), focused);
+  }
+  if (!next) {
+    toast('No agent needs you right now');
+    return false;
+  }
+  const id = next.id;
+  requestAnimationFrame(() => focusTile(id));
+  useWall.getState().setFocused(id);
+  return true;
+}
 
 export default function WallScreen() {
   const scope = useScope((s) => s.scope);
-  const agents = useAgentsInScope(scope);
+  const filter = useWall((s) => s.filter);
   const projects = useProjects((s) => s.list);
+  const projectsLoaded = useProjects((s) => s.loaded);
+  const ids = useAgents(
+    useShallow((s) =>
+      s.order.filter((id) => {
+        const a = s.byId[id];
+        return !!a && (scope === 'all' || a.projectId === scope) && matchesFilter(a, filter);
+      }),
+    ),
+  );
+  const counts = useAgents(
+    useShallow((s) => filterCounts(s.order.map((id) => s.byId[id]!).filter((a) => a && (scope === 'all' || a.projectId === scope)))),
+  );
+  const firstHighlighted = useWall((s) => Object.keys(s.highlighted)[0]);
+  const nKey = useShortcutLabel('agent.nextNeedsYou');
 
+  useEffect(() => {
+    if (firstHighlighted) requestAnimationFrame(() => focusTile(firstHighlighted));
+  }, [firstHighlighted]);
+
+  // Push the scope after the first commit: child effects run before App's, and the newest scope
+  // wins, so pushing on mount would let App's global N (open Focus) shadow the Wall's N.
+  const [keysReady, setKeysReady] = useState(false);
+  useEffect(() => setKeysReady(true), []);
+
+  useKeymapScope('wall', {
+    'agent.next': () => {
+      const a = stepAgent(visibleAgents(), useWall.getState().focusedId ?? undefined, 1);
+      if (a) focusTile(a.id);
+    },
+    'agent.prev': () => {
+      const a = stepAgent(visibleAgents(), useWall.getState().focusedId ?? undefined, -1);
+      if (a) focusTile(a.id);
+    },
+    'agent.nextNeedsYou': () => {
+      jumpToNextNeedsYou();
+    },
+    'permission.allow': () => answerFocused('allow'),
+    'permission.deny': () => answerFocused('deny'),
+    'view.back': () => {
+      if (!useWall.getState().focusedId) return false;
+      useWall.getState().setFocused(null);
+      const active = document.activeElement as HTMLElement | null;
+      if (active?.closest('[data-agent-id]')) active.blur();
+    },
+  }, { enabled: keysReady });
+
+  const title = scope === 'all' ? 'All agents' : projectName(projects, scope);
+  const noProjects = projectsLoaded && projects.length === 0;
 
   return (
-    <main className="flex-1 min-w-0 overflow-auto flex flex-col gap-3.5 px-5 py-[18px]">
-      <div className="flex items-center gap-3 flex-wrap">
-        <h1 className="m-0 text-[18px] font-semibold tracking-[-0.01em]">
-          {scope === 'all' ? 'All agents' : projectName(projects, scope)}
-        </h1>
-        <Badge tone="warn">Placeholder wall</Badge>
-        <div className="flex-1" />
-        <LinkButton
-          href="#spawn"
-          variant="primary"
-          size={32}
-          icon="plus"
-          onClick={(e) => {
-            e.preventDefault();
-            navigate('spawn', {});
-          }}
-        >
-          Spawn agent
-        </LinkButton>
-      </div>
-      {agents.length === 0 ? (
-        <EmptyState
-          icon="agents"
-          title="No agents yet"
-          description="Open a project and spawn an agent. Each agent is your own claude CLI, in its own git worktree."
-          className="flex-1"
-        />
-      ) : (
-        <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
-          {agents.map((a) => (
-            <PlaceholderTile key={a.id} agent={a} project={projectName(projects, a.projectId)} />
-          ))}
+    <>
+      <ProjectSidebar />
+      <main className="flex-1 min-w-0 overflow-y-auto flex flex-col gap-3.5 px-5 py-[18px] box-border" aria-label="Agents">
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="m-0 text-[18px] font-semibold tracking-[-0.01em]">{title}</h1>
+          <div role="group" aria-label="Filter" className={cn('flex gap-1.5 flex-wrap', counts.all === 0 && 'hidden')}>
+            {FILTERS.map((f) => (
+              <FilterChip key={f.id} selected={filter === f.id} tone={f.tone} onClick={() => useWall.getState().setFilter(f.id)}>
+                {f.label} · {counts[f.id]}
+              </FilterChip>
+            ))}
+          </div>
+          <div className="flex-1" />
+          <button type="button" className={buttonClass('warn-outline', 32, cn('text-warn! gap-2!', counts.all === 0 && 'hidden!'))} onClick={() => jumpToNextNeedsYou()} aria-keyshortcuts={nKey}>
+            Next that needs you <Kbd tone="warn">{nKey}</Kbd>
+          </button>
+          <Button variant="primary" size={32} icon="plus" className="text-[13px]! px-3.5! rounded-md!" onClick={() => navigate('spawn', scope === 'all' ? {} : { projectId: scope })}>
+            Spawn agent
+          </Button>
         </div>
-      )}
-    </main>
+
+        {noProjects && counts.all === 0 ? (
+          <EmptyState
+            icon="folder"
+            title="Open a project to get started"
+            description="A project is a git repository. Every agent you spawn in it gets its own worktree and branch, so agents never edit the same files on disk."
+            className="flex-1"
+            action={
+              <div className="flex gap-2">
+                <Button variant="primary" size={32} icon="plus" onClick={() => void openProject()}>
+                  Open project
+                </Button>
+                <Button size={32} onClick={() => navigate('spawn', {})}>
+                  Spawn agent
+                </Button>
+              </div>
+            }
+          />
+        ) : counts.all === 0 ? (
+          <EmptyState
+            icon="agents"
+            title="No agents yet"
+            description="Spawn an agent with a goal. Each agent is your own claude CLI, running in its own git worktree."
+            className="flex-1"
+            action={
+              <div className="flex gap-2">
+                <Button variant="primary" size={32} icon="plus" onClick={() => navigate('spawn', scope === 'all' ? {} : { projectId: scope })}>
+                  Spawn agent
+                </Button>
+                <Button size={32} onClick={() => void openProject()}>
+                  Open project
+                </Button>
+              </div>
+            }
+          />
+        ) : ids.length === 0 ? (
+          <div className="flex items-center gap-3 text-[12.5px] text-ink-3 py-6">
+            No agents match this filter.
+            <Button onClick={() => useWall.getState().setFilter('all')}>Show all</Button>
+          </div>
+        ) : (
+          <div className={cn('grid gap-3 grid-cols-[repeat(auto-fill,minmax(300px,1fr))] content-start')}>
+            {ids.map((id) => (
+              <TileSlot key={id} agentId={id} />
+            ))}
+          </div>
+        )}
+      </main>
+      <ArtifactsAside />
+      <CompactDialog />
+    </>
   );
 }
 
-function PlaceholderTile({ agent, project }: { agent: AgentSummary; project: string }) {
-  const warnAt = useSetting((s) => s.agents.contextWarnAt, undefined);
-  const dangerAt = useSetting((s) => s.agents.contextSuggestCompactAt, undefined);
-  const meta = agentStatusMeta(agent.status);
-  const branch = agent.branch?.split('/').pop() ?? agent.id;
-  return (
-    <Card as="article" tone={meta.tone} className="flex flex-col">
-      <div className="flex items-center gap-2 px-3 pt-2.5">
-        <span className="font-mono text-[11px] text-ink-3 truncate">
-          {project} · {branch}
-        </span>
-        <div className="flex-1" />
-        <StatusLabel status={agent.status} detail={agent.status === 'running' ? formatDuration(Date.now() - agent.createdAt) : undefined} />
-        <ContextRingButton used={contextFraction(agent.contextUsed, agent.contextWindow)} subject={agent.title} warnAt={warnAt} dangerAt={dangerAt} />
-      </div>
-      <h2 className="mx-3 mt-1 mb-2 text-[14px] font-semibold">{agent.title}</h2>
-      <div className="mx-3 px-2.5 py-2 bg-chrome rounded-md font-mono text-[11.5px] leading-[1.6] text-ink-code h-[92px] overflow-hidden">
-        {agent.lastMessage ? <div className="font-sans text-[12px] text-ink-2">{agent.lastMessage}</div> : agent.activity.map((l, i) => <div key={i}>{l}</div>)}
-      </div>
-      <div className="flex items-center gap-[5px] px-3 pt-2 flex-wrap" role="group" aria-label={`Subagents of ${agent.title}`}>
-        {agent.subagents.length === 0 ? (
-          <span className="text-[11px] text-ink-4">No subagents</span>
-        ) : (
-          agent.subagents.map((s) => (
-            <ModelLetterChip
-              key={s.id}
-              name={s.name}
-              model={s.model}
-              status={s.status}
-              detailText={`${modelFamily(s.model)}${s.effort ? `, ${s.effort} effort` : ''}${s.tier ? ` · routed as ${s.tier}` : ''} · ${s.status.replace('-', ' ')}`}
-              onClick={() => navigate('focus', { agentId: agent.id, subagentId: s.id })}
-            />
-          ))
-        )}
-      </div>
-      <div className="flex items-center gap-2.5 px-3 py-2.5 mt-auto text-ink-3 text-[12px]">
-        {agent.diff ? <DiffStat files={agent.diff.files} additions={agent.diff.additions} deletions={agent.diff.deletions} /> : <span />}
-        <div className="flex-1" />
-        <LinkButton
-          href={`#focus/${agent.id}`}
-          onClick={(e) => {
-            e.preventDefault();
-            navigate('focus', { agentId: agent.id });
-          }}
-        >
-          Open
-        </LinkButton>
-      </div>
-    </Card>
-  );
+/** Resolves the project name for a tile without making the grid depend on every agent. */
+function TileSlot({ agentId }: { agentId: string }) {
+  const projectId = useAgents((s) => s.byId[agentId]?.projectId);
+  const name = useProjects((s) => projectName(s.list, projectId));
+  return <AgentTile agentId={agentId} projectName={name} />;
+}
+
+function answerFocused(choice: 'allow' | 'deny'): boolean | void {
+  const id = useWall.getState().focusedId;
+  const agent = id ? useAgents.getState().byId[id] : undefined;
+  const req = agent?.status === 'needs-permission' ? agent.pendingPermission : undefined;
+  if (!agent || !req) return false;
+  void answerPermission(agent.id, req.requestId, choice);
 }
