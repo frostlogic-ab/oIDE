@@ -1,0 +1,32 @@
+/* Rendered Markdown (doc artifacts). Sanitised HTML from marked + DOMPurify. */
+.oide-md {
+  color: var(--color-ink-prose);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 14px 18px;
+  overflow-wrap: anywhere;
+}
+.oide-md > :first-child { margin-top: 0; }
+.oide-md h1 { font-size: 20px; font-weight: 600; color: var(--color-ink); margin: 18px 0 8px; }
+.oide-md h2 { font-size: 16px; font-weight: 600; color: var(--color-ink); margin: 16px 0 6px; }
+.oide-md h3 { font-size: 14px; font-weight: 600; color: var(--color-ink); margin: 14px 0 6px; }
+.oide-md p, .oide-md ul, .oide-md ol, .oide-md table, .oide-md pre, .oide-md blockquote { margin: 0 0 10px; }
+.oide-md ul, .oide-md ol { padding-left: 20px; }
+.oide-md ul { list-style: disc; }
+.oide-md ol { list-style: decimal; }
+.oide-md a { color: var(--color-link); }
+.oide-md code { font-family: var(--font-mono); font-size: 12px; background: var(--color-chrome); border: 1px solid var(--color-line-2); border-radius: 4px; padding: 0 4px; }
+.oide-md pre { background: var(--color-chrome); border: 1px solid var(--color-line-2); border-radius: 8px; padding: 10px 12px; overflow: auto; }
+.oide-md pre code { border: 0; padding: 0; background: none; }
+.oide-md table { border-collapse: collapse; }
+.oide-md th, .oide-md td { border: 1px solid var(--color-line-2); padding: 4px 10px; text-align: left; }
+.oide-md th { color: var(--color-ink); font-weight: 600; background: var(--color-card); }
+.oide-md blockquote { border-left: 2px solid var(--color-line-3); padding-left: 10px; color: var(--color-ink-3); }
+.oide-md hr { border: 0; border-top: 1px solid var(--color-line-2); margin: 14px 0; }
+.oide-md img { max-width: 100%; }
+
+/* Detail-pane preview: a smaller page so the first screenful fits in 190px. */
+.oide-md-compact { font-size: 11px; line-height: 1.5; padding: 10px 12px; }
+.oide-md-compact h1 { font-size: 14px; margin: 0 0 6px; }
+.oide-md-compact h2 { font-size: 12.5px; margin: 10px 0 4px; }
+.oide-md-compact table, .oide-md-compact pre { font-size: 10.5px; }
