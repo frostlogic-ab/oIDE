@@ -68,9 +68,14 @@ describe('tarball extraction', () => {
     });
   }
 
-  it('allows a symlink that stays inside the package', async () => {
-    const entries = await inspectTarball(makeTar([{ path: 'package/dist/a.js', body: 'A' }, { path: 'package/dist/b.js', type: '2', linkpath: 'a.js' }]));
-    expect(entries.map((e) => e.path)).toEqual(['dist/a.js', 'dist/b.js']);
+  it('rejects every symlink, including chains that look inside the package', async () => {
+    await expect(inspectTarball(makeTar([{ path: 'package/dist/a.js', body: 'A' }, { path: 'package/dist/b.js', type: '2', linkpath: 'a.js' }]))).rejects.toThrow(/symbolic link/);
+    const chain = [
+      { path: 'package/sub/x', type: '2', linkpath: '..' },
+      { path: 'package/a', type: '2', linkpath: 'sub/x' },
+      { path: 'package/esc', type: '2', linkpath: 'a/..' },
+    ];
+    await expect(inspectTarball(makeTar(chain))).rejects.toThrow(/symbolic link/);
   });
 
   it('enforces size limits', async () => {

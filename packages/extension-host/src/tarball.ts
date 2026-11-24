@@ -44,7 +44,7 @@ function checkEntryPath(p: string): void {
 
 /**
  * Read every header and validate it without writing anything. Throws TarballError on absolute
- * paths, `..`, hard links, devices, FIFOs, symlinks that point outside the package, more than one
+ * paths, `..`, hard links, symbolic links, devices, FIFOs, more than one
  * top-level folder, or size limits.
  */
 export async function inspectTarball(data: Uint8Array, limits: TarLimits = {}): Promise<TarEntryInfo[]> {
@@ -70,13 +70,9 @@ export async function inspectTarball(data: Uint8Array, limits: TarLimits = {}): 
           const type = FILE_TYPES.has(entry.type) ? 'File' : entry.type;
           if (type === 'Link') throw new TarballError(`Tarball contains a hard link: ${raw}`);
           if (type !== 'File' && type !== 'Directory' && type !== 'SymbolicLink') throw new TarballError(`Tarball contains an unsupported entry (${entry.type}): ${raw}`);
-          if (type === 'SymbolicLink') {
-            const target = entry.linkpath ?? '';
-            if (!target || isAbsoluteish(target)) throw new TarballError(`Symlink points outside the package: ${raw}`);
-            const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(segs.join('/')), target.replace(/\\/g, '/')));
-            const rs = segments(resolved);
-            if (rs[0] === '..' || rs[0] !== top || rs.includes('..')) throw new TarballError(`Symlink points outside the package: ${raw}`);
-          }
+          // Extensions ship bundled dist/ code and never need links. Lexical checks on link targets can be
+          // defeated by link chains (a -> sub/x, sub/x -> .., esc -> a/..), so symlinks are refused outright.
+          if (type === 'SymbolicLink') throw new TarballError(`Tarball contains a symbolic link: ${raw}`);
           total += entry.size ?? 0;
           if (entries.length + 1 > lim.maxEntries) throw new TarballError('Tarball has too many entries');
           if (total > lim.maxTotalBytes) throw new TarballError('Tarball is too large when unpacked');
@@ -121,7 +117,7 @@ export async function extractTarball(data: Uint8Array, dest: string, limits: Tar
         preserveOwner: false,
         filter: (_p, entry) => {
           const t = 'type' in entry ? entry.type : undefined;
-          return t === undefined || FILE_TYPES.has(t) || t === 'Directory' || t === 'SymbolicLink';
+          return t === undefined || FILE_TYPES.has(t) || t === 'Directory';
         },
       });
       unpack.on('error', (e: Error) => reject(new TarballError(`Extraction failed: ${e.message}`)));
