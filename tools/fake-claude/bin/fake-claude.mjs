@@ -5,11 +5,15 @@
 //
 // Scenario: --fake-scenario <name[,name…]> or FAKE_CLAUDE_SCENARIO. One name per user turn; the last repeats.
 //   basic | tools | permission | review | subagents | rate-limit | crash | slow | auth | replay:<fixture.jsonl>
+//   commit-work | address-feedback | commit-all | mcp-tool | artifacts   (milestone gate tests, test/gates)
+// A user message containing `[fake-scenario:<name>]` runs that scenario for its turn (overrides the list).
 // `/compact` (and other slash commands) work in every scenario. `--resume <id>` echoes the session id.
+// MCP servers from --mcp-config are reached over HTTP (`url`) or started over stdio (`command`).
 // Flags --fake-record <file>, --fake-exit-code <n>, --fake-no-control mirror the env vars below.
 // Env: FAKE_CLAUDE_RECORD=<file> (append argv, env KEY NAMES and stdin lines), FAKE_CLAUDE_DELAY_MS,
 //      FAKE_CLAUDE_EXIT_CODE (crash), FAKE_CLAUDE_NO_CONTROL=1 (ignore control requests),
 //      FAKE_CLAUDE_VERSION, FAKE_CLAUDE_HELP=<file>, FAKE_CLAUDE_WRITE_FILES=0 (do not touch cwd).
+import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
@@ -69,7 +73,7 @@ if (flags['--help'] || flags['-h']) {
   process.stdout.write(readFileSync(helpFile, 'utf8'));
   process.exit(0);
 }
-record({ argv, envKeys: Object.keys(process.env).sort(), cwd: process.cwd() });
+record({ argv, envKeys: Object.keys(process.env).sort(), cwd: process.cwd(), pid: process.pid });
 if (flags['--permission-mode'] && !MODES.includes(flags['--permission-mode'])) {
   process.stderr.write(`error: option '--permission-mode <mode>' argument '${flags['--permission-mode']}' is invalid.\n`);
   process.exit(1);
@@ -247,8 +251,75 @@ async function rateLimitAllowed() {
 
 // ------------------------------------------------------------------ MCP client (Streamable HTTP)
 
+// ------------------------------------------------------------------ MCP client (stdio)
+
+const normTool = (s) => String(s).replace(/[^a-zA-Z0-9_-]/g, '_');
+const stdioClients = new Map();
+
+/** Start (once per process) a stdio MCP server from --mcp-config, like the CLI does. Newline-delimited JSON-RPC. */
+function stdioClient(serverName, s) {
+  let c = stdioClients.get(serverName);
+  if (c) return c;
+  const child = spawn(s.command, s.args ?? [], { cwd: s.cwd ?? process.cwd(), env: { ...process.env, ...(s.env ?? {}) }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
+  const pending = new Map();
+  let nextId = 1;
+  const failAll = (err) => {
+    for (const p of pending.values()) p.reject(err);
+    pending.clear();
+  };
+  createInterface({ input: child.stdout }).on('line', (line) => {
+    const m = safeJson(line);
+    if (!m || m.id === undefined || !pending.has(m.id)) return;
+    const p = pending.get(m.id);
+    pending.delete(m.id);
+    if (m.error) p.reject(new Error(`MCP error: ${m.error.message}`));
+    else p.resolve(m.result);
+  });
+  child.stderr.on('data', () => {});
+  child.on('error', (err) => {
+    stdioClients.delete(serverName);
+    failAll(new Error(`MCP server ${serverName} failed to start: ${err.message}`));
+  });
+  child.on('exit', (code) => {
+    stdioClients.delete(serverName);
+    failAll(new Error(`MCP server ${serverName} exited with code ${code}`));
+  });
+  const send = (obj) => child.stdin.write(`${JSON.stringify(obj)}\n`);
+  const request = (method, params) =>
+    new Promise((res, rej) => {
+      const id = nextId++;
+      pending.set(id, { resolve: res, reject: rej });
+      send({ jsonrpc: '2.0', id, method, params });
+    });
+  const ready = request('initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'fake-claude', version: VERSION } }).then((r) => {
+    send({ jsonrpc: '2.0', method: 'notifications/initialized', params: {} });
+    return r;
+  });
+  ready.catch(() => undefined);
+  c = { child, request, ready, tools: null };
+  stdioClients.set(serverName, c);
+  return c;
+}
+
+async function stdioTools(c) {
+  await c.ready;
+  c.tools ??= (await c.request('tools/list', {}))?.tools ?? [];
+  return c.tools;
+}
+
+// The CLI's MCP servers end with it.
+process.on('exit', () => {
+  for (const c of stdioClients.values()) c.child.kill();
+});
+
 async function mcpCall(serverName, tool, args, toolUseId) {
   const s = mcpServers[serverName];
+  if (s && !s.url && s.command) {
+    const c = stdioClient(serverName, s);
+    // `mcp__srv__db_schema` → the server's own name (`db.schema`), as the CLI maps them.
+    const real = (await stdioTools(c)).find((t) => t.name === tool || normTool(t.name) === tool)?.name ?? tool;
+    return c.request('tools/call', { name: real, arguments: args, _meta: { 'claudecode/toolUseId': toolUseId } });
+  }
   if (!s || !s.url) throw new Error(`MCP server ${serverName} is not configured over HTTP`);
   let sid;
   const rpc = async (method, params, id) => {
@@ -308,7 +379,7 @@ let toolNo = 0;
 const toolId = () => `toolu_fake_${String(++toolNo).padStart(4, '0')}`;
 
 /** Emit a tool_use, ask for permission, emulate the tool, emit the tool_result. Returns {ok, text}. */
-async function useTool(name, input, { ptu = null } = {}) {
+async function useTool(name, input, { ptu = null, run } = {}) {
   const id = toolId();
   await assistant([{ type: 'tool_use', id, name, input, caller: { type: 'direct' } }], { ptu });
   const decision = await checkPermission(name, input, id);
@@ -320,7 +391,14 @@ async function useTool(name, input, { ptu = null } = {}) {
   }
   const inp = decision.updatedInput ?? input;
   let text = 'ok';
-  if (name === 'Read') text = `1\t${existsSync(String(inp.file_path)) ? readFileSync(String(inp.file_path), 'utf8').split(/\r?\n/)[0] : 'fake file content'}`;
+  if (run) {
+    try {
+      text = String(await run(inp));
+    } catch (err) {
+      await toolResult(id, String(err?.message ?? err), { ptu, isError: true });
+      return { ok: false, text: String(err?.message ?? err), id };
+    }
+  } else if (name === 'Read') text = `1\t${existsSync(String(inp.file_path)) ? readFileSync(String(inp.file_path), 'utf8').split(/\r?\n/)[0] : 'fake file content'}`;
   else if (name === 'Write' || name === 'Edit') {
     const p = resolve(String(inp.file_path));
     if (WRITE_FILES) {
@@ -332,8 +410,19 @@ async function useTool(name, input, { ptu = null } = {}) {
   } else if (name === 'Bash') text = String(inp.command).includes('test') ? 'Tests: 12 passed, 0 failed' : 'done';
   else if (name.startsWith('mcp__')) {
     const m = /^mcp__(.+?)__(.+)$/.exec(name);
-    const res = await mcpCall(m[1], m[2], inp, id);
+    let res;
+    try {
+      res = await mcpCall(m[1], m[2], inp, id);
+    } catch (err) {
+      if (current?.aborted) throw ABORT;
+      await toolResult(id, String(err?.message ?? err), { ptu, isError: true });
+      return { ok: false, text: String(err?.message ?? err), id };
+    }
     text = (res?.content ?? []).map((c) => c.text ?? '').join('\n');
+    if (res?.isError) {
+      await toolResult(id, text, { ptu, isError: true });
+      return { ok: false, text, id };
+    }
   }
   await toolResult(id, text, { ptu });
   return { ok: true, text, id };
@@ -342,6 +431,20 @@ async function useTool(name, input, { ptu = null } = {}) {
 // ------------------------------------------------------------------ scenarios
 
 const cwdFile = (rel) => join(process.cwd(), rel);
+
+/** The agent name from oIDE's contract in --append-system-prompt (for the commit trailer). */
+function agentName() {
+  const p = typeof flags['--append-system-prompt'] === 'string' ? flags['--append-system-prompt'] : '';
+  return /Oide-Agent: ([^\n]+)/.exec(p)?.[1]?.trim() ?? 'fake-claude';
+}
+
+/** A real commit in the agent's cwd (for the M3 gate), with the contract's `Oide-Agent:` trailer. */
+function gitCommit(files, message, name) {
+  const git = (...a) => execFileSync('git', a, { cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  git('add', '--', ...files);
+  git('-c', 'user.name=fake-claude', '-c', 'user.email=fake-claude@oide.invalid', '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', message, '-m', `Oide-Agent: ${name}`);
+  return git('rev-parse', '--short', 'HEAD').trim();
+}
 
 const SCENARIOS = {
   async basic(userText) {
@@ -438,6 +541,90 @@ const SCENARIOS = {
     process.exit(Number(flags['--fake-exit-code'] ?? process.env.FAKE_CLAUDE_EXIT_CODE ?? 3));
   },
 
+  // M3 gate: commit one file (with the Oide-Agent trailer), leave another uncommitted, submit for review.
+  async 'commit-work'() {
+    const name = agentName();
+    await useTool('Write', { file_path: cwdFile('committed.txt'), content: 'committed by the agent\n' });
+    const c = await useTool('Bash', { command: 'git add committed.txt && git commit -m "Add committed.txt"', description: 'Commit committed.txt' }, { run: () => (WRITE_FILES ? gitCommit(['committed.txt'], 'Add committed.txt', name) : 'skipped') });
+    await useTool('Write', { file_path: cwdFile('pending.txt'), content: 'pending\n' });
+    const t = await useTool('Bash', { command: 'npm test', description: 'Run tests' });
+    const r = await useTool('mcp__oide__submit_for_review', {
+      summary: 'Committed committed.txt; pending.txt is still uncommitted.',
+      checks: [
+        { name: 'npm test', status: t.ok ? 'passed' : 'skipped', detail: t.text },
+        { name: 'commit', status: c.ok ? 'passed' : 'failed', detail: c.text },
+      ],
+    });
+    const text = r.ok ? 'Submitted for review.' : `Could not submit: ${r.text}`;
+    await assistant([{ type: 'text', text }]);
+    await result(text);
+  },
+
+  // M3 gate, second turn: address the review feedback in the uncommitted file and submit again.
+  async 'address-feedback'(userText) {
+    const comment = /^- ([^\n]+)$/m.exec(userText)?.[1] ?? 'feedback';
+    await useTool('Edit', { file_path: cwdFile('pending.txt'), old_string: 'pending\n', new_string: `pending\naddressed: ${comment.replace(/\s+/g, ' ').slice(0, 80)}\n` });
+    const r = await useTool('mcp__oide__submit_for_review', { summary: 'Addressed the review feedback in pending.txt.', checks: [{ name: 'npm test', status: 'passed' }] });
+    const text = r.ok ? 'Addressed the feedback and submitted again.' : `Could not submit: ${r.text}`;
+    await assistant([{ type: 'text', text }]);
+    await result(text);
+  },
+
+  // "Commit everything you have" (all changes in cwd, with the trailer); ends the turn with a question.
+  async 'commit-all'() {
+    const c = await useTool('Bash', { command: 'git add -A && git commit -m "Commit remaining work"', description: 'Commit all changes' }, { run: () => (WRITE_FILES ? gitCommit(['.'], 'Commit remaining work', agentName()) : 'skipped') });
+    const text = c.ok ? `Committed everything (${c.text}). Anything else?` : `Could not commit: ${c.text}`;
+    await assistant([{ type: 'text', text }]);
+    await result(text);
+  },
+
+  // M5 gate: load and call an MCP tool. `[fake-tool:mcp__srv__tool]` and `[fake-args:{…}]` in the
+  // message pick it; otherwise the first tool of the first stdio server in --mcp-config.
+  async 'mcp-tool'(userText) {
+    let tool = /\[fake-tool:(mcp__[A-Za-z0-9_-]+?__[A-Za-z0-9_-]+)\]/.exec(userText)?.[1];
+    const args = safeJson(/\[fake-args:(\{[^\]]*\})\]/.exec(userText)?.[1] ?? '{}') ?? {};
+    if (!tool) {
+      for (const [name, s] of Object.entries(mcpServers)) {
+        if (!s?.command) continue;
+        const first = (await stdioTools(stdioClient(name, s)).catch(() => []))[0];
+        if (first) {
+          tool = `mcp__${normTool(name)}__${normTool(first.name)}`;
+          break;
+        }
+      }
+    }
+    if (!tool) {
+      const text = 'No MCP tool is available.';
+      await assistant([{ type: 'text', text }]);
+      await result(text);
+      return;
+    }
+    await useTool('ToolSearch', { query: `select:${tool}`, max_results: 1 });
+    const r = await useTool(tool, args);
+    const text = r.ok ? `The ${tool} tool returned: ${r.text}` : `The ${tool} tool failed: ${r.text}`;
+    await assistant([{ type: 'text', text }], { streamText: text });
+    await result(text);
+  },
+
+  // M6 gate: read the design artifact named in the message, then write a doc artifact from it.
+  async artifacts(userText) {
+    let id = /\{"id":"([^"]+)"\}/.exec(userText)?.[1];
+    if (!id) {
+      const l = await useTool('mcp__oide__artifacts_list', { kind: 'design' });
+      id = (safeJson(l.text) ?? [])[0]?.id;
+    }
+    const read = await useTool('mcp__oide__artifacts_read', { id: id ?? 'none' });
+    const got = read.ok ? safeJson(read.text) : undefined;
+    const title = got?.meta?.title ?? 'the design';
+    const headings = [...String(got?.content ?? '').matchAll(/<h[1-3][^>]*>(.*?)<\/h[1-3]>/gi)].map((m) => m[1]);
+    const doc = `# Notes on ${title}\n\nSections in the design:\n${headings.map((h) => `- ${h}`).join('\n') || '- (none)'}\n`;
+    const created = await useTool('mcp__oide__artifacts_create', { title: `Notes on ${title}`, kind: 'doc', content: doc });
+    const newId = created.ok ? safeJson(created.text)?.id : undefined;
+    const text = newId ? `Read "${title}" and wrote the doc artifact ${newId}.` : `Could not write the doc: ${created.text}`;
+    await assistant([{ type: 'text', text }]);
+    await result(text);
+  },
+
   async slow() {
     const id = messageId();
     let text = '';
@@ -496,7 +683,7 @@ async function runTurn(msg) {
     await emit(initEvent());
     if (text.trim().startsWith('/')) await slashCommand(text.trim());
     else {
-      const name = scenarios[Math.min(turnNo - 1, scenarios.length - 1)] ?? 'basic';
+      const name = /\[fake-scenario:([A-Za-z0-9:._-]+)\]/.exec(text)?.[1] ?? scenarios[Math.min(turnNo - 1, scenarios.length - 1)] ?? 'basic';
       if (name.startsWith('replay:')) await replay(name.slice('replay:'.length), text);
       else if (SCENARIOS[name]) await SCENARIOS[name](text);
       else await SCENARIOS.basic(text);

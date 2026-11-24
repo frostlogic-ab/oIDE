@@ -17,4 +17,4 @@ playwright-report/
 docs/site/.vitepress/cache/
 .compat/
 # Test fixture extensions ship prebuilt dist/ (no build step)
-!packages/extension-host/test/fixtures/*/dist/
+!packages/extension-host/test/fixtures/**/dist/

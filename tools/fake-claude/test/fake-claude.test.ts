@@ -53,4 +53,23 @@ describe('fake-claude', () => {
     expect(lines[0]).toMatchObject({ type: 'control_response', response: { subtype: 'success', request_id: 'r1', response: { mode: 'plan' } } });
     expect(lines.find((l) => (l.response as { request_id?: string } | undefined)?.request_id === 'r2')).toMatchObject({ response: { subtype: 'error' } });
   });
+
+  it('a [fake-scenario:<name>] marker in the message picks that turn’s scenario', async () => {
+    const { lines } = await run([...BASE, '--fake-scenario', 'basic'], [user('[fake-scenario:rate-limit] go'), user('plain')]);
+    const results = lines.filter((l) => l.type === 'result');
+    expect(results[0]).toMatchObject({ is_error: true, api_error_status: 429 });
+    expect(results[1]).toMatchObject({ is_error: false });
+  });
+
+  it('starts a stdio MCP server from --mcp-config and calls its tool by the CLI name (mcp-tool)', async () => {
+    const server = fileURLToPath(new URL('../../../test/gates/fixtures/ext-textkit/server.mjs', import.meta.url));
+    const config = JSON.stringify({ mcpServers: { textkit: { type: 'stdio', command: process.execPath, args: [server] } } });
+    const { lines, code } = await run([...BASE, '--fake-scenario', 'mcp-tool', '--mcp-config', config, '--permission-mode', 'bypassPermissions'], [user('[fake-tool:mcp__textkit__text_reverse] [fake-args:{"text":"abc"}]')]);
+    expect(code).toBe(0);
+    const results = lines.filter((l) => l.type === 'user' && Array.isArray((l.message as { content?: unknown }).content));
+    const toolResults = results.flatMap((l) => (l.message as { content: Array<{ type: string; content?: unknown; is_error?: boolean }> }).content).filter((b) => b.type === 'tool_result');
+    expect(toolResults.at(-1)).toMatchObject({ content: expect.stringMatching(/^textkit pid \d+: cba$/) });
+    expect(toolResults.at(-1)?.is_error).toBeUndefined();
+    expect(lines.find((l) => l.type === 'result')).toMatchObject({ is_error: false, result: expect.stringContaining('cba') });
+  });
 });

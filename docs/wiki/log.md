@@ -396,3 +396,20 @@ working agents stopped and resumable when the MCP server is down; and secrets ar
 log redactor (agent MCP secret and secret env at registration, keychain reads via `redactSecretReads`).
 Tests: `services/agents-broker.test.ts`, `reliability/redact.test.ts`, an MCP-down restart test in
 `test/integration/main-services.test.ts`. Page: [reliability](pages/reliability.md).
+
+## [2026-11-24] build | Milestone gate tests
+
+Automated proof for the M2 to M6 gates against tools/fake-claude, in `test/gates/` (plain-Node services
+layer through the real IPC router) and `apps/desktop/e2e/gates.spec.ts` (the UI-visible part). See
+[testing](pages/testing.md#milestone-gate-tests-testgates) and [milestones](pages/milestones.md).
+M2 compressed soak (6 agents, 3 projects, Max running 3, every interaction kind, 60 s by default via
+`OIDE_SOAK_MS`): no leaked CLI processes, listeners or handles, no lost or duplicated events, stores
+consistent, heap bounded. M3: passes up to a merged branch; the full gate (uncommitted work reaches main)
+is `it.fails` on blocker B1. M4: two userData dirs get identical launch plans from `.oide/`; untrusted
+differences checked; gap: Spawn reads mode and preset from global Settings (`it.todo`). M5: a third-party
+tarball from a local index (real integrity) gives an agent a stdio MCP tool it calls. M6: an agent reads a
+design and writes a doc; Agents using it; the user's save is v2. E2E: the M5 Marketplace check skips while
+the unpackaged build does not resolve built-in extensions. fake-claude gained `commit-work`,
+`address-feedback`, `commit-all`, `mcp-tool`, `artifacts`, the per-message `[fake-scenario:x]` marker,
+stdio MCP servers and `pid` in `--fake-record`. The gitignored `ext-sample/dist` fixture is now tracked
+(`.gitignore` exception), which made `host-client.test.ts` fail on clean checkouts.
