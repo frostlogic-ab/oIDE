@@ -1,3 +1,5 @@
+import { isSafeSuggestedSpecifier, isValidPermissionRule } from '@oide/protocol';
+
 /** Human summaries and "Always" rule suggestions for permission prompts. */
 
 function str(input: unknown, key: string): string | undefined {
@@ -50,18 +52,22 @@ export function suggestRule(toolName: string, input: unknown): string | undefine
     case 'Bash':
     case 'PowerShell': {
       const cmd = str(input, 'command')?.trim();
-      if (!cmd || cmd.includes('\n') || cmd.length > 200) return undefined;
-      return `${toolName}(${cmd})`;
+      // Never suggest a rule whose text carries rule syntax (`)`, `,`, `*`, `:`): it could widen into
+      // several rules, e.g. `npm test) Bash(*`. No suggestion means "Always" is not offered for it.
+      if (!cmd || !isSafeSuggestedSpecifier(cmd)) return undefined;
+      const rule = `${toolName}(${cmd})`;
+      return isValidPermissionRule(rule) ? rule : undefined;
     }
     case 'WebFetch': {
       const url = str(input, 'url');
       try {
-        return url ? `WebFetch(domain:${new URL(url).hostname})` : undefined;
+        const host = url ? new URL(url).hostname : '';
+        return host && /^[A-Za-z0-9.-]+$/.test(host) ? `WebFetch(domain:${host})` : undefined;
       } catch {
         return undefined;
       }
     }
     default:
-      return toolName;
+      return isValidPermissionRule(toolName) ? toolName : undefined;
   }
 }

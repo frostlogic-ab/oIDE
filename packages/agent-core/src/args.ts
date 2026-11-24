@@ -1,3 +1,4 @@
+import { isValidPermissionRule } from '@oide/protocol';
 import type { AgentSpec, CliInfo, CustomModel, Effort, ModelSlot, ModelStrategy, PermissionMode, Settings, SubagentTier, Technique } from '@oide/protocol';
 import { describeContext, textMessage, type ArtifactResolver, type StreamJsonUserMessage } from './messages.js';
 
@@ -422,7 +423,12 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
   ]).filter((r) => !askTools.has(r));
   const deny = uniq([...(ctx.projectRules?.deny ?? []), ...settings.permissions.alwaysDenied, ...ext.filter((t) => !t.enabled).map(toolName)]);
   if (ctx.trusted === false && ctx.projectRules?.allow.length) warnings.push('Untrusted project: .oide/permissions.json allow rules ignored');
-  if (allow.length) args.push('--allowedTools', allow.join(','));
+  // Rules come from .oide/ files and settings: drop any that could split into extra rules.
+  const badAllow = allow.filter((r) => !isValidPermissionRule(r));
+  if (badAllow.length) warnings.push(`Ignored malformed allow rules: ${badAllow.join(' | ')}`);
+  const okAllow = allow.filter(isValidPermissionRule);
+  if (okAllow.length) args.push('--allowedTools', okAllow.join(','));
+  // Deny rules pass through: if one splits, it only denies more.
   if (deny.length) args.push('--disallowedTools', deny.join(','));
 
   // Extra flags from Settings › Claude Code

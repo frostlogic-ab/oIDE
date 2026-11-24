@@ -172,3 +172,29 @@ export function resolveModel(model: string, versions: Record<string, string> = {
   if (!pinned || pinned === 'latest') return fam;
   return KNOWN_MODEL_VERSIONS[fam].find((v) => v.version === pinned || v.id === pinned)?.id ?? fam;
 }
+
+/**
+ * A permission rule oIDE is willing to pass to `--allowedTools` / `--disallowedTools`:
+ * a tool name (`Edit`, `mcp__srv__tool`) optionally followed by `(specifier)`. The specifier may not
+ * contain rule or list syntax (`(`, `)`, `,`), quotes, backslashes or newlines, so one rule can never
+ * turn into several (e.g. `Bash(x) Bash(*)`) when the CLI splits the list. A trailing `:*` prefix
+ * wildcard is allowed only for rules a person typed; suggested rules never contain `*` (see
+ * `isSafeSuggestedSpecifier`).
+ */
+export function isValidPermissionRule(rule: string): boolean {
+  if (rule.length === 0 || rule.length > 300) return false;
+  const m = /^([A-Za-z][A-Za-z0-9_-]*)(?:\((.*)\))?$/.exec(rule);
+  if (!m) return false;
+  const spec = m[2];
+  if (spec === undefined) return true;
+  if (spec.trim() === '' || /[(),"'`\\\r\n]/.test(spec)) return false;
+  // `*` only as the CLI's trailing prefix wildcard `:*`, or as a whole-specifier glob in paths like `src/**`.
+  const withoutTrailing = spec.endsWith(':*') ? spec.slice(0, -2) : spec;
+  if (/\*/.test(withoutTrailing) && !/^[A-Za-z0-9_./~-]+$/.test(withoutTrailing.replace(/\*/g, ''))) return false;
+  return true;
+}
+
+/** Characters allowed in an exact command we suggest for "Always in <project>". */
+export function isSafeSuggestedSpecifier(spec: string): boolean {
+  return spec.length > 0 && spec.length <= 200 && !/[(),"'`\*:\r\n]/.test(spec);
+}
