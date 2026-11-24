@@ -23,7 +23,7 @@ afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();
 });
 
-async function harness(opts: { extraFlags: string; maxRunning?: number }): Promise<Harness> {
+async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup?: WorktreeProvider['runSetup'] }): Promise<Harness> {
   const settings = testSettings({ extraFlags: opts.extraFlags, maxRunning: opts.maxRunning ?? 3 });
   const mcp = new OideMcpServer({ appDataDir: tempDir('oide-app-') });
   await mcp.start();
@@ -37,6 +37,7 @@ async function harness(opts: { extraFlags: string; maxRunning?: number }): Promi
       writeFileSync(join(path, 'README.md'), '# fixture\n');
       return { path, branch: `oide/${slug}`, baseRef: 'main' };
     },
+    ...(opts.runSetup ? { runSetup: opts.runSetup } : {}),
   };
   const sink: EventSink = {
     append: (e, r) => {
@@ -95,6 +96,50 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     expect(h.events.some((e) => e.type === 'permission-resolved' && e.behavior === 'deny')).toBe(true);
     expect(h.raw.some((r) => r.includes('"subtype":"init"'))).toBe(true);
     expect(h.saved.get(a!.id)?.status).toBe('has-question');
+  });
+
+  it('a queued spawn publishes its summary before it starts (m1)', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario permission', maxRunning: 1 });
+    const published: AgentSummary[] = [];
+    h.sup.on('summary', (s) => published.push(s));
+    const [a, b] = await h.sup.spawn(spec({ attempts: 2 }));
+    expect(published.filter((s) => s.id === b!.id && s.status === 'queued')).toHaveLength(1);
+    expect(h.saved.get(b!.id)?.status).toBe('queued');
+    await status(h, a!.id, 'needs-permission');
+  });
+
+  it('"Setup: running .oide/setup" only when the provider has a setup to run (m3)', async () => {
+    const setupDetail = (h: Harness, id: string) => h.events.some((e) => e.agentId === id && e.type === 'status' && e.detail === 'Setup: running .oide/setup');
+    const none = await harness({ extraFlags: '--fake-scenario permission', runSetup: async () => ({ ok: true }) });
+    const [a] = await none.sup.spawn(spec());
+    await status(none, a!.id, 'needs-permission');
+    expect(setupDetail(none, a!.id)).toBe(false);
+
+    const lines: string[] = [];
+    const some = await harness({
+      extraFlags: '--fake-scenario permission',
+      runSetup: async ({ onStart, onOutput }) => {
+        onStart?.();
+        onOutput?.('installed');
+        lines.push('ran');
+        return { ok: true };
+      },
+    });
+    const [b] = await some.sup.spawn(spec());
+    await status(some, b!.id, 'needs-permission');
+    expect(setupDetail(some, b!.id)).toBe(true);
+    expect(lines).toEqual(['ran']);
+  });
+
+  it('a prompt still pending at quit is denied with reason "quit" and remembered on the summary', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario permission' });
+    const [a] = await h.sup.spawn(spec());
+    await status(h, a!.id, 'needs-permission');
+    await h.mcp.close();
+    await waitFor(() => h.events.some((e) => e.agentId === a!.id && e.type === 'permission-resolved' && e.reason === 'quit'), 5000, 'quit deny');
+    expect(h.get(a!.id).pendingPermission).toBeUndefined();
+    expect(h.get(a!.id).interruptedPermission).toMatchObject({ toolName: 'Bash', summary: 'Run npm test' });
+    expect(h.saved.get(a!.id)?.interruptedPermission?.toolName).toBe('Bash');
   });
 
   it('review submission: submit_for_review → ready-for-review with structured checks', async () => {

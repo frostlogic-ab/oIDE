@@ -29,6 +29,7 @@ export default function SourceControlScreen() {
   const [logs, setLogs] = useState<Record<string, boolean>>({});
 
   const worktreeCount = projects.reduce((n, p) => n + (git[p.id]?.worktrees.length ?? 0), 0);
+  const gitLoading = projects.some((p) => !git[p.id]?.loadedAt);
   const scoped = scope === 'all' ? undefined : projects[0];
   const title = scope === 'all' ? 'All projects' : (scoped?.name ?? scope);
 
@@ -38,7 +39,8 @@ export default function SourceControlScreen() {
         <div className="flex items-baseline gap-3 flex-wrap">
           <h1 className="m-0 text-[18px] font-semibold">{title}</h1>
           <span className="text-[12.5px] text-ink-3">
-            {projects.length} {projects.length === 1 ? 'project' : 'projects'} · {worktreeCount} agent {worktreeCount === 1 ? 'worktree' : 'worktrees'}
+            {projects.length} {projects.length === 1 ? 'project' : 'projects'} ·{' '}
+            {gitLoading && worktreeCount === 0 ? 'loading agent worktrees…' : `${worktreeCount} agent ${worktreeCount === 1 ? 'worktree' : 'worktrees'}`}
           </span>
         </div>
         <span className="text-[12.5px] text-ink-3 leading-normal -mt-1.5">

@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -103,6 +103,14 @@ describe('OideMcpServer', () => {
     expect(await raw(port, '/mcp/agent-1', { ...ok, origin: `http://localhost:${port}` })).toBe(200);
     await server.unregisterAgent('agent-1');
     expect(await raw(port, '/mcp/agent-1', ok)).toBe(404);
+  });
+
+  it('unregisterAgent deletes the whole <app-data>/agents/<id>/ folder (m5)', async () => {
+    const { server, reg } = await setup();
+    const dir = join(reg.mcpConfigPath, '..');
+    writeFileSync(join(dir, 'scratch.txt'), 'x');
+    await server.unregisterAgent('agent-1');
+    expect(existsSync(dir)).toBe(false);
   });
 
   it('permission_prompt blocks until answered with the exact pending id', async () => {

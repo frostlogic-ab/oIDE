@@ -45,7 +45,7 @@ export default function ReviewScreen() {
   const [composer, setComposer] = useState<Composer | null>(null);
   const [hunk, setHunk] = useState(0);
   const diffRef = useRef<UnifiedDiffHandle>(null);
-  const pendingLine = useRef<number | undefined>(undefined);
+  const pendingLine = useRef<{ line: number; side: 'old' | 'new' } | undefined>(undefined);
 
   const file = files[Math.min(selected, Math.max(0, files.length - 1))];
   const totals = useMemo(() => files.reduce((t, f) => ({ add: t.add + f.additions, del: t.del + f.deletions }), { add: 0, del: 0 }), [files]);
@@ -69,9 +69,9 @@ export default function ReviewScreen() {
   // After switching file to jump to a comment, scroll to its line once the diff is rendered.
   useEffect(() => {
     if (pendingLine.current === undefined) return;
-    const line = pendingLine.current;
+    const { line, side } = pendingLine.current;
     pendingLine.current = undefined;
-    requestAnimationFrame(() => diffRef.current?.scrollToLine(line));
+    requestAnimationFrame(() => diffRef.current?.scrollToLine(line, side));
   }, [file?.path]);
 
   const hunkCount = file ? (file.patch.match(/^@@ /gm)?.length ?? 0) : 0;
@@ -248,7 +248,7 @@ export default function ReviewScreen() {
                 onAddComment={async (body) => {
                   if (!composer) return;
                   try {
-                    await review.addComment(composer.path, composer.line, body);
+                    await review.addComment(composer.path, composer.line, body, composer.removed ? 'old' : 'new');
                     setComposer(null);
                   } catch (err) {
                     toast(`Couldn't add the comment: ${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -280,14 +280,14 @@ export default function ReviewScreen() {
         prAvailable={git.prAvailable}
         prReason={git.prReason}
         onSendFeedback={review.sendFeedback}
-        onJump={(path, line) => {
+        onJump={(path, line, side = 'new') => {
           const i = files.findIndex((f) => f.path === path);
           if (i < 0) return;
           setView('unified');
           if (i === selected) {
-            if (line !== undefined) diffRef.current?.scrollToLine(line);
+            if (line !== undefined) diffRef.current?.scrollToLine(line, side);
           } else {
-            pendingLine.current = line;
+            pendingLine.current = line !== undefined ? { line, side } : undefined;
             selectFile(i);
           }
         }}

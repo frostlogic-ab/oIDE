@@ -69,6 +69,11 @@ describe('tile helpers', () => {
     expect(tileBodyKind({ ...base, status: 'error' })).toBe('error');
     expect(tileBodyKind({ ...base, status: 'queued' })).toBe('queued');
     expect(tileBodyKind({ ...base, status: 'needs-permission' })).toBe('activity'); // no request yet
+    // A prompt cut off by quitting oIDE shows its note while the agent waits for the user.
+    const cut = { ...base, interruptedPermission: { toolName: 'Bash', summary: 'Run npm i', at: 1 } };
+    expect(tileBodyKind({ ...cut, status: 'has-question' })).toBe('interrupted');
+    expect(tileBodyKind({ ...cut, status: 'stopped' })).toBe('interrupted');
+    expect(tileBodyKind({ ...cut, status: 'running' })).toBe('activity');
   });
   it('mode badge: Bypass always warns, others only when not the default', () => {
     expect(modeBadge('bypassPermissions', 'auto')).toMatchObject({ label: 'Bypass', warn: true });

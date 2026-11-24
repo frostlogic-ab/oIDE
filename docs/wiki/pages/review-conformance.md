@@ -104,7 +104,7 @@ Paths are relative to the repo root.
 
 | Row | Status | Notes |
 | --- | --- | --- |
-| Queued | partial | The queue works. A queued agent gets no `agents.summary` until it starts (m1). |
+| Queued | done | The queue works; a queued spawn publishes its summary right away (m1, fixed). |
 | Running / Needs permission / Has a question / Ready for review | done | `reducer.ts`; all four seen in the real app |
 | Error / Paused by plan limit | done | `supervisor.test.ts` (crash exit code, rate limit, no retry) |
 | Activity lines, Thinking / Writing | done | `TileBody.tsx` from tool-use and partial events |
@@ -133,7 +133,7 @@ Paths are relative to the repo root.
 | `.oide/setup` as a tile step | done | Trusted projects only (`services/agents.ts`) |
 | Project folder: one agent, no Bypass | done | `services/agents.ts` `spawn` |
 | Diff = merge-base…HEAD + uncommitted | done | `packages/git/src/diff.ts` |
-| Finish: Open PR | partial | `gh` is called from main (`packages/git/src/gh.ts`), not "through the Git extension" as the brief says; no ADR. The button is enabled for a repo with no remote (m6). |
+| Finish: Open PR | done | `gh` is called from main (`packages/git/src/gh.ts`), not "through the Git extension": [ADR 0006](../../adr/0006-pull-requests-through-gh-from-main.md). Disabled, with a reason, for a repo with no remote (m6, fixed). |
 | Finish: Merge locally | **wrong** | B1 |
 | Conflicts handed to a new agent | done | Review SummaryPanel conflicts → reconcile |
 | Cleanup schedule + startup prune + orphans | done | `services/core.ts`, `services/git.ts` `sweepMerged`. Cleanup "Right away" deletes work (B1). |
@@ -159,16 +159,16 @@ Paths are relative to the repo root.
 
 | Screen | Status | Notes |
 | --- | --- | --- |
-| Wall | done | Real data. m1 (queued tiles), M3 (status bar). |
+| Wall | done | Real data. m1 and M3 fixed. |
 | Focus | done | Real data; virtualized, paged history |
 | Spawn | done | Builds `AgentSpec`; presets and techniques from settings |
-| Source control | done | m2 (loading looks empty) |
-| Review | partial | Merge is wrong (B1). Toasts block the actions (M2). |
+| Source control | done | Loading state while git answers (m2, fixed) |
+| Review | partial | Merge is wrong (B1). Toasts no longer cover the actions (M2, fixed). Comments on removed lines keep their side. |
 | Files | done | Language servers from extensions are missing (see contribution points) |
-| Artifacts | partial | Whiteboard is a read-only SVG render, not an embedded editor (m7). claude.ai stays manual import (as briefed). |
+| Artifacts | partial | Whiteboard is a read-only SVG render, not an embedded editor ([ADR 0005](../../adr/0005-whiteboard-read-only-render-in-v1.md)). claude.ai stays manual import (as briefed). |
 | Marketplace | done (packaged) | Not available in e2e-style launches (M4) |
 | Settings | done | Extension `settings` fields are not shown (M1) |
-| Status bar | partial | Polls every 15 s: it shows "0 sessions · 0 worktrees · 0 projects open" while agents run (M3). Plan meters come from `rate_limit_event` utilization (the brief said hide them; a documented source was found, so this is acceptable, but it needs an ADR). |
+| Status bar | done | Counts are live from the agents and projects stores; `usage.summary` (tokens today) refreshes on agent and project events, no polling (M3, fixed). Plan meters come from `rate_limit_event` utilization: [ADR 0007](../../adr/0007-plan-usage-meters-from-rate-limit-events.md). |
 | Command bar | done | Core and extension `commands` |
 
 ### Data and storage
@@ -181,7 +181,7 @@ Paths are relative to the repo root.
 | `.mcp.json` with `${VAR}` placeholders | done | `extension-host/src/custom-tools.ts` |
 | `.oide/artifacts/` vs app data | done | `packages/store/src/artifacts.ts` |
 | Keychain via safeStorage | done | `SqliteSecretStore` + `platform.cipher` |
-| `<app-data>/agents/<id>/` deleted with agent | partial | `unregisterAgent` removes `mcp.json` only, not the folder (minor) |
+| `<app-data>/agents/<id>/` deleted with agent | done | `unregisterAgent` removes the whole folder (m5, fixed) |
 
 ### Contribution points (v1)
 
@@ -202,8 +202,7 @@ Paths are relative to the repo root.
 Covered in depth by [review-security](review-security.md). Spot checks here: the window options are hardened
 (`main/index.ts`), CSP is set, the fuses `runAsNode`, `enableNodeOptionsEnvironmentVariable` and
 `enableNodeCliInspectArguments` are off, IPC is Zod-validated with output validation, and permission answers
-need the exact id (integration test plus real CLI). `OIDE_E2E_TRUST` is ignored when packaged. Missing:
-Dependabot or Renovate config (Supply chain, m8). Auto-update (`electron-updater` is a dependency but never
+need the exact id (integration test plus real CLI). `OIDE_E2E_TRUST` is ignored when packaged. Dependabot is configured in `.github/dependabot.yml` (Supply chain, m8, fixed). Auto-update (`electron-updater` is a dependency but never
 used) is M7 scope.
 
 ## Prioritized gaps
@@ -232,13 +231,19 @@ used) is M7 scope.
   `packages/store/src/settings.ts` → Spawn and Settings › Techniques; extension settings fields in
   `screens/Settings`; `deployTargets` as Review actions in `screens/Review/SummaryPanel.tsx`; `languages` and
   `artifactTypes` per the brief, or an ADR deferring them. Expected: brief, Contribution points (v1).
-- **M2. Toasts never expire, go stale, and cover primary actions.** `renderer/src/components/frame/Toasts.tsx`,
+- **M2. Toasts never expire, go stale, and cover primary actions.** **Fixed 2026-11-24**: info and success
+  toasts leave after 5 s, warnings after 10 s, errors stay with Dismiss; repeats dedupe (×N); at most 3;
+  hover or focus holds one; a needs-permission toast is removed when its prompt resolves (`notify.kind` +
+  `requestId`, `retireStaleToasts`); they sit bottom-left above the status bar, in a polite live region.
+  Original finding: `renderer/src/components/frame/Toasts.tsx`,
   `stores/ui.ts`. The "Add feature needs permission" toast stayed after the prompt was answered, and the toasts
   sat over Review's "Open pull request" and "Merge worktree into main locally", intercepting clicks. In practice
   Playwright could not click Merge until it dismissed them. Expected: info toasts auto-dismiss; a needs-permission
   toast is removed when that request resolves; toasts never cover the Review action column (offset them, or put
   them in a corner that does not hold actions).
-- **M3. The status bar is stale.** `renderer/src/lib/boot.ts` polls `usage.summary` every 15 s, so
+- **M3. The status bar is stale.** **Fixed 2026-11-24**: counts come from the live stores; `usage.summary` is
+  refreshed (debounced 2 s) on `agents.summary`, `agents.removed` and `projects.changed`, plus once after local
+  midnight; the 15 s poll is gone (`lib/boot.ts` `connectUsage`). Original finding: `renderer/src/lib/boot.ts` polls `usage.summary` every 15 s, so
   "0 sessions · 0 worktrees · 0 subagents active · 0 projects open · Tokens today 0" showed while agents ran
   (screenshots of Wall, Focus and Review). Expected (Screen by screen › Status bar): counts derived live from the
   agents, projects and subagent stores, plus `usage.summary` on `agents.summary` and `projects.changed` events.
@@ -255,24 +260,30 @@ used) is M7 scope.
 
 ### Minor
 
-- m1. Queued agents do not get an `agents.summary` until they start. `supervisor.spawn` emits `status: queued`,
+- m1. **Fixed.** Queued agents do not get an `agents.summary` until they start. `supervisor.spawn` emits `status: queued`,
   which leaves the summary unchanged, so it never publishes. Spawns that do not come from the Spawn screen
   (IPC, extensions) are missing from the Wall: it showed "All · 4" while 6 agents existed. Fix:
   `publishSummary` in `packages/agent-core/src/supervisor.ts` `spawn`.
-- m2. Source control shows "0 agent worktrees" and "No commits yet" while it loads (about 1 s with 6 worktrees).
+- m2. **Fixed** ("Loading agent worktrees…", "Loading commits…"). Source control shows "0 agent worktrees" and "No commits yet" while it loads (about 1 s with 6 worktrees).
   It should show a loading state (`screens/SourceControl/ProjectCard.tsx`, `gitStore.loading`).
-- m3. Every launch emits `starting` with the detail "Setup: running .oide/setup", even when the project has no
+- m3. **Fixed** (the provider calls `runSetup`'s `onStart` only when a setup command runs). Every launch emits `starting` with the detail "Setup: running .oide/setup", even when the project has no
   `.oide/setup` (seen on tiles for repos without one). Only emit it when a setup command exists
   (`packages/agent-core/src/supervisor.ts` `launch` / `services/agents.ts` `runSetup`).
-- m4. The packaged app prints `'watchman' is not recognized` on stderr. `@parcel/watcher` probes watchman
+- m4. **Fixed** (`backend: 'windows'` on win32). The packaged app prints `'watchman' is not recognized` on stderr. `@parcel/watcher` probes watchman
   through cmd; pick the `windows` backend explicitly (`services/git.ts` `parcelWatch`).
-- m5. `<app-data>/agents/<id>/` is not deleted with the agent; only `mcp.json` is (`packages/mcp-server/src/server.ts` `unregisterAgent`).
-- m6. `git.prAvailable` is true for a repo without a remote, so "Open pull request" is enabled and can only fail.
-- m7. The Whiteboard is a read-only SVG render, not the embedded Excalidraw editor the brief lists. The Viewer
+- m5. **Fixed.** `<app-data>/agents/<id>/` is not deleted with the agent; only `mcp.json` is (`packages/mcp-server/src/server.ts` `unregisterAgent`).
+- m6. **Fixed** ("This project has no git remote…"). `git.prAvailable` is true for a repo without a remote, so "Open pull request" is enabled and can only fail.
+- m7. **Fixed** with ADRs [0005](../../adr/0005-whiteboard-read-only-render-in-v1.md), [0006](../../adr/0006-pull-requests-through-gh-from-main.md), [0007](../../adr/0007-plan-usage-meters-from-rate-limit-events.md). The Whiteboard is a read-only SVG render, not the embedded Excalidraw editor the brief lists. The Viewer
   comment admits it; an ADR is needed. PRs bypass the Git extension and the plan meters are shown; both need ADRs.
-- m8. There is no Dependabot or Renovate config (brief: Security › Supply chain).
-- m9. Lint warnings in `TechniquesSection.tsx:60` and `packages/store/test/repos.test.ts:3`.
+- m8. **Fixed** (`.github/dependabot.yml`). There is no Dependabot or Renovate config (brief: Security › Supply chain).
+- m9. **Fixed.** Lint warnings in `TechniquesSection.tsx:60` and `packages/store/test/repos.test.ts:3`.
 - m10. The packaged app honours `OIDE_CLAUDE_PATH`, `OIDE_USER_DATA` and `--remote-debugging-port`. The last one
   lets any local process drive `window.oide` over CDP. Over to [review-security](review-security.md).
 
-Counts: **1 blocker, 5 major, 10 minor.**
+Counts: **1 blocker, 5 major, 10 minor.** Fixed on 2026-11-24 (Conformance UX fixes): M2, M3, m1 to m9.
+m10 stays with [review-security](review-security.md).
+
+Also done in that change (UX items outside the numbered list): Settings › Keyboard shortcuts rebinding (record,
+conflict warning, reset; saved in Settings `keybindings`), Focus's `/` menu from the CLI's `init.slash_commands`,
+a note on the tile and in Focus when a prompt was cut off by quitting (`permission-resolved.reason: 'quit'` →
+`AgentSummary.interruptedPermission`), and review comments that keep their diff side (`ReviewComment.side`).

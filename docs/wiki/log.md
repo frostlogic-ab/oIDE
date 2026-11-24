@@ -202,3 +202,20 @@ Electron 45.4.1 that utilityProcess ignores `--permission`, so capabilities stay
 Marketplace copy, [security](pages/security.md), [extensions](pages/extensions.md) and the
 extension-api README now say so. Tests: `test/security/extension-confirm.test.ts` (new),
 SEC-04 and SEC-13 PoCs flipped to `it`, plus oauth, import-scan and registry unit tests.
+
+## [2026-11-24] build | Conformance UX fixes
+
+Fixed from [review-conformance](pages/review-conformance.md): **M2** toasts (5 s info/success, 10 s warnings,
+sticky errors with Dismiss, dedupe ×N, max 3, hover holds, bottom-left above the status bar, polite live region;
+`notify.kind`/`requestId` so a needs-permission toast is retired when its prompt resolves); **M3** status bar
+(live counts; `usage.summary` on agent/project events, debounced, plus local midnight; no 15 s poll); **m1**
+queued summary published at spawn; **m2** Source control loading state; **m3** setup status only when a setup
+runs (`runSetup` `onStart`); **m4** `@parcel/watcher` `windows` backend; **m5** agent folder deleted on remove;
+**m6** no PR without a git remote; **m7** ADRs 0005 (whiteboard render), 0006 (PRs via gh from main), 0007
+(plan meters from `rate_limit_event`); **m8** `.github/dependabot.yml`; **m9** lint warnings. m10 stays with
+security. Also: Focus `/` menu from `init.slash_commands` (parser fills `slashCommands`); Settings › Keyboard
+shortcuts editor (record, conflict warning, reset) saved in `Settings.keybindings` (old localStorage rebinds
+migrated once); a tile and Focus note when a prompt was denied because oIDE quit
+(`permission-resolved.reason: 'quit'` → `AgentSummary.interruptedPermission`); review comments keep
+`side: 'old' | 'new'` (store migration 2). Pages: desktop-shell, protocol, storage, cli-integration,
+screen-focus, screen-review, screen-settings, screen-source-control, screen-wall. New e2e: `toasts.spec.ts`.

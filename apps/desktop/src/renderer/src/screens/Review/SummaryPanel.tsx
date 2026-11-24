@@ -17,7 +17,7 @@ export interface SummaryPanelProps {
   prAvailable?: boolean;
   prReason?: string;
   onSendFeedback(): Promise<void>;
-  onJump(path: string, line?: number): void;
+  onJump(path: string, line?: number, side?: 'old' | 'new'): void;
 }
 
 /** Right column of Review: status, title, worktree → base, agent's summary and checks, feedback, decisions. */
@@ -133,12 +133,12 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
             <li key={c.id} className="min-w-0">
               <button
                 type="button"
-                onClick={() => onJump(c.path, c.line)}
+                onClick={() => onJump(c.path, c.line, c.side)}
                 className={`w-full text-left bg-transparent border-0 p-0 text-[12.5px] truncate cursor-pointer hover:text-ink ${c.sent ? 'text-ink-3' : 'text-ink-2'}`}
                 title={c.body}
               >
                 {baseName(c.path)}
-                {c.line !== undefined ? `:${c.line}` : ''} · {c.body}
+                {c.line !== undefined ? (c.side === 'old' ? ` (removed line ${c.line})` : `:${c.line}`) : ''} · {c.body}
                 {c.sent ? ' (sent)' : ''}
               </button>
             </li>

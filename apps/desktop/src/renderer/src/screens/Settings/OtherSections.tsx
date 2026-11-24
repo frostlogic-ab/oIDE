@@ -1,8 +1,7 @@
 import { useRef, useState } from 'react';
 import type { Project, Settings } from '@oide/protocol';
-import { ACCENT_OPTIONS, Kbd, cn } from '@oide/ui';
-import { isMac, ipcErrorMessage, oide } from '../../lib/bridge';
-import { ACTION_LABELS, DEFAULT_BINDINGS, comboLabel, keymap } from '../../lib/keymap';
+import { ACCENT_OPTIONS, cn } from '@oide/ui';
+import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { useProjects } from '../../stores/projects';
 import { navigate } from '../../stores/router';
 import { toast } from '../../stores/ui';
@@ -87,36 +86,6 @@ export function ArtifactsSection() {
       <Row title="Open in claude.ai" desc="Artifacts that came from claude.ai keep their link and open it in your browser. There is no public API for live sync yet.">
         {() => null}
       </Row>
-    </>
-  );
-}
-
-/* ------------------------------------------------------------ Keyboard shortcuts */
-
-export function KeysSection() {
-  const mac = isMac();
-  const bindings = keymap.getBindings();
-  return (
-    <>
-      <H1>Keyboard shortcuts</H1>
-      <Rd>Shortcuts work in the oIDE window only, never system-wide. Single keys are ignored while you type in a field.</Rd>
-      <Sec>Shortcuts</Sec>
-      {Object.keys({ ...DEFAULT_BINDINGS, ...bindings }).map((action) => {
-        const combos = bindings[action] ?? DEFAULT_BINDINGS[action] ?? [];
-        return (
-          <Row key={action} title={ACTION_LABELS[action] ?? action}>
-            {() => (
-              <span className="flex gap-1.5">
-                {combos.map((c) => (
-                  <Kbd key={c} className="text-[12px] px-2 py-0.5">
-                    {comboLabel(c, mac)}
-                  </Kbd>
-                ))}
-              </span>
-            )}
-          </Row>
-        );
-      })}
     </>
   );
 }

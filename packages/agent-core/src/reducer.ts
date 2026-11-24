@@ -273,6 +273,10 @@ export class AgentReducer {
       case 'permission-resolved':
         if (s.pendingPermission?.requestId === e.requestId) {
           const subId = s.pendingPermission.subagentId;
+          if (e.reason === 'quit') {
+            const p = s.pendingPermission;
+            s.interruptedPermission = { toolName: p.toolName, ...(p.summary ? { summary: p.summary } : {}), at: e.ts };
+          }
           delete s.pendingPermission;
           if (s.status === 'needs-permission') s.status = this.reviewSinceSend ? 'ready-for-review' : 'running';
           if (subId) {
@@ -328,8 +332,11 @@ export class AgentReducer {
           s.status = 'stopped';
         }
         break;
-      case 'subagent':
       case 'user-text':
+        // The user answered the agent after a prompt was cut off by quitting: the note has done its job.
+        if (lead) delete s.interruptedPermission;
+        break;
+      case 'subagent':
       case 'tool-result':
       case 'subagent-task':
       case 'unknown':

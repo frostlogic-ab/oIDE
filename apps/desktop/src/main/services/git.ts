@@ -43,7 +43,9 @@ export const parcelWatch: WatchFn = async (dir, onChange) => {
     (err) => {
       if (!err) onChange();
     },
-    { ignore: ['.git', 'node_modules', '**/.git/**', '**/node_modules/**'] },
+    // On Windows pick the native backend: the default probes watchman through cmd, which prints
+    // "'watchman' is not recognized" on every start (m4).
+    { ignore: ['.git', 'node_modules', '**/.git/**', '**/node_modules/**'], ...(process.platform === 'win32' ? { backend: 'windows' as const } : {}) },
   );
 };
 
@@ -193,7 +195,12 @@ export class GitService {
     return pr;
   }
 
-  async prAvailable(): Promise<{ available: boolean; reason?: string }> {
+  /** A pull request needs a remote to push to and the GitHub CLI (m6: a repo without a remote can only fail). */
+  async prAvailable(projectPath?: string): Promise<{ available: boolean; reason?: string }> {
+    if (projectPath) {
+      const remotes = (await new Git({ cwd: projectPath }).out(['remote']).catch(() => '')).trim();
+      if (!remotes) return { available: false, reason: 'This project has no git remote to open a pull request against.' };
+    }
     const ok = await this.gh.available().catch(() => false);
     return ok ? { available: true } : { available: false, reason: 'The GitHub CLI (gh) is not installed or not signed in.' };
   }

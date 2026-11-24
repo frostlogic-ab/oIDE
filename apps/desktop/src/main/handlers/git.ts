@@ -19,8 +19,8 @@ export function registerGitHandlers(router: IpcRouter, s: Services, _ctx: MainCo
   router.register('git.mergeLocal', ({ agentId }) => g.mergeLocal(agentId));
   router.register('git.openPr', ({ agentId, title, body }) => g.openPr(agentId, title, body));
   router.register('git.prAvailable', ({ projectId }) => {
-    s.projects.require(projectId);
-    return g.prAvailable();
+    const p = s.projects.require(projectId);
+    return g.prAvailable(p.path);
   });
   router.register('git.pruneOrphans', ({ projectId }) => g.pruneOrphans(projectId));
 
@@ -56,9 +56,9 @@ export function registerGitHandlers(router: IpcRouter, s: Services, _ctx: MainCo
 export function registerReviewHandlers(router: IpcRouter, s: Services, _ctx: MainContext): void {
   const r = s.store.review;
   router.register('review.comments', ({ agentId }) => r.comments(agentId));
-  router.register('review.addComment', ({ agentId, path, line, body }) => {
+  router.register('review.addComment', ({ agentId, path, line, side, body }) => {
     s.agents.require(agentId);
-    return r.addComment({ agentId, path, ...(line !== undefined ? { line } : {}), body });
+    return r.addComment({ agentId, path, ...(line !== undefined ? { line, side } : {}), body });
   });
   router.register('review.deleteComment', ({ commentId }) => {
     if (!r.deleteComment(commentId)) throw new IpcError(`Unknown comment ${commentId}`, 'not_found');
@@ -71,7 +71,7 @@ export function registerReviewHandlers(router: IpcRouter, s: Services, _ctx: Mai
     // Deliver first, then mark sent, so a failed delivery leaves the comments unsent.
     s.agents.send(agentId, {
       kind: 'review-feedback',
-      comments: pending.map((c) => ({ path: c.path, ...(c.line !== undefined ? { line: c.line } : {}), body: c.body })),
+      comments: pending.map((c) => ({ path: c.path, ...(c.line !== undefined ? { line: c.line, side: c.side } : {}), body: c.body })),
       ...(note?.trim() ? { note: note.trim() } : {}),
     });
     r.takeUnsent(agentId);

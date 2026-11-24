@@ -175,6 +175,9 @@ export class Supervisor {
       const rec = this.newRecord(s, summary, 0, false);
       this.agents.set(id, rec);
       this.emitDraft(rec, { type: 'status', status: 'queued' });
+      // The summary is born queued, so the status event above changes nothing and would not publish:
+      // publish it here so every spawn (IPC, extensions) shows up on the Wall while it waits.
+      this.publishSummary(rec);
       this.queue.push({ id, resume: false });
       out.push(rec.reducer.summary);
     }
@@ -242,8 +245,14 @@ export class Supervisor {
         if (rec.worktree.baseRef) s.baseRef = rec.worktree.baseRef;
         this.publishSummary(rec);
         if (this.deps.worktrees.runSetup) {
-          this.emitDraft(rec, { type: 'status', status: 'starting', detail: 'Setup: running .oide/setup' });
-          const setup = await this.deps.worktrees.runSetup({ agentId: rec.id, path: rec.worktree.path, spec: rec.spec, onOutput: (line) => this.emitDraft(rec, { type: 'stderr', text: `[setup] ${line}` }) });
+          // The provider calls onStart only when there is a setup command to run (and the project is trusted).
+          const setup = await this.deps.worktrees.runSetup({
+            agentId: rec.id,
+            path: rec.worktree.path,
+            spec: rec.spec,
+            onStart: () => this.emitDraft(rec, { type: 'status', status: 'starting', detail: 'Setup: running .oide/setup' }),
+            onOutput: (line) => this.emitDraft(rec, { type: 'stderr', text: `[setup] ${line}` }),
+          });
           if (!setup.ok) {
             this.emitDraft(rec, { type: 'error', message: `Setup failed${setup.output ? `: ${setup.output.slice(-500)}` : ''}`, code: 'spawn' });
             this.emitDraft(rec, { type: 'status', status: 'error' });
@@ -259,7 +268,7 @@ export class Supervisor {
         rec.id,
         {
           onPermissionRequest: (req) => this.onPermissionRequest(rec, req),
-          onPermissionResolved: (requestId, behavior) => this.onPermissionResolved(rec, requestId, behavior),
+          onPermissionResolved: (requestId, behavior, reason) => this.onPermissionResolved(rec, requestId, behavior, reason),
           onReview: (review) => this.emitDraft(rec, { type: 'review-submitted', review: { agentId: rec.id, summary: review.summary, checks: review.checks, submittedAt: Date.now() } }),
         },
         extra,
@@ -388,9 +397,9 @@ export class Supervisor {
     if (first) this.emitDraft(rec, { type: 'permission-request', request });
   }
 
-  private onPermissionResolved(rec: AgentRecord, requestId: string, behavior: 'allow' | 'deny'): void {
+  private onPermissionResolved(rec: AgentRecord, requestId: string, behavior: 'allow' | 'deny', reason?: 'quit'): void {
     if (!rec.pendingPermissions.delete(requestId)) return;
-    this.emitDraft(rec, { type: 'permission-resolved', requestId, behavior });
+    this.emitDraft(rec, { type: 'permission-resolved', requestId, behavior, ...(reason ? { reason } : {}) });
     const next = rec.pendingPermissions.values().next();
     if (!next.done) this.emitDraft(rec, { type: 'permission-request', request: next.value });
   }

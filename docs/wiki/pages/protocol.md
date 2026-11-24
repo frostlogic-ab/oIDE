@@ -45,3 +45,7 @@ Fields added after the first cut (all optional or defaulted):
   `InstalledExtension.disabledProjects/disabledTools`, extension/custom IPC commands
   (`extensions.updates/update/addFromGit`, `custom.importSelected/setHeaderToken`) and the
   `extensions.hostState` event. See those packages' pages for meaning.
+- Conformance UX fixes (2026-11-24): `Settings.keybindings` (action → combos, default `{}`);
+  `ReviewComment.side` and `review.addComment { side }` (`old` | `new`, default `new`), `side` on
+  `review-feedback` comments; `permission-resolved.reason` (`quit`); `AgentSummary.interruptedPermission`;
+  `notify.kind` / `notify.requestId`. The `init.slashCommands` field is now filled by the parser.

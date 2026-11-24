@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { comboFromEvent, comboLabel, isEditableTarget, Keymap, normalizeCombo, type KeyEventLike } from './keymap';
+import { comboFromEvent, comboLabel, isEditableTarget, Keymap, normalizeCombo, portableCombo, type KeyEventLike } from './keymap';
 
 function key(k: string, mods: Partial<Pick<KeyEventLike, 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>> = {}, target: unknown = null): KeyEventLike & { prevented: boolean } {
   const e = {
@@ -121,21 +121,46 @@ describe('Keymap', () => {
     expect(mode).toHaveBeenCalled();
   });
 
-  it('rebinds, persists and resets', () => {
-    let saved: string | null = null;
-    const storage = { get: () => saved, set: (v: string) => void (saved = v) };
-    const km = new Keymap({ storage });
+  it('rebinds, persists patches and resets', () => {
+    const patches: unknown[] = [];
+    const km = new Keymap({ persist: (p) => void patches.push(p) });
     const next = vi.fn();
     km.pushScope('focus', { 'agent.next': next });
     km.rebind('agent.next', ['ArrowDown']);
     expect(km.handleKeyDown(key('j'))).toBe(false);
     expect(km.handleKeyDown(key('ArrowDown'))).toBe(true);
-    expect(JSON.parse(saved!)).toEqual({ 'agent.next': ['ArrowDown'] });
+    expect(km.isCustom('agent.next')).toBe(true);
+    expect(patches).toEqual([{ 'agent.next': ['ArrowDown'] }]);
 
-    const restored = new Keymap({ storage });
+    // Saved rebinds come back from Settings without being saved again.
+    const restored = new Keymap({ persist: (p) => void patches.push(p) });
+    restored.setOverrides({ 'agent.next': ['ArrowDown'] });
     expect(restored.getBindings()['agent.next']).toEqual(['ArrowDown']);
+    expect(patches).toHaveLength(1);
     restored.resetBinding('agent.next');
     expect(restored.getBindings()['agent.next']).toEqual(['J']);
+    expect(patches.at(-1)).toEqual({ 'agent.next': null });
+    restored.resetBinding();
+    expect(patches.at(-1)).toBeNull();
+  });
+
+  it('finds conflicts and assign() moves a combo from the action that had it', () => {
+    const patches: unknown[] = [];
+    const km = new Keymap({ persist: (p) => void patches.push(p) });
+    expect(km.conflicts('Ctrl+K')).toEqual(['commandBar.open']);
+    expect(km.conflicts('Mod+K', 'commandBar.open')).toEqual([]);
+    expect(km.conflicts('Shift+J')).toEqual([]);
+    km.assign('agent.next', 'Mod+K');
+    expect(km.getBindings()['agent.next']).toEqual(['Mod+K']);
+    expect(km.getBindings()['commandBar.open']).toEqual([]);
+    expect(patches).toEqual([{ 'commandBar.open': [], 'agent.next': ['Mod+K'] }]);
+  });
+
+  it('portableCombo stores the platform modifier as Mod', () => {
+    expect(portableCombo('Ctrl+k', false)).toBe('Mod+K');
+    expect(portableCombo('Meta+Shift+p', true)).toBe('Mod+Shift+P');
+    expect(portableCombo('Ctrl+k', true)).toBe('Ctrl+K');
+    expect(portableCombo('ArrowDown', false)).toBe('ArrowDown');
   });
 
   it('skips events already handled or composing', () => {

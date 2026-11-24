@@ -40,7 +40,7 @@ describe('openDatabase', () => {
     migrated.close();
     // the backup is a consistent copy at the old version
     const bak = new DatabaseSync(migrated.backupPath!);
-    expect((bak.prepare('SELECT MAX(version) AS v FROM schema_migrations').get() as { v: number }).v).toBe(1);
+    expect((bak.prepare('SELECT MAX(version) AS v FROM schema_migrations').get() as { v: number }).v).toBe(MIGRATIONS[MIGRATIONS.length - 1]!.version);
     expect((bak.prepare("SELECT data FROM settings WHERE key = 'x'").get() as { data: string }).data).toBe('1');
     bak.close();
     expect(readdirSync(dir).filter((f) => f.endsWith('.bak'))).toHaveLength(1);
@@ -50,13 +50,24 @@ describe('openDatabase', () => {
     const dir = tempDir();
     const file = join(dir, 'oide.db');
     openDatabase(file).close();
-    const bad = [...MIGRATIONS, { version: 2, name: 'broken', up: 'CREATE TABLE ok_part (x INT); SELECT * FROM missing_table;' }];
+    const bad = [...MIGRATIONS, { version: 98, name: 'broken', up: 'CREATE TABLE ok_part (x INT); SELECT * FROM missing_table;' }];
     expect(() => openDatabase(file, { migrations: bad })).toThrow();
     const d = openDatabase(file);
     expect(d.db.prepare("SELECT name FROM sqlite_master WHERE name = 'ok_part'").get()).toBeUndefined();
     d.db.prepare("INSERT INTO schema_migrations (version, name, applied_at) VALUES (500, 'future', 1)").run();
     d.close();
     expect(() => openDatabase(file)).toThrow(/newer than this build/);
+  });
+
+  it('migration 2 adds review_comments.side; comments from version 1 read as new-side', () => {
+    const file = join(tempDir(), 'oide.db');
+    const v1 = openDatabase(file, { migrations: MIGRATIONS.filter((m) => m.version === 1) });
+    v1.db.exec('PRAGMA foreign_keys = OFF');
+    v1.db.prepare("INSERT INTO review_comments (id, agent_id, path, line, body, sent, created_at) VALUES ('c1', 'a1', 'x.ts', 4, 'old one', 0, 1)").run();
+    v1.close();
+    const s = openStore(file);
+    expect(s.review.comments('a1')).toEqual([expect.objectContaining({ id: 'c1', line: 4, side: 'new' })]);
+    s.close();
   });
 
   it('nests transactions with savepoints', () => {

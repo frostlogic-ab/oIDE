@@ -7,7 +7,8 @@ import type { ArtifactKind, ArtifactMeta, ArtifactUse, CheckResult, PermissionRe
 
 export interface AgentToolHandlers {
   onPermissionRequest(request: PermissionRequest): void;
-  onPermissionResolved(requestId: string, behavior: 'allow' | 'deny'): void;
+  /** `reason: 'quit'` when the prompt was denied because oIDE is shutting down. */
+  onPermissionResolved(requestId: string, behavior: 'allow' | 'deny', reason?: 'quit'): void;
   onReview(review: { summary: string; checks: CheckResult[] }): void;
 }
 

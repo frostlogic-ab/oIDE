@@ -47,9 +47,11 @@ other errors show in the card). `useGitData(projectIds)` loads them and reloads 
 ## Tests
 
 `SourceControl.test.tsx`: cards per project from the mock bridge, sync label/action, heads-up and
-unpushed notices, scope switching filters cards and calls `scope.set`; label helpers.
+unpushed notices, scope switching filters cards and calls `scope.set`; the loading state; label helpers.
 
 ## Deviations from the canvas
 
 - The overlap card names the agents by their full titles (the canvas uses short names).
-- A Spinner shows while a project first loads; errors appear as a red line inside the card.
+- A Spinner shows while a project first loads, with "Loading agent worktrees…" and "Loading commits…" (and
+  "loading agent worktrees…" in the header count) instead of 0 / "No commits yet"; errors appear as a red line inside the card.
+- "Open pull request" is hidden or disabled with a reason when the project has no git remote (`git.prAvailable`).

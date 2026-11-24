@@ -30,7 +30,7 @@ export interface WorktreeProvider {
   /** Create the agent's worktree (`git worktree add -b oide/<slug> <path> <base>`), or return the project folder. */
   create(input: { agentId: string; slug: string; spec: AgentSpec }): Promise<WorktreeResult>;
   /** Run `.oide/setup` (only for trusted projects; the provider decides). Output lines go to the tile. */
-  runSetup?(input: { agentId: string; path: string; spec: AgentSpec; onOutput?: (line: string) => void }): Promise<{ ok: boolean; output?: string }>;
+  runSetup?(input: { agentId: string; path: string; spec: AgentSpec; onStart?: () => void; onOutput?: (line: string) => void }): Promise<{ ok: boolean; output?: string }>;
   /** `git worktree remove` + branch delete, used by `remove(agentId, { deleteWorktree: true })`. */
   remove?(input: { agentId: string; path: string; branch?: string; projectId: string }): Promise<void>;
 }
@@ -85,7 +85,8 @@ export interface SecretProvider {
 /** Callbacks the MCP server calls for one agent. */
 export interface AgentToolHandlers {
   onPermissionRequest(request: PermissionRequest): void;
-  onPermissionResolved(requestId: string, behavior: 'allow' | 'deny'): void;
+  /** `reason: 'quit'` when oIDE denied the prompt because it was closing. */
+  onPermissionResolved(requestId: string, behavior: 'allow' | 'deny', reason?: 'quit'): void;
   onReview(review: { summary: string; checks: CheckResult[] }): void;
 }
 

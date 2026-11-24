@@ -88,7 +88,11 @@ this filter" + Show all.
 - **Footer "2 files · 1 doc artifact"** is not reproduced: there is no per-agent artifact count; the
   diff stat is shown instead.
 - Tile order is the store's (creation time), not the canvas order.
-- Plan percentage meters stay hidden (status bar, see [desktop-shell](desktop-shell.md)).
+- Plan meters show only from the CLI's `rate_limit_event` utilization (status bar, see [desktop-shell](desktop-shell.md), ADR 0007).
+- A tile whose prompt was cut off by quitting oIDE (`AgentSummary.interruptedPermission`, while the agent is idle)
+  shows "oIDE closed while waiting for your answer; send a message to continue." and the tool it asked for
+  (`tileBodyKind` → `interrupted`).
+- Queued spawns from any caller (IPC, extensions) appear at once: the supervisor publishes the queued summary.
 
 ## Mock fixtures
 

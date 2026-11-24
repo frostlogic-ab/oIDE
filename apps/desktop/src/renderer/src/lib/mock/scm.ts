@@ -577,8 +577,8 @@ export function createScmHandlers({ agents, emit, fallbackDiffs = {}, artifacts 
     },
 
     'review.comments': ({ agentId }) => state.comments.filter((c) => c.agentId === agentId),
-    'review.addComment': ({ agentId, path, line, body }) => {
-      const c = ReviewComment.parse({ id: `rc-${nextId++}`, agentId, path, line, body, createdAt: Date.now() });
+    'review.addComment': ({ agentId, path, line, side, body }) => {
+      const c = ReviewComment.parse({ id: `rc-${nextId++}`, agentId, path, line, side, body, createdAt: Date.now() });
       state.comments.push(c);
       return c;
     },

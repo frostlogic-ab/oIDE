@@ -105,7 +105,9 @@ export function ProjectCard({ project, git, agents, open, onToggle, logOpen, onT
             </div>
           )}
 
-          <div className={`px-3.5 pt-2 pb-1 border-t border-line-6 ${SECTION_LABEL}`}>Agent worktrees · {git.worktrees.length}</div>
+          {/* Until the first load answers, say so instead of "0" / "No commits yet" (m2). */}
+          <div className={`px-3.5 pt-2 pb-1 border-t border-line-6 ${SECTION_LABEL}`}>Agent worktrees{git.loadedAt ? ` · ${git.worktrees.length}` : ''}</div>
+          {!git.loadedAt && <div className="px-3.5 py-2.5 border-t border-[#1A1E24] text-[12px] text-ink-3">Loading agent worktrees…</div>}
           {git.worktrees.length === 0 && git.loadedAt && (
             <div className="px-3.5 py-2.5 border-t border-[#1A1E24] text-[12px] text-ink-3">No agents are working in this project.</div>
           )}
@@ -129,7 +131,7 @@ export function ProjectCard({ project, git, agents, open, onToggle, logOpen, onT
           </button>
           {logOpen && (
             <ol id={logId} className="list-none m-0 flex flex-col pt-0 pr-3.5 pb-2.5 pl-[30px]">
-              {git.log.length === 0 && <li className="py-[5px] text-[12px] text-ink-3">No commits yet.</li>}
+              {git.log.length === 0 && <li className="py-[5px] text-[12px] text-ink-3">{git.loadedAt ? 'No commits yet.' : 'Loading commits…'}</li>}
               {git.log.map((c) => (
                 <li key={c.sha} className="flex items-center gap-2.5 py-[5px] text-[12px] text-ink-2 flex-wrap">
                   <span className="font-mono text-ink-3 text-[11px]">{c.sha.slice(0, 7)}</span>

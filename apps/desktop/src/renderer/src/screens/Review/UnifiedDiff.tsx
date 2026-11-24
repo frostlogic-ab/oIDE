@@ -25,7 +25,8 @@ export interface Composer {
 
 export interface UnifiedDiffHandle {
   scrollToHunk(index: number): void;
-  scrollToLine(line: number): void;
+  /** Scroll to a line: `new` numbers (default) or, for comments on removed lines, `old` numbers. */
+  scrollToLine(line: number, side?: 'old' | 'new'): void;
 }
 
 export interface UnifiedDiffProps {
@@ -72,9 +73,11 @@ export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(funct
     overscan: 40,
   });
 
+  // Threads by side and line: a comment on a removed line sits under that removed line (old number),
+  // never under the new-side line that happens to share its number.
   const byLine = useMemo(() => {
-    const m = new Map<number, ReviewComment[]>();
-    for (const c of comments) if (c.line !== undefined) m.set(c.line, [...(m.get(c.line) ?? []), c]);
+    const m = new Map<string, ReviewComment[]>();
+    for (const c of comments) if (c.line !== undefined) m.set(threadKey(c.side, c.line), [...(m.get(threadKey(c.side, c.line)) ?? []), c]);
     return m;
   }, [comments]);
   const fileLevel = comments.filter((c) => c.line === undefined);
@@ -87,7 +90,8 @@ export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(funct
   };
   useImperativeHandle(ref, () => ({
     scrollToHunk: (h) => scrollToIndex(indexOf((r) => r.type === 'hunk' && r.hunk === h)),
-    scrollToLine: (n) => scrollToIndex(indexOf((r) => r.type === 'line' && r.line.newLine === n)),
+    scrollToLine: (n, side = 'new') =>
+      scrollToIndex(indexOf((r) => r.type === 'line' && (side === 'old' ? r.line.kind === 'del' && r.line.oldLine === n : r.line.kind !== 'del' && r.line.newLine === n))),
   }));
 
   // Report the hunk at the top of the viewport (for hunk navigation).
@@ -119,7 +123,7 @@ export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(funct
     const n = commentLine(line);
     const removed = line.kind === 'del';
     const open = composer?.rowKey === row.key && composer.path === file.path;
-    const thread = !removed && line.newLine !== undefined ? byLine.get(line.newLine) : undefined;
+    const thread = removed ? (line.oldLine !== undefined ? byLine.get(threadKey('old', line.oldLine)) : undefined) : line.newLine !== undefined ? byLine.get(threadKey('new', line.newLine)) : undefined;
     const clickable = n !== undefined && line.kind !== 'no-newline';
     const openComposer = () => clickable && onOpenComposer({ path: file.path, rowKey: row.key, line: n!, removed });
     return (
@@ -199,6 +203,8 @@ export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(funct
   );
 });
 
+const threadKey = (side: 'old' | 'new', line: number) => `${side}:${line}`;
+
 function Notice({ children }: { children: ReactNode }) {
   return <div className="flex-1 px-5 py-6 text-[12.5px] text-ink-3">{children}</div>;
 }
@@ -260,10 +266,10 @@ function CommentComposer({ composer, onCancel, onAdd }: { composer: Composer; on
 
 function CommentCard({ c, onDelete }: { c: ReviewComment; onDelete?: (id: string) => void }) {
   return (
-    <div className={BOX} role="note" aria-label={`Your comment on line ${c.line ?? 'file'}`}>
+    <div className={BOX} role="note" aria-label={c.line === undefined ? 'Your comment on this file' : `Your comment on ${c.side === 'old' ? 'removed line' : 'line'} ${c.line}`}>
       <div className="flex items-center gap-2">
         <span className="text-[12px] text-ink-3 flex-1">
-          {c.line !== undefined ? `Your comment on line ${c.line}` : 'Your comment on this file'} · {c.sent ? 'sent to the agent' : 'not sent yet'}
+          {c.line !== undefined ? `Your comment on ${c.side === 'old' ? 'removed line' : 'line'} ${c.line}` : 'Your comment on this file'} · {c.sent ? 'sent to the agent' : 'not sent yet'}
         </span>
         {!c.sent && onDelete && <IconButton icon="trash" aria-label="Delete comment" size={28} onClick={() => onDelete(c.id)} />}
       </div>

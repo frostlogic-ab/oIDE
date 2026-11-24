@@ -56,6 +56,25 @@ describe('UnifiedDiff', () => {
     expect(screen.getByRole('button', { name: 'Comment on line 12' }).textContent).toBe('12');
   });
 
+  it('a comment on a removed line sits under that removed line, not under the new line with the same number', () => {
+    const at = (id: string, line: number, side: 'old' | 'new', body: string) => ({ id, agentId: 'a', path: 'src/x.ts', line, side, body, sent: false, createdAt: 1 });
+    const { container } = render(
+      <UnifiedDiff
+        file={FILE}
+        comments={[at('c-old', 2, 'old', 'Keep b'), at('c-new', 2, 'new', 'Why B?')]}
+        composer={null}
+        onOpenComposer={() => {}}
+        onCancelComposer={() => {}}
+        onAddComment={() => {}}
+      />,
+    );
+    const delRow = container.querySelector<HTMLElement>('[data-kind="del"]')!.closest<HTMLElement>('[data-row]')!;
+    const addRow = container.querySelector<HTMLElement>('[data-kind="add"]')!.closest<HTMLElement>('[data-row]')!;
+    expect(within(delRow).getByRole('note', { name: 'Your comment on removed line 2' }).textContent).toContain('Keep b');
+    expect(within(addRow).getByRole('note', { name: 'Your comment on line 2' }).textContent).toContain('Why B?');
+    expect(within(delRow).queryByText('Why B?')).toBeNull();
+  });
+
   it('clicking a line opens the composer for that line', () => {
     const open = vi.fn();
     render(<UnifiedDiff file={FILE} comments={[]} composer={null} onOpenComposer={open} onCancelComposer={() => {}} onAddComment={() => {}} />);
@@ -81,7 +100,7 @@ describe('Review screen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add to feedback' }));
 
     await waitFor(() =>
-      expect(invoke).toHaveBeenCalledWith('review.addComment', { agentId: 'a-webhook', path: 'src/webhooks/retry.ts', line: 7, body: 'Name the attempt parameter' }),
+      expect(invoke).toHaveBeenCalledWith('review.addComment', { agentId: 'a-webhook', path: 'src/webhooks/retry.ts', line: 7, side: 'new', body: 'Name the attempt parameter' }),
     );
     expect(await screen.findByRole('heading', { name: 'Your feedback · 2 comments' })).toBeTruthy();
     expect(screen.queryByLabelText('Comment for the agent')).toBeNull();
@@ -89,6 +108,18 @@ describe('Review screen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send feedback to agent' }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('review.sendFeedback', { agentId: 'a-webhook' }));
     expect(await screen.findByRole('button', { name: 'Feedback sent · agent is revising' })).toBeTruthy();
+  });
+
+  it('a comment on a removed line is saved with side "old" and shown under that line', async () => {
+    const { invoke } = await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook' } });
+    render(<ReviewScreen />);
+    const removed = (await screen.findAllByRole('button', { name: /^Comment on removed line \d+$/ }))[0]!;
+    const line = Number(/(\d+)$/.exec(removed.getAttribute('aria-label')!)![1]);
+    fireEvent.click(removed);
+    fireEvent.change(screen.getByLabelText('Comment for the agent'), { target: { value: 'Keep this' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add to feedback' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('review.addComment', expect.objectContaining({ line, side: 'old', body: 'Keep this' })));
+    expect(await screen.findByRole('note', { name: `Your comment on removed line ${line}` })).toBeTruthy();
   });
 
   it('toggles Viewed through review.setViewed', async () => {
