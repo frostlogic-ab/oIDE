@@ -406,6 +406,16 @@ function Detail({ item, busy, projects, onInstall, onUpdate, onRemove, onEdit, o
                   label={`Allow ${t.name}`}
                   onChange={(v) => onSaveCustom({ ...custom, tools: custom.tools.map((x, j) => (j === i ? { ...x, enabled: v } : x)) })}
                 />
+              ) : ext && item.state !== 'install' ? (
+                <CheckButton
+                  checked={t.enabled !== false}
+                  label={`Allow ${t.name}`}
+                  onChange={(v) =>
+                    void oide
+                      .invoke('extensions.setToolEnabled', { id: ext.id, tool: t.name, server: t.server, enabled: v })
+                      .catch((err) => toast(`Couldn't change ${t.name}: ${ipcErrorMessage(err)}`, 'error'))
+                  }
+                />
               ) : null}
               <span className={cn('flex-1 min-w-0 truncate', t.enabled === false ? 'text-ink-4' : 'text-ink')} title={t.description}>
                 {t.name}

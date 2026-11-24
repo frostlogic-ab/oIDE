@@ -38,7 +38,11 @@ export default defineConfig({
       outDir: 'out/main',
       externalizeDeps: { include: runtimeDeps, exclude: [] },
       rolldownOptions: {
-        input: { index: resolve(root, 'src/main/index.ts') },
+        input: {
+          index: resolve(root, 'src/main/index.ts'),
+          // Extension host code runs in its own utility process per extension (out/main/host-process.js).
+          'host-process': resolve(root, '../../packages/extension-host/src/host-process.ts'),
+        },
       },
     },
   },

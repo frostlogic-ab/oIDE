@@ -130,6 +130,32 @@ and expects a text content holding one of:
 - Prompts from subagents carry the **subagent's** tool_use id; oIDE maps it to the subagent through the
   `parent_tool_use_id` of the matching `tool-use` event.
 
+## MCP tool names (verified 2026-11-24, CLI 2.1.325)
+
+One real `claude -p --model haiku` run with a stdio MCP server `probe` that lists the tools `db.schema`,
+`plain_tool` and `with space+plus` gave, in the `init` event's `tools`:
+
+```
+mcp__probe__db_schema  mcp__probe__plain_tool  mcp__probe__with_space_plus
+```
+
+- Every character outside `[A-Za-z0-9_-]` in a tool name becomes `_` (`.`, space and `+` each map to
+  one `_`). The model loaded it with `ToolSearch select:mcp__probe__db_schema` and called it by that name.
+- `--allowedTools mcp__probe__db_schema` pre-allowed the call (no permission prompt, no denial), so
+  allow and deny rules must use the normalized name.
+- `resolveAgentMcpConfig` / `mcpToolName` (extension-host) already normalize this way, and since this
+  check `buildLaunch` normalizes `ExtensionToolRef` server and tool names the same way.
+- Server names were not tested with special characters: manifests and custom servers only allow `[A-Za-z0-9_-]`.
+
+## Windows `.cmd` shims and multi-line arguments
+
+`cmd.exe` ends the command line at a newline, so a multi-line `--append-system-prompt` passed through
+`cmd.exe /d /s /c` silently drops every later flag (`--allowedTools`, extra flags). `resolveSpawn` now
+detects a newline in any argument for a `.cmd`/`.bat` target, reads the shim, and when it is an
+npm-style shim (`"%dp0%\node_modules\…\cli.js"`, or `"%~dp0x.mjs"` like fake-claude's) runs that script
+with Node directly (`node` from PATH inside Electron). Other shims get newlines replaced by spaces.
+`claude.exe` (the native installer) is spawned directly and is not affected.
+
 ## Fallbacks
 
 | Feature | Primary | Fallback |

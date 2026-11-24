@@ -20,6 +20,19 @@ files:
   - "!**/*.{ts,tsx,md}"
   - "!**/{test,tests,__tests__,e2e}/**"
 
+# Built-in extensions (loaded by the registry from <resources>/extensions) and the offline
+# marketplace index (<resources>/marketplace/index.json). Main's host-process.js is in out/main.
+extraResources:
+  - from: ../../extensions
+    to: extensions
+    filter:
+      - "**/*"
+      - "!**/node_modules/**"
+      - "!**/*.test.*"
+      - "!**/tsconfig*.json"
+  - from: ../../tools/marketplace-index/bundled/index.json
+    to: marketplace/index.json
+
 asar: true
 # Native N-API prebuilds must live outside the asar archive to be loadable.
 asarUnpack:

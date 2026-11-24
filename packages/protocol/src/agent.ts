@@ -65,6 +65,8 @@ export const AgentSpec = z.object({
   goal: z.string().min(1).max(100_000),
   context: z.array(ContextChip).default([]),
   workIn: WorkIn.default('worktree-from-main'),
+  /** Start the worktree from this branch or ref instead of the one `workIn` picks (reconcile agents). */
+  baseRef: z.string().min(1).max(256).optional(),
   mode: PermissionMode.default('auto'),
   strategy: ModelStrategy,
   customModel: CustomModelRef.optional(),

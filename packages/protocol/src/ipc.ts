@@ -4,7 +4,7 @@ import { ArtifactKind, ArtifactMeta, ArtifactUse, ArtifactVersion } from './arti
 import { AgentEvent } from './events.js';
 import { CustomServer, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
 import { CommitInfo, FileDiff, FileNode, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
-import { CliInfo, CustomModel, Settings, Technique } from './settings.js';
+import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settings.js';
 
 /**
  * The IPC contract. Every renderer → main command is a request/response pair, validated with Zod
@@ -68,6 +68,8 @@ export const Commands = {
   'git.openPr': cmd(z.object({ agentId: Id, title: z.string(), body: z.string().default('') }), z.object({ url: z.string() })),
   'git.reconcile': cmd(z.object({ projectId: Id, agentIds: z.tuple([Id, Id]) }), z.array(AgentSummary)),
   'git.pruneOrphans': cmd(z.object({ projectId: Id }), z.object({ removed: z.array(z.string()) })),
+  /** Whether PRs can be opened for this project (gh installed and signed in). Source control hides PR state and Review disables Open pull request when false. */
+  'git.prAvailable': cmd(z.object({ projectId: Id }), z.object({ available: z.boolean(), reason: z.string().optional() })),
 
   // Review
   'review.comments': cmd(z.object({ agentId: Id }), z.array(ReviewComment)),
@@ -83,6 +85,8 @@ export const Commands = {
   'files.write': cmd(z.object({ root: z.string(), path: z.string(), content: z.string() }), Ok),
   'files.history': cmd(z.object({ root: z.string(), path: z.string() }), z.array(CommitInfo)),
   'files.editingAgents': cmd(z.object({ path: z.string() }), z.array(Id)),
+  /** Artifacts that mention this file (Files › Mentioned in). Path is relative to root. */
+  'files.mentionedIn': cmd(z.object({ root: z.string(), path: z.string() }), z.array(ArtifactMeta)),
 
   // Terminals
   'terminal.create': cmd(z.object({ cwd: z.string(), command: z.string().optional(), cols: z.number().int().default(100), rows: z.number().int().default(30) }), z.object({ terminalId: Id })),
@@ -101,6 +105,10 @@ export const Commands = {
   'settings.testCustomModel': cmd(z.object({ id: Id }), z.object({ ok: z.boolean(), detail: z.string() })),
   'settings.projectPermissions': cmd(z.object({ projectId: Id }), z.object({ allow: z.array(z.string()), ask: z.array(z.string()), deny: z.array(z.string()) })),
   'settings.saveProjectPermissions': cmd(z.object({ projectId: Id, allow: z.array(z.string()), ask: z.array(z.string()), deny: z.array(z.string()) }), Ok),
+  /** Shipped focus presets and techniques, for "edited" markers and "Reset to default" (Settings › Models, Techniques). */
+  'settings.builtIns': cmd(Void, z.object({ presets: z.array(FocusPreset), techniques: z.array(Technique) })),
+  /** Problems found while loading settings and `.oide/*.json` (bad JSON, schema errors); shown at the top of Settings. */
+  'settings.loadErrors': cmd(z.object({ projectId: Id.optional() }), z.array(z.object({ projectId: Id.optional(), file: z.string(), message: z.string() }))),
 
   // Usage
   'usage.summary': cmd(Void, z.object({
@@ -118,6 +126,8 @@ export const Commands = {
   'extensions.install': cmd(z.object({ name: z.string(), version: z.string().optional() }), InstalledExtension),
   'extensions.uninstall': cmd(z.object({ id: Id }), Ok),
   'extensions.setEnabled': cmd(z.object({ id: Id, projectId: Id.optional(), enabled: z.boolean() }), InstalledExtension),
+  /** Turn one of an extension's tools on or off. `tool` is the tool name in the manifest, or the full `mcp__<server>__<tool>`. */
+  'extensions.setToolEnabled': cmd(z.object({ id: Id, tool: z.string().min(1), server: z.string().optional(), enabled: z.boolean() }), InstalledExtension),
   'extensions.addFromFolder': cmd(z.object({ path: z.string().optional(), devMode: z.boolean().default(false) }), InstalledExtension.nullable()),
   'extensions.runCommand': cmd(z.object({ commandId: z.string(), args: z.array(z.unknown()).default([]) }), z.unknown()),
   'custom.list': cmd(Void, z.array(CustomServer)),
@@ -141,13 +151,19 @@ export const Commands = {
   'artifacts.create': cmd(z.object({ title: z.string(), kind: ArtifactKind, projectId: Id.optional(), location: z.enum(['repo', 'app-data']).default('app-data'), content: z.string().optional() }), ArtifactMeta),
   'artifacts.save': cmd(z.object({ id: Id, content: z.string(), note: z.string().optional() }), ArtifactMeta),
   'artifacts.delete': cmd(z.object({ id: Id }), Ok),
-  'artifacts.import': cmd(z.object({ url: z.string().url().optional(), filePath: z.string().optional(), title: z.string().optional(), kind: ArtifactKind.optional() }), ArtifactMeta),
+  'artifacts.import': cmd(z.object({ url: z.string().url().optional(), filePath: z.string().optional(), title: z.string().optional(), kind: ArtifactKind.optional(), projectId: Id.optional(), location: z.enum(['repo', 'app-data']).optional() }), ArtifactMeta),
+  /** Uses log for several artifacts at once (the grid's "Read by 2 agents" lines), keyed by artifact id. */
+  'artifacts.uses': cmd(z.object({ ids: z.array(Id).max(500) }), z.record(z.string(), z.array(ArtifactUse))),
+  /** Content of one numbered snapshot (History › view version). */
+  'artifacts.readVersion': cmd(z.object({ id: Id, version: z.number().int().positive() }), z.object({ content: z.string() })),
   'artifacts.previewUrl': cmd(z.object({ id: Id }), z.object({ url: z.string() })),
 
   // Shell helpers
   'shell.openExternal': cmd(z.object({ url: z.string().url() }), Ok),
   'shell.revealPath': cmd(z.object({ path: z.string() }), Ok),
   'dialog.pickFolder': cmd(z.object({ title: z.string().optional() }), z.string().nullable()),
+  /** Native open-file dialog (Import from claude.ai › pick a file). Main remembers the picked path for the follow-up command. */
+  'dialog.pickFile': cmd(z.object({ title: z.string().optional(), filters: z.array(z.object({ name: z.string(), extensions: z.array(z.string()) })).default([]) }), z.string().nullable()),
 } as const;
 
 export type CommandName = keyof typeof Commands;

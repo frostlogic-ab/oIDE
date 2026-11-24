@@ -19,6 +19,10 @@ import {
   type Scope,
 } from '@oide/protocol';
 import * as fx from './fixtures';
+import { focusDiffs, focusEvents, focusHandlers, patchFocusAgent, startFocusDemo } from './focus';
+import { libraryHandlers, seedLibrarySettings } from './library';
+import { createScmHandlers } from './scm';
+import { seedAgents, seedProjects, wallHandlers, wallMockMode } from './wall';
 
 type Listener = (payload: unknown) => void;
 
@@ -31,10 +35,12 @@ export interface MockBridgeOptions {
 
 export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { emit: <K extends EventName>(e: K, p: EventPayload<K>) => void } {
   const listeners = new Map<string, Set<Listener>>();
-  const agents = new Map<string, AgentSummary>(fx.agents.map((a) => [a.id, structuredClone(a)]));
-  const events = new Map<string, AgentEvent[]>(Object.entries(fx.events).map(([k, v]) => [k, [...v]]));
+  // `?wall=states|empty|no-projects` in the dev URL switches the Wall fixtures (see ./wall.ts).
+  const wallMode = wallMockMode();
+  const agents = new Map<string, AgentSummary>(seedAgents(fx.agents, wallMode).map((a) => [a.id, structuredClone(patchFocusAgent(a))]));
+  const events = new Map<string, AgentEvent[]>(Object.entries({ ...fx.events, ...focusEvents }).map(([k, v]) => [k, [...v]]));
   let scope: Scope = 'all';
-  let settings = structuredClone(fx.settings);
+  let settings = seedLibrarySettings(structuredClone(fx.settings));
   const latency = opts.latency ?? 40;
 
   const emit = <K extends EventName>(event: K, payload: EventPayload<K>) => {
@@ -52,9 +58,11 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
   };
 
   const handlers: { [K in CommandName]?: (input: CommandInput<K>) => CommandOutput<K> | Promise<CommandOutput<K>> } = {
+    // Source control, Review, Files (git.*, review.*, files.*): see ./scm.ts. Later keys override.
+    ...createScmHandlers({ agents, emit, fallbackDiffs: { ...fx.diffs, ...focusDiffs }, artifacts: fx.artifacts }),
     'app.info': () => ({ version: '0.1.0-mock', platform: 'browser', userData: '/mock/userData' }),
     'cli.detect': () => fx.cli,
-    'projects.list': () => fx.projects,
+    'projects.list': () => seedProjects(fx.projects, wallMode),
     'scope.get': () => scope,
     'scope.set': ({ scope: s }) => {
       scope = s;
@@ -86,17 +94,12 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
       if (a.status === 'has-question') updateAgent(agentId, { status: 'running', lastMessage: undefined });
       return { ok: true as const };
     },
-    'agents.compact': ({ agentId }) => {
-      const a = agents.get(agentId);
-      emit('notify', { level: 'info', message: `Sent /compact to ${a?.title ?? agentId}. Compacting…`, agentId });
-      return { ok: true as const };
-    },
+    // The Wall toasts "Sent /compact to …" itself after this resolves.
+    'agents.compact': () => ({ ok: true as const }),
     'agents.pause': ({ agentId }) => (updateAgent(agentId, { status: 'paused' }), { ok: true as const }),
     'agents.resume': ({ agentId }) => (updateAgent(agentId, { status: 'running' }), { ok: true as const }),
     'agents.stop': ({ agentId }) => (updateAgent(agentId, { status: 'stopped' }), { ok: true as const }),
     'agents.setMode': ({ agentId, mode }) => (updateAgent(agentId, { mode }), { ok: true as const }),
-    'git.diff': ({ agentId }) => fx.diffs[agentId] ?? [],
-    'git.log': () => fx.commits,
     'artifacts.list': ({ projectId, kind }) => fx.artifacts.filter((a) => (!projectId || a.projectId === projectId) && (!kind || a.kind === kind)),
     'settings.get': () => settings,
     'settings.update': ({ patch }) => {
@@ -111,9 +114,24 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
       return { ok: true as const };
     },
     'dialog.pickFolder': () => null,
+    // Focus: Terminal tab shell, Stop subagent (lib/mock/focus.ts).
+    ...focusHandlers(emit),
+    // Wall and Spawn: agents.spawn, projects.open (lib/mock/wall.ts).
+    ...wallHandlers({ agents, emit, getSettings: () => settings }),
+    // Artifacts, Marketplace and Settings screens (lib/mock/library.ts). Spread last: overrides the
+    // simpler artifacts.list / extensions.installed above.
+    ...libraryHandlers({
+      emit,
+      getSettings: () => settings,
+      setSettings: (s) => {
+        settings = s;
+        emit('settings.changed', s);
+      },
+    }),
   };
 
   if (opts.live ?? true) {
+    startFocusDemo(emit, events);
     let n = 0;
     setInterval(() => {
       const running = [...agents.values()].filter((a) => a.status === 'running');

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { ContextChip } from '@oide/protocol';
 
 /**
  * Typed in-app router. No URLs: a screen id plus typed params, with a back/forward history
@@ -8,10 +9,11 @@ import { create } from 'zustand';
 export interface ScreenParams {
   wall: Record<string, never>;
   focus: { agentId: string; subagentId?: string };
-  spawn: { projectId?: string; goal?: string };
+  /** `context`: chips to pre-fill (Artifacts › Give to an agent passes the artifact). */
+  spawn: { projectId?: string; goal?: string; context?: ContextChip[] };
   'source-control': Record<string, never>;
   review: { agentId: string };
-  files: { root?: string; path?: string };
+  files: { root?: string; path?: string; line?: number };
   artifacts: { artifactId?: string };
   marketplace: { extension?: string };
   settings: { section?: string };

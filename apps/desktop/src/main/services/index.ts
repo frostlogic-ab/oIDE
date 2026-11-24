@@ -1,21 +1,20 @@
 import type { MainContext } from '../context.js';
+import { createCoreServices, type Services } from './core.js';
+import { electronPlatform, handleArtifactScheme } from './electron-platform.js';
 import { TerminalService } from './terminals.js';
 
-/**
- * Seam for domain services (wave 2). Add a field to `Services`, construct it in `createServices`,
- * register its folders with `ctx.roots` and its cleanup with `ctx.onQuit`. Handlers receive the
- * whole object in `registerAllHandlers(router, services, ctx)`.
- *
- * Planned: store (packages/store), supervisor (packages/agent-core), git (packages/git),
- * mcp (packages/mcp-server), extensions (packages/extension-host), projects, settings, artifacts.
- */
-export interface Services {
-  terminals: TerminalService;
-}
+export type { Services } from './core.js';
 
+/**
+ * Seam for domain services. The domain layer lives in `core.ts` and runs in plain Node
+ * (test/integration); this wrapper injects the Electron pieces (`electron-platform.ts`):
+ * safeStorage, dialogs, notifications, utility processes and the artifact preview protocol.
+ */
 export async function createServices(ctx: MainContext): Promise<Services> {
   const terminals = new TerminalService({ emit: ctx.emit });
   ctx.onQuit(() => terminals.disposeAll());
-
-  return { terminals };
+  const services = await createCoreServices({ ctx, platform: electronPlatform(ctx, terminals), terminals });
+  handleArtifactScheme(services.artifacts);
+  ctx.onQuit(() => services.dispose());
+  return services;
 }

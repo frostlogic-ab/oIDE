@@ -241,7 +241,7 @@ export class WorktreeManager {
     }
     const registered = new Set(entries.map((w) => pathKey(w.path)));
     for (const root of roots) {
-      let names: string[] = [];
+      let names: string[];
       try {
         names = (await readdir(root, { withFileTypes: true })).filter((d) => d.isDirectory()).map((d) => d.name);
       } catch {

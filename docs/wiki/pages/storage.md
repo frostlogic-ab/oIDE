@@ -107,6 +107,6 @@ keychain item, the OAuth block key, and keychain lookups for Claude, and fails t
 ## Gaps
 
 - No repository for "sessions" separate from agents: the CLI session id lives on the agent row.
-- Usage retention (`deleteOlderThan`) and event compaction are not scheduled here; main should run
-  them at startup.
+- Usage retention (`deleteOlderThan`, 90 days) and event compaction (30 days) are not scheduled here;
+  main runs them once at startup ([desktop-shell](desktop-shell.md), Lifecycle).
 - `node:sqlite` prints an ExperimentalWarning; main suppresses it (ADR 0001).

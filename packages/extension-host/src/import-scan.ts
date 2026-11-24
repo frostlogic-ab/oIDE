@@ -168,6 +168,7 @@ export function extractServers(text: string, format: ScanFile['format']): Array<
       }
     }
   }
+  // eslint-disable-next-line no-useless-assignment -- intentional: release the parsed file so nothing else in it is kept
   doc = undefined; // drop everything else in the file
   const out: Array<{ name: string; scope?: string; config: ImportedConfig }> = [];
   for (const f of found) {
@@ -218,6 +219,7 @@ export async function scanImportsFull(o: ScanOptions = {}): Promise<Array<Import
     } catch {
       continue; // unreadable file: skipped without logging its content
     } finally {
+      // eslint-disable-next-line no-useless-assignment -- intentional: drop the raw file text right after parsing
       text = '';
     }
     for (const s of servers) {

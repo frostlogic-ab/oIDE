@@ -7,17 +7,25 @@ const appDir = resolve(import.meta.dirname, '..');
 
 export interface LaunchedApp {
   app: ElectronApplication;
+  userData: string;
   page: Page;
   consoleErrors: string[];
   close(): Promise<void>;
 }
 
-/** Launches the built app (out/main/index.js) with a throwaway userData folder. */
-export async function launchApp(): Promise<LaunchedApp> {
+/** tools/fake-claude, so agent tests never need a real CLI or a login. */
+export const FAKE_CLAUDE = resolve(appDir, '../../tools/fake-claude/bin', process.platform === 'win32' ? 'fake-claude.cmd' : 'fake-claude.mjs');
+
+/**
+ * Launches the built app (out/main/index.js) with a throwaway userData folder. `env` adds variables,
+ * e.g. `OIDE_CLAUDE_PATH` (CLI override) and `OIDE_E2E_TRUST=trust` (answers the trust dialog).
+ */
+export async function launchApp(extraEnv: Record<string, string> = {}): Promise<LaunchedApp> {
   const userData = mkdtempSync(join(tmpdir(), 'oide-e2e-'));
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k !== 'ELECTRON_RENDERER_URL') env[k] = v;
   env.OIDE_USER_DATA = userData;
+  Object.assign(env, extraEnv);
   const app = await electron.launch({
     args: [join(appDir, 'out/main/index.js'), ...(process.platform === 'linux' ? ['--no-sandbox'] : [])],
     cwd: appDir,
@@ -32,11 +40,12 @@ export async function launchApp(): Promise<LaunchedApp> {
   await page.waitForLoadState('domcontentloaded');
   return {
     app,
+    userData,
     page,
     consoleErrors,
     close: async () => {
       await app.close();
-      rmSync(userData, { recursive: true, force: true });
+      rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
     },
   };
 }

@@ -104,6 +104,9 @@ export function ModelsSection({ settings, builtIns }: { settings: Settings; buil
     ...customs.map((c) => ({ value: `${CUSTOM_PREFIX}${c.id}`, label: c.name })),
   ];
 
+  // Subagents can't be routed to another endpoint by the CLI, so your models are offered for the lead slot only.
+  const familyOptions = modelOptions.filter((o) => !o.value.startsWith(CUSTOM_PREFIX));
+
   const defaultOptions = [
     ...presets.map((p) => ({ value: p.id, label: p.name })),
     { value: 'custom', label: 'Custom (last used)' },
@@ -194,7 +197,7 @@ export function ModelsSection({ settings, builtIns }: { settings: Settings; buil
             {slotsOf(preset.strategy).map(({ key, label, slot }) => (
               <div key={key} className="flex items-center gap-2.5 flex-wrap">
                 <span className="w-[170px] text-[12.5px] text-ink-2">{label}</span>
-                <Pills label={`${label} model`} options={modelOptions} value={slot.model.toLowerCase().startsWith(CUSTOM_PREFIX) ? slot.model : slot.model.toLowerCase()} onChange={(m) => setSlot(key, { model: m })} />
+                <Pills label={`${label} model`} options={key === 'lead' ? modelOptions : familyOptions} value={slot.model.toLowerCase().startsWith(CUSTOM_PREFIX) ? slot.model : slot.model.toLowerCase()} onChange={(m) => setSlot(key, { model: m })} />
                 <select aria-label={`${label} effort`} className={cn(inp, 'h-8 text-[12px]')} value={slot.effort ?? 'medium'} onChange={(e) => setSlot(key, { effort: e.target.value as Effort })}>
                   {EFFORTS.map((o) => (
                     <option key={o.value} value={o.value}>

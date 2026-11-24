@@ -6,7 +6,7 @@ import { AGENT_SECRET_HEADER, isLoopbackOrigin, McpProxy } from '../src/mcp-prox
 let upstream: Server;
 let upstreamUrl = '';
 const seen: Array<{ auth?: string; secret?: string; body: string; method?: string }> = [];
-let token = 'tok-1';
+const token = 'tok-1';
 
 beforeAll(async () => {
   upstream = createServer((req, res) => {

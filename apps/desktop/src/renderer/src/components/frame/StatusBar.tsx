@@ -6,11 +6,12 @@ import { useProjects } from '../../stores/projects';
 import { toast } from '../../stores/ui';
 import { ipcErrorMessage } from '../../lib/bridge';
 import { formatResetTime, formatTokens, plural } from '../../lib/format';
+import { PlanUsageMeter, latestPlanUsage } from './PlanUsage';
 
 /**
- * 26px status bar. Plan percentage meters (Session / Week) are hidden: there is no supported
- * source for them (build brief, "Context ring and plan usage"). Shows what oIDE can measure:
- * tokens today and the reset time of the last rate-limit event.
+ * 26px status bar. The plan meter (Session / Week) shows only when an agent's `planUsage` (the
+ * CLI's `rate_limit_event`) carries a utilization; otherwise only its reset time (PlanUsage.tsx).
+ * Also shows what oIDE measures: tokens today and the reset time of the last rate-limit event.
  */
 export function StatusBar() {
   const info = useCli((s) => s.info);
@@ -26,6 +27,7 @@ export function StatusBar() {
       worktrees: list.filter((a) => a.worktreePath || a.branch).length,
       subagentsActive: countAgents(list).subagentsActive,
       rateLimitResetAt: list.map((a) => a.rateLimitResetAt ?? 0).reduce((m, x) => Math.max(m, x), 0) || undefined,
+      planUsage: latestPlanUsage(list),
     };
   }, [byId]);
 
@@ -44,6 +46,8 @@ export function StatusBar() {
       </span>
       <div className="flex-1" />
       <div role="group" aria-label="Usage" className="h-[22px] flex items-center gap-1">
+        {/* Plan meter only from the CLI's own rate_limit_event utilization (never a guessed %). */}
+        {derived.planUsage && <PlanUsageMeter usage={derived.planUsage} />}
         {usage && (
           <Tooltip content="Tokens used by oIDE agents today (input + output)" placement="top-end">
             <button type="button" className="h-[22px] flex items-center gap-1.5 px-2 border-0 rounded-[5px] bg-transparent text-ink-3 text-[11.5px] hover:bg-selected hover:text-ink focus-visible:bg-selected">

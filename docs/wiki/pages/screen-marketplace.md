@@ -31,7 +31,7 @@ flow, Add custom services, loopback proxy) are on [marketplace.md](marketplace.m
   "publisher · built in", "Added by you · custom", folder/git), "not reviewed" badge when not reviewed,
   description, update box ("Update to x"), main button (Install / Uninstall / Remove / disabled
   "Built in"), "Tools it gives agents" (mono rows, risk text "read only" `#7FC8A9` / "asks first"
-  `#F2C078`; custom servers get a per-tool on/off), "Enabled for" (All projects + one checkbox per open
+  `#F2C078`; custom servers and installed extensions get a per-tool on/off; extensions save it with `extensions.setToolEnabled({ id, tool, server, enabled })`, which fills `disabledTools`), "Enabled for" (All projects + one checkbox per open
   project), "Declared capabilities", the custom box (source line, explanation, Edit, Publish to
   marketplace), and "Tools marked "asks first" always show a permission prompt on the agent's tile."
 
@@ -88,10 +88,6 @@ project is ticked; "Project .mcp.json (shared through git)" saves `projects` = t
 
 ## Gaps
 
-- **Per-tool on/off for marketplace extensions**: `InstalledExtension.disabledTools` exists but no IPC
-  sets it, so the detail shows the tools without checkboxes for extensions (custom servers have them).
-  Needs e.g. `extensions.setToolEnabled({ id, tool, enabled })`.
-- `custom.save` from the detail and Edit sends `secrets: {}`; main must keep existing secrets when the
-  map is empty.
+- `custom.save` from the detail and Edit sends `secrets: {}`; main keeps the stored values (only passed keys are overwritten).
 - No "Check for updates" refresh button (the index refreshes daily in main; `extensions.index({ refresh })` exists).
 - Mock data for this screen lives in `lib/mock/library.ts` (invented sample entries from the canvas).

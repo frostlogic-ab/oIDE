@@ -56,6 +56,8 @@ export const MarketplaceEntry = z.object({
   source: z.enum(['npm', 'builtin']).default('npm'),
   downloads: z.number().int().nonnegative().default(0),
   rating: z.number().min(0).max(5).optional(),
+  /** ISO date of the newest version, for the "Recently updated" sort. */
+  updatedAt: z.string().optional(),
   versions: z.array(
     z.object({
       version: z.string(),

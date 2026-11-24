@@ -27,6 +27,8 @@ export const AgentEvent = z.discriminatedUnion('type', [
     mcpServers: z.array(z.object({ name: z.string(), status: z.string() })).default([]),
     permissionMode: z.string().optional(),
     cliVersion: z.string().optional(),
+    /** The CLI's `slash_commands` (without the leading "/"), e.g. ["compact","context","init"]. Focus's `/` menu. */
+    slashCommands: z.array(z.string()).optional(),
   }),
   z.object({ ...base, type: z.literal('user-text'), text: z.string() }),
   z.object({ ...base, type: z.literal('assistant-text'), messageId: z.string().optional(), text: z.string() }),

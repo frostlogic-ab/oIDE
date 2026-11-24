@@ -36,6 +36,8 @@ export interface LaunchContext {
   customModel?: CustomModel;
   /** The custom model's key from oIDE's keychain store. Never Claude credentials. */
   customModelSecret?: string;
+  /** Extra env (custom MCP server secrets for `${VAR}` placeholders). Cannot override OIDE_AGENT_ID. */
+  extraEnv?: Record<string, string>;
   /** Source for the env allow-list. Defaults to process.env. Never copied wholesale. */
   baseEnv?: Record<string, string | undefined>;
   platform?: NodeJS.Platform;
@@ -340,10 +342,13 @@ export interface CommandLine {
   args: string[];
 }
 
-/** `.mjs`/`.js` CLIs (fake-claude) run through the current Node; everything else is spawned directly. */
+/**
+ * `.mjs`/`.js` CLIs (fake-claude) run through Node; everything else is spawned directly. Inside
+ * Electron `process.execPath` is the app binary, so `node` from PATH is used there instead.
+ */
 export function cliCommand(cliPath: string | undefined): CommandLine {
   const p = cliPath ?? 'claude';
-  if (/\.(mjs|cjs|js)$/i.test(p)) return { command: process.execPath, args: [p] };
+  if (/\.(mjs|cjs|js)$/i.test(p)) return { command: process.versions.electron ? 'node' : process.execPath, args: [p] };
   return { command: p, args: [] };
 }
 
@@ -413,7 +418,9 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
 
   // Allowed / disallowed tools
   const ext = ctx.extensionTools ?? [];
-  const toolName = (t: ExtensionToolRef) => `mcp__${t.server}__${t.tool}`;
+  // The CLI replaces characters outside [A-Za-z0-9_-] with `_` (verified on 2.1.325: `db.schema` → `db_schema`).
+  const norm = (x: string) => x.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const toolName = (t: ExtensionToolRef) => `mcp__${norm(t.server)}__${norm(t.tool)}`;
   const askTools = new Set([...ext.filter((t) => t.risk === 'ask').map(toolName), ...(ctx.projectRules?.ask ?? [])]);
   const allow = uniq([
     ...(ctx.trusted !== false ? (ctx.projectRules?.allow ?? []) : []),
@@ -436,6 +443,7 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
 
   // Env
   const env = allowListEnv(ctx.baseEnv ?? process.env);
+  for (const [k, v] of Object.entries(ctx.extraEnv ?? {})) if (ENV_KEY.test(k)) env[k] = v;
   env.OIDE_AGENT_ID = ctx.agentId;
   if (spec.strategy.kind === 'subagent-model') env[SUBAGENT_MODEL_ENV] = spec.strategy.subagents.model;
   if (ctx.customModel) Object.assign(env, customModelEnv(ctx.customModel, ctx.customModelSecret));

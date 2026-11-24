@@ -48,7 +48,7 @@ team-requested extensions that are not installed. `onChange` feeds the `extensio
 - `read` tools of enabled extensions and custom servers are pre-allowed; `ask` tools never are, so
   they always prompt on the tile; turned-off tools are disallowed.
 - Tool names are `mcp__<server>__<tool>` with characters outside `[A-Za-z0-9_-]` replaced by `_`
-  (guess: matches the CLI's normalisation, check in M1; `db.schema` → `mcp__postgres__db_schema`).
+  (verified on CLI 2.1.325, see [cli-integration](cli-integration.md), "MCP tool names": `db.schema` → `mcp__postgres__db_schema`).
 - The server name `oide` is reserved for oIDE's own MCP server; duplicate names are skipped with a
   warning.
 - Custom stdio servers get `${OIDE_MCP_<SERVER>_<KEY>}` placeholders; the values come back in

@@ -1,0 +1,38 @@
+import type { MainContext } from '../context.js';
+import { IpcError, type IpcRouter } from '../ipc/router.js';
+import type { Services } from '../services/index.js';
+
+const OK = { ok: true as const };
+
+/** projects.* and scope.* */
+export function registerProjectHandlers(router: IpcRouter, s: Services, ctx: MainContext): void {
+  router.register('projects.list', () => s.projects.list());
+  // No path: native folder picker. First open asks for trust with a native dialog (see security.md).
+  router.register('projects.open', ({ path }) => s.projects.open(path));
+  router.register('projects.remove', async ({ projectId }) => {
+    await s.projects.remove(projectId);
+    return OK;
+  });
+  router.register('projects.trust', ({ projectId, trusted }) => s.projects.trust(projectId, trusted));
+
+  router.register('scope.get', () => s.store.ui.scope());
+  router.register('scope.set', ({ scope }) => {
+    if (scope !== 'all' && !s.projects.get(scope)) throw new IpcError(`Unknown project ${scope}`, 'not_found');
+    const next = s.store.ui.setScope(scope);
+    ctx.emit('scope.changed', next);
+    return next;
+  });
+}
+
+/** cli.* */
+export function registerCliHandlers(router: IpcRouter, s: Services, ctx: MainContext): void {
+  router.register('cli.detect', () => s.cli.detect());
+  // Sign-in only through Anthropic's own flow: a terminal running the user's `claude`.
+  router.register('cli.openSignIn', async () => {
+    const info = await s.cli.ensure();
+    // Quoted for the user's shell (PowerShell on Windows, a POSIX shell elsewhere); no other input.
+    const p = info.found && info.path && !/\.(mjs|cjs|js)$/i.test(info.path) ? info.path : undefined;
+    const command = !p ? 'claude' : ctx.platform === 'win32' ? `& '${p.replace(/'/g, "''")}'` : `'${p.replace(/'/g, `'\\''`)}'`;
+    return s.platform.terminals.create({ cwd: ctx.userDataDir, command });
+  });
+}

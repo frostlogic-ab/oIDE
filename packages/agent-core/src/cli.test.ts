@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FAKE_CLAUDE, FAKE_CLAUDE_CMD, fixture, tempDir } from '../test/helpers.js';
-import { compareVersions, detectCli, findOnPath, inTestedRange, parseHelpFeatures, resolveSpawn } from './cli.js';
+import { cmdShimTarget, compareVersions, detectCli, findOnPath, inTestedRange, parseHelpFeatures, resolveSpawn } from './cli.js';
 
 describe('CLI detection', () => {
   it('parses the real 2.1.325 help into features', () => {
@@ -66,5 +66,19 @@ describe('CLI detection', () => {
     });
     const first = JSON.parse(readFileSync(rec, 'utf8').split('\n')[0]!) as { argv: string[] };
     expect(first.argv).toEqual(args);
+  });
+});
+
+describe('resolveSpawn with .cmd shims and multi-line arguments', () => {
+  it('runs the shim target with Node so a newline cannot cut the cmd.exe command line', () => {
+    const t = resolveSpawn(FAKE_CLAUDE_CMD, ['--append-system-prompt', 'line one\nline two', '--fake-scenario', 'review'], 'win32');
+    expect(t.windowsVerbatimArguments).toBeUndefined();
+    expect(t.args[0]).toBe(FAKE_CLAUDE);
+    expect(t.args.slice(1)).toEqual(['--append-system-prompt', 'line one\nline two', '--fake-scenario', 'review']);
+    expect(cmdShimTarget(FAKE_CLAUDE_CMD)).toBe(FAKE_CLAUDE);
+  });
+  it('keeps cmd.exe quoting for single-line arguments', () => {
+    const t = resolveSpawn(FAKE_CLAUDE_CMD, ['--version'], 'win32');
+    expect(t.windowsVerbatimArguments).toBe(true);
   });
 });

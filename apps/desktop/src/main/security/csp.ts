@@ -17,7 +17,10 @@ export interface CspOptions {
   frameSrc?: string[];
 }
 
-export function buildCsp({ dev = false, frameSrc = [] }: CspOptions = {}): string {
+/** Frames the app window may embed: artifact previews (`oide-artifact://<id>/…`, sandboxed iframes). */
+export const APP_FRAME_SRC = ['oide-artifact:'];
+
+export function buildCsp({ dev = false, frameSrc = APP_FRAME_SRC }: CspOptions = {}): string {
   const directives: Record<string, string[]> = {
     'default-src': ["'self'"],
     'script-src': dev ? ["'self'", "'unsafe-inline'"] : ["'self'"],

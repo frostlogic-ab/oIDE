@@ -74,3 +74,81 @@ summary `planText`/`backgroundTasks`/`planUsage`, `PermissionRequest.toolUseId`,
 [agent-supervisor](pages/agent-supervisor.md), [subagents](pages/subagents.md),
 [mcp-server](pages/mcp-server.md), [open-questions](pages/open-questions.md), [testing](pages/testing.md).
 Finding: `rate_limit_event` reports plan utilization per window (open question 4).
+
+## [2026-11-24] build | Wall and Spawn screens
+Built the Wall (`screens/Wall/`: projects sidebar as scope switcher, filter chips, memoized per-agent
+tiles for every status incl. queued / rate-limited / error, inline permission prompt with the exact
+request id, reply box, Review diff / Open PR, subagent chips, compact confirm, Artifacts and
+Marketplace teasers, empty states, J / K / N / Enter / Y / D / Esc) and Spawn (`screens/Spawn/`:
+goal + context chips from route params, project, Work in, mode cards with Bypass guard rails, focus
+presets, routed strategy slots with effort and model versions, techniques, attempts 1–6, extension
+tools, Ctrl/Cmd+Enter, `AgentSpec` validation, highlight on the Wall). Mock: `lib/mock/wall.ts`
+(`agents.spawn`, `projects.open`, `?wall=states|empty|no-projects`). Consumes `git.prAvailable` and
+`artifacts.uses`; no protocol changes. Decisions: N focuses the tile on the Wall; one "Model
+versions" row instead of a select per slot. Pages: [screen-wall](pages/screen-wall.md),
+[screen-spawn](pages/screen-spawn.md).
+
+## [2026-11-24] build | Artifacts, Marketplace and Settings screens
+
+Built the three screens from the canvas against the IPC contract, with mock data in
+`lib/mock/library.ts` (marked as mock; marketplace entries are invented sample data). Pages:
+[screen-artifacts](pages/screen-artifacts.md), [screen-marketplace](pages/screen-marketplace.md),
+[screen-settings](pages/screen-settings.md). Protocol additions (additive): `settings.builtIns`,
+`settings.loadErrors`, `artifacts.uses`, `artifacts.readVersion`, `dialog.pickFile`, optional
+`projectId`/`location` on `artifacts.import`, optional `MarketplaceEntry.updatedAt`; router
+`spawn.context` for Give to an agent. Decisions: whiteboards render as read-only SVG (no embedded
+Excalidraw in v1); doc editing uses a textarea; design previews use `oide-artifact://` in an
+`allow-scripts` sandbox (srcdoc with an empty sandbox as fallback); Settings "Check for update" is
+"Check again" (no CLI update command); worktree location is a select (schema enum). Open needs:
+an IPC to toggle single tools of marketplace extensions (`disabledTools`), and the supervisor
+must map `custom:<id>` preset slots to `AgentSpec.customModel`.
+
+## [2026-11-24] build | Source control, Review and Files screens
+Built Source control (`screens/SourceControl/`: per-project cards with sync state and Pull / Fetch /
+Push, Commit… dialog, agent worktrees with status, diff stats, PR state, Review and a ··· menu (open
+folder, reconcile, remove), recent commits with agent attribution; Ready to review, overlap heads-up
+with `git.reconcile`, unpushed notice; shared `useGit` store refreshed on `git.changed`), Review
+(`screens/Review/`: custom unified diff renderer with click-to-comment and inline threads, virtualized
+past 400 rows; Monaco split view with reverse-applied originals; Viewed; summary, checks, Send
+feedback, Open PR gated by gh, Merge locally with conflict hand-off to Spawn; J/K files, ]/[ hunks) and
+Files (`screens/Files/`: lazy windowed trees per project with compacted folders, checkout menu and
+agent markers; one lazy Monaco editor from the local package with an inlined editor worker and the
+`oide-dark` theme; save via `files.write`; agent banner; selection "Ask an agent about this" / "Send
+to agent"; history and Mentioned in). Mock: `lib/mock/scm.ts`. Protocol additions: `git.prAvailable`,
+`files.mentionedIn`; router: `files.line`. Pages: [screen-source-control](pages/screen-source-control.md),
+[screen-review](pages/screen-review.md), [screen-files](pages/screen-files.md).
+
+## [2026-11-24] build | Focus screen
+
+Built Focus (`screens/Focus/`) to Focus.dc.html: agents list with J/K/N/Esc, lead and subagent headers,
+virtualized transcript (`agents.events` pages + live tail, own history store, stick-to-bottom with
+"Jump to latest", streaming "Writing…" from partials, sanitized markdown), subagent cards and views by
+`parentToolUseId`, pinned permission prompt (exact request id, Y/D), composer (/ commands, Attach
+artifact, Shift+Tab mode), compact confirm, inspector Plan/Subagents/Changes/Artifacts/Terminal (xterm,
+lazy). Status bar plan meter (`components/frame/PlanUsage.tsx`) from `planUsage` utilization only.
+Protocol: `init.slashCommands` (agent-core parser should fill it). Mock: `lib/mock/focus.ts` (canvas
+transcript, 5k-event transcript, terminal). 43 tests. Page: [screen-focus](pages/screen-focus.md).
+
+## [2026-11-24] build | Main-process wiring
+Connected every wave-1 package inside the Electron main process. `services/core.ts`
+(`createCoreServices`, plain Node, Electron injected through `services/platform.ts`) builds the store
+(`<userData>/oide.db`), SettingsService, SqliteSecretStore over `safeStorage` (writes refused + startup
+notice when unavailable), WorktreeManager, ArtifactStore (rescan at startup), OideMcpServer, the
+Supervisor with all four ports (`services/agents.ts`), GitService (watchers, debounced diffs, periodic
+fetch, gh PR state), ExtensionsService (registry, installer, custom tools, loopback proxy, one utility
+process per extension from the bundled `out/main/host-process.js`) and CliService. Every command in
+the IPC contract has a handler (`handlers/*.ts`, Electron-free except `shell.ts`), including the
+renderer engineers' additions (settings.builtIns/loadErrors, artifacts.readVersion/uses,
+dialog.pickFile, git.prAvailable, files.mentionedIn, extensions.setToolEnabled). Trust: native dialog
+in main on first open (default "Not now"). Artifact previews: privileged `oide-artifact://<id>/<file>`
+scheme with a no-network CSP; window `frame-src oide-artifact:`. Lifecycle: migrations, worktree prune
++ orphan notice, 30-day event compaction, restore + `--resume` of agents working at quit; quit denies
+pending prompts and stops agents. Package changes: agent-core (`extraEnv` / agentId for extension
+hooks, `Supervisor.setDiff`, tool-name normalization in `buildLaunch`, Node for `.mjs` CLIs inside
+Electron, `.cmd` shims with multi-line args run their Node target), protocol (`AgentSpec.baseRef`,
+`extensions.setToolEnabled`), lint fixes in extension-host, git, store, protocol. Verified with one real
+`claude -p --model haiku` run that the CLI names `db.schema` `mcp__<server>__db_schema` (recorded in
+[cli-integration](pages/cli-integration.md)). New page [security](pages/security.md); updated
+[desktop-shell](pages/desktop-shell.md), [testing](pages/testing.md), [storage](pages/storage.md),
+[extensions](pages/extensions.md). Tests: `test/integration/main-services.test.ts` (6) and
+`apps/desktop/e2e/agents.spec.ts` (3).

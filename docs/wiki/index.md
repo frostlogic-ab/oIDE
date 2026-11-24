@@ -37,15 +37,15 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 
 ## Screens
 
-- [pages/screen-wall.md](pages/screen-wall.md): Mission Control wall (Main).
-- [pages/screen-focus.md](pages/screen-focus.md): Focus view.
-- [pages/screen-spawn.md](pages/screen-spawn.md): Spawn agent.
-- [pages/screen-source-control.md](pages/screen-source-control.md): Source control.
-- [pages/screen-review.md](pages/screen-review.md): Review changes.
-- [pages/screen-files.md](pages/screen-files.md): Files.
-- [pages/screen-artifacts.md](pages/screen-artifacts.md): Artifacts library.
-- [pages/screen-marketplace.md](pages/screen-marketplace.md): Extension marketplace.
-- [pages/screen-settings.md](pages/screen-settings.md): Settings.
+- [pages/screen-wall.md](pages/screen-wall.md): Mission Control wall (Main): tiles per status, inline permission / reply / review, subagent chips, compact confirm, J/K/N/Y/D keys.
+- [pages/screen-focus.md](pages/screen-focus.md): Focus: virtualized paged transcript, subagent views by parentToolUseId, pinned permission prompt, composer with / commands and artifacts, inspector (Plan, Subagents, Changes, Artifacts, Terminal).
+- [pages/screen-spawn.md](pages/screen-spawn.md): Spawn agent: fields → AgentSpec, presets and model slots, Bypass rules, CLI feature gating.
+- [pages/screen-source-control.md](pages/screen-source-control.md): Source control: project cards (sync, Commit…, agent worktrees, PR state, recent commits), Ready to review, overlap heads-up, unpushed notice; shared git store.
+- [pages/screen-review.md](pages/screen-review.md): Review changes: custom unified diff with inline comments, Monaco split view, Viewed, summary and checks, Send feedback / Open PR / Merge locally, J/K and ]/[ keys.
+- [pages/screen-files.md](pages/screen-files.md): Files: lazy per-project trees with checkout menus and agent markers, one Monaco editor (local, lazy), agent banner, history, Mentioned in.
+- [pages/screen-artifacts.md](pages/screen-artifacts.md): Artifacts: grid by kind / scope / search, sandboxed previews, Open with editor, Give to an agent, history with view and restore, Import from claude.ai, New artifact.
+- [pages/screen-marketplace.md](pages/screen-marketplace.md): Extension marketplace: categories, list and detail, install consent, updates, Add custom (URL, import, command/JSON, folder/git).
+- [pages/screen-settings.md](pages/screen-settings.md): Settings: Claude Code, Models (presets, versions, your models), Agents, Techniques, Permissions, Projects, shortcuts, accent, privacy; save-on-change rules and `.oide/` load errors.
 
 ## Decisions
 

@@ -115,7 +115,7 @@ function validateContent(kind: ArtifactKind, content: string): void {
     try {
       v = JSON.parse(content);
     } catch (e) {
-      throw new Error(`Whiteboard content must be Excalidraw JSON: ${(e as Error).message}`);
+      throw new Error(`Whiteboard content must be Excalidraw JSON: ${(e as Error).message}`, { cause: e });
     }
     if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('Whiteboard content must be an Excalidraw JSON object.');
   }

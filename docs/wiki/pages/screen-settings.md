@@ -62,8 +62,9 @@ shows as an amber banner at the top of every section, and per project under Proj
 
 ## Gaps
 
-- Custom models in preset slots are stored as `custom:<id>`. The supervisor still has to map that to
-  the model's env (`AgentSpec.customModel`); until then pick custom models in Spawn.
+- Custom models are offered only in the lead slot (stored as `custom:<id>`; `agents.spawn` maps it to
+  `AgentSpec.customModel`). Subagent slots list the model families only: the CLI cannot route
+  subagents to another endpoint.
 - Keyboard shortcuts are read-only here (rebinding lives in `keymap.rebind`, persisted to localStorage).
 - "Custom (last used)" depends on Spawn writing `models.lastUsedStrategy`.
 - `settings.builtIns`, `settings.loadErrors` and `projects.trust` need main handlers; without them the

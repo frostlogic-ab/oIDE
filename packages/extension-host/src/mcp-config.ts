@@ -57,7 +57,7 @@ const RESERVED = new Set(['oide']);
 
 /**
  * The name Claude Code gives an MCP tool: `mcp__<server>__<tool>`, with characters outside
- * `[a-zA-Z0-9_-]` replaced by `_` (guess: matches the CLI's name normalisation; checked in M1).
+ * `[a-zA-Z0-9_-]` replaced by `_` (verified on CLI 2.1.325: `db.schema` → `db_schema`; see docs/wiki/pages/cli-integration.md).
  */
 export function mcpToolName(server: string, tool: string): string {
   const norm = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, '_');

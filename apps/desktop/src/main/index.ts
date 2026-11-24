@@ -9,6 +9,7 @@ import { createAgentEventBatcher, createEmitter } from './ipc/emit.js';
 import { attachRouter, IpcRouter, type Logger } from './ipc/router.js';
 import { registerAllHandlers } from './handlers/index.js';
 import { createServices } from './services/index.js';
+import { registerArtifactScheme } from './services/electron-platform.js';
 import { hardenApp } from './security/hardening.js';
 import { AllowedRoots } from './security/roots.js';
 import { loadWindowState, MIN_HEIGHT, MIN_WIDTH, trackWindowState } from './window-state.js';
@@ -26,6 +27,8 @@ const log: Logger = {
 if (process.env.OIDE_USER_DATA) app.setPath('userData', process.env.OIDE_USER_DATA);
 
 app.enableSandbox();
+// Privileged schemes must be registered before the app is ready.
+registerArtifactScheme();
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -113,6 +116,7 @@ async function start(): Promise<void> {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+  mainWindow.webContents.on('did-finish-load', () => setTimeout(() => services.flushNotices(), 500));
   if (devServerUrl) await mainWindow.loadURL(devServerUrl);
   else await mainWindow.loadFile(join(rendererDir, 'index.html'));
 

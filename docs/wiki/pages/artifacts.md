@@ -52,4 +52,4 @@ implements it in v1.
 
 ## MCP tools and UI
 
-(To be written by the MCP server and Artifacts screen work: tool names, preview protocol, Give to an agent.)
+UI: [screen-artifacts.md](screen-artifacts.md) (preview through `artifacts.previewUrl` in a sandboxed iframe, Give to an agent as a Spawn context chip, history with view and restore). MCP tool names: [mcp-server.md](mcp-server.md).

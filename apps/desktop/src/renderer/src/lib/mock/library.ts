@@ -585,6 +585,16 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
       changedExt();
       return next;
     },
+    'extensions.setToolEnabled': ({ id, tool, server, enabled }) => {
+      const rec = installed.find((e) => e.id === id) ?? fail('not_found', 'Not installed');
+      const clean = (x: string) => x.replace(/[^A-Za-z0-9_-]/g, '_');
+      const srv = server ?? Object.entries(rec.manifest.oide.mcpServers).find(([, d]) => tool in d.tools)?.[0] ?? '';
+      const name = tool.startsWith('mcp__') ? tool : `mcp__${clean(srv)}__${clean(tool)}`;
+      const next = { ...rec, disabledTools: enabled ? rec.disabledTools.filter((t) => t !== name) : [...new Set([...rec.disabledTools, name])] };
+      installed = installed.map((e) => (e.id === id ? next : e));
+      changedExt();
+      return next;
+    },
     'extensions.updates': () =>
       installed.flatMap((rec) => {
         const entry = marketplaceEntries.find((e) => e.name === rec.name);

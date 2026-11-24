@@ -196,5 +196,5 @@ export function isValidPermissionRule(rule: string): boolean {
 
 /** Characters allowed in an exact command we suggest for "Always in <project>". */
 export function isSafeSuggestedSpecifier(spec: string): boolean {
-  return spec.length > 0 && spec.length <= 200 && !/[(),"'`\*:\r\n]/.test(spec);
+  return spec.length > 0 && spec.length <= 200 && !/[(),"'`*:\r\n]/.test(spec);
 }

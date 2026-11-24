@@ -63,9 +63,14 @@ export interface SettingsProvider {
   techniques?(projectId: string): Technique[] | Promise<Technique[]>;
   project?(projectId: string): ProjectInfo | undefined | Promise<ProjectInfo | undefined>;
   /** Extension and custom-server tools for this agent, with risk labels. */
-  extensionTools?(spec: AgentSpec): ExtensionToolRef[] | Promise<ExtensionToolRef[]>;
+  extensionTools?(spec: AgentSpec, agentId: string): ExtensionToolRef[] | Promise<ExtensionToolRef[]>;
   /** Extension / custom MCP servers to merge into the agent's mcp.json (never named `oide`). */
-  extraMcpServers?(spec: AgentSpec): Record<string, McpServerEntry> | Promise<Record<string, McpServerEntry>>;
+  extraMcpServers?(spec: AgentSpec, agentId: string): Record<string, McpServerEntry> | Promise<Record<string, McpServerEntry>>;
+  /**
+   * Extra env for this agent's process on every launch: values for the `${VAR}` placeholders of
+   * custom MCP servers (from oIDE's keychain store). Never Claude credentials; never written to disk.
+   */
+  extraEnv?(spec: AgentSpec, agentId: string): Record<string, string> | Promise<Record<string, string>>;
   customModel?(id: string): CustomModel | undefined | Promise<CustomModel | undefined>;
   /** "Always in <project>": save an allow rule (e.g. `Bash(npm test)`) to `.oide/permissions.json`. */
   addAllowRule?(projectId: string, rule: string): void | Promise<void>;

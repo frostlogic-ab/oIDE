@@ -78,16 +78,16 @@ test('renderer is isolated: no Node, only window.oide, strict CSP', async () => 
   expect(probe.csp).not.toContain('unsafe-eval');
 });
 
-test('IPC: app.info works, unknown handlers answer not_implemented', async () => {
+test('IPC: app.info works, error codes cross IPC', async () => {
   const { page } = ctx;
   const res = await page.evaluate(async () => {
     const oide = (window as unknown as { oide: { invoke(c: string, i: unknown): Promise<unknown> } }).oide;
     const info = (await oide.invoke('app.info', undefined)) as { version: string };
-    let notImpl = '';
+    let notFound = '';
     try {
       await oide.invoke('git.worktrees', { projectId: 'x' });
     } catch (e) {
-      notImpl = (e as Error).message;
+      notFound = (e as Error).message;
     }
     let invalid = '';
     try {
@@ -101,10 +101,10 @@ test('IPC: app.info works, unknown handlers answer not_implemented', async () =>
     } catch (e) {
       forbidden = (e as Error).message;
     }
-    return { version: info.version, notImpl, invalid, forbidden };
+    return { version: info.version, notFound, invalid, forbidden };
   });
   expect(res.version).toMatch(/\d+\.\d+\.\d+/);
-  expect(res.notImpl).toMatch(/^\[not_implemented\]/);
+  expect(res.notFound).toMatch(/^\[not_found\]/);
   expect(res.invalid).toMatch(/^\[invalid_input\]/);
   expect(res.forbidden).toMatch(/^\[forbidden\]/);
 });
@@ -117,14 +117,14 @@ test('rail navigation moves aria-current and swaps the screen', async () => {
   await rail.getByRole('button', { name: 'Files' }).click();
   await expect(rail.getByRole('button', { name: 'Files' })).toHaveAttribute('aria-current', 'page');
   await expect(rail.getByRole('button', { name: 'Agents' })).not.toHaveAttribute('aria-current', 'page');
-  await expect(page.getByRole('heading', { level: 1, name: 'Files' })).toBeVisible();
   await expect(page.getByRole('radiogroup', { name: 'Project scope' })).toBeVisible();
 
   await rail.getByRole('button', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  await expect(rail.getByRole('button', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByRole('navigation', { name: 'Settings' })).toBeVisible();
 
   await page.keyboard.press('Alt+ArrowLeft');
-  await expect(page.getByRole('heading', { level: 1, name: 'Files' })).toBeVisible();
+  await expect(rail.getByRole('button', { name: 'Files' })).toHaveAttribute('aria-current', 'page');
 
   await rail.getByRole('button', { name: 'Agents' }).click();
   await expect(rail.getByRole('button', { name: 'Agents' })).toHaveAttribute('aria-current', 'page');
@@ -143,7 +143,7 @@ test('Ctrl+K opens the command bar and runs a navigation command', async () => {
   await expect(bar.getByRole('option').first()).toContainText('Go to Marketplace');
   await page.keyboard.press('Enter');
   await expect(bar).toBeHidden();
-  await expect(page.getByRole('heading', { level: 1, name: 'Marketplace' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: /marketplace/i })).toHaveAttribute('aria-current', 'page');
 
   await page.keyboard.press(process.platform === 'darwin' ? 'Meta+K' : 'Control+K');
   await expect(bar).toBeVisible();

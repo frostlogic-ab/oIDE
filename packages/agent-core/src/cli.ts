@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
-import { existsSync, statSync } from 'node:fs';
-import { delimiter, extname, isAbsolute, join } from 'node:path';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { delimiter, dirname, extname, isAbsolute, join, resolve } from 'node:path';
 import { TESTED_CLI_RANGE, type CliInfo } from '@oide/protocol';
 import { allowListEnv, cliCommand } from './args.js';
 
@@ -39,10 +39,32 @@ export function escapeCmdCommand(cmd: string): string {
  */
 export function resolveSpawn(command: string, args: string[], platform: NodeJS.Platform = process.platform): SpawnTarget {
   if (platform === 'win32' && /\.(cmd|bat)$/i.test(command)) {
+    // cmd.exe cannot carry a newline inside an argument (it ends the command line, dropping every
+    // later flag), and --append-system-prompt is multi-line. npm-style shims just run a Node script:
+    // run that script with Node directly instead.
+    if (args.some((a) => /[\r\n]/.test(a))) {
+      const script = cmdShimTarget(command);
+      if (script) return { file: process.versions.electron ? 'node' : process.execPath, args: [script, ...args] };
+      args = args.map((a) => a.replace(/\r?\n/g, ' '));
+    }
     const line = [escapeCmdCommand(command), ...args.map((a) => escapeCmdArgument(a, true))].join(' ');
     return { file: process.env.ComSpec ?? 'cmd.exe', args: ['/d', '/s', '/c', `"${line}"`], windowsVerbatimArguments: true };
   }
   return { file: command, args };
+}
+
+/** The Node script an npm-style `.cmd` shim runs (`"%dp0%\node_modules\…\cli.js"` or `"%~dp0x.mjs"`), if any. */
+export function cmdShimTarget(shim: string): string | undefined {
+  let text: string;
+  try {
+    text = readFileSync(shim, 'utf8');
+  } catch {
+    return undefined;
+  }
+  const m = /"%~?dp0%?[\\/]?([^"%]+\.(?:js|mjs|cjs))"/i.exec(text);
+  if (!m) return undefined;
+  const target = resolve(dirname(shim), m[1]!);
+  return existsSync(target) ? target : undefined;
 }
 
 /** Find `claude` on PATH. Windows: honours PATHEXT, prefers claude.exe over claude.cmd. */

@@ -252,7 +252,7 @@ export class Supervisor {
         }
       }
       if (!rec.mcpConfigPath) {
-        const extra = (await this.deps.settings.extraMcpServers?.(rec.spec)) ?? {};
+        const extra = (await this.deps.settings.extraMcpServers?.(rec.spec, rec.id)) ?? {};
         const reg = await this.deps.broker.registerAgent(
           rec.id,
           {
@@ -279,7 +279,8 @@ export class Supervisor {
         techniques: (await this.deps.settings.techniques?.(rec.spec.projectId)) ?? settings.techniques,
         ...(project?.rules ? { projectRules: project.rules } : {}),
         trusted: project?.trusted ?? false,
-        extensionTools: (await this.deps.settings.extensionTools?.(rec.spec)) ?? [],
+        extensionTools: (await this.deps.settings.extensionTools?.(rec.spec, rec.id)) ?? [],
+        extraEnv: (await this.deps.settings.extraEnv?.(rec.spec, rec.id)) ?? {},
         mcpConfigPath: rec.mcpConfigPath,
         ...(customModel ? { customModel } : {}),
         ...(customModelSecret ? { customModelSecret } : {}),
@@ -537,6 +538,17 @@ export class Supervisor {
     if (ACTIVE.has(status) || status === 'queued') return;
     rec.idleStatus = status === 'paused' || status === 'stopped' || status === 'error' || status === 'done' ? IDLE_AFTER_RESUME : status;
     this.enqueueResume(rec);
+  }
+
+  /** Diff counts from the worktree (`git diff --numstat`), refreshed by main after edits. */
+  setDiff(agentId: string, diff: AgentSummary['diff']): void {
+    const rec = this.agents.get(agentId);
+    if (!rec) return;
+    const cur = rec.reducer.summary.diff;
+    if (cur && diff && cur.files === diff.files && cur.additions === diff.additions && cur.deletions === diff.deletions) return;
+    if (diff) rec.reducer.summary.diff = diff;
+    else delete rec.reducer.summary.diff;
+    this.publishSummary(rec);
   }
 
   /** Stop one subagent (open question 9): deny its next tool call with a stop message. */

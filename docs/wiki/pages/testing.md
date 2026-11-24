@@ -10,6 +10,43 @@ rewriting others. Related: [agent-supervisor](agent-supervisor.md), [cli-integra
 - Agent tests never need a Claude login: they run against `tools/fake-claude`.
 - `test/no-credentials.test.ts` fails the build if a Claude credential location appears in code.
 
+## Main-process integration (`test/integration/`)
+
+The whole services layer of `apps/desktop/src/main` runs in plain Node, no Electron:
+`createCoreServices({ ctx, platform, terminals })` with a fake `Platform` (reversible cipher instead of
+`safeStorage`, trust answer, captured notifications, no watchers) and `registerDomainHandlers` on a real
+`IpcRouter`, so every call goes through the Zod-validated contract exactly as the renderer's.
+`harness.ts` builds a temp git repo (`makeRepo`), a temp userData, and `call(command, input)` /
+`fails(command, input)` (returns the error code). The CLI is `tools/fake-claude` via
+`Platform.cliPathOverride`. Test files import the protocol by relative path (the root has no
+`node_modules/@oide`).
+
+`main-services.test.ts` covers: a handler for every command in `Commands` (shell.* need Electron); open a
+repo (non-repo → `not_a_repo`) → spawn (worktree under `<userData>/worktrees`, branch `oide/<slug>`) →
+permission prompt on the summary (wrong id → `not_found`, Always saves `Bash(npm test)` to
+`.oide/permissions.json`) → `submit_for_review` → `git.diff` and tile diff counts → files tree/read and
+path guard (`forbidden_path`) → review comment + `sendFeedback` (one review-feedback message, comments
+marked sent) → second turn → commit in the worktree → `git.mergeLocal` → cleanup "Right away" removes
+worktree, branch and agent; `.oide/setup` runs only after the project is trusted; Bypass refusals;
+the Max running queue (2 attempts, max 1); resume with `--resume <same session id>` after a simulated
+restart (`--fake-record` argv check); artifacts preview URL resolution, picked-file rule for imports,
+custom model keys stay in the secret store and never appear in `settings.get`.
+
+## E2E (Playwright for Electron, `apps/desktop/e2e/`)
+
+`pnpm --filter @oide/desktop e2e` builds, then runs the built app with a temp `OIDE_USER_DATA`.
+`launchApp(env)` takes extra env: `OIDE_CLAUDE_PATH` (CLI override; `FAKE_CLAUDE` is
+`tools/fake-claude/bin/fake-claude.cmd` on Windows, `.mjs` elsewhere) and `OIDE_E2E_TRUST=trust|untrusted`
+(answers the first-open trust dialog; honoured only by unpackaged builds).
+
+- `smoke.spec.ts`: window and web preferences, isolation and CSP, error codes over real IPC, rail
+  navigation by `aria-current`, Ctrl+K.
+- `agents.spec.ts`: `projects.open({ path })` at the IPC level (the native picker can't be driven),
+  spawn with fake-claude `--fake-scenario review`, the Wall tile shows the
+  `group "Permission: Run npm test"`, clicking "Allow once" leads to `ready-for-review` and the
+  "Ready for review" label, `git.diff` lists the file; the `oide-artifact://` protocol serves an
+  artifact with the no-network CSP and answers 404 for `..` escapes.
+
 ## fake-claude (`tools/fake-claude`)
 
 A scriptable stand-in for the `claude` CLI in `-p --input-format stream-json --output-format stream-json`
