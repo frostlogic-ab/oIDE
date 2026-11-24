@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AgentSpec, CliInfo, Technique } from '@oide/protocol';
-import { allowListEnv, buildLaunch, customModelEnv, deniedModelEnvKeys, filterExtraFlags, isDeniedModelEnvKey, LaunchError, shellSplit, type LaunchContext } from './args.js';
+import { allowListEnv, buildLaunch, customModelEnv, disallowedModelEnvKeys, filterExtraFlags, isAllowedModelEnvEntry, isAllowedModelEnvKey, LaunchError, shellSplit, type LaunchContext } from './args.js';
 import { testSettings } from '../test/helpers.js';
 
 const cli = CliInfo.parse({ found: true, path: 'C:\\bin\\claude.exe', version: '2.1.325', inTestedRange: true, features: { effort: true, 'mode:auto': true, agents: true, 'permission-prompt-tool': true, 'include-partial-messages': true, 'forward-subagent-text': true } });
@@ -114,7 +114,7 @@ describe('buildLaunch', () => {
   });
 
   it('builds env from an allow-list only, plus custom model variables from the passed-in secret', () => {
-    const p = buildLaunch(spec({ customModel: { id: 'cm1' } }), ctx({ customModel: { id: 'cm1', name: 'Local', provider: 'compatible-api', baseUrl: 'http://127.0.0.1:8080', model: 'qwen-coder', hasKey: true, extraEnv: { FOO_BAR: '1' } }, customModelSecret: 'k-123' }));
+    const p = buildLaunch(spec({ customModel: { id: 'cm1' } }), ctx({ customModel: { id: 'cm1', name: 'Local', provider: 'compatible-api', baseUrl: 'http://127.0.0.1:8080', model: 'qwen-coder', hasKey: true, extraEnv: { MAX_THINKING_TOKENS: '1' } }, customModelSecret: 'k-123' }));
     expect(p.env.PATH).toBe('/usr/bin');
     expect(p.env.Path).toBe('C:\\Windows');
     expect(p.env.LC_ALL).toBe('C');
@@ -122,7 +122,7 @@ describe('buildLaunch', () => {
     expect(p.env.ANTHROPIC_API_KEY).toBeUndefined();
     expect(p.env.GITHUB_TOKEN).toBeUndefined();
     expect(p.env.AWS_SECRET_ACCESS_KEY).toBeUndefined();
-    expect(p.env).toMatchObject({ ANTHROPIC_BASE_URL: 'http://127.0.0.1:8080', ANTHROPIC_MODEL: 'qwen-coder', ANTHROPIC_AUTH_TOKEN: 'k-123', FOO_BAR: '1', OIDE_AGENT_ID: 'agt-1' });
+    expect(p.env).toMatchObject({ ANTHROPIC_BASE_URL: 'http://127.0.0.1:8080', ANTHROPIC_MODEL: 'qwen-coder', ANTHROPIC_AUTH_TOKEN: 'k-123', MAX_THINKING_TOKENS: '1', OIDE_AGENT_ID: 'agt-1' });
     expect(flagValue(p.args, '--model')).toBe('qwen-coder');
     const b = buildLaunch(spec(), ctx({ customModel: { id: 'b', name: 'Bedrock', provider: 'bedrock', model: 'anthropic.claude', hasKey: false, extraEnv: {} } }));
     expect(b.env.CLAUDE_CODE_USE_BEDROCK).toBe('1');
@@ -220,23 +220,70 @@ describe('helpers', () => {
   it('SEC-01: the agent env makes Windows skip the cwd when the CLI spawns git/node', () => {
     expect(buildLaunch(spec(), ctx({ platform: 'win32' })).env.NoDefaultCurrentDirectoryInExePath).toBe('1');
   });
-  it('SEC-28: a custom model env cannot set loaders, PATH, proxies, TLS, Electron, Claude Code or oIDE variables', () => {
-    for (const k of ['NODE_OPTIONS', 'node_options', 'Path', 'PATH', 'PATHEXT', 'HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'NO_PROXY', 'LD_PRELOAD', 'ld_library_path', 'DYLD_INSERT_LIBRARIES', 'ELECTRON_RUN_AS_NODE', 'CLAUDE_CODE_GIT_BASH_PATH', 'CLAUDE_CODE_SHELL_PREFIX', 'CLAUDE_CODE_USE_BEDROCK', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_CUSTOM_HEADERS', 'ANTHROPIC_BEDROCK_BASE_URL', 'NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'PYTHONPATH', 'PERL5OPT', 'GIT_SSH_COMMAND', 'BASH_ENV', 'COMSPEC', 'OIDE_AGENT_ID', 'OIDE_MCP_HANDSHAKE', 'CLAUDE_CONFIG_DIR', 'AWS_ENDPOINT_URL_BEDROCK_RUNTIME', 'NoDefaultCurrentDirectoryInExePath', 'bad-name', '']) {
-      expect(isDeniedModelEnvKey(k), k).toBe(true);
-    }
-    for (const k of ['AWS_REGION', 'AWS_PROFILE', 'CLOUD_ML_REGION', 'ANTHROPIC_VERTEX_PROJECT_ID', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'anthropic_small_fast_model', 'CLAUDE_CODE_MAX_OUTPUT_TOKENS', 'FOO_BAR', 'PATHS_EXTRA', 'NODEJS_FLAVOR']) {
-      expect(isDeniedModelEnvKey(k), k).toBe(false);
-    }
-    expect(deniedModelEnvKeys({ AWS_REGION: 'x', NODE_OPTIONS: 'y' })).toEqual(['NODE_OPTIONS']);
+  it('SEC-28: a custom model env may set only allow-listed model and provider names', () => {
+    const rejected = [
+      // loaders, runtimes, shells, pagers, terminal
+      'NODE_OPTIONS', 'node_options', 'LD_PRELOAD', 'DYLD_INSERT_LIBRARIES', 'ELECTRON_RUN_AS_NODE', 'PYTHONPATH', 'PERL5OPT', 'LUA_INIT', 'LUA_PATH', 'GCONV_PATH', 'BASH_ENV', 'IFS', 'PS4', 'COMSPEC', 'LESSOPEN', 'LESSCLOSE', 'LESS', 'MANPAGER', 'PAGER', 'EDITOR', 'TERMINFO',
+      // program lookup, case tricks
+      'PATH', 'Path', 'PATHEXT', 'NoDefaultCurrentDirectoryInExePath', 'aws_region', 'Aws_Profile',
+      // traffic, TLS, credentials files
+      'HTTPS_PROXY', 'https_proxy', 'NO_PROXY', 'NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'OPENSSL_CONF', 'OPENSSL_MODULES', 'AWS_ENDPOINT_URL_BEDROCK_RUNTIME', 'AWS_CA_BUNDLE', 'AWS_CONFIG_FILE', 'GOOGLE_APPLICATION_CREDENTIALS', 'GIT_SSH_COMMAND',
+      // what oIDE and Claude Code control
+      'ANTHROPIC_BASE_URL', 'ANTHROPIC_MODEL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY', 'ANTHROPIC_CUSTOM_HEADERS', 'ANTHROPIC_BEDROCK_BASE_URL', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_GIT_BASH_PATH', 'CLAUDE_CODE_SHELL_PREFIX', 'CLAUDE_CONFIG_DIR', 'OIDE_AGENT_ID', 'OIDE_MCP_HANDSHAKE',
+      // anything else
+      'FOO_BAR', 'VERTEX_REGION_', 'bad-name', '',
+    ];
+    for (const k of rejected) expect(isAllowedModelEnvKey(k), k).toBe(false);
+    const allowed = ['AWS_REGION', 'AWS_DEFAULT_REGION', 'AWS_PROFILE', 'ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION', 'CLOUD_ML_REGION', 'ANTHROPIC_VERTEX_PROJECT_ID', 'VERTEX_REGION_CLAUDE_3_5_HAIKU', 'ANTHROPIC_DEFAULT_OPUS_MODEL', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL', 'ANTHROPIC_SMALL_FAST_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_MAX_OUTPUT_TOKENS', 'MAX_THINKING_TOKENS', 'DISABLE_PROMPT_CACHING'];
+    for (const k of allowed) expect(isAllowedModelEnvKey(k), k).toBe(true);
+    expect(disallowedModelEnvKeys({ AWS_REGION: 'x', NODE_OPTIONS: 'y', LESSOPEN: 'z' })).toEqual(['NODE_OPTIONS', 'LESSOPEN']);
     const warnings: string[] = [];
-    const env = customModelEnv({ id: 'm', name: 'M', provider: 'bedrock', model: 'x', hasKey: false, extraEnv: { AWS_REGION: 'eu-west-1', NODE_OPTIONS: '--require x', https_proxy: 'http://evil', ANTHROPIC_BEDROCK_BASE_URL: 'https://evil' } }, undefined, warnings);
+    const env = customModelEnv({ id: 'm', name: 'M', provider: 'bedrock', model: 'x', hasKey: false, extraEnv: { AWS_REGION: 'eu-west-1', NODE_OPTIONS: '--require x', https_proxy: 'http://evil', ANTHROPIC_BEDROCK_BASE_URL: 'https://evil', CLAUDE_CODE_USE_BEDROCK: '0' } }, undefined, warnings);
     expect(env).toEqual({ AWS_REGION: 'eu-west-1', CLAUDE_CODE_USE_BEDROCK: '1', ANTHROPIC_MODEL: 'x' });
-    expect(warnings[0]).toMatch(/NODE_OPTIONS, https_proxy, ANTHROPIC_BEDROCK_BASE_URL/);
-    // buildLaunch: a stored model with a denied key (e.g. from before SEC-28) still cannot set it.
+    expect(warnings[0]).toMatch(/NODE_OPTIONS, https_proxy, ANTHROPIC_BEDROCK_BASE_URL, CLAUDE_CODE_USE_BEDROCK/);
+    // oIDE's own fields always win: extraEnv cannot re-point the base URL, model or token.
+    const own = customModelEnv({ id: 'm', name: 'M', provider: 'local', baseUrl: 'http://127.0.0.1:1', model: 'q', hasKey: true, extraEnv: { ANTHROPIC_BASE_URL: 'https://evil', ANTHROPIC_MODEL: 'z', ANTHROPIC_AUTH_TOKEN: 't' } }, 'k');
+    expect(own).toEqual({ ANTHROPIC_BASE_URL: 'http://127.0.0.1:1', ANTHROPIC_MODEL: 'q', ANTHROPIC_AUTH_TOKEN: 'k' });
+    // buildLaunch: a stored model with a refused name (e.g. from before SEC-28) still cannot set it.
     const p = buildLaunch(spec({ customModel: { id: 'cm1' } }), ctx({ baseEnv: { PATH: '/usr/bin' }, customModel: { id: 'cm1', name: 'L', provider: 'local', baseUrl: 'http://127.0.0.1:1', model: 'q', hasKey: false, extraEnv: { PATH: '/evil', NODE_OPTIONS: '--require x' } } }));
     expect(p.env.PATH).toBe('/usr/bin');
     expect(p.env.NODE_OPTIONS).toBeUndefined();
     expect(p.warnings.join(' | ')).toMatch(/PATH, NODE_OPTIONS/);
+    // The agent's subagent-model strategy wins over the model's CLAUDE_CODE_SUBAGENT_MODEL.
+    const sub = buildLaunch(spec({ customModel: { id: 'cm1' }, strategy: { kind: 'subagent-model', lead: { model: 'opus' }, subagents: { model: 'haiku' } } }), ctx({ customModel: { id: 'cm1', name: 'L', provider: 'bedrock', model: 'q', hasKey: false, extraEnv: { CLAUDE_CODE_SUBAGENT_MODEL: 'other' } } }));
+    expect(sub.env.CLAUDE_CODE_SUBAGENT_MODEL).toBe('haiku');
+  });
+  it('SEC-28: allowed names must also have well-formed values', () => {
+    const ok: Array<[string, string]> = [
+      ['AWS_REGION', 'eu-west-1'], ['AWS_DEFAULT_REGION', 'us-east-1'], ['ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION', 'us-west-2'], ['CLOUD_ML_REGION', 'global'], ['CLOUD_ML_REGION', 'europe-west4'], ['VERTEX_REGION_CLAUDE_3_5_HAIKU', 'us-east5'],
+      ['ANTHROPIC_VERTEX_PROJECT_ID', 'my-project-123'], ['ANTHROPIC_VERTEX_PROJECT_ID', 'abcdef'],
+      ['AWS_PROFILE', 'work'], ['AWS_PROFILE', 'team.dev+ops=1,a@b_c-d'],
+      ['CLAUDE_CODE_MAX_OUTPUT_TOKENS', '32000'], ['MAX_THINKING_TOKENS', '0'], ['MAX_THINKING_TOKENS', '1000000'],
+      ['ANTHROPIC_DEFAULT_SONNET_MODEL', 'claude-sonnet-4-5'], ['ANTHROPIC_SMALL_FAST_MODEL', 'us.anthropic.claude-3-5-haiku-20241022-v1:0'], ['CLAUDE_CODE_SUBAGENT_MODEL', 'claude-opus-4[1m]'], ['ANTHROPIC_DEFAULT_OPUS_MODEL', 'claude-opus-4-20250514'],
+      ['DISABLE_PROMPT_CACHING', '1'], ['DISABLE_PROMPT_CACHING', 'false'],
+    ];
+    for (const [k, v] of ok) expect(isAllowedModelEnvEntry(k, v), `${k}=${v}`).toBe(true);
+    const bad: Array<[string, unknown]> = [
+      // regions that could become a hostname
+      ['AWS_REGION', 'evil.example.com/'], ['AWS_REGION', 'eu-west-1.evil.com'], ['AWS_REGION', 'EU-WEST-1'], ['AWS_REGION', ''], ['AWS_REGION', '-eu'], ['AWS_REGION', 'eu--west'], ['CLOUD_ML_REGION', 'us-east5/../x'], ['VERTEX_REGION_CLAUDE_3_5_HAIKU', 'x:443'], ['AWS_DEFAULT_REGION', 'a'.repeat(65)],
+      // project ids
+      ['ANTHROPIC_VERTEX_PROJECT_ID', 'abc'], ['ANTHROPIC_VERTEX_PROJECT_ID', '1project'], ['ANTHROPIC_VERTEX_PROJECT_ID', 'my-project-'], ['ANTHROPIC_VERTEX_PROJECT_ID', 'evil.com/x'], ['ANTHROPIC_VERTEX_PROJECT_ID', 'a'.repeat(31)],
+      // profiles
+      ['AWS_PROFILE', 'a/b'], ['AWS_PROFILE', 'a:b'], ['AWS_PROFILE', 'a b'], ['AWS_PROFILE', ''], ['AWS_PROFILE', 'p'.repeat(65)],
+      // token counts
+      ['CLAUDE_CODE_MAX_OUTPUT_TOKENS', '-1'], ['CLAUDE_CODE_MAX_OUTPUT_TOKENS', '1e9'], ['MAX_THINKING_TOKENS', '1000001'], ['MAX_THINKING_TOKENS', '12 '], ['MAX_THINKING_TOKENS', ''],
+      // model names
+      ['ANTHROPIC_DEFAULT_SONNET_MODEL', 'a/b'], ['ANTHROPIC_DEFAULT_SONNET_MODEL', 'x@evil.com'], ['ANTHROPIC_SMALL_FAST_MODEL', 'm?x=1'], ['CLAUDE_CODE_SUBAGENT_MODEL', 'm#f'], ['ANTHROPIC_DEFAULT_HAIKU_MODEL', 'a b'], ['ANTHROPIC_DEFAULT_OPUS_MODEL', 'm'.repeat(129)], ['ANTHROPIC_DEFAULT_OPUS_MODEL', ''],
+      // switches, types
+      ['DISABLE_PROMPT_CACHING', 'yes'], ['AWS_REGION', 1], ['AWS_REGION', undefined],
+      // names outside the list never pass, whatever the value
+      ['NODE_OPTIONS', 'eu-west-1'], ['constructor', 'x'], ['__proto__', 'x'],
+    ];
+    for (const [k, v] of bad) expect(isAllowedModelEnvEntry(k, v), `${k}=${String(v)}`).toBe(false);
+    expect(disallowedModelEnvKeys({ AWS_REGION: 'evil.example.com/', AWS_PROFILE: 'work' })).toEqual(['AWS_REGION']);
+    const warnings: string[] = [];
+    expect(customModelEnv({ id: 'm', name: 'M', provider: 'bedrock', model: 'x', hasKey: false, extraEnv: { AWS_REGION: 'evil.example.com/', AWS_PROFILE: 'work' } }, undefined, warnings)).toEqual({ AWS_PROFILE: 'work', CLAUDE_CODE_USE_BEDROCK: '1', ANTHROPIC_MODEL: 'x' });
+    expect(warnings[0]).toMatch(/AWS_REGION/);
   });
   it('allowListEnv never copies unknown keys', () => {
     expect(allowListEnv({ PATH: 'p', SECRET: 's', lc_ctype: 'x', https_proxy: 'h' })).toEqual({ PATH: 'p', lc_ctype: 'x', https_proxy: 'h' });

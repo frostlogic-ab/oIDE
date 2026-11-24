@@ -25,7 +25,7 @@ import type { AgentSpec, AgentSummary, ExtensionUpdate, InstalledExtension, Mark
 import { readOideFile, type SecretStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
-import { confirmNative } from '../security/confirm.js';
+import { confirmNative, safeDialogText as q } from '../security/confirm.js';
 import type { Platform } from './platform.js';
 import type { ProjectsService } from './projects.js';
 
@@ -260,15 +260,16 @@ export class ExtensionsService {
     if (kv.get<string>(runConfirmedKey(ext.id)) === ext.path) return;
     const l = this.registry.resolved(ext.id);
     const runs: string[] = [];
-    if (l?.main) runs.push(`Host code: ${relative(l.dir, l.main)} (runs in oIDE as soon as it is on)`);
-    for (const [name, s] of Object.entries(l?.mcpServers ?? {})) runs.push(`MCP server "${name}": ${commandLine(s.command, s.args)} (agents start it)`);
-    for (const lang of l?.languages ?? []) runs.push(`Language server for ${lang.id}: ${commandLine(lang.command, lang.args)}`);
-    const caps = l ? capabilityList(l.manifest) : [];
+    // SEC-31: every value from the extension is escaped, so it cannot add or hide lines in the dialog.
+    if (l?.main) runs.push(`Host code: ${q(relative(l.dir, l.main))} (runs in oIDE as soon as it is on)`);
+    for (const [name, s] of Object.entries(l?.mcpServers ?? {})) runs.push(`MCP server "${q(name, { max: 80 })}": ${q(commandLine(s.command, s.args))} (agents start it)`);
+    for (const lang of l?.languages ?? []) runs.push(`Language server for ${q(lang.id, { max: 80 })}: ${q(commandLine(lang.command, lang.args))}`);
+    const caps = l ? capabilityList(l.manifest).map((c) => q(c)) : [];
     const ok = await confirmNative(this.o.ctx, {
       title: 'Turn on unreviewed extension?',
-      message: `Turn on ${ext.displayName}? Its code has not been reviewed.`,
+      message: `Turn on ${q(ext.displayName, { max: 80 })}? Its code has not been reviewed.`,
       detail: [
-        `${ext.name} ${ext.version}, from ${ext.source === 'git' ? 'a git repository' : 'a folder'}: ${ext.path}`,
+        `${q(ext.name)} ${q(ext.version)}, from ${ext.source === 'git' ? 'a git repository' : 'a folder'}: ${q(ext.path)}`,
         '',
         runs.length ? 'It will run as you, with full access to your files, network and programs:' : 'It has no host code or servers; only its panels load.',
         ...runs.map((r) => `- ${r}`),
@@ -289,10 +290,10 @@ export class ExtensionsService {
     const lines: string[] = [];
     for (const s of req.servers) {
       if (s.command !== undefined) {
-        lines.push(`${s.name}: ${commandLine(s.command, s.args ?? [])}`);
-        if (s.envKeys?.length) lines.push(`  Environment variables: ${s.envKeys.join(', ')}`);
-      } else if (s.url) lines.push(`${s.name}: ${s.url}`);
-      if (s.preAllowed.length) lines.push(`  Runs without asking: ${s.preAllowed.join(', ')}`);
+        lines.push(`${q(s.name, { max: 80 })}: ${q(commandLine(s.command, s.args ?? []))}`);
+        if (s.envKeys?.length) lines.push(`  Environment variables: ${s.envKeys.map((k) => q(k)).join(', ')}`);
+      } else if (s.url) lines.push(`${q(s.name, { max: 80 })}: ${q(s.url)}`);
+      if (s.preAllowed.length) lines.push(`  Runs without asking: ${s.preAllowed.map((t) => q(t)).join(', ')}`);
     }
     const what =
       req.kind === 'probe'
@@ -344,7 +345,7 @@ export class ExtensionsService {
     const ok = await confirmNative(this.o.ctx, {
       title: 'Add an extension from git?',
       message: 'Download this unreviewed extension?',
-      detail: `${url}\n\noIDE clones the repository without running anything. Its code has not been reviewed; oIDE asks again before any of it runs, when you turn it on.`,
+      detail: `${q(url)}\n\noIDE clones the repository without running anything. Its code has not been reviewed; oIDE asks again before any of it runs, when you turn it on.`,
       confirmLabel: 'Download',
     });
     if (!ok) throw new IpcError('Cancelled: nothing was downloaded.', 'forbidden');

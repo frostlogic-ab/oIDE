@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { describeCustomModel } from '../../apps/desktop/src/main/handlers/settings.js';
 import { setConfirmOverride, type ConfirmOptions } from '../../apps/desktop/src/main/security/confirm.js';
 import { pathKey } from '../../packages/git/src/index.js';
 import { cleanup, startHarness, type Harness } from '../integration/harness.js';
@@ -32,10 +33,10 @@ function confirmations(answer: boolean): ConfirmOptions[] {
 const base = { id: 'm1', name: 'Mine', provider: 'compatible-api' as const, baseUrl: 'https://llm.example.invalid', model: 'x', hasKey: false, extraEnv: {} as Record<string, string> };
 
 describe('SEC-28: custom model env', () => {
-  it('refuses denied env names at save time, whatever their case, through both commands', async () => {
+  it('refuses env names outside the allow-list at save time, through both commands', async () => {
     const h = await harness();
     const seen = confirmations(true);
-    for (const extraEnv of [{ NODE_OPTIONS: '--require /tmp/x.js' }, { Path: 'C:\\evil' }, { https_proxy: 'http://evil' }, { LD_PRELOAD: '/x.so' }, { DYLD_INSERT_LIBRARIES: '/x' }, { ELECTRON_RUN_AS_NODE: '1' }, { CLAUDE_CODE_GIT_BASH_PATH: 'C:\\x' }, { ANTHROPIC_BASE_URL: 'https://evil' }, { NODE_TLS_REJECT_UNAUTHORIZED: '0' }, { GIT_SSH_COMMAND: 'x' }]) {
+    for (const extraEnv of [{ NODE_OPTIONS: '--require /tmp/x.js' }, { Path: 'C:\\evil' }, { https_proxy: 'http://evil' }, { LD_PRELOAD: '/x.so' }, { DYLD_INSERT_LIBRARIES: '/x' }, { ELECTRON_RUN_AS_NODE: '1' }, { CLAUDE_CODE_GIT_BASH_PATH: 'C:\\x' }, { ANTHROPIC_BASE_URL: 'https://evil' }, { NODE_TLS_REJECT_UNAUTHORIZED: '0' }, { GIT_SSH_COMMAND: 'x' }, { LESSOPEN: '|x %s' }, { OPENSSL_CONF: '/x' }, { GOOGLE_APPLICATION_CREDENTIALS: '/x.json' }, { FOO_BAR: '1' }]) {
       expect(await h.fails('settings.saveCustomModel', { model: { ...base, extraEnv } })).toBe('invalid_input');
       expect(await h.fails('settings.update', { patch: { models: { custom: [{ ...base, extraEnv }] } } })).toBe('invalid_input');
     }
@@ -46,15 +47,14 @@ describe('SEC-28: custom model env', () => {
   it('a new or re-pointed model needs a native confirmation showing the values (secret values hidden)', async () => {
     const h = await harness();
     let seen = confirmations(false);
-    const model = { ...base, extraEnv: { AWS_REGION: 'eu-west-1', MY_API_TOKEN: 'tok-should-not-show' } };
+    const model = { ...base, extraEnv: { AWS_REGION: 'eu-west-1', AWS_PROFILE: 'work' } };
     expect(await h.fails('settings.saveCustomModel', { model })).toBe('forbidden');
     expect((await h.call('settings.get', undefined)).models.custom).toHaveLength(0);
     expect(seen).toHaveLength(1);
     expect(seen[0]!.detail).toContain('https://llm.example.invalid');
     expect(seen[0]!.detail).toContain('compatible-api');
     expect(seen[0]!.detail).toContain('AWS_REGION=eu-west-1');
-    expect(seen[0]!.detail).toContain('MY_API_TOKEN (value hidden)');
-    expect(seen[0]!.detail).not.toContain('tok-should-not-show');
+    expect(seen[0]!.detail).toContain('AWS_PROFILE=work');
 
     seen = confirmations(true);
     await h.call('settings.saveCustomModel', { model });
@@ -70,6 +70,78 @@ describe('SEC-28: custom model env', () => {
     expect(await h.fails('settings.update', { patch: { models: { custom: [{ ...model, extraEnv: { AWS_REGION: 'us-east-1' } }] } } })).toBe('forbidden');
     expect(seen).toHaveLength(3);
     expect((await h.call('settings.get', undefined)).models.custom[0]).toMatchObject({ name: 'Again', baseUrl: 'https://llm.example.invalid', extraEnv: { AWS_REGION: 'eu-west-1' } });
+  });
+});
+
+describe('SEC-28: confirmation text', () => {
+  it('shows secret-looking env values as names only', () => {
+    const text = describeCustomModel({ id: 'm', name: 'M', provider: 'compatible-api', baseUrl: 'https://x.example.invalid', extraEnv: { AWS_REGION: 'eu-west-1', MY_API_TOKEN: 'tok-should-not-show' } });
+    expect(text).toContain('AWS_REGION=eu-west-1');
+    expect(text).toContain('MY_API_TOKEN (value hidden)');
+    expect(text).not.toContain('tok-should-not-show');
+  });
+});
+
+describe('SEC-28: env values', () => {
+  it('refuses a malformed value for an allowed name at save time, through both commands', async () => {
+    const h = await harness();
+    const seen = confirmations(true);
+    for (const extraEnv of [{ AWS_REGION: 'evil.example.com/' }, { CLOUD_ML_REGION: 'x.evil' }, { ANTHROPIC_VERTEX_PROJECT_ID: 'evil.com/p' }, { AWS_PROFILE: 'a/b' }, { MAX_THINKING_TOKENS: '9999999999' }, { ANTHROPIC_DEFAULT_SONNET_MODEL: 'x@evil.com' }]) {
+      expect(await h.fails('settings.saveCustomModel', { model: { ...base, provider: 'bedrock', extraEnv } })).toBe('invalid_input');
+      expect(await h.fails('settings.update', { patch: { models: { custom: [{ ...base, provider: 'bedrock', extraEnv }] } } })).toBe('invalid_input');
+    }
+    expect(seen).toHaveLength(0);
+    await h.call('settings.saveCustomModel', { model: { ...base, provider: 'bedrock', extraEnv: { AWS_REGION: 'eu-west-1', AWS_PROFILE: 'work' } } });
+    expect(seen).toHaveLength(1);
+  });
+});
+
+describe('SEC-31: confirmation text cannot be spoofed', () => {
+  it('refuses base URLs with user:password or a non-http(s) scheme', async () => {
+    const h = await harness();
+    const seen = confirmations(true);
+    for (const baseUrl of ['https://user:pass@llm.example.invalid', 'https://trusted.example.com@evil.example.invalid', 'file:///etc/passwd', 'javascript:alert(1)', 'ftp://llm.example.invalid', 'not a url']) {
+      expect(await h.fails('settings.saveCustomModel', { model: { ...base, baseUrl } }), baseUrl).toBe('invalid_input');
+      expect(await h.fails('settings.update', { patch: { models: { custom: [{ ...base, baseUrl }] } } }), baseUrl).toBe('invalid_input');
+    }
+    expect(seen).toHaveLength(0);
+  });
+
+  it('shows the endpoint origin in full and escapes name, URL and values (no fake lines)', async () => {
+    const h = await harness();
+    const seen = confirmations(false);
+    const name = `Local\nEndpoint: https://api.trusted.example\n${'x'.repeat(300)}`;
+    const baseUrl = `https://evil.example.invalid/${'a'.repeat(500)}`;
+    expect(await h.fails('settings.saveCustomModel', { model: { ...base, name, baseUrl, extraEnv: { AWS_PROFILE: 'work' } } })).toBe('forbidden');
+    const lines = seen[0]!.detail!.split('\n');
+    // Exactly one real "Endpoint:" line; the one inside the name stays on the name's line, escaped.
+    expect(lines.filter((l) => l.trimStart().startsWith('Endpoint:'))).toEqual(['  Endpoint: https://evil.example.invalid']);
+    expect(lines[0]!.startsWith('Local\\nEndpoint: https://api.trusted.')).toBe(true);
+    expect(lines[0]!.endsWith('xxxx')).toBe(true); // shortened from the middle
+    expect(lines[0]!.length).toBeLessThanOrEqual(80);
+    expect(seen[0]!.detail).toContain(baseUrl); // never truncated
+  });
+
+  it('escapes the CLI path and extra flags', async () => {
+    const h = await harness();
+    const seen = confirmations(false);
+    await h.fails('settings.update', { patch: { claude: { cliPath: 'C:\\x\\claude.exe\n\nOnly continue: this is the official CLI' } } });
+    await h.fails('settings.update', { patch: { claude: { extraFlags: '--verbose\u2028--looks-harmless' } } });
+    expect(seen[0]!.detail!.split('\n')[0]).toBe('C:\\x\\claude.exe\\n\\nOnly continue: this is the official CLI');
+    expect(seen[1]!.detail!.split('\n')[0]).toBe('--verbose\\u{2028}--looks-harmless');
+  });
+
+  it('escapes extension and custom tool confirmations (probe command, git URL)', async () => {
+    const h = await harness();
+    const seen = confirmations(false);
+    expect(await h.fails('custom.probeCommand', { command: 'node\nOnly a harmless listing', args: ['-e', 'x\u202e'], env: { 'TOK\nEN': 'v' } })).toBe('forbidden');
+    const detail = seen[0]!.detail!;
+    expect(detail).toContain('node\\nOnly a harmless listing');
+    expect(detail).toContain('\\u{202e}');
+    expect(detail).toContain('TOK\\nEN');
+    expect(detail.split('\n').some((l) => l.startsWith('Only a harmless listing'))).toBe(false);
+    expect(await h.fails('extensions.addFromGit', { url: 'https://git.example.invalid/x.git#\u2028trusted' })).toBe('forbidden');
+    expect(seen[1]!.detail!.split('\n')[0]).not.toMatch(/\u2028/);
   });
 });
 
@@ -104,7 +176,7 @@ describe('SEC-30: model keys are bound to origin, provider and env', () => {
     const model = { ...base, extraEnv: { AWS_REGION: 'eu-west-1' } };
     expect((await h.call('settings.saveCustomModel', { model, apiKey: 'sk-1' })).hasKey).toBe(true);
     // A raw settings.update that changes only the env: the key stays stored but is not released.
-    await h.call('settings.update', { patch: { models: { custom: [{ ...model, extraEnv: { AWS_REGION: 'eu-west-1', EXTRA: '1' }, hasKey: true }] } } });
+    await h.call('settings.update', { patch: { models: { custom: [{ ...model, extraEnv: { AWS_REGION: 'eu-west-1', AWS_PROFILE: 'other' }, hasKey: true }] } } });
     expect((await h.call('settings.get', undefined)).models.custom[0]!.hasKey).toBe(false);
     const { boundModelKey } = await import('../../apps/desktop/src/main/security/model-keys.js');
     expect(boundModelKey(h.services.secrets, (await h.call('settings.get', undefined)).models.custom[0]!)).toBeUndefined();

@@ -247,3 +247,27 @@ picked in the new `dialog.pickCli` (Settings › Claude Code › CLI path › Br
 confirmation, once; other dialog picks no longer count. SEC-30 (medium): custom model keys are bound
 to a hash of origin, provider and the whole `extraEnv`. New `test/security/custom-model-env.test.ts`
 and agent-core denylist tests. Pages updated: security, review-security.
+
+## [2026-11-24] build | Custom model env: allow-list instead of denylist (SEC-28)
+
+The SEC-28 denylist missed names (`OPENSSL_*`, `GCONV_PATH`, `LESSOPEN`, `MANPAGER`, `TERMINFO`,
+`IFS`, `PS4`, `LUA_*`, `GOOGLE_APPLICATION_CREDENTIALS`), so a custom model's `extraEnv` is now
+checked against `MODEL_ENV_ALLOW_LIST` in agent-core (exact names: AWS/Vertex region, project and
+profile, `VERTEX_REGION_<MODEL>`, default model ids, `CLAUDE_CODE_SUBAGENT_MODEL`, output and
+thinking token limits, `DISABLE_PROMPT_CACHING`). The same check runs at save time in main (clear
+`invalid_input` message listing the allowed names) and at launch in `customModelEnv`. An agent's
+subagent-model strategy now wins over the model's `CLAUDE_CODE_SUBAGENT_MODEL`. Pages updated:
+security, review-security.
+
+## [2026-11-25] build | Custom model env values checked; confirmations cannot be spoofed (SEC-28, SEC-31)
+
+Two more scan findings, fixed together with the allow-list. SEC-28: allowed env names must also
+have well-formed values (`isAllowedModelEnvEntry` in agent-core: regions, GCP project ids, AWS
+profiles, token counts, model names, switches), checked at save time and at launch, so a region
+such as `evil.example.com/` cannot redirect Bedrock or Vertex. SEC-31 (medium): native
+confirmations escaped nothing, so a crafted name, URL, path, flag or command line could add fake
+lines; new `safeDialogText()` in `security/confirm.ts` escapes controls, line separators, bidi and
+zero-width characters, every `confirmNative` caller uses it (settings, extensions, custom tools)
+and `confirmNative` applies it again per line. Custom model base URLs must be http(s) without
+`user:password@`; the dialog shows the origin in full. New `confirm.test.ts`; more cases in
+`custom-model-env.test.ts` and `args.test.ts`. Pages updated: security, review-security.
