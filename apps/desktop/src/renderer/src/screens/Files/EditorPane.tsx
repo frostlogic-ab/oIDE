@@ -1,0 +1,257 @@
+/**
+ * The single live Monaco editor of the Files screen (lazy chunk: Monaco loads only when a file is
+ * opened). One model per open tab, view state kept per tab, Ctrl/Cmd+S saves through files.write.
+ */
+import { useEffect, useRef, useState } from 'react';
+import { Spinner } from '@oide/ui';
+import { ipcErrorMessage, oide } from '../../lib/bridge';
+import { toast } from '../../stores/ui';
+import type { FileTab } from './filesStore';
+import { BASE_OPTIONS, languageFor, languageLabel, monaco } from './monaco/setup';
+
+export interface SelectionInfo {
+  path: string;
+  startLine: number;
+  endLine: number;
+  text: string;
+}
+
+export interface EditorStatus {
+  line: number;
+  column: number;
+  language: string;
+  dirty: boolean;
+  saving: boolean;
+  readOnly: boolean;
+}
+
+interface Entry {
+  model: monaco.editor.ITextModel;
+  saved: number;
+  view?: monaco.editor.ICodeEditorViewState | null;
+  readOnly: boolean;
+}
+
+const entries = new Map<string, Entry>();
+type LoadState = { state: 'loading' } | { state: 'ready' } | { state: 'binary' } | { state: 'error'; message: string };
+
+export interface EditorPaneProps {
+  tabs: FileTab[];
+  active: FileTab;
+  revealLine?: number;
+  onStatus(s: EditorStatus): void;
+  onDirty(tabId: string, dirty: boolean): void;
+  /** Selection toolbar: "Ask an agent about this". */
+  onAsk(sel: SelectionInfo): void;
+  /** Selection toolbar: "Send to <agent>" (shown when an agent is editing this file). */
+  sendTo?: { label: string; run(sel: SelectionInfo): void };
+  /** Imperative save hook for the tab bar's Save button. */
+  saveRef?: { current: (() => Promise<void>) | null };
+}
+
+export default function EditorPane({ tabs, active, revealLine, onStatus, onDirty, onAsk, sendTo, saveRef }: EditorPaneProps) {
+  const host = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const [load, setLoad] = useState<LoadState>({ state: 'loading' });
+  const [selection, setSelection] = useState<(SelectionInfo & { top: number; left: number }) | null>(null);
+  const [saving, setSaving] = useState(false);
+  const cb = useRef({ onStatus, onDirty, onAsk });
+  cb.current = { onStatus, onDirty, onAsk };
+
+  const status = (overrides: Partial<EditorStatus> = {}) => {
+    const ed = editorRef.current;
+    const e = entries.get(activeRef.current.id);
+    const pos = ed?.getPosition();
+    cb.current.onStatus({
+      line: pos?.lineNumber ?? 1,
+      column: pos?.column ?? 1,
+      language: e ? languageLabel(e.model.getLanguageId()) : '',
+      dirty: e ? e.model.getAlternativeVersionId() !== e.saved : false,
+      saving,
+      readOnly: e?.readOnly ?? false,
+      ...overrides,
+    });
+  };
+
+  const save = async () => {
+    const tab = activeRef.current;
+    const e = entries.get(tab.id);
+    if (!e || e.readOnly) return;
+    const version = e.model.getAlternativeVersionId();
+    setSaving(true);
+    status({ saving: true });
+    try {
+      await oide.invoke('files.write', { root: tab.root, path: tab.path, content: e.model.getValue() });
+      e.saved = version;
+      cb.current.onDirty(tab.id, e.model.getAlternativeVersionId() !== e.saved);
+      toast(`Saved ${tab.path}`, 'success', { duration: 2500 });
+    } catch (err) {
+      toast(`Couldn't save ${tab.path}: ${ipcErrorMessage(err)}`, 'error');
+    } finally {
+      setSaving(false);
+      status({ saving: false });
+    }
+  };
+  if (saveRef) saveRef.current = save;
+
+  // Create the editor once.
+  useEffect(() => {
+    if (!host.current) return;
+    const ed = monaco.editor.create(host.current, { ...BASE_OPTIONS, model: null });
+    editorRef.current = ed;
+    ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => void save());
+    ed.addAction({
+      id: 'oide.askAgent',
+      label: 'Ask an agent about this',
+      contextMenuGroupId: 'navigation',
+      contextMenuOrder: 0,
+      run: (e) => {
+        const sel = currentSelection(e, activeRef.current.path);
+        if (sel) cb.current.onAsk(sel);
+      },
+    });
+    const subs = [
+      ed.onDidChangeCursorPosition(() => status()),
+      ed.onDidChangeCursorSelection(() => {
+        const sel = currentSelection(ed, activeRef.current.path);
+        const s = ed.getSelection();
+        if (!sel || !s || s.isEmpty()) return setSelection(null);
+        const pos = ed.getScrolledVisiblePosition(s.getStartPosition());
+        if (!pos) return setSelection(null);
+        setSelection({ ...sel, top: Math.max(4, pos.top - 40), left: Math.max(8, pos.left) });
+      }),
+      ed.onDidScrollChange(() => setSelection(null)),
+      ed.onDidChangeModelContent(() => {
+        const e = entries.get(activeRef.current.id);
+        if (e) cb.current.onDirty(activeRef.current.id, e.model.getAlternativeVersionId() !== e.saved);
+        status();
+      }),
+    ];
+    return () => {
+      subs.forEach((d) => d.dispose());
+      ed.dispose();
+      editorRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Switch models when the active tab changes.
+  useEffect(() => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    let cancelled = false;
+    const prev = ed.getModel();
+    if (prev) {
+      for (const e of entries.values()) if (e.model === prev) e.view = ed.saveViewState();
+    }
+    setSelection(null);
+    const show = (e: Entry) => {
+      ed.setModel(e.model);
+      ed.updateOptions({ readOnly: e.readOnly });
+      if (e.view) ed.restoreViewState(e.view);
+      setLoad({ state: 'ready' });
+      status();
+    };
+    const have = entries.get(active.id);
+    if (have) {
+      show(have);
+      return;
+    }
+    ed.setModel(null);
+    setLoad({ state: 'loading' });
+    oide
+      .invoke('files.read', { root: active.root, path: active.path })
+      .then(({ content, binary }) => {
+        if (cancelled) return;
+        if (binary) {
+          setLoad({ state: 'binary' });
+          return;
+        }
+        const uri = monaco.Uri.from({ scheme: 'oide', path: `/${encodeURIComponent(active.root)}/${active.path}` });
+        const model = monaco.editor.getModel(uri) ?? monaco.editor.createModel(content, languageFor(active.path), uri);
+        const e: Entry = { model, saved: model.getAlternativeVersionId(), readOnly: content.length > 5_000_000 };
+        entries.set(active.id, e);
+        show(e);
+      })
+      .catch((err: unknown) => !cancelled && setLoad({ state: 'error', message: ipcErrorMessage(err) }));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active.id]);
+
+  // Reveal a line (from Review "Open in editor" or a link).
+  useEffect(() => {
+    const ed = editorRef.current;
+    if (!ed || !revealLine || load.state !== 'ready') return;
+    ed.revealLineInCenter(revealLine);
+    ed.setPosition({ lineNumber: revealLine, column: 1 });
+  }, [revealLine, load.state, active.id]);
+
+  // Dispose models of closed tabs.
+  const openIds = tabs.map((t) => t.id).join('\n');
+  useEffect(() => {
+    const open = new Set(openIds.split('\n'));
+    for (const [id, e] of entries) {
+      if (!open.has(id)) {
+        e.model.dispose();
+        entries.delete(id);
+      }
+    }
+  }, [openIds]);
+
+  return (
+    <div className="relative flex-1 min-h-0 flex flex-col">
+      <div ref={host} className="flex-1 min-h-0" data-testid="monaco-host" style={{ visibility: load.state === 'ready' ? 'visible' : 'hidden' }} />
+      {load.state === 'loading' && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Spinner label={`Opening ${active.path}`} />
+        </div>
+      )}
+      {load.state === 'binary' && <div className="absolute inset-0 px-5 py-6 text-[12.5px] text-ink-3">This is a binary file. oIDE does not edit binary files.</div>}
+      {load.state === 'error' && (
+        <div role="alert" className="absolute inset-0 px-5 py-6 text-[12.5px] text-bad">
+          Couldn't open {active.path}: {load.message}
+        </div>
+      )}
+      {selection && load.state === 'ready' && (
+        <div
+          className="absolute z-10 flex gap-1 p-1 rounded-[9px] bg-card border border-line-3 shadow-[0_8px_24px_rgba(0,0,0,0.45)] font-sans"
+          style={{ top: selection.top, left: selection.left }}
+          role="toolbar"
+          aria-label="Selection actions"
+        >
+          <button
+            type="button"
+            className="h-7 px-2.5 rounded-sm bg-accent text-on-accent font-semibold text-[12px] border-0 cursor-pointer hover:brightness-110"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => cb.current.onAsk(selection)}
+          >
+            Ask an agent about this
+          </button>
+          {sendTo && (
+            <button
+              type="button"
+              className="h-7 px-2.5 rounded-sm bg-transparent text-ink text-[12px] border-0 cursor-pointer hover:bg-raised"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => sendTo.run(selection)}
+            >
+              {sendTo.label}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function currentSelection(ed: monaco.editor.ICodeEditor, path: string): SelectionInfo | null {
+  const model = ed.getModel();
+  const s = ed.getSelection();
+  if (!model || !s) return null;
+  const startLine = s.startLineNumber;
+  const endLine = s.endColumn === 1 && s.endLineNumber > s.startLineNumber ? s.endLineNumber - 1 : s.endLineNumber;
+  return { path, startLine, endLine, text: s.isEmpty() ? '' : model.getValueInRange(s) };
+}
