@@ -165,3 +165,25 @@ describe('ArtifactStore', () => {
     expect((await store.read(personal.id)).content).toContain('mine');
   });
 });
+
+describe('ArtifactStore symlinks', () => {
+  it('refuses to read or write through a symlinked entry file from a cloned repo', async () => {
+    const { mkdirSync, symlinkSync } = await import('node:fs');
+    const { store, repo, p, appData } = setup();
+    const secret = join(appData, 'secret.txt');
+    writeFileSync(secret, 'SECRET');
+    const dir = join(repo, '.oide', 'artifacts', 'linked');
+    mkdirSync(dir, { recursive: true });
+    const now = Date.now();
+    writeFileSync(join(dir, 'artifact.json'), JSON.stringify({ id: 'linked-1', slug: 'linked', title: 'Linked', kind: 'doc', location: 'repo', version: 1, entry: 'doc.md', createdAt: now, updatedAt: now }));
+    try {
+      symlinkSync(secret, join(dir, 'doc.md'), 'file');
+    } catch {
+      return; // creating symlinks needs Developer Mode or admin on Windows; nothing to test here
+    }
+    await store.rescan([{ id: p.id, path: repo }]);
+    await expect(store.read('linked-1')).rejects.toThrow(/symbolic link/);
+    await expect(store.save('linked-1', 'overwrite')).rejects.toThrow(/symbolic link/);
+    expect(readFileSync(secret, 'utf8')).toBe('SECRET');
+  });
+});

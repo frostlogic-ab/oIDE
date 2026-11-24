@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
 import {
   ArtifactMeta,
   ArtifactUse,
@@ -167,11 +167,28 @@ export class ArtifactStore {
    * Path of an artifact's entry file (or a version snapshot of it). The file name always comes from the
    * kind, never from `artifact.json`, and the result must stay inside the artifact folder.
    */
-  private contentPath(id: string, meta: ArtifactMeta, version?: number): string {
+  private async contentPath(id: string, meta: ArtifactMeta, version?: number): Promise<string> {
     const dir = resolve(this.dirOf(id));
-    const file = resolve(version === undefined ? join(dir, ENTRY_FILES[meta.kind]) : join(dir, VERSIONS_DIR, String(version), ENTRY_FILES[meta.kind]));
+    const parts = version === undefined ? [ENTRY_FILES[meta.kind]] : [VERSIONS_DIR, String(version), ENTRY_FILES[meta.kind]];
+    const file = resolve(join(dir, ...parts));
     const rel = relative(dir, file);
     if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error('Artifact path escapes its folder');
+    // Symlinks (a cloned repo can commit them) must not redirect reads or writes elsewhere:
+    // the artifact folder must be a real directory and no component below it may be a link.
+    if ((await lstat(dir)).isSymbolicLink()) throw new Error('Artifact folder is a symbolic link');
+    const realDir = await realpath(dir);
+    let cur = dir;
+    for (const part of parts) {
+      cur = join(cur, part);
+      const st = await lstat(cur).catch(() => undefined);
+      if (!st) break; // not created yet; parents checked so far are real
+      if (st.isSymbolicLink()) throw new Error('Artifact path contains a symbolic link');
+    }
+    const parentReal = await realpath(dirname(file)).catch(() => undefined);
+    if (parentReal) {
+      const r = relative(realDir, parentReal);
+      if (r.startsWith('..') || isAbsolute(r)) throw new Error('Artifact path escapes its folder');
+    }
     return file;
   }
 
@@ -257,7 +274,7 @@ export class ArtifactStore {
 
   async read(id: string, agentId?: string): Promise<ArtifactContent> {
     const meta = this.metaFromIndex(id);
-    const content = await readFile(this.contentPath(id, meta), 'utf8');
+    const content = await readFile(await this.contentPath(id, meta), 'utf8');
     if (agentId) this.recordUse(id, agentId, 'read');
     return { meta, content };
   }
@@ -281,7 +298,7 @@ export class ArtifactStore {
   async readVersion(id: string, version: number): Promise<string> {
     const meta = this.metaFromIndex(id);
     if (!Number.isInteger(version) || version < 1) throw new Error('Bad version');
-    return readFile(this.contentPath(id, meta, version), 'utf8');
+    return readFile(await this.contentPath(id, meta, version), 'utf8');
   }
 
   /* -------------------------------------------------------------- write */
@@ -331,9 +348,10 @@ export class ArtifactStore {
       const ts = this.now();
       const version = cur.version + 1;
       const meta = ArtifactMeta.parse({ ...cur, version, updatedAt: ts });
+      await this.contentPath(id, meta, version); // refuse symlinked .versions before creating anything
       await mkdir(join(dir, VERSIONS_DIR, String(version)), { recursive: true });
-      await writeFile(this.contentPath(id, meta, version), content, 'utf8');
-      await writeAtomic(this.contentPath(id, meta), content);
+      await writeFile(await this.contentPath(id, meta, version), content, 'utf8');
+      await writeAtomic(await this.contentPath(id, meta), content);
       const versions = await this.versions(id);
       versions.push(ArtifactVersion.parse({ version, ts, author: opts.author ?? 'user', note: opts.note }));
       versions.sort((a, b) => a.version - b.version);
