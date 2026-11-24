@@ -1,0 +1,5 @@
+@import 'tailwindcss';
+@import '@oide/ui/tokens.css';
+
+/* Scan the renderer sources (Vite root) and the UI kit (via @source in tokens.css). */
+@source '../';

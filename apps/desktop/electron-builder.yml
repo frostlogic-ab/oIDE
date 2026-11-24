@@ -1,0 +1,92 @@
+# electron-builder config for oIDE. Docs: docs/wiki/pages/packaging.md
+# Build locally: pnpm --filter @oide/desktop dist   (unsigned; CI release builds come from tags)
+appId: dev.oide.app
+productName: oIDE
+# Keep in sync with the installed electron (electron-builder needs an exact version with hoisted deps).
+electronVersion: 45.4.1
+copyright: Copyright (c) oIDE contributors. MIT licensed.
+executableName: oide
+
+directories:
+  output: release/${version}
+  buildResources: build
+
+# Only the bundled output and real runtime deps ship. Everything the renderer/main bundles
+# (React, @oide/* TypeScript sources, zod, …) is a devDependency and is not packaged.
+files:
+  - out/**/*
+  - package.json
+  - "!**/*.map"
+  - "!**/*.{ts,tsx,md}"
+  - "!**/{test,tests,__tests__,e2e}/**"
+
+asar: true
+# Native N-API prebuilds must live outside the asar archive to be loadable.
+asarUnpack:
+  - "**/node_modules/@lydell/node-pty*/**"
+  - "**/node_modules/@parcel/watcher*/**"
+  - "**/*.node"
+
+# @lydell/node-pty and @parcel/watcher ship N-API prebuilds that work in Electron's Node as-is.
+npmRebuild: false
+nodeGypRebuild: false
+
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  loadBrowserProcessSpecificV8Snapshot: false
+  # Keep file:// privileges: the renderer is loaded from file:// with ES module scripts.
+
+publish:
+  provider: github
+  owner: oide-dev
+  repo: oide
+  releaseType: draft
+
+win:
+  target:
+    - target: nsis
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  artifactName: ${productName}-${version}-win-${arch}.${ext}
+  # Signing (Authenticode, e.g. Azure Trusted Signing) is an open question; builds are unsigned.
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: oIDE
+
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip
+      arch: [arm64, x64]
+  category: public.app-category.developer-tools
+  artifactName: ${productName}-${version}-mac-${arch}.${ext}
+  hardenedRuntime: true
+  # Developer ID signing + notarization need an Apple account (open question). Unsigned for now.
+  identity: null
+
+dmg:
+  title: ${productName} ${version}
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64, arm64]
+    - target: deb
+      arch: [x64, arm64]
+    - target: rpm
+      arch: [x64, arm64]
+  category: Development
+  maintainer: oIDE contributors
+  synopsis: Run many Claude Code CLI agents in parallel, in one window.
+  artifactName: ${productName}-${version}-linux-${arch}.${ext}

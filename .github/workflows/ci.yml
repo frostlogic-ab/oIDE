@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests (Vitest)
+        run: pnpm test
+
+      - name: Wiki lint
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm wiki:lint
+
+      - name: Build desktop
+        run: pnpm --filter @oide/desktop build
+
+      - name: E2E (Playwright for Electron, Linux under xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm --filter @oide/desktop exec playwright test
+
+      - name: E2E (Playwright for Electron)
+        if: runner.os != 'Linux'
+        run: pnpm --filter @oide/desktop exec playwright test
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.os }}
+          path: |
+            apps/desktop/test-results
+            apps/desktop/playwright-report
+          retention-days: 7

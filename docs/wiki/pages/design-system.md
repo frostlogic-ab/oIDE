@@ -55,3 +55,60 @@ Buttons on accent use text `#0B0D10`, weight 600.
 
 Real `<button>`, `<a href>`, `<input>` + `<label>`; `aria-label` on icon-only buttons; `aria-current`
 on the active rail item; radiogroups for segmented controls; 4.5:1 text contrast; focus rings in accent.
+
+## Tokens in code
+
+`packages/ui/src/tokens.css` is a Tailwind v4 `@theme`. Default Tailwind colours are removed
+(`--color-*: initial`), so only canvas colours exist as utilities: `bg-ground`, `bg-chrome`,
+`bg-panel`, `bg-card`, `bg-raised`, `bg-selected`, `bg-selected-2` (`#1A2130`, selected preset/pill),
+`border-line` … `border-line-6`, `border-line-hover` (`#4A515C`), `text-ink` … `text-ink-5`,
+`text-ink-code` (`#B8BFC9`, activity lines), `text-ink-prose` (`#D5D9DF`, transcript prose),
+`text-on-accent`, `bg-accent`, `text-link`, and the status families `ok*`, `warn*` (incl.
+`warn-bg-2` `#221D12`, `warn-ink` `#A9A08E`, `warn-kbd` `#8A6A30`), `bad*`, `review*`, `violet*`.
+Radii: `rounded-xs` 3, `rounded-sm` 6, `rounded-md` 8, `rounded-lg` 10, `rounded-xl` 12,
+`rounded-2xl` 14 (dialogs), `rounded-3xl` 16 (Spawn). Frame sizes: `h-header` 44, `w-rail` 56,
+`h-status` 26. Fonts: `font-sans` Inter, `font-mono` JetBrains Mono (bundled, latin 400–700 / 400–500).
+The `ico` utility is the canvas `.ico` (18px, stroke 1.7, round caps). Accent switches at runtime:
+`setAccent(hex)` sets `--color-accent` on `<html>` (`ACCENT_OPTIONS` holds the four choices); the
+settings store applies `settings.ui.accent` automatically. Import the tokens after Tailwind:
+
+```css
+@import 'tailwindcss';
+@import '@oide/ui/tokens.css';
+```
+
+## Component inventory (`@oide/ui`)
+
+All components are plain React, take `className`, and follow the accessibility rules above. Status
+colours come from `agentStatusMeta(status)` / `subagentStatusMeta(status)` (`label`, `color`, `tone`).
+
+| Component | Canvas source | Notes |
+| --- | --- | --- |
+| `Icon` | every `.ico` SVG | `name` from `ICON_NAMES`: agents, artifacts, file, source-control, marketplace, settings, search, chevron-left/right, terminal, pause, info, alert-circle, warning, arrow-up, check, plus, close, projects, folder, subagents; extras in the same style: chevron-down/up, stop, play, refresh, external-link, more, copy, trash, link, branch. `size` default 18; `title` makes it announced |
+| `Button`, `LinkButton` | Spawn agent, Open, Allow once, Review diff, Stop | variants `primary`/`accent`, `secondary`/`outline`, `ghost`, `warn`, `warn-outline`, `danger`, `review`, `review-outline`; sizes 28 / 32 / 36; `icon`, `kbd` (e.g. "Y") |
+| `IconButton` | Open project (+), dialog close | `aria-label` required; sizes 28 / 32 / 40 |
+| `StatusDot` | 6–8px dots | from `status`, `subagentStatus` or `color` |
+| `StatusLabel` | "Running · 14m", "Needs permission" | 11px, status colour |
+| `ContextRing` | 14 / 22 / 44px rings | `used` 0–1; amber from `warnAt` (default 0.65), red from `dangerAt` (0.85); pass Settings › Agents values. `contextLevel`, `contextColor`, `contextPercent`, `contextFraction` helpers |
+| `ContextRingButton` | tile ring, Focus "Context 81%" | opens the compact confirm; tooltip "click to /compact"; variants `tile`, `header` |
+| `ContextMeter` | "◔ 81%" in lists | 14px ring + mono percent |
+| `Chip` | Spawn context chips, Agent tools tags | variants `context`, `tag`; optional remove button |
+| `FilterChip` | Wall filters "All · 6", "Needs you · 2" | `aria-pressed`; `tone="warn"` |
+| `ModelLetterChip`, `ModelLetter` | subagent chips (letter = model) | 22px pill: status dot, name, H/S/O; amber when needs-permission; tooltip with model, effort, route, status. `modelLetter(model)`, `modelFamily(model)` |
+| `SegmentedControl` | project scope, Default focus, Provider | `role="radiogroup"`, arrow keys; variants `header`, `inset` |
+| `Tabs` | Focus inspector, Add custom, Settings presets | WAI-ARIA tabs; variants `underline`, `pill`; `tabPanelProps(idPrefix, id)` for panels |
+| `Toggle` | technique "On by default" | `role="switch"`, 34×20 track |
+| `Checkbox` | notifications, extension tools | native input with `accent-color`; `description`; variant `pill` |
+| `TextField`, `TextArea`, `Select` | `.inp` fields, Spawn goal | real `<label>` (visible or `hideLabel`), `hint`, `error`; sizes 28 / 34 / 36; surfaces `card`, `chrome` |
+| `SectionLabel` | "PROJECTS", "AGENT TOOLS" | 11px uppercase 0.08em |
+| `Card` | tiles, panels | tones `default`, `needs` (amber), `review` (blue), `error` (red); radius 10 / 12 |
+| `Badge` | "not reviewed", "Bypass", "read only", "asks first", "edited" | tones `neutral`, `warn`, `ok`, `bad`, `review`, `accent`, `violet` |
+| `DiffStat` | "7 files · +214 −37" | U+2212 minus |
+| `Kbd` | Ctrl K, J, K, N, Esc | tones `default`, `on-fill`, `warn` |
+| `Dialog` | Compact this session?, Spawn | `role="dialog"` + `aria-modal`, focus trap, Esc, focus restore; `position` `center` / `top`; `icon`, `footer` |
+| `Menu` | dropdowns | menu button, `role="menu"`, arrow keys, Esc |
+| `Tooltip` | `.tip` bubbles | light bubble, hover and keyboard focus, sets `aria-describedby` |
+| `EmptyState`, `Spinner` | empty lists, loading | |
+
+The app frame (header, rail, status bar, command bar, toasts) lives in the desktop renderer, not in
+the kit; see [desktop-shell](desktop-shell.md).
