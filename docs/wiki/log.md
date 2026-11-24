@@ -202,3 +202,22 @@ Electron 45.4.1 that utilityProcess ignores `--permission`, so capabilities stay
 Marketplace copy, [security](pages/security.md), [extensions](pages/extensions.md) and the
 extension-api README now say so. Tests: `test/security/extension-confirm.test.ts` (new),
 SEC-04 and SEC-13 PoCs flipped to `it`, plus oauth, import-scan and registry unit tests.
+
+## [2026-11-24] build | Artifact editors
+
+Artifact editors on the Artifacts screen ([screen-artifacts](pages/screen-artifacts.md),
+[artifacts](pages/artifacts.md)). Whiteboards open in an embedded Excalidraw 0.18 (MIT, open
+question 16), dark theme mapped onto the oIDE tokens, lazy chunk, fonts bundled by a Vite plugin
+(`apps/desktop/excalidraw-assets.ts`) with `EXCALIDRAW_ASSET_PATH` set locally and Excalidraw's esm.sh
+font fallback stripped; **no CSP change** (export, AI and embeds are off instead). Docs edit in Monaco
+(the Files setup, lazy) beside a live Markdown preview; designs edit HTML in Monaco beside the
+sandboxed preview, which reloads on save. Compare any two versions (or a version and unsaved edits)
+in a Monaco diff. Rename (`artifacts.rename`, title only) and Delete with confirms. Agent writes reach
+an open artifact through `artifacts.changed` (now with `change`, `version`, `author`): loaded with
+"Updated by <agent>" when there are no edits, otherwise a conflict banner (Compare, Keep mine, Use
+theirs); saves carry `baseVersion` and main refuses stale ones with `conflict`. Bundle: first-load
+chunk unchanged, Excalidraw 1.8 MB lazy, fonts 13.1 MB (Xiaolai CJK 12.6 MB). Tests: store
+(`artifacts-editing.test.ts`), handlers (`test/integration/artifact-handlers.test.ts`), renderer
+(`Editors.test.tsx`, `excalidraw-env.test.ts`, model), e2e (`e2e/artifacts.spec.ts`: doc edited to v2,
+whiteboard saved under the production CSP). Found: the keymap does not treat Monaco's EditContext as
+editable, so plain-key shortcuts can fire while typing in other Monaco hosts.

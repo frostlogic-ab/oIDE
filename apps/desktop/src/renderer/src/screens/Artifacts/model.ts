@@ -129,3 +129,52 @@ export function validateContent(kind: ArtifactKind, content: string): string | n
     return `Not valid JSON: ${(err as Error).message}`;
   }
 }
+
+/** "you", "Window shell layout agent", or the raw author string. */
+export function authorLabel(author: string | undefined, agentTitle: (id: string) => string | undefined): string {
+  if (!author || author === 'user') return 'you';
+  if (author.startsWith('agent:')) {
+    const id = author.slice(6);
+    return `${agentTitle(id) ?? id} agent`;
+  }
+  return author;
+}
+
+/**
+ * What an open editor does when the artifact's current version moves on (an `artifacts.changed`
+ * reload):
+ * - `none`: same version as the editor's base (or older: a stale reply).
+ * - `own`: the editor saved it itself.
+ * - `reload`: someone else saved it and there are no unsaved edits: load it and say who.
+ * - `conflict`: someone else saved it while there are unsaved edits: keep the edits, show a banner.
+ */
+export type LiveDecision = 'none' | 'own' | 'reload' | 'conflict';
+
+export function liveDecision(opts: { baseVersion: number; incomingVersion: number; ownVersions: ReadonlySet<number>; dirty: boolean }): LiveDecision {
+  if (opts.incomingVersion <= opts.baseVersion) return 'none';
+  if (opts.ownVersions.has(opts.incomingVersion)) return 'own';
+  return opts.dirty ? 'conflict' : 'reload';
+}
+
+/** Monaco language for an artifact kind's source. */
+export function sourceLanguage(kind: ArtifactKind): 'markdown' | 'html' | 'json' {
+  return kind === 'doc' ? 'markdown' : kind === 'design' ? 'html' : 'json';
+}
+
+/** Whiteboard JSON is pretty-printed for the version diff (one property per line); other kinds as is. */
+export function contentForDiff(kind: ArtifactKind, content: string): string {
+  if (kind !== 'whiteboard') return content;
+  try {
+    return JSON.stringify(JSON.parse(content), null, 2) + '\n';
+  } catch {
+    return content;
+  }
+}
+
+/** Title for a rename, or an error message. */
+export function validateTitle(title: string): { title: string } | { error: string } {
+  const t = title.replace(/\s+/g, ' ').trim();
+  if (!t) return { error: 'Give it a title.' };
+  if (t.length > 200) return { error: 'Use at most 200 characters.' };
+  return { title: t };
+}

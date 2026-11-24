@@ -1,11 +1,12 @@
 /**
- * New artifact and Import from claude.ai dialogs. Both end with the new artifact selected.
+ * New artifact and Import from claude.ai dialogs (both end with the new artifact selected), and the
+ * Rename and Delete confirms.
  */
-import { useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { ArtifactKind, ArtifactMeta, Project } from '@oide/protocol';
 import { Button, Dialog, SegmentedControl, Select, Tabs, TextField, tabPanelProps } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
-import { KIND_LABEL, isClaudeLink, kindFromFileName } from './model';
+import { KIND_LABEL, isClaudeLink, kindFromFileName, validateTitle } from './model';
 
 type Location = 'repo' | 'app-data';
 
@@ -287,6 +288,133 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
         <LocationField value={projectId ? location : 'app-data'} onChange={setLocation} hasProject={Boolean(projectId)} />
         {error && <ErrorLine>{error}</ErrorLine>}
       </div>
+    </Dialog>
+  );
+}
+
+export interface RenameDialogProps {
+  open: boolean;
+  meta: ArtifactMeta;
+  onClose: () => void;
+  onRenamed: (meta: ArtifactMeta) => void;
+}
+
+/** Rename: a new title only; the folder, id and versions stay the same. */
+export function RenameDialog({ open, meta, onClose, onRenamed }: RenameDialogProps) {
+  const [title, setTitle] = useState(meta.title);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setTitle(meta.title);
+    setError(null);
+    const t = setTimeout(() => inputRef.current?.select(), 0);
+    return () => clearTimeout(t);
+  }, [open, meta.title]);
+
+  const submit = async () => {
+    const v = validateTitle(title);
+    if ('error' in v) {
+      setError(v.error);
+      inputRef.current?.focus();
+      return;
+    }
+    if (v.title === meta.title) return onClose();
+    setBusy(true);
+    setError(null);
+    try {
+      onRenamed(await oide.invoke('artifacts.rename', { id: meta.id, title: v.title }));
+    } catch (err) {
+      setError(ipcErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={`Rename ${meta.title}`}
+      description="Agents keep finding it: only the title changes, not its folder or history."
+      initialFocus={inputRef}
+      footer={
+        <>
+          <Button size={32} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size={32} variant="primary" onClick={() => void submit()} disabled={busy}>
+            Rename
+          </Button>
+        </>
+      }
+    >
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit();
+        }}
+      >
+        <TextField ref={inputRef} label="Title" value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} error={error ?? undefined} required />
+        <button type="submit" hidden />
+      </form>
+    </Dialog>
+  );
+}
+
+export interface DeleteDialogProps {
+  open: boolean;
+  meta: ArtifactMeta;
+  onClose: () => void;
+  onDeleted: (id: string) => void;
+}
+
+/** Delete confirm. Repo artifacts are removed from the working tree (git still has committed copies). */
+export function DeleteDialog({ open, meta, onClose, onDeleted }: DeleteDialogProps) {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open) setError(null);
+  }, [open]);
+
+  const remove = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await oide.invoke('artifacts.delete', { id: meta.id });
+      onDeleted(meta.id);
+    } catch (err) {
+      setError(ipcErrorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onClose}
+      title={`Delete ${meta.title}?`}
+      description={
+        meta.location === 'repo'
+          ? `This deletes its folder in .oide/artifacts/ and all ${meta.version} ${meta.version === 1 ? 'version' : 'versions'}. Copies you committed stay in git history.`
+          : `This deletes it from oIDE on this computer, with all ${meta.version} ${meta.version === 1 ? 'version' : 'versions'}. It can't be undone.`
+      }
+      footer={
+        <>
+          <Button size={32} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size={32} variant="danger" onClick={() => void remove()} disabled={busy}>
+            Delete
+          </Button>
+        </>
+      }
+    >
+      {error && <ErrorLine>{error}</ErrorLine>}
     </Dialog>
   );
 }

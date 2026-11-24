@@ -40,3 +40,52 @@
 .oide-md-compact h1 { font-size: 14px; margin: 0 0 6px; }
 .oide-md-compact h2 { font-size: 12.5px; margin: 10px 0 4px; }
 .oide-md-compact table, .oide-md-compact pre { font-size: 10.5px; }
+
+/* Embedded Excalidraw (WhiteboardEditor.tsx): its dark theme mapped onto the oIDE tokens
+   (docs/wiki/pages/design-system.md). The canvas itself keeps Excalidraw's inverted rendering, so
+   shapes keep their real colours in the saved JSON. */
+.oide-whiteboard .excalidraw.theme--dark {
+  --ui-font: var(--font-sans);
+  --color-primary: var(--color-accent);
+  --color-primary-darker: #8EB0F8;
+  --color-primary-darkest: #A3BEFA;
+  --color-primary-hover: #8EB0F8;
+  --color-primary-light: #1E2A44;
+  --color-primary-light-darker: #24324F;
+  --color-brand-hover: #8EB0F8;
+  --color-brand-active: #A3BEFA;
+  --color-selection: #3A5A9C;
+  --color-surface-primary-container: #24324F;
+  --color-on-primary-container: var(--color-link);
+  --default-bg-color: var(--color-ground);
+  --island-bg-color: var(--color-card);
+  --popup-bg-color: var(--color-card);
+  --popup-secondary-bg-color: var(--color-raised);
+  --sidebar-bg-color: var(--color-panel);
+  --sidebar-border-color: var(--color-line-2);
+  --dialog-border-color: var(--color-line-3);
+  --input-bg-color: var(--color-chrome);
+  --input-border-color: var(--color-line-3);
+  --input-hover-bg-color: var(--color-raised);
+  --input-label-color: var(--color-ink-2);
+  --color-surface-lowest: var(--color-ground);
+  --color-surface-low: var(--color-card);
+  --color-surface-mid: var(--color-panel);
+  --color-surface-high: var(--color-selected);
+  --color-on-surface: var(--color-ink);
+  --color-border-outline-variant: var(--color-line-3);
+  --text-primary-color: var(--color-ink);
+  --popup-text-color: var(--color-ink-2);
+  --keybinding-color: var(--color-ink-3);
+  --link-color: var(--color-link);
+  --select-highlight-color: var(--color-accent);
+  --focus-highlight-color: var(--color-accent);
+  --button-hover-bg: var(--color-raised);
+  --button-gray-1: var(--color-selected);
+  --button-gray-2: var(--color-raised);
+  --button-gray-3: var(--color-card);
+  --scrollbar-thumb: var(--color-line-3);
+  --scrollbar-thumb-hover: var(--color-line-5);
+  --shadow-island: 0 0 0 1px var(--color-line-2);
+}
+.oide-whiteboard .excalidraw .Island { border-radius: 10px; }

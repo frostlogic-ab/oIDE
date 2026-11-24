@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ArtifactMeta, ArtifactUse, type AgentSummary } from '@oide/protocol';
-import { agentsUsing, filterArtifacts, isClaudeLink, stripFrontMatter, usageLine, validateContent, versionLabel } from './model';
+import { agentsUsing, authorLabel, contentForDiff, filterArtifacts, isClaudeLink, liveDecision, sourceLanguage, stripFrontMatter, usageLine, validateContent, validateTitle, versionLabel } from './model';
 
 const now = 1_800_000_000_000;
 const meta = (id: string, kind: ArtifactMeta['kind'], projectId?: string) =>
@@ -53,5 +53,36 @@ describe('artifacts model', () => {
     expect(validateContent('whiteboard', '[1]')).toMatch(/JSON object/);
     expect(validateContent('whiteboard', '{')).toMatch(/Not valid JSON/);
     expect(validateContent('doc', '{')).toBeNull();
+  });
+});
+
+describe('artifact editors model', () => {
+  it('decides what an open editor does with a newer version', () => {
+    const own = new Set([3]);
+    expect(liveDecision({ baseVersion: 2, incomingVersion: 2, ownVersions: own, dirty: true })).toBe('none');
+    expect(liveDecision({ baseVersion: 4, incomingVersion: 3, ownVersions: own, dirty: false })).toBe('none');
+    expect(liveDecision({ baseVersion: 2, incomingVersion: 3, ownVersions: own, dirty: true })).toBe('own');
+    expect(liveDecision({ baseVersion: 2, incomingVersion: 4, ownVersions: own, dirty: false })).toBe('reload');
+    expect(liveDecision({ baseVersion: 2, incomingVersion: 4, ownVersions: own, dirty: true })).toBe('conflict');
+  });
+
+  it('names authors, languages and diff text', () => {
+    const title = (id: string) => (id === 'a1' ? 'Retry policy' : undefined);
+    expect(authorLabel('user', title)).toBe('you');
+    expect(authorLabel(undefined, title)).toBe('you');
+    expect(authorLabel('agent:a1', title)).toBe('Retry policy agent');
+    expect(authorLabel('agent:zz', title)).toBe('zz agent');
+    expect(sourceLanguage('doc')).toBe('markdown');
+    expect(sourceLanguage('design')).toBe('html');
+    expect(sourceLanguage('whiteboard')).toBe('json');
+    expect(contentForDiff('whiteboard', '{"a":1,"b":[2]}')).toBe('{\n  "a": 1,\n  "b": [\n    2\n  ]\n}\n');
+    expect(contentForDiff('whiteboard', 'not json')).toBe('not json');
+    expect(contentForDiff('doc', '{"a":1}')).toBe('{"a":1}');
+  });
+
+  it('validates rename titles', () => {
+    expect(validateTitle('  Main   window ')).toEqual({ title: 'Main window' });
+    expect(validateTitle('   ')).toEqual({ error: 'Give it a title.' });
+    expect(validateTitle('x'.repeat(201))).toEqual({ error: 'Use at most 200 characters.' });
   });
 });

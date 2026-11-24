@@ -2,12 +2,13 @@
  * Artifacts screen (docs/wiki/raw/design/Artifacts.dc.html, page: docs/wiki/pages/screen-artifacts.md).
  *
  * Grid of local artifacts filtered by kind, the shared project scope and a search; a detail pane
- * with a live preview, Open, Give to an agent, Open in claude.ai, Agents using it and History
- * (view or restore a version); Import from claude.ai and New artifact dialogs.
+ * with a live preview, Open, Give to an agent, Open in claude.ai, Rename, Delete, Agents using it
+ * and History (view, restore or compare versions); Import from claude.ai and New artifact dialogs.
+ * Open shows the editor for the kind (Viewer.tsx).
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { ArtifactMeta, ArtifactUse, ArtifactVersion, CommandOutput } from '@oide/protocol';
-import { Button, EmptyState, Icon, LinkButton, Spinner, agentStatusMeta, cn } from '@oide/ui';
+import { Button, EmptyState, Icon, IconButton, LinkButton, Spinner, agentStatusMeta, cn } from '@oide/ui';
 import { HeaderSlot } from '../../components/frame/HeaderSlot';
 import { invokeOr, ipcErrorMessage, isNotImplemented, oide } from '../../lib/bridge';
 import { useAgents } from '../../stores/agents';
@@ -15,13 +16,14 @@ import { projectName as nameOf, useProjects } from '../../stores/projects';
 import { navigate, useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { toast } from '../../stores/ui';
-import { ImportDialog, NewArtifactDialog } from './Dialogs';
+import { DeleteDialog, ImportDialog, NewArtifactDialog, RenameDialog } from './Dialogs';
 import { ArtifactPreview, KindThumb } from './Preview';
-import { Viewer } from './Viewer';
+import { Viewer, type CompareSide, type ViewerMode } from './Viewer';
 import { KIND_LABEL, KIND_TABS, agentsUsing, filterArtifacts, isClaudeLink, usageLine, versionLabel, type KindTab } from './model';
 import './artifacts.css';
 
 type Detail = CommandOutput<'artifacts.get'>;
+type OpenAs = { mode?: ViewerMode; compare?: { from: CompareSide; to: CompareSide } };
 
 /** List + uses log, refreshed on `artifacts.changed`. */
 function useLibrary() {
@@ -64,7 +66,10 @@ function useDetail(id: string | undefined) {
     setDetail((d) => (d?.meta.id === id ? d : null));
     void load();
     return oide.on('artifacts.changed', (e) => {
-      if (!e.id || e.id === id) void load();
+      if (e.id && e.id !== id) return;
+      // Deleted (by an agent, or in another window): drop it instead of reporting a failed load.
+      if (e.change === 'deleted') return setDetail(null);
+      void load();
     });
   }, [id, load]);
   return { detail, setDetail, reload: load };
@@ -80,8 +85,8 @@ export default function ArtifactsScreen() {
   const { list, uses } = useLibrary();
   const [kind, setKind] = useState<KindTab>('all');
   const [query, setQuery] = useState('');
-  const [dialog, setDialog] = useState<'new' | 'import' | null>(null);
-  const [opened, setOpened] = useState(false);
+  const [dialog, setDialog] = useState<'new' | 'import' | 'rename' | 'delete' | null>(null);
+  const [opened, setOpened] = useState<false | OpenAs>(false);
 
   const projectName = useCallback((id: string | undefined) => (id ? nameOf(projects, id) : 'Personal'), [projects]);
   const visible = useMemo(() => filterArtifacts(list ?? [], { kind, project: scope, query }, projectName), [list, kind, scope, query, projectName]);
@@ -91,15 +96,51 @@ export default function ArtifactsScreen() {
 
   useEffect(() => setOpened(false), [selectedId]);
 
-  if (opened && detail) {
-    return (
-      <Viewer
-        meta={detail.meta}
-        content={detail.content}
-        projectName={detail.meta.projectId ? projectName(detail.meta.projectId) : ''}
-        onClose={() => setOpened(false)}
-        onSaved={(meta, content) => setDetail({ ...detail, meta, content })}
+  const shown = detail?.meta.id === selectedId ? detail : null;
+  const actionDialogs = shown && (
+    <>
+      <RenameDialog
+        open={dialog === 'rename'}
+        meta={shown.meta}
+        onClose={() => setDialog(null)}
+        onRenamed={(meta) => {
+          setDialog(null);
+          setDetail((d) => (d && d.meta.id === meta.id ? { ...d, meta } : d));
+          toast(`Renamed to ${meta.title}`, 'success');
+        }}
       />
+      <DeleteDialog
+        open={dialog === 'delete'}
+        meta={shown.meta}
+        onClose={() => setDialog(null)}
+        onDeleted={() => {
+          setDialog(null);
+          setOpened(false);
+          setDetail(null);
+          toast(`Deleted ${shown.meta.title}`, 'success');
+          const next = visible.find((a) => a.id !== shown.meta.id);
+          useRouter.getState().replace('artifacts', next ? { artifactId: next.id } : {});
+        }}
+      />
+    </>
+  );
+
+  if (opened && shown) {
+    return (
+      <>
+        <Viewer
+          key={shown.meta.id}
+          detail={shown}
+          projectName={shown.meta.projectId ? projectName(shown.meta.projectId) : ''}
+          initialMode={opened.mode}
+          compare={opened.compare}
+          onClose={() => setOpened(false)}
+          onSaved={(meta, content) => setDetail((d) => (d && d.meta.id === meta.id ? withSaved(d, meta, content) : d))}
+          onRename={() => setDialog('rename')}
+          onDelete={() => setDialog('delete')}
+        />
+        {actionDialogs}
+      </>
     );
   }
 
@@ -173,7 +214,7 @@ export default function ArtifactsScreen() {
                   onClick={() => select(a.id)}
                   onDoubleClick={() => {
                     select(a.id);
-                    setOpened(true);
+                    setOpened({});
                   }}
                   className={cn('flex flex-col p-0 rounded-xl border bg-card overflow-hidden text-left text-ink', sel ? 'border-accent' : 'border-line-2 hover:border-line-hover')}
                 >
@@ -196,19 +237,28 @@ export default function ArtifactsScreen() {
 
       <DetailPane
         key={selectedId ?? 'none'}
-        detail={detail?.meta.id === selectedId ? detail : null}
+        detail={shown}
         selected={Boolean(selectedId)}
         projectName={projectName}
         agentTitle={(id) => agents[id]?.title}
         agentStatus={(id) => agents[id]?.status}
-        onOpen={() => setOpened(true)}
+        onOpen={(o) => setOpened(o ?? {})}
         onRestored={(d) => setDetail(d)}
+        onRename={() => setDialog('rename')}
+        onDelete={() => setDialog('delete')}
       />
+      {actionDialogs}
 
       <NewArtifactDialog open={dialog === 'new'} onClose={() => setDialog(null)} projects={projects} defaultProjectId={scope === 'all' ? undefined : scope} onCreated={created} />
       <ImportDialog open={dialog === 'import'} onClose={() => setDialog(null)} projects={projects} defaultProjectId={scope === 'all' ? undefined : scope} onImported={created} />
     </>
   );
+}
+
+/** Detail after one of our own saves (until the artifacts.changed reload brings the real versions list). */
+function withSaved(d: Detail, meta: ArtifactMeta, content: string): Detail {
+  const versions = d.versions.some((v) => v.version === meta.version) ? d.versions : [{ version: meta.version, ts: meta.updatedAt, author: 'user', note: 'Edited by you' }, ...d.versions];
+  return { ...d, meta, content, versions };
 }
 
 function KindTabs({ value, onChange }: { value: KindTab; onChange: (k: KindTab) => void }) {
@@ -253,11 +303,13 @@ interface DetailPaneProps {
   projectName: (id: string | undefined) => string;
   agentTitle: (id: string) => string | undefined;
   agentStatus: (id: string) => Parameters<typeof agentStatusMeta>[0] | undefined;
-  onOpen: () => void;
+  onOpen: (o?: OpenAs) => void;
   onRestored: (d: Detail) => void;
+  onRename: () => void;
+  onDelete: () => void;
 }
 
-function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, onOpen, onRestored }: DetailPaneProps) {
+function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, onOpen, onRestored, onRename, onDelete }: DetailPaneProps) {
   const [viewing, setViewing] = useState<{ version: number; content: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -313,8 +365,11 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
         />
       </div>
       {viewing && (
-        <div role="status" className="flex items-center gap-2 px-2.5 py-2 rounded-md border border-review-line bg-review-bg text-[12px] text-ink-2">
+        <div role="status" className="flex items-center gap-2 flex-wrap px-2.5 py-2 rounded-md border border-review-line bg-review-bg text-[12px] text-ink-2">
           <span className="flex-1">Viewing v{viewing.version} (current is v{meta.version})</span>
+          <Button size={28} onClick={() => onOpen({ mode: 'compare', compare: { from: viewing.version, to: meta.version } })}>
+            Compare
+          </Button>
           <Button size={28} onClick={() => void restore()} disabled={busy}>
             Restore
           </Button>
@@ -323,14 +378,20 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
           </Button>
         </div>
       )}
-      <div className="flex flex-col gap-1">
-        <h2 className="m-0 text-[16px] font-semibold">{meta.title}</h2>
-        <span className="text-[12px] text-ink-3">
-          {KIND_LABEL[meta.kind]} · {projectName(meta.projectId)} · {origin}
-        </span>
+      <div className="flex items-start gap-1">
+        <div className="flex-1 min-w-0 flex flex-col gap-1">
+          <h2 className="m-0 text-[16px] font-semibold break-words">{meta.title}</h2>
+          <span className="text-[12px] text-ink-3">
+            {KIND_LABEL[meta.kind]} · {projectName(meta.projectId)} · {origin}
+          </span>
+        </div>
+        <Button size={28} variant="ghost" aria-label={`Rename ${meta.title}`} onClick={onRename}>
+          Rename
+        </Button>
+        <IconButton icon="trash" aria-label={`Delete ${meta.title}`} title="Delete" onClick={onDelete} />
       </div>
       <div className="flex gap-2 flex-wrap">
-        <Button size={32} variant="primary" className="rounded-md" onClick={onOpen}>
+        <Button size={32} variant="primary" className="rounded-md" onClick={() => onOpen()}>
           Open
         </Button>
         <LinkButton
@@ -382,9 +443,20 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
       </section>
 
       <section aria-labelledby="art-history" className="flex flex-col gap-2">
-        <h3 id="art-history" className="m-0 text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3">
-          History
-        </h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 id="art-history" className="m-0 text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3">
+            History
+          </h3>
+          {versions.length > 1 && (
+            <button
+              type="button"
+              onClick={() => onOpen({ mode: 'compare', compare: { from: viewing?.version ?? meta.version - 1, to: meta.version } })}
+              className="bg-transparent border-0 p-0 text-[12px] text-link hover:text-link-hover"
+            >
+              Compare versions
+            </button>
+          )}
+        </div>
         <ul className="m-0 p-0 list-none flex flex-col gap-1">
           {versions.map((v) => {
             const current = v.version === meta.version;

@@ -30,7 +30,8 @@ export function registerArtifactHandlers(router: IpcRouter, s: Services, ctx: Ma
     registerRoot(meta.location === 'repo' ? meta.projectId : undefined);
     return meta;
   });
-  router.register('artifacts.save', ({ id, content, note }) => wrap(a.save(id, content, { author: 'user', ...(note ? { note } : {}) })));
+  router.register('artifacts.save', ({ id, content, note, baseVersion }) => wrap(a.save(id, content, { author: 'user', ...(note ? { note } : {}), ...(baseVersion ? { baseVersion } : {}) })));
+  router.register('artifacts.rename', ({ id, title }) => wrap(a.rename(id, title)));
   router.register('artifacts.delete', async ({ id }) => {
     if (!(await wrap(a.delete(id)))) throw new IpcError(`Unknown artifact ${id}`, 'not_found');
     return OK;

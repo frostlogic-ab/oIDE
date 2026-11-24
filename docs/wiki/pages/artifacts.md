@@ -32,10 +32,20 @@ for both locations (ADR 0004); oIDE never commits artifacts.
 
 `new ArtifactStore({ db, appDataDir, projectPath: (projectId) => string | undefined, now?, onChange? })`
 
+`onChange(id?, info?)` gets an `ArtifactChange` `{ change: 'created' | 'saved' | 'renamed' | 'deleted', version?, author? }`;
+main forwards it as the `artifacts.changed` event (`{ id, change, version, author }`, plus `change: 'used'`
+for MCP uses), so an open editor can say "Updated by <agent>" without a refetch.
+
 - `create({ title, kind, projectId?, location='app-data', content? }, author='user')` → `ArtifactMeta` (version 1).
 - `list({ projectId?, kind? })`, `read(id, agentId?)` → `{ meta, content }`, `get(id)` → `{ meta, content, uses, versions }` (the `artifacts.get` IPC shape).
-- `save(id, content, { author, note })` → next version; per-artifact lock so concurrent writes get distinct versions.
-- `versions(id)` (newest first), `readVersion(id, n)`, `rename(id, title)`, `delete(id)`, `dirOf(id)` (for preview and path checks), `root(location, projectId?)`.
+- `save(id, content, { author, note, baseVersion? })` → next version; per-artifact lock so concurrent writes get distinct versions.
+  With `baseVersion` (the version an editor started from) it throws `ArtifactError` code `conflict` when the
+  artifact has moved on (an agent saved meanwhile); the IPC error code is `conflict`.
+- `rename(id, title)`: trims and collapses whitespace, 1 to 200 characters (`ArtifactError` `invalid_input`);
+  only `artifact.json` and the index change. The folder (slug), id and versions stay, so repo paths, git
+  history and agents holding the id keep working. A rename is not a version.
+- `delete(id)`: removes the folder (all versions), the index row and the uses log; `false` if unknown.
+- `versions(id)` (newest first), `readVersion(id, n)`, `dirOf(id)` (for preview and path checks), `root(location, projectId?)`.
 - `importUrl({ url, title?, kind='doc', projectId?, location? })`: only `https://claude.ai` (and `claude.site`) links; stores a link-only stub with `importedFrom`, since the content cannot be fetched. "Open in claude.ai" uses `importedFrom`.
 - `importFile({ filePath, title?, kind?, ... })`: `.html/.htm` → design, `.md/.markdown/.txt` → doc, `.excalidraw` or Excalidraw `.json` → whiteboard; 10 MB limit.
 - `rescan(projects)` re-indexes folders found on disk (repo artifacts teammates committed), assigns
@@ -50,6 +60,16 @@ for both locations (ADR 0004); oIDE never commits artifacts.
 `ArtifactSource { list, fetch, push }` is declared in the protocol for a future sync source; nothing
 implements it in v1.
 
+## IPC
+
+`artifacts.list`, `get`, `create`, `save` (`baseVersion?`, refused with `conflict`), `rename` (Zod: trimmed,
+1 to 200 characters), `delete`, `import`, `uses`, `readVersion`, `previewUrl`
+(`apps/desktop/src/main/handlers/artifacts.ts`). Tests: `packages/store/test/artifacts-editing.test.ts`,
+`test/integration/artifact-handlers.test.ts`.
+
 ## MCP tools and UI
 
-UI: [screen-artifacts.md](screen-artifacts.md) (preview through `artifacts.previewUrl` in a sandboxed iframe, Give to an agent as a Spawn context chip, history with view and restore). MCP tool names: [mcp-server.md](mcp-server.md).
+UI: [screen-artifacts.md](screen-artifacts.md) (editors per kind: Excalidraw for whiteboards, Monaco for
+docs and designs; preview through `artifacts.previewUrl` in a sandboxed iframe; Give to an agent as a
+Spawn context chip; history with view, restore and compare; rename and delete). MCP tool names:
+[mcp-server.md](mcp-server.md).

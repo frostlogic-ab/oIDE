@@ -16,7 +16,10 @@ rules in [constraints](constraints.md). Where things live: [desktop-shell](deskt
   `clipboard-sanitized-write`.
 - CSP (`security/csp.ts`, injected as `<meta>` at build and as a header for the dev server):
   `script-src 'self'` (no inline, no eval), `object-src 'none'`, `base-uri 'none'`,
-  `form-action 'none'`, `frame-src oide-artifact:` (artifact previews only).
+  `form-action 'none'`, `frame-src oide-artifact:` (artifact previews only). The Excalidraw
+  whiteboard editor needed no CSP change: its fonts are bundled and served from `'self'`, its esm.sh
+  font fallback is stripped, and export (WebAssembly font subsetting), AI and embeds are off
+  ([screen-artifacts](screen-artifacts.md#excalidraw-csp-and-bundle)).
 - Electron fuses in packaged builds: `RunAsNode` off, `NODE_OPTIONS` and `--inspect` off, asar
   integrity, load only from asar (`electron-builder.yml`).
 

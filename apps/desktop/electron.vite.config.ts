@@ -4,6 +4,7 @@ import { defineConfig } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import type { Plugin } from 'vite';
+import { excalidrawAssets } from './excalidraw-assets';
 import { buildCsp } from './src/main/security/csp';
 
 const root = import.meta.dirname;
@@ -59,7 +60,7 @@ export default defineConfig({
   },
   renderer: {
     root: resolve(root, 'src/renderer'),
-    plugins: [react(), tailwindcss(), cspPlugin()],
+    plugins: [react(), tailwindcss(), cspPlugin(), excalidrawAssets()],
     build: {
       outDir: resolve(root, 'out/renderer'),
       rolldownOptions: {
