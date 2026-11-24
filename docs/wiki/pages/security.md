@@ -233,6 +233,10 @@ Only one agent at a time may hold the project folder (`conflict`).
   becomes pre-allowed only after a native confirmation naming it.
 - Native confirmations go through `security/confirm.ts` (`confirmNative`): Cancel is the default,
   plain Node answers no, and only unpackaged builds honour `OIDE_E2E_CONFIRM=accept|deny`.
+  Every interpolated value goes through `safeDialogText()`, which shows newlines, other control
+  characters, Unicode line separators, bidi and zero-width characters as visible escapes, so a
+  value cannot add or reorder lines; only display names are shortened (from the middle). The
+  custom model confirmation shows the endpoint origin in full on its own line (SEC-31).
 
 ## Custom model test ("Test connection")
 
@@ -254,14 +258,19 @@ prompt, `--safe-mode`/`--restricted`/`--bare`), whatever their spelling or numbe
 
 ## Custom model env ("Your models")
 
-- A custom model's `extraEnv` may not set names in `DENIED_MODEL_ENV` (agent-core; upper-cased,
-  prefix-aware): loaders and runtime options (`LD_*`, `DYLD_*`, `NODE_*`, `ELECTRON_*`, `PYTHON*`,
-  …), program lookup and shells (`PATH`, `PATHEXT`, `COMSPEC`, `GIT_*`, `SSH_*`, `HOME`, …),
-  traffic (`*_PROXY`, `SSL_*`, CA bundles, `AWS_ENDPOINT_URL*`) and what oIDE or Claude Code
-  control (`ANTHROPIC_*`, `CLAUDE_CODE_*`, `CLAUDE_CONFIG_DIR`, `OIDE_*`, `MCP_*`), except a few
-  model ids and tuning names (`ANTHROPIC_VERTEX_PROJECT_ID`, `ANTHROPIC_DEFAULT_*_MODEL`,
-  `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, …). `settings.saveCustomModel` and `settings.update` refuse
-  them (`invalid_input`); `customModelEnv` drops them at launch with a warning (SEC-28).
+- A custom model's `extraEnv` may set only the names on `MODEL_ENV_ALLOW_LIST` (agent-core,
+  exact match): `AWS_REGION`, `AWS_DEFAULT_REGION`, `AWS_PROFILE`,
+  `ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION`, `CLOUD_ML_REGION`, `ANTHROPIC_VERTEX_PROJECT_ID`,
+  `VERTEX_REGION_<MODEL>`, `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`,
+  `ANTHROPIC_SMALL_FAST_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL` (an agent's subagent-model strategy
+  wins), `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, `MAX_THINKING_TOKENS`, `DISABLE_PROMPT_CACHING`. The base
+  URL, model, token and Bedrock/Vertex switches are set only by oIDE from the record's fields.
+  `settings.saveCustomModel` and `settings.update` refuse any other name (`invalid_input`);
+  `customModelEnv` drops it at launch with a warning (SEC-28). Values are checked as well
+  (`isAllowedModelEnvEntry`: regions, GCP project ids, AWS profile names, token counts, model names
+  without `/`, `@`, `?`, `#`), so a region cannot turn into another hostname.
+- A custom model's base URL must be `http(s)` and may not carry `user:password@` (refused at save
+  time).
 - A new model, or a change to a model's base URL, provider or `extraEnv`, needs a native
   confirmation in main (`confirmExecSettings`) showing the new values; env values whose names look
   secret (`KEY`, `TOKEN`, `SECRET`, `PASS`, …) are shown as names only.

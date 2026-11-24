@@ -13,7 +13,7 @@ Run them from a cwd on an uppercase drive letter (a lowercase `c:\` breaks vites
 `Set-Location 'C:\…\oide'; node node_modules/vitest/vitest.mjs run test/security`.
 
 **Counts:** 2 critical, 5 high, 9 medium, 11 low. A follow-up scan of the fixes added 1 high and
-2 medium (SEC-28..30, fixed). `pnpm audit --prod` reports no known
+3 medium (SEC-28..31, fixed). `pnpm audit --prod` reports no known
 vulnerabilities.
 
 ## Critical
@@ -515,8 +515,9 @@ existing permission flags. File: `packages/agent-core/src/args.ts`. Test: `args.
 
 ## Follow-up scan of the fixes (2026-11-24)
 
-An automated scan of the committed fixes found three more gaps. All three are fixed, with tests in
-`test/security/custom-model-env.test.ts` and `packages/agent-core/src/args.test.ts`.
+An automated scan of the committed fixes found four more gaps. All four are fixed, with tests in
+`test/security/custom-model-env.test.ts`, `packages/agent-core/src/args.test.ts` and
+`apps/desktop/src/main/security/confirm.test.ts`.
 
 ### SEC-28 (high) A custom model's `extraEnv` reaches the agent env with no limits or confirmation
 
@@ -525,18 +526,26 @@ An automated scan of the committed fixes found three more gaps. All three are fi
 confirmation. A compromised renderer, or a careless edit, could set `NODE_OPTIONS`, `PATH`,
 `*_PROXY`, `LD_*`/`DYLD_*`, `ELECTRON_*`, `CLAUDE_CODE_*` or `ANTHROPIC_*` overrides: code
 execution in the agent, or its traffic sent elsewhere.
-**Status:** **fixed.** `DENIED_MODEL_ENV` in agent-core (case-insensitive, prefix-aware): loaders
-and runtime options (`LD_`, `DYLD_`, `NODE_`, `ELECTRON_`, `NPM_CONFIG_`, `PYTHON*`, `PERL5*`,
-`DOTNET_`, `COR_`, Java options, …), program lookup and shells (`PATH`, `PATHEXT`, `COMSPEC`,
-`SHELL`, `BASH_ENV`, `GIT_`, `SSH_`, `EDITOR`, `HOME`, `TEMP`, `XDG_`, …), traffic (`*_PROXY`,
-`SSL_`, CA bundles, `AWS_ENDPOINT_URL*`, `CLOUDSDK_`, …) and what oIDE and Claude Code control
-(`ANTHROPIC_`, `CLAUDE_CODE_`, `CLAUDE_CONFIG_DIR`, `OIDE_`, `MCP_`). A few model ids and plain
-tuning names stay allowed (`ANTHROPIC_VERTEX_PROJECT_ID`, `ANTHROPIC_DEFAULT_*_MODEL`,
-`ANTHROPIC_SMALL_FAST_MODEL`, `CLAUDE_CODE_MAX_OUTPUT_TOKENS`). `customModelEnv` drops denied
-names (with a launch warning), and main refuses them at save time (`invalid_input`). A model whose
-base URL, provider or `extraEnv` changes (a new model too) needs a native confirmation in main
-(`confirmExecSettings`), which shows the provider, base URL and env, secret-looking values as names
-only. Files: `packages/agent-core/src/args.ts`, `apps/desktop/src/main/handlers/settings.ts`.
+**Status:** **fixed.** A custom model may set only the env names on `MODEL_ENV_ALLOW_LIST` in
+agent-core, matched exactly (a first denylist version was replaced, because a scan found names it
+missed: `OPENSSL_*`, `GCONV_PATH`, `LESSOPEN`, `MANPAGER`, `TERMINFO`, `IFS`, `PS4`, `LUA_*`,
+`GOOGLE_APPLICATION_CREDENTIALS`, …). The list holds documented model and provider settings only:
+`AWS_REGION`, `AWS_DEFAULT_REGION`, `AWS_PROFILE`, `ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION`,
+`CLOUD_ML_REGION`, `ANTHROPIC_VERTEX_PROJECT_ID`, `VERTEX_REGION_<MODEL>`,
+`ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`, `ANTHROPIC_SMALL_FAST_MODEL`,
+`CLAUDE_CODE_SUBAGENT_MODEL` (an agent's subagent-model strategy still wins),
+`CLAUDE_CODE_MAX_OUTPUT_TOKENS`, `MAX_THINKING_TOKENS`, `DISABLE_PROMPT_CACHING`.
+`ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_USE_BEDROCK`/`_VERTEX`
+are set only by oIDE from the record's fields. Values are checked too (`isAllowedModelEnvEntry`),
+because a region or id that ends up in a hostname (`evil.example.com/`) could still redirect
+Bedrock or Vertex: regions `^[a-z0-9]+(-[a-z0-9]+)*$`, GCP project ids
+`^[a-z][a-z0-9-]{4,28}[a-z0-9]$`, AWS profiles `^[A-Za-z0-9_+=,.@-]{1,64}$`, token counts digits up
+to 1,000,000, model names `^[A-Za-z0-9._:[\]-]{1,128}$`, switches `0`/`1`/`true`/`false`. Main
+refuses any other name or value at save time (`invalid_input`, the message lists the allowed
+names), and `customModelEnv` drops it at launch with a warning; both use the same check. A model whose base URL, provider or `extraEnv` changes (a
+new model too) needs a native confirmation in main (`confirmExecSettings`), which shows the
+provider, base URL and env, secret-looking values as names only. Files:
+`packages/agent-core/src/args.ts`, `apps/desktop/src/main/handlers/settings.ts`.
 
 ### SEC-29 (medium) The CLI path confirmation is skipped for paths picked for other purposes
 
@@ -557,7 +566,25 @@ the same origin.
 the whole sorted `extraEnv` (`model:<id>:binding`), stored at save time, and releases it only while
 that hash matches; `saveCustomModel` deletes the key when the binding changes without a new key.
 Keys stored with the old origin-only binding are not released and must be entered again. Together
-with the SEC-28 denylist.
+with the SEC-28 allow-list.
+
+### SEC-31 (medium) Native confirmations can be spoofed with crafted values
+
+The confirmation texts interpolated names, base URLs, env values, the CLI path, extra flags and
+extension or custom-tool command lines as they came. A value with newlines, Unicode line
+separators or bidi controls could add fake lines ("Endpoint: https://trusted…") or reorder text,
+and the custom model text clipped values, so a long name or URL could push the real origin out of
+view.
+**Status:** **fixed.** `safeDialogText()` in `security/confirm.ts` shows every control character,
+DEL, C1 control, Unicode line or paragraph separator, bidi embedding, override or isolate,
+zero-width character and BOM as a visible escape (`\n`, `\u{202e}`), and truncates only when
+asked, from the middle. Every `confirmNative` caller escapes each interpolated value (custom
+models, CLI path, extra flags, folder and git extensions, custom tools, git URLs); only display
+names are shortened. `confirmNative` also escapes title, message and label and each detail line,
+as defence in depth. A custom model's base URL must be `http(s)` without `user:password@`
+(refused at save time), and the dialog shows `new URL(baseUrl).origin` in full on its own
+`Endpoint:` line before anything else. Files: `security/confirm.ts`, `handlers/settings.ts`,
+`services/extensions.ts`.
 
 ## What held
 

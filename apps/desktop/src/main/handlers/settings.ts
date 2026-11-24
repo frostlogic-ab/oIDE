@@ -1,12 +1,12 @@
 import { resolve } from 'node:path';
-import { deniedModelEnvKeys } from '@oide/agent-core';
+import { isAllowedModelEnvKey, isAllowedModelEnvEntry, MODEL_ENV_ALLOW_LIST } from '@oide/agent-core';
 import { pathKey, samePath } from '@oide/git';
-import type { CustomModel, Settings, Technique } from '@oide/protocol';
+import { CustomModel, type Settings, type Technique } from '@oide/protocol';
 import { BUILTIN_PRESETS, BUILTIN_TECHNIQUES, readOideFile } from '@oide/store';
 import { ZodError } from 'zod';
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
-import { confirmNative } from '../security/confirm.js';
+import { confirmNative, dialogOrigin, safeDialogText } from '../security/confirm.js';
 import { boundModelKey, deleteModelKey, hasBoundKey, modelBinding, storeModelKey } from '../security/model-keys.js';
 import type { Services } from '../services/index.js';
 
@@ -172,10 +172,13 @@ export function registerSettingsHandlers(router: IpcRouter, s: Services, ctx: Ma
  * `dialog.pickCli` flow this session skips it (once); paths picked for anything else do not.
  * Clearing either value needs none.
  *
- * SEC-28: custom models (`models.custom`, also through `settings.saveCustomModel`) may not set
- * denied env names (`deniedModelEnvKeys`, refused as `invalid_input`), and a model whose base URL,
- * provider or extraEnv changes (a new model included) needs a native confirmation that shows the
- * new values, secret-looking env values as names only.
+ * SEC-28: custom models (`models.custom`, also through `settings.saveCustomModel`) may only set
+ * env names on agent-core's `MODEL_ENV_ALLOW_LIST`, each with a well-formed value
+ * (`isAllowedModelEnvEntry`; others are refused as `invalid_input`), and
+ * a model whose base URL, provider or extraEnv changes (a new model included) needs a native confirmation that shows the
+ * new values, secret-looking env values as names only. SEC-31: the base URL must be http(s) with no
+ * user:password part, the dialog shows its origin in full, and every value is escaped
+ * (`safeDialogText`), so a crafted value cannot add lines or push the origin out of view.
  */
 export async function confirmExecSettings(s: Services, ctx: MainContext, patch: Record<string, unknown>): Promise<void> {
   await confirmCustomModels(s, ctx, patch.models);
@@ -190,7 +193,7 @@ export async function confirmExecSettings(s: Services, ctx: MainContext, patch: 
       (await confirmNative(ctx, {
         title: 'Use this Claude Code CLI?',
         message: 'oIDE will run this program as the Claude Code CLI for every agent.',
-        detail: `${c.cliPath}\n\nOnly continue if you typed or chose this path yourself.`,
+        detail: `${safeDialogText(c.cliPath)}\n\nOnly continue if you typed or chose this path yourself.`,
         confirmLabel: 'Use this CLI',
         danger: true,
       }));
@@ -200,7 +203,7 @@ export async function confirmExecSettings(s: Services, ctx: MainContext, patch: 
     const ok = await confirmNative(ctx, {
       title: 'Pass these flags to every agent?',
       message: 'oIDE will add these extra flags to every Claude Code agent it starts.',
-      detail: `${c.extraFlags}\n\nFlags that would change oIDE's own settings, MCP servers, permissions or directories are ignored.`,
+      detail: `${safeDialogText(c.extraFlags)}\n\nFlags that would change oIDE's own settings, MCP servers, permissions or directories are ignored.`,
       confirmLabel: 'Use these flags',
       danger: true,
     });
@@ -214,6 +217,7 @@ const SECRET_ENV_NAME = /KEY|TOKEN|SECRET|PASS|CRED|AUTH|COOKIE|SESSION|SIGNATUR
 export interface ModelLike {
   id: string;
   name?: unknown;
+  model?: unknown;
   provider?: unknown;
   baseUrl?: unknown;
   extraEnv: Record<string, unknown>;
@@ -221,31 +225,63 @@ export interface ModelLike {
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const envJson = (env: Record<string, unknown> | undefined) => JSON.stringify(Object.entries(env ?? {}).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
-const clip = (v: unknown, n = 200) => {
-  const t = typeof v === 'string' ? v : v === undefined || v === null ? '' : JSON.stringify(v);
-  return t.length > n ? `${t.slice(0, n)}…` : t;
-};
 
-/** The confirmation text for one custom model: where its agents' traffic goes, and with what env. */
+/** SEC-31: a custom model base URL is http(s), with no `user:password@` part. Returns the problem, if any. */
+export function baseUrlProblem(baseUrl: string): string | undefined {
+  let u: URL;
+  try {
+    u = new URL(baseUrl);
+  } catch {
+    return 'The base URL is not a valid URL.';
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return 'The base URL must start with https:// (or http:// for a local server).';
+  if (u.username || u.password) return 'The base URL may not contain a user name or password; enter the key in its own field.';
+  return undefined;
+}
+
+/**
+ * The confirmation text for one custom model: where its agents' traffic goes, and with what env.
+ * The origin comes first and in full; only the display name is shortened (from the middle).
+ */
 export function describeCustomModel(m: ModelLike): string {
   const env = Object.entries(m.extraEnv);
+  const url = typeof m.baseUrl === 'string' && m.baseUrl ? m.baseUrl : undefined;
   return [
-    clip(m.name, 80) || m.id,
-    `  Provider: ${clip(m.provider, 40)}`,
-    ...(typeof m.baseUrl === 'string' && m.baseUrl ? [`  Base URL: ${clip(m.baseUrl)}`] : []),
+    safeDialogText(m.name, { max: 80 }) || safeDialogText(m.id),
+    ...(url ? [`  Endpoint: ${dialogOrigin(url) ?? '(not a valid URL)'}`, `  Base URL: ${safeDialogText(url)}`] : []),
+    `  Provider: ${safeDialogText(m.provider)}`,
+    ...(m.model !== undefined ? [`  Model: ${safeDialogText(m.model, { max: 120 })}`] : []),
     `  Env:${env.length ? '' : ' (none)'}`,
-    ...env.map(([k, v]) => (SECRET_ENV_NAME.test(k) ? `    ${k} (value hidden)` : `    ${k}=${clip(v)}`)),
+    ...env.map(([k, v]) => (SECRET_ENV_NAME.test(k) ? `    ${safeDialogText(k)} (value hidden)` : `    ${safeDialogText(k)}=${safeDialogText(v)}`)),
   ].join('\n');
 }
 
 async function confirmCustomModels(s: Services, ctx: MainContext, models: unknown): Promise<void> {
   if (!isObj(models) || !Array.isArray(models.custom)) return;
-  const next: ModelLike[] = models.custom
-    .filter((m): m is Record<string, unknown> & { id: string } => isObj(m) && typeof m.id === 'string')
-    .map((m) => ({ ...m, extraEnv: isObj(m.extraEnv) ? m.extraEnv : {} }));
-  const denied = [...new Set(next.flatMap((m) => deniedModelEnvKeys(m.extraEnv as Record<string, string>)))];
-  if (denied.length) {
-    throw new IpcError(`A custom model may not set these environment variables (they can run code, redirect traffic or override what oIDE controls): ${denied.join(', ')}`, 'invalid_input');
+  const next: CustomModel[] = [];
+  for (const raw of models.custom) {
+    const r = CustomModel.safeParse(raw);
+    if (!r.success) throw new IpcError(`Invalid custom model: ${r.error.issues[0]?.path.join('.')}: ${r.error.issues[0]?.message}`, 'invalid_input');
+    next.push(r.data);
+  }
+  for (const m of next) {
+    const problem = m.baseUrl ? baseUrlProblem(m.baseUrl) : undefined;
+    if (problem) throw new IpcError(problem, 'invalid_input');
+  }
+  const entries = next.flatMap((m) => Object.entries(m.extraEnv));
+  const names = [...new Set(entries.filter(([k]) => !isAllowedModelEnvKey(k)).map(([k]) => safeDialogText(k, { max: 60 })))];
+  if (names.length) {
+    throw new IpcError(
+      `A custom model may not set ${names.join(', ')}. Allowed environment variables: ${MODEL_ENV_ALLOW_LIST.join(', ')}, VERTEX_REGION_<MODEL>. The base URL, model and key have their own fields.`,
+      'invalid_input',
+    );
+  }
+  const values = [...new Set(entries.filter(([k, v]) => !isAllowedModelEnvEntry(k, v)).map(([k]) => k))];
+  if (values.length) {
+    throw new IpcError(
+      `Invalid value for ${values.join(', ')}: regions look like eu-west-1, project ids like my-project-123, model names may not contain / @ ? #, token counts are whole numbers up to 1000000.`,
+      'invalid_input',
+    );
   }
   const cur = new Map(s.store.settings.get().models.custom.map((m) => [m.id, m]));
   const changed = next.filter((m) => {

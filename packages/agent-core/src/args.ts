@@ -129,116 +129,83 @@ export function allowListEnv(base: Record<string, string | undefined>): Record<s
 const ENV_KEY = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 /**
- * SEC-28: variables a custom model's `extraEnv` may never set, because they run code in the agent
- * or the programs it starts (loaders, interpreter options, shells, editors, PATH), redirect or
- * intercept its traffic (proxies, CA bundles, TLS checks, endpoint overrides) or override what oIDE
- * controls (`ANTHROPIC_*`, `CLAUDE_CODE_*`, `OIDE_*`, Claude Code's config folder). Compared
- * upper-cased (Windows env names are case-insensitive); entries ending in `_` are prefixes, and so
- * are entries ending in `*` (without the `*`).
+ * SEC-28: the only env names a custom model's `extraEnv` may set. An allow-list, because a
+ * denylist always misses something (loaders, shells, pagers, TLS and proxy settings, endpoint
+ * overrides). Each name is a model or provider setting documented for the Claude Code CLI or the
+ * AWS / Google SDKs it uses, and none of them runs a program, names a file or changes where
+ * traffic goes:
+ * - Bedrock: `AWS_REGION`, `AWS_DEFAULT_REGION`, `AWS_PROFILE` (a profile from the user's own
+ *   `~/.aws` config), `ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION`.
+ * - Vertex: `CLOUD_ML_REGION`, `ANTHROPIC_VERTEX_PROJECT_ID`, per-model `VERTEX_REGION_<MODEL>`.
+ * - Model choice and tuning: `ANTHROPIC_DEFAULT_{OPUS,SONNET,HAIKU}_MODEL`,
+ *   `ANTHROPIC_SMALL_FAST_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL` (a subagent-model strategy still
+ *   wins), `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, `MAX_THINKING_TOKENS`, `DISABLE_PROMPT_CACHING`.
+ * `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL`, `ANTHROPIC_AUTH_TOKEN` and `CLAUDE_CODE_USE_BEDROCK` /
+ * `_VERTEX` are set only by oIDE, from the record's own fields. Names are matched exactly
+ * (upper case), so `Path`-style case tricks on Windows cannot slip through.
  */
-export const DENIED_MODEL_ENV: readonly string[] = [
-  // Loaders and interpreter / runtime options
-  'LD_',
-  'DYLD_',
-  'NODE_',
-  'ELECTRON_',
-  'NPM_CONFIG_',
-  'BUN_',
-  'DENO_',
-  'PYTHON*',
-  'PERL5*',
-  'PERLLIB',
-  'RUBYOPT',
-  'RUBYLIB',
-  'JAVA_TOOL_OPTIONS',
-  '_JAVA_OPTIONS',
-  'JDK_JAVA_OPTIONS',
-  'DOTNET_',
-  'COR_',
-  'CORECLR_',
-  // Program lookup, shells and the programs the CLI starts
-  'PATH',
-  'PATHEXT',
-  'COMSPEC',
-  'SHELL',
-  'BASH_ENV',
-  'ENV',
-  'ZDOTDIR',
-  'PROMPT_COMMAND',
-  'PSMODULEPATH',
-  'EDITOR',
-  'VISUAL',
-  'PAGER',
-  'BROWSER',
-  'GIT_',
-  'GH_',
-  'SSH_',
-  'NODEFAULTCURRENTDIRECTORYINEXEPATH',
-  'SYSTEMROOT',
-  'WINDIR',
-  'HOME',
-  'USERPROFILE',
-  'APPDATA',
-  'LOCALAPPDATA',
-  'TEMP',
-  'TMP',
-  'TMPDIR',
-  'XDG_',
-  // Traffic: proxies, CA bundles, TLS, key logs, cloud endpoint overrides
-  'HTTP_PROXY',
-  'HTTPS_PROXY',
-  'ALL_PROXY',
-  'NO_PROXY',
-  'FTP_PROXY',
-  'GLOBAL_AGENT_',
-  'SSL_',
-  'SSLKEYLOGFILE',
-  'REQUESTS_CA_BUNDLE',
-  'CURL_CA_BUNDLE',
-  'AWS_CA_BUNDLE',
-  'AWS_ENDPOINT_URL*',
-  'AWS_CONFIG_FILE',
-  'AWS_SHARED_CREDENTIALS_FILE',
-  'GOOGLE_EXTERNAL_ACCOUNT_ALLOW_EXECUTABLES',
-  'CLOUDSDK_',
-  // What oIDE and Claude Code control
-  'ANTHROPIC_',
-  'CLAUDE_CODE_',
-  'CLAUDE_CONFIG_DIR',
-  'OIDE_',
-  'MCP_',
-];
+const REGION = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+const GCP_PROJECT = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
+const AWS_PROFILE = /^[A-Za-z0-9_+=,.@-]{1,64}$/;
+const MODEL_NAME = /^[A-Za-z0-9._:[\]-]{1,128}$/;
+const region = (v: string) => v.length <= 64 && REGION.test(v);
+const modelName = (v: string) => MODEL_NAME.test(v);
+const tokenCount = (v: string) => /^[0-9]{1,7}$/.test(v) && Number(v) <= 1_000_000;
 
-/** `ANTHROPIC_*` / `CLAUDE_CODE_*` names a custom model may set: model ids and plain tuning only. */
-const MODEL_ENV_EXCEPTIONS = new Set([
-  'ANTHROPIC_VERTEX_PROJECT_ID',
-  'ANTHROPIC_SMALL_FAST_MODEL',
-  'ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION',
-  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
-  'ANTHROPIC_DEFAULT_SONNET_MODEL',
-  'ANTHROPIC_DEFAULT_OPUS_MODEL',
-  'CLAUDE_CODE_MAX_OUTPUT_TOKENS',
-]);
+/**
+ * Value checks per allowed name (SEC-28): a region or model id that went into a hostname or URL
+ * unchecked (`evil.example.com/`) could still redirect Bedrock or Vertex traffic.
+ * Regions `^[a-z0-9]+(-[a-z0-9]+)*$`, GCP project ids, AWS profile names (no `/` or `:`), token
+ * counts (digits, at most 1,000,000), model names `^[A-Za-z0-9._:[\]-]{1,128}$` (no `/`, `@`,
+ * `?`, `#`), and `0`/`1`/`true`/`false` for switches.
+ */
+const MODEL_ENV_VALUE: Readonly<Record<string, (v: string) => boolean>> = {
+  AWS_REGION: region,
+  AWS_DEFAULT_REGION: region,
+  AWS_PROFILE: (v) => AWS_PROFILE.test(v),
+  ANTHROPIC_SMALL_FAST_MODEL_AWS_REGION: region,
+  CLOUD_ML_REGION: region,
+  ANTHROPIC_VERTEX_PROJECT_ID: (v) => GCP_PROJECT.test(v),
+  ANTHROPIC_DEFAULT_OPUS_MODEL: modelName,
+  ANTHROPIC_DEFAULT_SONNET_MODEL: modelName,
+  ANTHROPIC_DEFAULT_HAIKU_MODEL: modelName,
+  ANTHROPIC_SMALL_FAST_MODEL: modelName,
+  CLAUDE_CODE_SUBAGENT_MODEL: modelName,
+  CLAUDE_CODE_MAX_OUTPUT_TOKENS: tokenCount,
+  MAX_THINKING_TOKENS: tokenCount,
+  DISABLE_PROMPT_CACHING: (v) => /^(0|1|true|false)$/.test(v),
+};
+export const MODEL_ENV_ALLOW_LIST: readonly string[] = Object.keys(MODEL_ENV_VALUE);
+/** Vertex per-model region overrides (`VERTEX_REGION_CLAUDE_3_5_HAIKU`, …); the value is a region. */
+const VERTEX_REGION_KEY = /^VERTEX_REGION_[A-Z0-9_]+$/;
 
-/** True when a custom model's `extraEnv` may not set `key` (also for malformed names). */
-export function isDeniedModelEnvKey(key: string): boolean {
-  if (!ENV_KEY.test(key)) return true;
-  const up = key.toUpperCase();
-  if (MODEL_ENV_EXCEPTIONS.has(up)) return false;
-  return DENIED_MODEL_ENV.some((d) => (d.endsWith('*') ? up.startsWith(d.slice(0, -1)) : d.endsWith('_') ? up.startsWith(d) : up === d));
+const valueCheck = (key: string): ((v: string) => boolean) | undefined =>
+  Object.prototype.hasOwnProperty.call(MODEL_ENV_VALUE, key) ? MODEL_ENV_VALUE[key] : VERTEX_REGION_KEY.test(key) ? region : undefined;
+
+/** True when a custom model's `extraEnv` may set `key` at all (see `MODEL_ENV_ALLOW_LIST`). */
+export function isAllowedModelEnvKey(key: string): boolean {
+  return valueCheck(key) !== undefined;
 }
 
-/** The names in `env` that a custom model may not set (see `DENIED_MODEL_ENV`). */
-export function deniedModelEnvKeys(env: Record<string, string> | undefined): string[] {
-  return Object.keys(env ?? {}).filter(isDeniedModelEnvKey);
+/** True when a custom model's `extraEnv` may set `key` to `value` (allowed name and well-formed value). */
+export function isAllowedModelEnvEntry(key: string, value: unknown): boolean {
+  const check = valueCheck(key);
+  return check !== undefined && typeof value === 'string' && check(value);
+}
+
+/** The names in `env` that a custom model may not set as given (unknown name or malformed value). */
+export function disallowedModelEnvKeys(env: Record<string, unknown> | undefined): string[] {
+  return Object.entries(env ?? {})
+    .filter(([k, v]) => !isAllowedModelEnvEntry(k, v))
+    .map(([k]) => k);
 }
 
 /** Env for a custom model ("Your models"). The key comes from oIDE's keychain store. */
 export function customModelEnv(model: CustomModel, secret?: string, warnings?: string[]): Record<string, string> {
   const env: Record<string, string> = {};
-  const denied = deniedModelEnvKeys(model.extraEnv);
-  if (denied.length) warnings?.push(`Ignored env variables of custom model "${model.name}" that it may not set: ${denied.join(', ')}`);
-  for (const [k, v] of Object.entries(model.extraEnv ?? {})) if (!isDeniedModelEnvKey(k)) env[k] = v;
+  const refused = disallowedModelEnvKeys(model.extraEnv);
+  if (refused.length) warnings?.push(`Ignored env variables of custom model "${model.name}" that it may not set (or not to that value): ${refused.join(', ')}`);
+  for (const [k, v] of Object.entries(model.extraEnv ?? {})) if (isAllowedModelEnvEntry(k, v)) env[k] = v;
   switch (model.provider) {
     case 'compatible-api':
     case 'local':
@@ -665,8 +632,9 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
   env.OIDE_AGENT_ID = ctx.agentId;
   // SEC-01: the CLI's own spawns (git, gh, node, shells) never pick a program from the worktree.
   if ((ctx.platform ?? process.platform) === 'win32') env.NoDefaultCurrentDirectoryInExePath = '1';
-  if (spec.strategy.kind === 'subagent-model') env[SUBAGENT_MODEL_ENV] = spec.strategy.subagents.model;
   if (ctx.customModel) Object.assign(env, customModelEnv(ctx.customModel, ctx.customModelSecret, warnings));
+  // After the custom model env: the agent's own subagent-model strategy wins over its extraEnv.
+  if (spec.strategy.kind === 'subagent-model') env[SUBAGENT_MODEL_ENV] = spec.strategy.subagents.model;
 
   // First message: goal, then first-message techniques in Settings order, then context chips
   let firstMessage: StreamJsonUserMessage | null = null;
