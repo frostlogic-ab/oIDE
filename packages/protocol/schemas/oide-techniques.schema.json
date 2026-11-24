@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "oIDE project techniques",
+  "description": "Schema for <repo>/.oide/techniques.json.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this schema, for editors."
+    },
+    "version": {
+      "default": 1,
+      "type": "number",
+      "const": 1
+    },
+    "techniques": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "placement": {
+            "type": "string",
+            "enum": [
+              "first-message",
+              "system-prompt"
+            ]
+          },
+          "builtIn": {
+            "default": false,
+            "type": "boolean"
+          },
+          "enabledByDefault": {
+            "default": false,
+            "type": "boolean"
+          },
+          "scope": {
+            "default": "global",
+            "type": "string",
+            "enum": [
+              "global",
+              "project"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "text",
+          "placement"
+        ]
+      }
+    }
+  }
+}

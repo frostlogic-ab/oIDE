@@ -6,7 +6,15 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc --noEmit -p ." },
-  "dependencies": { "@oide/protocol": "workspace:*", "zod": "^4.6.7" }
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "gen:schemas": "node --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/gen-schemas.ts"
+  },
+  "dependencies": {
+    "@oide/protocol": "workspace:*",
+    "zod": "^4.6.7"
+  }
 }
