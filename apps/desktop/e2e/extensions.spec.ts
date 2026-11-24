@@ -39,7 +39,8 @@ test.beforeAll(async () => {
   );
   await new Promise<void>((r) => site.listen(0, '127.0.0.1', r));
   devUrl = `http://127.0.0.1:${(site.address() as AddressInfo).port}/`;
-  ctx = await launchApp({ OIDE_CLAUDE_PATH: FAKE_CLAUDE, OIDE_E2E_TRUST: 'trust' });
+  // OIDE_E2E_OPEN_PATHS: the test-only stand-in for a folder-picker pick (SEC-08).
+  ctx = await launchApp({ OIDE_CLAUDE_PATH: FAKE_CLAUDE, OIDE_E2E_TRUST: 'trust', OIDE_E2E_OPEN_PATHS: repo });
 });
 
 test.afterAll(async () => {

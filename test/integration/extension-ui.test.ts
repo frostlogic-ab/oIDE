@@ -24,7 +24,9 @@ afterEach(async () => {
 });
 
 async function harness(): Promise<Harness> {
+  // The deploy-target flow sets --fake-scenario extra flags, which main confirms natively (SEC-07): accept.
   const h = await startHarness({
+    confirm: 'accept',
     platform: {
       builtinExtensionDirs: [
         join(REPO, 'extensions'),
@@ -189,6 +191,7 @@ describe('extension UI contributions (plain Node, real router)', () => {
     dirs.push(repo);
     const h = await harness();
     await h.call('settings.update', { patch: { claude: { extraFlags: '--fake-scenario review' } } });
+    h.allowOpen(repo); // stands in for the folder-picker pick (SEC-08)
     const project = (await h.call('projects.open', { path: repo }))!;
     const [a] = await h.call('agents.spawn', {
       projectId: project.id,
