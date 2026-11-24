@@ -11,7 +11,7 @@ the `.oide/` footer note) and a scrolling main column (padding 22px 32px, conten
 the design's `.row` / `.rl` / `.rt` / `.rd` / `.sec` / `.inp` styles (`ui.tsx`: `Row`, `Rd`, `Sec`,
 `inp`). The section is the route param: `navigate('settings', { section: 'models' })`; clicking a
 section calls `replace('settings', { section })`. Ids: `cli`, `models`, `agents`, `tech`, `perms`,
-`projects`, `artifacts`, `keys`, `look`, `privacy`. Search filters the list by section label plus
+`projects`, `artifacts`, `keys`, `look`, `privacy`, `diag`. Search filters the list by section label plus
 the words of its rows (`SECTIONS[].keywords`); Enter opens the first match.
 
 `settings.loadErrors` (bad JSON or schema errors in the settings document or a project's `.oide/*.json`)
@@ -31,6 +31,8 @@ shows as an amber banner at the top of every section, and per project under Proj
 | Keyboard shortcuts | read-only list from `keymap.getBindings()` and `ACTION_LABELS` | none |
 | Appearance | accent radiogroup (four `ACCENT_OPTIONS` swatches, arrow keys) | `settings.update({ ui: { accent } })`; the settings store applies it |
 | Privacy | Share anonymous usage statistics (off by default) | `settings.update({ ui: { telemetry } })` |
+| Privacy | Crash reports (off by default; local only, never uploaded in v1; off deletes them) | `settings.update({ ui: { crashReports } })` |
+| Diagnostics | Checks (CLI, git ≥ 2.38, gh, node, keychain, database, MCP port, logs), Copy report, Check again, Open logs folder | `app.diagnostics`, `app.openLogsFolder` ([reliability](reliability.md)) |
 
 ## Save and validation rules
 

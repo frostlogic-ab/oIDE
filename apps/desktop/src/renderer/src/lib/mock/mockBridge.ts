@@ -61,6 +61,17 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
     // Source control, Review, Files (git.*, review.*, files.*): see ./scm.ts. Later keys override.
     ...createScmHandlers({ agents, emit, fallbackDiffs: { ...fx.diffs, ...focusDiffs }, artifacts: fx.artifacts }),
     'app.info': () => ({ version: '0.1.0-mock', platform: 'browser', userData: '/mock/userData' }),
+    'app.diagnostics': () => {
+      const checks = [
+        { id: 'cli', label: 'Claude Code CLI', status: 'ok' as const, value: '2.1.325 · ~/.local/bin/claude', detail: 'In the tested range.' },
+        { id: 'git', label: 'git', status: 'ok' as const, value: '2.45.1 · /usr/bin/git' },
+        { id: 'gh', label: 'GitHub CLI (gh)', status: 'warn' as const, value: 'Not found', detail: 'Optional. Opening pull requests from Review needs gh.' },
+        { id: 'mcp', label: 'oIDE MCP server', status: 'ok' as const, value: '127.0.0.1:51234' },
+      ];
+      return { generatedAt: new Date().toISOString(), checks, report: checks.map((c) => `${c.label}: ${c.value}`).join('\n') };
+    },
+    'app.openLogsFolder': () => ({ ok: true as const }),
+    'app.reportError': () => ({ ok: true as const }),
     'cli.detect': () => fx.cli,
     'projects.list': () => seedProjects(fx.projects, wallMode),
     'scope.get': () => scope,

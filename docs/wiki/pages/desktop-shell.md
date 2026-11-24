@@ -51,8 +51,10 @@ apps/desktop/
   (`oide-artifact:`, the sandboxed artifact previews; see [security](security.md)). Injected as a
   `<meta>` at build and as a header for the dev server. Dev adds `'unsafe-inline'` scripts and the
   HMR socket only.
-- **Quit**: `ctx.onQuit(fn)` hooks run on `will-quit` (3 s cap), then `app.exit(0)`. Use it to deny
-  pending permissions, stop agents, close the database.
+- **Quit**: `ctx.onQuit(fn, name?)` hooks run on `will-quit` one after another in registration order,
+  each capped (7 s, 12 s total; `reliability/shutdown.ts`), then logs are flushed and `app.exit(0)`.
+  Use it to deny pending permissions, stop agents, close the database. `before-quit` stops crash
+  reloads. Crash isolation, logs, crash reports and diagnostics: [reliability](reliability.md).
 
 ### IPC router
 

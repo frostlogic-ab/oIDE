@@ -11,6 +11,12 @@ import { invokeOr, oide } from '../lib/bridge';
  * - `agents.removed` → delete
  */
 export const MAX_EVENTS_PER_AGENT = 2000;
+/**
+ * Hard cap per agent once history pages are loaded (Focus scroll-back). Older events stay in
+ * the database and are paged in again with `agents.events` when needed; `releaseHistory` drops
+ * back to the live tail when Focus closes, so long transcripts never pile up in memory.
+ */
+export const MAX_RETAINED_EVENTS = 10_000;
 
 export interface AgentCounts {
   total: number;
@@ -25,6 +31,8 @@ interface AgentsState {
   /** Display order (creation order). */
   order: string[];
   events: Record<string, AgentEvent[]>;
+  /** Per-agent cap while history is loaded (default MAX_EVENTS_PER_AGENT). */
+  limits: Record<string, number>;
   loaded: boolean;
   load(): Promise<void>;
   applySummary(summary: AgentSummary): void;
@@ -32,6 +40,8 @@ interface AgentsState {
   remove(agentId: string): void;
   /** Prepend older events fetched with `agents.events` (Focus transcript paging). */
   prependHistory(agentId: string, events: AgentEvent[]): void;
+  /** Drop paged-in history, keeping the live tail (Focus unmount). */
+  releaseHistory(agentId: string): void;
 }
 
 function sortOrder(byId: Record<string, AgentSummary>): string[] {
@@ -44,6 +54,7 @@ export const useAgents = create<AgentsState>()((set, get) => ({
   byId: {},
   order: [],
   events: {},
+  limits: {},
   loaded: false,
   load: async () => {
     const list = await invokeOr('agents.list', undefined, []);
@@ -68,9 +79,11 @@ export const useAgents = create<AgentsState>()((set, get) => ({
       }
       events[ev.agentId]!.push(ev);
     }
+    const limits = get().limits;
     for (const id of touched) {
       const arr = events[id]!;
-      if (arr.length > MAX_EVENTS_PER_AGENT) events[id] = arr.slice(arr.length - MAX_EVENTS_PER_AGENT);
+      const cap = limits[id] ?? MAX_EVENTS_PER_AGENT;
+      if (arr.length > cap) events[id] = arr.slice(arr.length - cap);
     }
     set({ events });
   },
@@ -79,13 +92,25 @@ export const useAgents = create<AgentsState>()((set, get) => ({
     delete byId[agentId];
     const events = { ...get().events };
     delete events[agentId];
-    set({ byId, order: sortOrder(byId), events });
+    const limits = { ...get().limits };
+    delete limits[agentId];
+    set({ byId, order: sortOrder(byId), events, limits });
   },
   prependHistory: (agentId, older) => {
     const current = get().events[agentId] ?? [];
     const firstSeq = current[0]?.seq ?? Number.POSITIVE_INFINITY;
-    const merged = [...older.filter((e) => e.seq < firstSeq), ...current];
-    set({ events: { ...get().events, [agentId]: merged } });
+    let merged = [...older.filter((e) => e.seq < firstSeq), ...current];
+    if (merged.length > MAX_RETAINED_EVENTS) merged = merged.slice(merged.length - MAX_RETAINED_EVENTS);
+    // While history is loaded, live events no longer push it out; only the hard cap applies.
+    set({ events: { ...get().events, [agentId]: merged }, limits: { ...get().limits, [agentId]: MAX_RETAINED_EVENTS } });
+  },
+  releaseHistory: (agentId) => {
+    const limits = { ...get().limits };
+    if (!(agentId in limits)) return;
+    delete limits[agentId];
+    const arr = get().events[agentId];
+    const events = arr && arr.length > MAX_EVENTS_PER_AGENT ? { ...get().events, [agentId]: arr.slice(arr.length - MAX_EVENTS_PER_AGENT) } : get().events;
+    set({ events, limits });
   },
 }));
 
@@ -176,6 +201,7 @@ export function useAgentHistory(agentId: string | undefined, limit = 500): void 
     }, () => {});
     return () => {
       cancelled = true;
+      useAgents.getState().releaseHistory(agentId);
     };
   }, [agentId, limit]);
 }
@@ -183,9 +209,11 @@ export function useAgentHistory(agentId: string | undefined, limit = 500): void 
 /** Fetch the page of events before the oldest one held. Returns how many were added. */
 export async function loadOlderEvents(agentId: string, limit = 500): Promise<number> {
   const first = useAgents.getState().events[agentId]?.[0];
+  const before = useAgents.getState().events[agentId]?.length ?? 0;
   const older = await invokeOr('agents.events', { agentId, limit, beforeSeq: first?.seq }, []);
   useAgents.getState().prependHistory(agentId, older);
-  return older.length;
+  // 0 at MAX_RETAINED_EVENTS: the store keeps the newest events and stops growing.
+  return Math.max(0, (useAgents.getState().events[agentId]?.length ?? 0) - before);
 }
 
 /** Subscribe the store to main's agent events. Returns an unsubscribe. */

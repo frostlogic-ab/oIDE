@@ -202,3 +202,25 @@ Electron 45.4.1 that utilityProcess ignores `--permission`, so capabilities stay
 Marketplace copy, [security](pages/security.md), [extensions](pages/extensions.md) and the
 extension-api README now say so. Tests: `test/security/extension-confirm.test.ts` (new),
 SEC-04 and SEC-13 PoCs flipped to `it`, plus oauth, import-scan and registry unit tests.
+
+## [2026-11-24] build | Reliability and diagnostics
+
+New `apps/desktop/src/main/reliability/` (see [reliability](pages/reliability.md)): renderer
+watchdog (reload after `render-process-gone` with a crash-loop guard and error page, unresponsive
+dialog), rotating redacted file logs in `<userData>/logs/` (main, renderer, extension host, one per
+agent; 5 MB x 3, 14-day retention, never throws), opt-in local crash reports (off by default,
+`crashReporter` with `uploadToServer: false`, summaries stripped of paths, prompts and code; no
+upload in v1), database open with recovery prompts (locked → Retry; damaged → backed up first, then
+the user chooses; `openDatabase` now closes its handle on failure), event appends that survive a
+full disk (bounded queue, one notice), MCP bind retries without blocking startup, ordered shutdown
+with per-step timeouts (the old 3 s cap could orphan CLI processes), Windows locked-folder cleanup
+queue (`pending-cleanup.json`, retried on next start), `taskkill /T` by absolute path for agent and
+setup process trees, and Settings › Diagnostics (CLI range, git ≥ 2.38, gh, node, keychain, DB,
+MCP port; copyable redacted report; Open logs folder). Git service dispose now closes watchers and
+awaits in-flight diff refreshes, so worktrees are not left locked after shutdown on Windows.
+Renderer: per-screen error boundaries with a sanitized copyable report, bounded event buffers
+(2000 tail, 10 000 with history, released on Focus close), extension host state store (panels
+reloading, toasts). Found: Node 24.11 `fs.rmSync` silently skips non-ASCII paths on Windows
+(`fs-safe.ts` `removeSync` falls back). Extension host test fixture `dist/` was git-ignored and is
+now committed. New IPC: `app.diagnostics`, `app.openLogsFolder`, `app.reportError`; setting
+`ui.crashReports`. E2E `reliability.spec.ts` kills the renderer and checks the agent keeps running.

@@ -136,3 +136,32 @@ Bedrock and Vertex are not tested (oIDE does not read cloud credentials).
   model env and MCP placeholder values. Electron/Node variables are not passed.
 - Sign-in is only through Anthropic's flow: `cli.openSignIn` opens a terminal running the user's
   `claude`. `test/no-credentials.test.ts` fails the build if credential paths appear in code.
+
+## Logs and redaction
+
+oIDE's own logs (`<userData>/logs/`, see [reliability](reliability.md)) never hold secrets, prompts
+or credentials. Every line passes `Redactor` (`apps/desktop/src/main/reliability/redact.ts`):
+
+- token shapes: `sk-ant-…`, `sk-…`, `ghp_…` / `gho_…` / `github_pat_…`, `xox?-…`, `AKIA…`, `AIza…`,
+  `npm_…`, JWTs, PEM private keys, `Bearer` / `Basic` values;
+- `key=value` and `"key": "value"` pairs whose key looks secret (token, secret, password, api key,
+  authorization, credential, private key, session key, cookie), URL user-info and secret query
+  parameters (`token`, `code`, `sig`, …);
+- in objects: secret-looking keys with string values, and **every value under an `env` key**;
+- the home folder (→ `~`) and userData (→ `<userData>`), both slash styles, case-insensitive;
+- values registered at runtime with `addSecret` / `addEnvSecrets`.
+
+Per-agent logs record status changes, exit codes and error codes only, never prompts, transcript
+text or tool output. Screen error reports from the renderer (`app.reportError`) carry only the error
+name, a sanitized message and reduced stack frames (no props, state, prompts or code) and are
+redacted again in main. The diagnostics report uses the same redaction.
+
+## Crash reports
+
+Off by default (Settings › Privacy › Crash reports, `ui.crashReports`). When on, crash summaries are
+written locally to `<userData>/crash-reports/` with paths, quoted strings (prompts, code) and tokens
+removed and stacks reduced to function names and file base names. Electron's `crashReporter` runs
+with `uploadToServer: false`; its minidumps (which can contain process memory) stay in
+`crash-reports/native/`, only the newest 5 are kept, and turning the setting off deletes every local
+report. **v1 uploads nothing**: there is no crash endpoint; a user can copy a summary into an issue.
+Usage statistics (`ui.telemetry`) are also off by default, and v1 sends none.

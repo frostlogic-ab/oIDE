@@ -28,8 +28,13 @@ export function createEmitter(getTargets: () => EventTarget[], log?: Logger): Em
     let sent = false;
     for (const target of getTargets()) {
       if (target.isDestroyed()) continue;
-      target.send(IPC_EVENT_CHANNEL, { event, payload: parsed.data });
-      sent = true;
+      try {
+        // A crashed or reloading renderer must never break the sender (agents, supervisor).
+        target.send(IPC_EVENT_CHANNEL, { event, payload: parsed.data });
+        sent = true;
+      } catch (err) {
+        log?.debug(`[ipc] could not deliver "${event}"`, (err as Error).message);
+      }
     }
     return sent;
   };

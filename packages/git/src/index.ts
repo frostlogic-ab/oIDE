@@ -11,3 +11,4 @@ export * as remote from './remote.js';
 export { fetch as gitFetch, pull as gitPull, push as gitPush, type RemoteResult } from './remote.js';
 export * from './gh.js';
 export * from './commit.js';
+export { findExecutable, resolveTool } from './bin.js';

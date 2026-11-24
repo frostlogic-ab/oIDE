@@ -1,6 +1,7 @@
 import { Suspense, useEffect } from 'react';
 import { Spinner } from '@oide/ui';
 import { SCREENS } from '../../screens/registry';
+import { ScreenErrorBoundary } from '../ErrorBoundary';
 import { useRouter } from '../../stores/router';
 import { CommandBar } from './CommandBar';
 import { Header } from './Header';
@@ -28,10 +29,12 @@ export function AppFrame() {
       <div className="flex-1 min-h-0 flex">
         <Rail active={def.rail} />
         <div className="flex-1 min-w-0 min-h-0 flex" data-screen={route.screen}>
-          <Suspense fallback={<ScreenLoading />}>
-            <Base />
-            {Overlay && <Overlay />}
-          </Suspense>
+          <ScreenErrorBoundary screen={route.screen}>
+            <Suspense fallback={<ScreenLoading />}>
+              <Base />
+              {Overlay && <Overlay />}
+            </Suspense>
+          </ScreenErrorBoundary>
         </div>
       </div>
       <StatusBar />

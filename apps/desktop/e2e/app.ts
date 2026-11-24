@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
@@ -20,8 +21,8 @@ export const FAKE_CLAUDE = resolve(appDir, '../../tools/fake-claude/bin', proces
  * Launches the built app (out/main/index.js) with a throwaway userData folder. `env` adds variables,
  * e.g. `OIDE_CLAUDE_PATH` (CLI override) and `OIDE_E2E_TRUST=trust` (answers the trust dialog).
  */
-export async function launchApp(extraEnv: Record<string, string> = {}): Promise<LaunchedApp> {
-  const userData = mkdtempSync(join(tmpdir(), 'oide-e2e-'));
+export async function launchApp(extraEnv: Record<string, string> = {}, opts: { userDataPrefix?: string } = {}): Promise<LaunchedApp> {
+  const userData = mkdtempSync(join(tmpdir(), opts.userDataPrefix ?? 'oide-e2e-'));
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k !== 'ELECTRON_RENDERER_URL') env[k] = v;
   env.OIDE_USER_DATA = userData;
@@ -45,7 +46,8 @@ export async function launchApp(extraEnv: Record<string, string> = {}): Promise<
     consoleErrors,
     close: async () => {
       await app.close();
-      rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+      // fs.promises.rm: some Node builds' rmSync silently skips non-ASCII paths on Windows.
+      await rm(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
     },
   };
 }

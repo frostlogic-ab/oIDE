@@ -13,3 +13,5 @@ Thumbs.db
 test-results/
 playwright-report/
 .vite/
+# Committed test fixtures (built extension output the host tests load)
+!packages/extension-host/test/fixtures/*/dist/

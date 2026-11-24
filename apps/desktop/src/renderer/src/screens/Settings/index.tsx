@@ -12,12 +12,13 @@ import { useRouter } from '../../stores/router';
 import { useSettings } from '../../stores/settings';
 import { AgentsSection } from './AgentsSection';
 import { ClaudeCodeSection } from './ClaudeCodeSection';
+import { DiagnosticsSection } from './DiagnosticsSection';
 import { ModelsSection } from './ModelsSection';
 import { AppearanceSection, ArtifactsSection, KeysSection, PrivacySection, ProjectsSection } from './OtherSections';
 import { PermissionsSection } from './PermissionsSection';
 import { TechniquesSection } from './TechniquesSection';
 
-export type SectionId = 'cli' | 'models' | 'agents' | 'tech' | 'perms' | 'projects' | 'artifacts' | 'keys' | 'look' | 'privacy';
+export type SectionId = 'cli' | 'models' | 'agents' | 'tech' | 'perms' | 'projects' | 'artifacts' | 'keys' | 'look' | 'privacy' | 'diag';
 export interface LoadError {
   projectId?: string;
   file: string;
@@ -36,6 +37,7 @@ export const SECTIONS: Array<{ id: SectionId; label: string; keywords: string }>
   { id: 'keys', label: 'Keyboard shortcuts', keywords: 'keyboard shortcuts keys bindings' },
   { id: 'look', label: 'Appearance', keywords: 'appearance accent colour color theme' },
   { id: 'privacy', label: 'Privacy', keywords: 'privacy telemetry crash reports usage statistics' },
+  { id: 'diag', label: 'Diagnostics', keywords: 'diagnostics logs log folder git version gh node keychain database mcp port report troubleshooting' },
 ];
 
 const isSection = (s: string | undefined): s is SectionId => SECTIONS.some((x) => x.id === s);
@@ -132,6 +134,8 @@ export default function SettingsScreen() {
             <KeysSection />
           ) : section === 'look' ? (
             <AppearanceSection settings={settings} />
+          ) : section === 'diag' ? (
+            <DiagnosticsSection />
           ) : (
             <PrivacySection settings={settings} />
           )}

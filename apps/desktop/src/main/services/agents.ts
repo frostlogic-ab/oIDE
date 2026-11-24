@@ -6,6 +6,8 @@ import { ENTRY_FILES, readOideFile, type SecretStore, type SettingsService, type
 import type { AgentEvent, AgentSpecInput, AgentStatus, AgentSummary, ArtifactKind, PermissionAnswer, PermissionMode, UserMessage } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
+import { isLockedFileError, lockedFolderMessage, type CleanupQueue } from '../reliability/cleanup-queue.js';
+import { BufferedWriter, StorageErrorReporter } from '../reliability/storage-errors.js';
 import type { CliService } from './cli.js';
 import type { ExtensionsService } from './extensions.js';
 import type { GitService } from './git.js';
@@ -62,6 +64,10 @@ export interface AgentsServiceOptions {
   projects: ProjectsService;
   cli: CliService;
   platform: Platform;
+  /** Worktree folders to delete on next start when a locked file blocks removal (Windows). */
+  cleanup?: CleanupQueue;
+  /** False when oIDE's MCP server could not start (agents need it for permission prompts). */
+  mcpReady?: () => boolean;
   /** Set after construction (cycle). */
   extensions?: ExtensionsService;
   git?: GitService;
@@ -81,10 +87,14 @@ export class AgentsService {
   private readonly lastStatus = new Map<string, AgentStatus>();
   extensions: ExtensionsService | undefined;
   git: GitService | undefined;
+  /** Event appends: a full disk or a locked database queues events (bounded) and tells the user once. */
+  private readonly eventWriter: BufferedWriter<{ e: AgentEvent; raw: string | undefined }>;
 
   constructor(private readonly o: AgentsServiceOptions) {
     this.extensions = o.extensions;
     this.git = o.git;
+    const storeErrors = new StorageErrorReporter({ notify: (level, message) => o.ctx.emit('notify', { level, message }), log: o.ctx.log });
+    this.eventWriter = new BufferedWriter(({ e, raw }) => void o.store.events.append(e, safeJson(raw)), storeErrors);
     this.supervisor = new Supervisor({
       worktrees: this.worktreeProvider(),
       sink: this.eventSink(),
@@ -150,7 +160,16 @@ export class AgentsService {
         const p = o.projects.get(projectId);
         if (!p || samePath(path, p.path)) return;
         await this.git?.unwatch(path);
-        await o.worktrees.remove(p.path, path, { force: true, deleteBranch: true });
+        try {
+          await o.worktrees.remove(p.path, path, { force: true, deleteBranch: true });
+        } catch (err) {
+          // Windows: a program still has a file open in the folder after the retries. Remove the
+          // agent anyway, tell the user which folder, and finish the delete on the next start.
+          if (!isLockedFileError(err) || !o.cleanup) throw err;
+          o.cleanup.schedule(path, p.path);
+          o.ctx.log.warn('worktree folder locked; scheduled for the next start', { path, error: err });
+          o.ctx.emit('notify', { level: 'warning', message: lockedFolderMessage(path, true) });
+        }
         o.ctx.roots.remove(path);
         this.git?.changed(projectId);
       },
@@ -179,12 +198,13 @@ export class AgentsService {
         o.ctx.agentEvents.push(e);
         if (e.type === 'partial') return;
         if (!this.ensureRow(e.agentId)) return;
+        this.eventWriter.push({ e, raw });
+        if (e.type === 'error') o.ctx.reliability?.logs.agent(e.agentId).warn('agent error event', { code: e.code });
         try {
-          o.store.events.append(e, safeJson(raw));
+          this.onEvent(e);
         } catch (err) {
-          o.ctx.log.warn('could not store event', e.type, (err as Error).message);
+          o.ctx.log.warn('event bookkeeping failed', e.type, err);
         }
-        this.onEvent(e);
       },
       saveSummary: (summary) => {
         if (!this.ensureRow(summary.id)) return;
@@ -283,6 +303,12 @@ export class AgentsService {
     const prev = this.lastStatus.get(s.id);
     if (prev === s.status) return;
     this.lastStatus.set(s.id, s.status);
+    // Per-agent supervisor log: status changes, exit codes and errors (never prompts or output).
+    const agentLog = o.ctx.reliability?.logs.agent(s.id);
+    if (agentLog) {
+      const detail = { ...(s.exitCode != null ? { exitCode: s.exitCode } : {}), ...(s.error ? { error: s.error } : {}), ...(s.sessionId ? { session: s.sessionId } : {}) };
+      (s.status === 'error' ? agentLog.warn : agentLog.info)(`status ${prev ?? '(new)'} → ${s.status}`, detail);
+    }
     if (!ACTIVE.has(s.status)) this.editing.clear(s.id);
     if (prev === undefined && s.status !== 'needs-permission' && s.status !== 'error') return;
     this.notifyFor(s);
@@ -324,6 +350,7 @@ export class AgentsService {
 
   async spawn(input: AgentSpecInput): Promise<AgentSummary[]> {
     const p = this.o.projects.require(input.projectId);
+    if (this.o.mcpReady && !this.o.mcpReady()) throw new IpcError("oIDE's MCP server is not running, so agents cannot ask for permission. Restart oIDE.", 'unavailable');
     let spec = input;
     // Presets store a "Your models" slot as `custom:<id>`: that is AgentSpec.customModel.
     const lead = spec.strategy.lead.model;
@@ -407,5 +434,7 @@ export class AgentsService {
     this.o.store.ui.kv.set(RESUME_KEY, live);
     await this.o.mcp.close().catch(() => undefined);
     await this.supervisor.shutdown();
+    this.eventWriter.flush();
+    if (this.eventWriter.queued || this.eventWriter.dropped) this.o.ctx.log.warn('agent events not saved at quit', { queued: this.eventWriter.queued, dropped: this.eventWriter.dropped });
   }
 }
