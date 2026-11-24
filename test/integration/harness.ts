@@ -143,5 +143,22 @@ export async function waitFor<T>(fn: () => T | undefined | false | Promise<T | u
 }
 
 export function cleanup(...dirs: string[]): void {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true, maxRetries: 15, retryDelay: 250 });
+  for (const d of dirs) {
+    try {
+      rmSync(d, { recursive: true, force: true, maxRetries: 15, retryDelay: 250 });
+    } catch (err) {
+      let ok = false;
+      for (let i = 0; i < 40 && !ok; i++) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+        try {
+          rmSync(d, { recursive: true, force: true });
+          ok = true;
+        } catch {
+          /* still held */
+        }
+      }
+      console.error(`[cleanup] ${d}: ${ok ? 'removed after a wait' : 'still held'}`);
+      if (!ok) throw err;
+    }
+  }
 }
