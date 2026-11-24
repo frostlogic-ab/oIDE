@@ -53,3 +53,5 @@ Fields added after the first cut (all optional or defaulted):
   `ReviewComment.side` and `review.addComment { side }` (`old` | `new`, default `new`), `side` on
   `review-feedback` comments; `permission-resolved.reason` (`quit`); `AgentSummary.interruptedPermission`;
   `notify.kind` / `notify.requestId`. The `init.slashCommands` field is now filled by the parser.
+- Integration (2026-11-25): IPC `settings.forProject { projectId } → { defaultMode, presetId, techniques }`, the
+  project's effective Spawn defaults (`.oide/config.json` under trust, as launches use them).

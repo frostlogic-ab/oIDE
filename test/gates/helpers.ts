@@ -34,8 +34,18 @@ export function useGateCleanup(): void {
   });
 }
 
+/**
+ * A harness that plays the user's part in main's native gates: it accepts the confirmation that
+ * extra CLI flags need (SEC-07; the gates use `--fake-scenario`), and every `projects.open({ path })`
+ * counts as a folder-picker pick (SEC-08).
+ */
 export async function gateHarness(opts: HarnessOptions = {}): Promise<Harness> {
-  const h = await startHarness(opts);
+  const h = await startHarness({ confirm: 'accept', ...opts });
+  const call = h.call.bind(h);
+  h.call = ((command: string, input: unknown) => {
+    if (command === 'projects.open' && input && typeof (input as { path?: unknown }).path === 'string') h.allowOpen((input as { path: string }).path);
+    return call(command as never, input as never);
+  }) as Harness['call'];
   open.push(h);
   dirs.push(h.userData);
   return h;

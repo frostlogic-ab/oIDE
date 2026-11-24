@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, delimiter, join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { FAKE_CLAUDE, launchApp, type LaunchedApp } from './app';
 
@@ -13,12 +13,21 @@ import { FAKE_CLAUDE, launchApp, type LaunchedApp } from './app';
 
 let ctx: LaunchedApp;
 const repos: string[] = [];
+/**
+ * Repo folders are fixed before launch: OIDE_E2E_OPEN_PATHS (the test-only stand-in for a
+ * folder-picker pick, SEC-08) lists the exact paths `projects.open` may take.
+ */
+const REPO_SLOTS = 8;
+const root = mkdtempSync(join(tmpdir(), 'oide-e2e-gates-'));
+const slots = Array.from({ length: REPO_SLOTS }, (_, i) => join(root, `repo-${i}`));
 
 type Invoke = (command: string, input: unknown) => Promise<unknown>;
 type Agent = { id: string; status: string; title: string; pendingPermission?: { requestId: string } };
 
-function makeRepo(prefix: string, files: Record<string, string> = {}): string {
-  const repo = mkdtempSync(join(tmpdir(), prefix));
+function makeRepo(_prefix: string, files: Record<string, string> = {}): string {
+  const repo = slots[repos.length];
+  if (!repo) throw new Error(`gates.spec: more than ${REPO_SLOTS} repos; raise REPO_SLOTS`);
+  mkdirSync(repo);
   repos.push(repo);
   const git = (...args: string[]) => execFileSync('git', args, { cwd: repo, stdio: 'ignore' });
   git('init', '-q', '-b', 'main');
@@ -70,12 +79,13 @@ async function settle(page: Page, id: string, status: string): Promise<void> {
 const rail = (page: Page) => page.getByRole('navigation', { name: 'Primary' });
 
 test.beforeAll(async () => {
-  ctx = await launchApp({ OIDE_CLAUDE_PATH: FAKE_CLAUDE, OIDE_E2E_TRUST: 'trust' });
+  // OIDE_E2E_CONFIRM answers the native confirmation that extra CLI flags need (SEC-07).
+  ctx = await launchApp({ OIDE_CLAUDE_PATH: FAKE_CLAUDE, OIDE_E2E_TRUST: 'trust', OIDE_E2E_OPEN_PATHS: slots.join(delimiter), OIDE_E2E_CONFIRM: 'accept' });
 });
 
 test.afterAll(async () => {
   await ctx?.close();
-  for (const r of repos) rmSync(r, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 });
 });
 
 test('M4: Settings › Permissions shows the rules committed in the project .oide/', async () => {
@@ -164,7 +174,8 @@ test('M6: a doc artifact written by an agent appears in Artifacts with "Agents u
   await rail(page).getByRole('button', { name: 'Agents' }).click();
   await rail(page).getByRole('button', { name: 'Artifacts' }).click();
   await grid.getByRole('button', { name: /Notes on Landing page/ }).click();
-  await expect(details.getByRole('region', { name: 'History' }).getByRole('button')).toHaveCount(2);
+  // One entry per version (the region also holds "Compare versions").
+  await expect(details.getByRole('region', { name: 'History' }).getByRole('listitem')).toHaveCount(2);
 
   // The design shows the agent as a reader.
   await grid
@@ -233,10 +244,8 @@ test('M2: six agents across three projects; beyond Max running 3 they queue on t
     })) as Agent[];
     ids.push(a!.id);
   }
-  // The Spawn screen adds the agents it gets back to the Wall itself; spawned over IPC here, the
-  // queued ones (no summary event until they start) appear once the window reloads its list.
-  await page.reload();
-  await page.waitForLoadState('domcontentloaded');
+  // Spawned over IPC (not from the Spawn screen): main publishes every summary, queued ones too,
+  // so all six tiles appear without a reload.
   await rail(page).getByRole('button', { name: 'Agents' }).click();
   const tiles = page.locator('article[data-agent-id]');
   await expect(tiles).toHaveCount(6);
@@ -257,13 +266,13 @@ test('M5: the Marketplace lists the built-in extensions', async () => {
     displayName: string;
   }>;
   const builtins = installed.filter((e) => e.source === 'builtin');
-  test.skip(
-    builtins.length === 0,
-    'The dev build does not resolve the built-in extensions folder (review-conformance M4)',
-  );
+  // Unpackaged builds find the built-ins from the repo root (review-conformance M4, fixed).
+  expect(builtins.length).toBeGreaterThan(0);
   await rail(page).getByRole('button', { name: 'Extension marketplace' }).click();
+  await page.getByRole('navigation', { name: 'Your extensions' }).getByRole('button', { name: /^Installed/ }).click();
+  const list = page.getByRole('main').getByRole('list');
   for (const b of builtins)
-    await expect(page.getByText(b.displayName, { exact: true }).first()).toBeVisible();
+    await expect(list.getByRole('button').filter({ hasText: `${b.displayName} ·` }).first()).toBeVisible();
 });
 
 test('no console errors', async () => {

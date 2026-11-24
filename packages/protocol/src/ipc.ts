@@ -118,6 +118,12 @@ export const Commands = {
   'settings.get': cmd(Void, Settings),
   'settings.update': cmd(z.object({ patch: z.record(z.string(), z.unknown()) }), Settings),
   'settings.techniques': cmd(z.object({ projectId: Id.optional() }), z.array(Technique)),
+  /**
+   * The project's effective Spawn defaults: global Settings with `.oide/config.json` applied under
+   * workspace trust (default mode only when trusted, preset when it exists), and the techniques list
+   * (global + the project's + extensions'), as `settings.techniques { projectId }` returns it.
+   */
+  'settings.forProject': cmd(z.object({ projectId: Id }), z.object({ defaultMode: PermissionMode, presetId: Id, techniques: z.array(Technique) })),
   'settings.saveTechnique': cmd(z.object({ technique: Technique, projectId: Id.optional() }), Technique),
   'settings.deleteTechnique': cmd(z.object({ id: Id, projectId: Id.optional() }), Ok),
   'settings.saveCustomModel': cmd(z.object({ model: CustomModel, apiKey: z.string().optional() }), CustomModel),

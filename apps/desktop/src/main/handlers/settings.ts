@@ -73,14 +73,21 @@ export function registerSettingsHandlers(router: IpcRouter, s: Services, ctx: Ma
       throw err;
     }
   });
+  // Only main marks a technique as an extension's; a settings file cannot claim to be one.
+  const own = (list: Technique[]) => list.map(({ extension: _x, ...t }) => t);
   // Extension techniques (`contributes.techniques`) come last and are read-only.
   router.register('settings.techniques', async ({ projectId }) => {
     const ext = await s.extensions.techniques(projectId);
-    // Only main marks a technique as an extension's; a settings file cannot claim to be one.
-    const own = (list: Technique[]) => list.map(({ extension: _x, ...t }) => t);
     if (!projectId) return [...own(svc.get().techniques), ...ext];
     const p = project(projectId);
     return [...own((await svc.forProject(p.path, { trusted: p.trusted })).techniques), ...ext];
+  });
+  // Spawn's defaults for a project: what a launch in it would use (M4: `.oide/` travels).
+  router.register('settings.forProject', async ({ projectId }) => {
+    const p = project(projectId);
+    const eff = await svc.forProject(p.path, { trusted: p.trusted });
+    const ext = await s.extensions.techniques(projectId);
+    return { defaultMode: eff.settings.claude.defaultMode, presetId: eff.settings.models.defaultPresetId, techniques: [...own(eff.techniques), ...ext] };
   });
   router.register('settings.saveTechnique', ({ technique, projectId }) => {
     if (technique.extension || technique.id.startsWith('ext:')) throw new IpcError('Techniques from extensions cannot be edited', 'forbidden');

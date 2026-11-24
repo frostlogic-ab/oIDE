@@ -344,6 +344,45 @@ thinking token limits, `DISABLE_PROMPT_CACHING`). The same check runs at save ti
 subagent-model strategy now wins over the model's `CLAUDE_CODE_SUBAGENT_MODEL`. Pages updated:
 security, review-security.
 
+## [2026-11-24] build | Reliability and diagnostics
+
+New `apps/desktop/src/main/reliability/` (see [reliability](pages/reliability.md)): renderer
+watchdog (reload after `render-process-gone` with a crash-loop guard and error page, unresponsive
+dialog), rotating redacted file logs in `<userData>/logs/` (main, renderer, extension host, one per
+agent; 5 MB x 3, 14-day retention, never throws), opt-in local crash reports (off by default,
+`crashReporter` with `uploadToServer: false`, summaries stripped of paths, prompts and code; no
+upload in v1), database open with recovery prompts (locked → Retry; damaged → backed up first, then
+the user chooses; `openDatabase` now closes its handle on failure), event appends that survive a
+full disk (bounded queue, one notice), MCP bind retries without blocking startup, ordered shutdown
+with per-step timeouts (the old 3 s cap could orphan CLI processes), Windows locked-folder cleanup
+queue (`pending-cleanup.json`, retried on next start), `taskkill /T` by absolute path for agent and
+setup process trees, and Settings › Diagnostics (CLI range, git ≥ 2.38, gh, node, keychain, DB,
+MCP port; copyable redacted report; Open logs folder). Git service dispose now closes watchers and
+awaits in-flight diff refreshes, so worktrees are not left locked after shutdown on Windows.
+Renderer: per-screen error boundaries with a sanitized copyable report, bounded event buffers
+(2000 tail, 10 000 with history, released on Focus close), extension host state store (panels
+reloading, toasts). Found: Node 24.11 `fs.rmSync` silently skips non-ASCII paths on Windows
+(`fs-safe.ts` `removeSync` falls back). Extension host test fixture `dist/` was git-ignored and is
+now committed. New IPC: `app.diagnostics`, `app.openLogsFolder`, `app.reportError`; setting
+`ui.crashReports`. E2E `reliability.spec.ts` kills the renderer and checks the agent keeps running.
+
+## [2026-11-24] build | Milestone gate tests
+
+Automated proof for the M2 to M6 gates against tools/fake-claude, in `test/gates/` (plain-Node services
+layer through the real IPC router) and `apps/desktop/e2e/gates.spec.ts` (the UI-visible part). See
+[testing](pages/testing.md#milestone-gate-tests-testgates) and [milestones](pages/milestones.md).
+M2 compressed soak (6 agents, 3 projects, Max running 3, every interaction kind, 60 s by default via
+`OIDE_SOAK_MS`): no leaked CLI processes, listeners or handles, no lost or duplicated events, stores
+consistent, heap bounded. M3: passes up to a merged branch; the full gate (uncommitted work reaches main)
+is `it.fails` on blocker B1. M4: two userData dirs get identical launch plans from `.oide/`; untrusted
+differences checked; gap: Spawn reads mode and preset from global Settings (`it.todo`). M5: a third-party
+tarball from a local index (real integrity) gives an agent a stdio MCP tool it calls. M6: an agent reads a
+design and writes a doc; Agents using it; the user's save is v2. E2E: the M5 Marketplace check skips while
+the unpackaged build does not resolve built-in extensions. fake-claude gained `commit-work`,
+`address-feedback`, `commit-all`, `mcp-tool`, `artifacts`, the per-message `[fake-scenario:x]` marker,
+stdio MCP servers and `pid` in `--fake-record`. The gitignored `ext-sample/dist` fixture is now tracked
+(`.gitignore` exception), which made `host-client.test.ts` fail on clean checkouts.
+
 ## [2026-11-25] build | Custom model env values checked; confirmations cannot be spoofed (SEC-28, SEC-31)
 
 Two more scan findings, fixed together with the allow-list. SEC-28: allowed env names must also
@@ -367,28 +406,6 @@ keymap ignored Monaco's EditContext input, so J/K/N/Y/D fired while typing in th
 keys inside `.monaco-editor`, contenteditable ancestors and Excalidraw are now ignored
 ([desktop-shell](pages/desktop-shell.md)).
 
-## [2026-11-24] build | Reliability and diagnostics
-
-New `apps/desktop/src/main/reliability/` (see [reliability](pages/reliability.md)): renderer
-watchdog (reload after `render-process-gone` with a crash-loop guard and error page, unresponsive
-dialog), rotating redacted file logs in `<userData>/logs/` (main, renderer, extension host, one per
-agent; 5 MB x 3, 14-day retention, never throws), opt-in local crash reports (off by default,
-`crashReporter` with `uploadToServer: false`, summaries stripped of paths, prompts and code; no
-upload in v1), database open with recovery prompts (locked → Retry; damaged → backed up first, then
-the user chooses; `openDatabase` now closes its handle on failure), event appends that survive a
-full disk (bounded queue, one notice), MCP bind retries without blocking startup, ordered shutdown
-with per-step timeouts (the old 3 s cap could orphan CLI processes), Windows locked-folder cleanup
-queue (`pending-cleanup.json`, retried on next start), `taskkill /T` by absolute path for agent and
-setup process trees, and Settings › Diagnostics (CLI range, git ≥ 2.38, gh, node, keychain, DB,
-MCP port; copyable redacted report; Open logs folder). Git service dispose now closes watchers and
-awaits in-flight diff refreshes, so worktrees are not left locked after shutdown on Windows.
-Renderer: per-screen error boundaries with a sanitized copyable report, bounded event buffers
-(2000 tail, 10 000 with history, released on Focus close), extension host state store (panels
-reloading, toasts). Found: Node 24.11 `fs.rmSync` silently skips non-ASCII paths on Windows
-(`fs-safe.ts` `removeSync` falls back). Extension host test fixture `dist/` was git-ignored and is
-now committed. New IPC: `app.diagnostics`, `app.openLogsFolder`, `app.reportError`; setting
-`ui.crashReports`. E2E `reliability.spec.ts` kills the renderer and checks the agent keeps running.
-
 ## [2026-11-25] build | Integration: robust merged; MCP launch guard and secret redaction
 Merged `wave4/robust`. Two scanner findings fixed: the MCP-down guard now sits on the launch path
 (`guardedBroker` in `services/agents.ts`, used by spawn, resume and relaunch), and `restore()` leaves
@@ -397,19 +414,12 @@ log redactor (agent MCP secret and secret env at registration, keychain reads vi
 Tests: `services/agents-broker.test.ts`, `reliability/redact.test.ts`, an MCP-down restart test in
 `test/integration/main-services.test.ts`. Page: [reliability](pages/reliability.md).
 
-## [2026-11-24] build | Milestone gate tests
-
-Automated proof for the M2 to M6 gates against tools/fake-claude, in `test/gates/` (plain-Node services
-layer through the real IPC router) and `apps/desktop/e2e/gates.spec.ts` (the UI-visible part). See
-[testing](pages/testing.md#milestone-gate-tests-testgates) and [milestones](pages/milestones.md).
-M2 compressed soak (6 agents, 3 projects, Max running 3, every interaction kind, 60 s by default via
-`OIDE_SOAK_MS`): no leaked CLI processes, listeners or handles, no lost or duplicated events, stores
-consistent, heap bounded. M3: passes up to a merged branch; the full gate (uncommitted work reaches main)
-is `it.fails` on blocker B1. M4: two userData dirs get identical launch plans from `.oide/`; untrusted
-differences checked; gap: Spawn reads mode and preset from global Settings (`it.todo`). M5: a third-party
-tarball from a local index (real integrity) gives an agent a stdio MCP tool it calls. M6: an agent reads a
-design and writes a doc; Agents using it; the user's save is v2. E2E: the M5 Marketplace check skips while
-the unpackaged build does not resolve built-in extensions. fake-claude gained `commit-work`,
-`address-feedback`, `commit-all`, `mcp-tool`, `artifacts`, the per-message `[fake-scenario:x]` marker,
-stdio MCP servers and `pid` in `--fake-record`. The gitignored `ext-sample/dist` fixture is now tracked
-(`.gitignore` exception), which made `host-client.test.ts` fail on clean checkouts.
+## [2026-11-25] build | Integration: gates merged and green
+Merged `wave4/gates`. The gate harness accepts main's native confirmations and counts `projects.open`
+as a folder pick; e2e specs from the branches use `OIDE_E2E_OPEN_PATHS` / `OIDE_E2E_CONFIRM`. Follow-ups:
+M3's full gate is a plain `it` (B1 fixed on main); M4's todo is a passing test: new IPC
+`settings.forProject { projectId } → { defaultMode, presetId, techniques }`, used by the Spawn screen
+(project mode under trust and preset; a mode or model setup the user picked is kept); the M5 Marketplace
+e2e check is no longer skipped; queued agents spawned over IPC already get a summary (ux), so the M2 e2e
+reload workaround is gone. Pages: [testing](pages/testing.md), [milestones](pages/milestones.md),
+[screen-spawn](pages/screen-spawn.md), [protocol](pages/protocol.md).

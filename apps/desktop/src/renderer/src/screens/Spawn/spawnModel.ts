@@ -298,18 +298,20 @@ export interface InitialInput {
   scope: Scope;
   params: { projectId?: string; goal?: string; context?: ContextChip[] };
   cli: CliInfo | null;
+  /** The chosen project's effective defaults (`settings.forProject`: `.oide/config.json` under trust). */
+  projectDefaults?: { defaultMode?: PermissionMode; presetId?: string };
 }
 
-export function initialForm({ settings, projects, scope, params, cli }: InitialInput): SpawnForm {
+export function initialForm({ settings, projects, scope, params, cli, projectDefaults }: InitialInput): SpawnForm {
   const presets = presetsOf(settings);
-  const preferred = settings?.models.defaultPresetId ?? 'balanced';
+  const preferred = projectDefaults?.presetId ?? settings?.models.defaultPresetId ?? 'balanced';
   const strategies = availableStrategies(cli);
   const preset = presets.find((p) => p.id === preferred && strategies.includes(p.strategy.kind)) ?? presets.find((p) => strategies.includes(p.strategy.kind));
   const strategy: ModelStrategy = (!preset || !presets.some((p) => p.id === preferred)) && settings?.models.lastUsedStrategy ? settings.models.lastUsedStrategy : (preset?.strategy ?? FALLBACK_PRESETS[1]!.strategy);
   const projectId =
     (params.projectId && projects.some((p) => p.id === params.projectId) && params.projectId) || (scope !== 'all' && projects.some((p) => p.id === scope) ? scope : projects[0]?.id) || '';
   const modes = availableModes(cli, settings?.claude.allowBypass ?? false);
-  const wanted = settings?.claude.defaultMode ?? 'auto';
+  const wanted = projectDefaults?.defaultMode ?? settings?.claude.defaultMode ?? 'auto';
   const mode = modes.includes(wanted) ? wanted : modes.includes('auto') ? 'auto' : (modes[0] ?? 'default');
   return {
     goal: params.goal ?? '',

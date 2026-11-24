@@ -109,10 +109,9 @@ describe('M3 gate: Spawn → Review → feedback → merge locally', { timeout: 
     else expect(existsSync(join((await agentOf(h, id))!.worktreePath!, 'pending.txt'))).toBe(true);
   });
 
-  // B1 (review-conformance.md): Merge locally must merge what Review showed, including the
-  // uncommitted pending.txt. Today it merges only the branch's commits, reports ok, and pending.txt
-  // never reaches main. Remove `.fails` once B1 is fixed.
-  it.fails('everything Review showed (committed and uncommitted) ends up on main', async () => {
+  // B1 (review-conformance.md, fixed on main): Merge locally merges what Review showed, including
+  // the uncommitted pending.txt (main commits pending worktree changes before merging).
+  it('everything Review showed (committed and uncommitted) ends up on main', async () => {
     const { h, repo, id, branch } = await toSecondReview();
     let merged = await h
       .call('git.mergeLocal', { agentId: id })

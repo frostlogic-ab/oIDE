@@ -731,6 +731,11 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
     'settings.builtIns': () => ({ presets: builtInPresets, techniques: builtInTechniques }),
     'settings.loadErrors': () => [{ projectId: 'docs-site', file: 'docs-site/.oide/techniques.json', message: 'Unexpected token } in JSON at line 14. Using defaults for this file.' }],
     'settings.techniques': ({ projectId }) => [...ctx.getSettings().techniques, ...(projectId ? (projectTechniques.get(projectId) ?? []) : [])],
+    'settings.forProject': ({ projectId }) => ({
+      defaultMode: ctx.getSettings().claude.defaultMode,
+      presetId: ctx.getSettings().models.defaultPresetId,
+      techniques: [...ctx.getSettings().techniques, ...(projectTechniques.get(projectId) ?? [])],
+    }),
     'settings.saveTechnique': ({ technique, projectId }) => {
       if (projectId) {
         const list = projectTechniques.get(projectId) ?? [];

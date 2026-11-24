@@ -18,9 +18,8 @@ import { localMarketplace, TEXTKIT } from './marketplace.js';
  * A third machine that does not trust the project gets the documented differences; trusting it
  * later gives the same plan as the others.
  *
- * Spawn's defaults are computed the way the Spawn screen does (default-on techniques from
- * `settings.techniques`) plus `.oide/config.json` through `forProject` (mode and preset): the
- * renderer itself still reads the global defaults (see docs/wiki/pages/testing.md, gate tests).
+ * Spawn's defaults come from the same IPC the Spawn screen uses: `settings.forProject` (mode and
+ * preset from `.oide/config.json` under trust, default-on techniques).
  */
 
 useGateCleanup();
@@ -111,21 +110,20 @@ async function machine(
   return { h, clone, record, project };
 }
 
-/** Spawn with the defaults this project gives (Spawn screen: default-on techniques; .oide/config.json: mode, preset). */
+/** Spawn with the defaults this project gives, as the Spawn screen does (`settings.forProject`). */
 async function spawnWithDefaults(m: Machine): Promise<{ agentId: string; sessionId: string; plan: Plan }> {
   const { h } = m;
   const project = (await h.call('projects.list', undefined)).find((p) => p.id === m.project.id)!;
-  const eff = await h.services.store.settings.forProject(project.path, { trusted: project.trusted });
-  const preset = eff.settings.models.presets.find((p) => p.id === eff.settings.models.defaultPresetId)!;
-  const techniques = (await h.call('settings.techniques', { projectId: project.id }))
-    .filter((t) => t.enabledByDefault)
-    .map((t) => t.id);
+  const defaults = await h.call('settings.forProject', { projectId: project.id });
+  const settings = await h.call('settings.get', undefined);
+  const preset = settings.models.presets.find((p) => p.id === defaults.presetId)!;
+  const techniques = defaults.techniques.filter((t) => t.enabledByDefault).map((t) => t.id);
   const before = launches(m.record).length;
   const [a] = await h.call('agents.spawn', {
     projectId: project.id,
     title: 'Team agent',
     goal: 'Check the project',
-    mode: eff.settings.claude.defaultMode,
+    mode: defaults.defaultMode,
     strategy: preset.strategy,
     techniques,
   });
@@ -285,7 +283,21 @@ describe('M4 gate: .oide/ reproduces the agent setup on another machine', { time
     expect(pc2.plan.firstMessage).toEqual(pa.plan.firstMessage);
   });
 
-  it.todo(
-    'Spawn screen takes its default mode and preset from .oide/config.json (today it reads the global Settings only)',
-  );
+  it('Spawn screen defaults (settings.forProject) come from .oide/config.json, mode only when trusted', async () => {
+    const origin = originRepo();
+    track(origin);
+    const globals = { claude: { defaultMode: 'plan' }, models: { defaultPresetId: 'quality' } };
+    const trusted = await machine(origin, { trust: true, globals });
+    const untrusted = await machine(origin, { trust: false, globals });
+    const t = await trusted.h.call('settings.forProject', { projectId: trusted.project.id });
+    expect(t).toMatchObject({ defaultMode: 'acceptEdits', presetId: 'balanced' });
+    expect(t.techniques.map((x) => x.id)).toEqual(expect.arrayContaining(['team-style', 'team-checks']));
+    // Untrusted: the repo cannot pick the permission mode; the global default stays.
+    const u = await untrusted.h.call('settings.forProject', { projectId: untrusted.project.id });
+    expect(u.defaultMode).toBe('plan');
+    expect(u.presetId).toBe('balanced');
+    expect(u.techniques.find((x) => x.id === 'team-style')?.enabledByDefault).toBe(false);
+    // The global Settings are untouched.
+    expect((await trusted.h.call('settings.get', undefined)).claude.defaultMode).toBe('plan');
+  });
 });

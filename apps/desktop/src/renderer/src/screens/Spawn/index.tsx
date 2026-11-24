@@ -6,7 +6,7 @@
  * returns to the Wall with the new tile(s) highlighted. Controls the detected CLI lacks are hidden.
  */
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { MODEL_FAMILIES, KNOWN_MODEL_VERSIONS, type InstalledExtension, type ModelFamily, type Technique } from '@oide/protocol';
+import { MODEL_FAMILIES, KNOWN_MODEL_VERSIONS, type InstalledExtension, type ModelFamily, type PermissionMode, type Technique } from '@oide/protocol';
 import { Badge, Button, Checkbox, Dialog, Icon, Kbd, SegmentedControl, Select, TextArea, cn } from '@oide/ui';
 import { invokeOr, ipcErrorMessage, isMac, oide } from '../../lib/bridge';
 import { useKeymapScope } from '../../lib/useKeymap';
@@ -81,6 +81,11 @@ export default function SpawnScreen() {
 
   const [form, setForm] = useState<SpawnForm>(() => initialForm({ settings, projects, scope, params, cli }));
   const touched = useRef(false);
+  /** The user picked a mode / a model setup themselves: a project's defaults no longer replace it. */
+  const modeTouched = useRef(false);
+  const strategyTouched = useRef(false);
+  /** The chosen project's effective defaults (`settings.forProject`: its `.oide/config.json` under trust). */
+  const [projectDefaults, setProjectDefaults] = useState<{ projectId: string; defaultMode: PermissionMode; presetId: string } | null>(null);
   const [errors, setErrors] = useState<Partial<Record<SpawnField, string>>>({});
   const [busy, setBusy] = useState(false);
   const [advOpen, setAdvOpen] = useState(true);
@@ -89,24 +94,45 @@ export default function SpawnScreen() {
   const [extensions, setExtensions] = useState<InstalledExtension[]>([]);
   const goalRef = useRef<HTMLTextAreaElement>(null);
 
-  // Settings / projects may arrive after the dialog opened (cold start): re-derive until the user edits.
+  // Settings / projects may arrive after the dialog opened (cold start): re-derive until the user
+  // edits. The project's own defaults (mode, preset) apply too, unless the user already chose them.
   useEffect(() => {
-    if (touched.current) return;
     setForm((f) => {
-      const next = initialForm({ settings, projects, scope, params, cli });
-      // Keep what the async loaders below already filled in.
+      const forProject = (id: string) => (projectDefaults?.projectId === id ? { defaultMode: projectDefaults.defaultMode, presetId: projectDefaults.presetId } : undefined);
+      if (!touched.current) {
+        const base = initialForm({ settings, projects, scope, params, cli });
+        const pd = forProject(base.projectId);
+        const next = pd ? initialForm({ settings, projects, scope, params, cli, projectDefaults: pd }) : base;
+        // Keep what the async loaders below already filled in.
+        return {
+          ...next,
+          techniques: Object.keys(f.techniques).length ? f.techniques : next.techniques,
+          extensions: next.projectId === f.projectId ? f.extensions : next.extensions,
+        };
+      }
+      const pd = forProject(f.projectId);
+      if (!pd || (modeTouched.current && strategyTouched.current)) return f;
+      const next = initialForm({ settings, projects, scope, params, cli, projectDefaults: pd });
       return {
-        ...next,
-        techniques: Object.keys(f.techniques).length ? f.techniques : next.techniques,
-        extensions: next.projectId === f.projectId ? f.extensions : next.extensions,
+        ...f,
+        ...(modeTouched.current ? {} : { mode: next.mode }),
+        ...(strategyTouched.current ? {} : { kind: next.kind, slots: next.slots, customPicked: false }),
       };
     });
-  }, [settings, projects, scope, params, cli]);
+  }, [settings, projects, scope, params, cli, projectDefaults]);
 
-  // Techniques: global + the project's .oide/techniques.json.
+  // Techniques and defaults: global + the project's .oide/ (config.json, techniques.json).
   useEffect(() => {
     let cancelled = false;
-    void invokeOr('settings.techniques', form.projectId ? { projectId: form.projectId } : {}, settings?.techniques ?? []).then(
+    const projectId = form.projectId;
+    const load = projectId
+      ? invokeOr('settings.forProject', { projectId }, null).then((d) => {
+          if (!d) return invokeOr('settings.techniques', { projectId }, settings?.techniques ?? []);
+          if (!cancelled) setProjectDefaults({ projectId, defaultMode: d.defaultMode, presetId: d.presetId });
+          return d.techniques;
+        })
+      : invokeOr('settings.techniques', {}, settings?.techniques ?? []);
+    void load.then(
       (list) => {
         if (cancelled) return;
         setTechniques(list);
@@ -117,7 +143,7 @@ export default function SpawnScreen() {
     return () => {
       cancelled = true;
     };
-  }, [form.projectId, settings?.techniques]);
+  }, [form.projectId, settings]);
 
   // Extension tools offered to this agent, defaulting to the ones enabled for the project.
   useEffect(() => {
@@ -138,6 +164,8 @@ export default function SpawnScreen() {
 
   const update = (patch: Partial<SpawnForm>) => {
     touched.current = true;
+    if ('mode' in patch) modeTouched.current = true;
+    if ('kind' in patch || 'slots' in patch || 'customPicked' in patch) strategyTouched.current = true;
     setForm((f) => ({ ...f, ...patch }));
     setErrors((e) => {
       const next = { ...e };

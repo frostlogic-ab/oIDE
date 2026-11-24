@@ -20,14 +20,21 @@ const invoke = vi.fn(async (command: string, input?: unknown): Promise<unknown> 
       AgentSummary.parse({ id: `new-${i}`, projectId: spec.projectId, title: spec.title, status: 'queued', mode: spec.mode ?? 'auto', model: spec.strategy.lead.model, createdAt: Date.now() + i, updatedAt: Date.now() }),
     );
   }
+  if (command === 'settings.forProject') {
+    const d = projectDefaults[(input as { projectId: string }).projectId];
+    if (d) return { ...d, techniques: [] };
+  }
   throw new Error(`[not_implemented] ${command}`);
 });
+/** `settings.forProject` answers per project (`.oide/config.json` under trust); others are not implemented. */
+let projectDefaults: Record<string, { defaultMode: string; presetId: string }> = {};
 installFallbackBridge({ invoke: invoke as unknown as OideBridge['invoke'], on: () => () => {}, platform: 'win32' });
 
 let detach: () => void;
 
 beforeEach(() => {
   invoke.mockClear();
+  projectDefaults = {};
   useAgents.setState({ byId: {}, order: [], events: {}, loaded: true });
   useProjects.setState({ list: projects, loaded: true });
   useSettings.setState({ settings: { ...settings, claude: { ...settings.claude, allowBypass: true } } });
@@ -115,6 +122,27 @@ describe('Spawn', () => {
     useSettings.setState({ settings });
     render(<SpawnScreen />);
     expect(screen.queryByRole('radio', { name: /Bypass permissions/ })).toBeNull();
+  });
+
+  it("takes the default mode and preset from the project's .oide/config.json (settings.forProject)", async () => {
+    projectDefaults = { oide: { defaultMode: 'acceptEdits', presetId: 'quality' } };
+    await act(async () => {
+      render(<SpawnScreen />);
+    });
+    expect(invoke).toHaveBeenCalledWith('settings.forProject', { projectId: 'oide' });
+    expect(screen.getByRole('radio', { name: /^Edit automatically/ }).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('radio', { name: /Quality/ }).getAttribute('aria-checked')).toBe('true');
+    // Another project without its own defaults: the global ones; a mode the user picked stays.
+    fireEvent.click(screen.getByRole('radio', { name: /^Plan/ }));
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText('Project'), { target: { value: 'billing-api' } });
+    });
+    expect(screen.getByRole('radio', { name: /^Plan/ }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'Tidy the README' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Spawn agent/ }));
+    });
+    expect(spawnCall()).toMatchObject({ projectId: 'billing-api', mode: 'plan' });
   });
 
   it('switches the focus to Custom when a slot changes', () => {

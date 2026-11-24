@@ -14,10 +14,10 @@ A 720px dialog over the Wall (`overlay: true` in `screens/registry.tsx`). Design
 | Context chips + "Artifact, file or URL" | `context[]` | artifact (from `artifacts.list` for the project), file (relative path, no `..`), http(s) URL. Pre-filled from route `params.context` (Artifacts › Give to an agent, Files › Ask an agent) |
 | Project | `projectId` | default: route `params.projectId`, else the scoped project, else the first |
 | Work in | `workIn` | new worktree from main / from current branch / project folder |
-| Mode cards | `mode` | default Settings › Claude Code › default mode (Auto). Bypass card only when Allow Bypass is on |
-| Models: Cheap / Balanced / Quality / Custom | `strategy` | presets from `settings.models.presets` (built-in fallback); hints from the canvas for built-ins |
+| Mode cards | `mode` | default: the project's `.oide/config.json` `defaultMode` when trusted (`settings.forProject`), else Settings › Claude Code › default mode (Auto). A mode you picked is kept when you switch project. Bypass card only when Allow Bypass is on |
+| Models: Cheap / Balanced / Quality / Custom | `strategy` | presets from `settings.models.presets` (built-in fallback); default: the project's `presetId` (`settings.forProject`), else Settings' default preset; hints from the canvas for built-ins |
 | Advanced model settings | `strategy` | How agents pick models (one / separate subagent model / routed), a row per slot (model pills, effort), Model versions (Latest alias or a pinned version per family) |
-| Advanced techniques | `techniques[]` (Settings order) | `settings.techniques({projectId})` (global + `.oide/techniques.json`); default on = `enabledByDefault`; placement badge (First message / System prompt) and the text when on |
+| Advanced techniques | `techniques[]` (Settings order) | `settings.forProject({projectId})` (global + `.oide/techniques.json` + extensions; `settings.techniques` without a project); default on = `enabledByDefault`; placement badge (First message / System prompt) and the text when on |
 | Parallel attempts 1–6 | `attempts`, `attemptGroup` | group id generated when > 1 |
 | Tools from extensions | `extensions[]` | `extensions.installed` with tools; checked when enabled for the project; "asks first" / "read only" labels |
 
