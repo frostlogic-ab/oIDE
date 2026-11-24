@@ -32,6 +32,25 @@ the Max running queue (2 attempts, max 1); resume with `--resume <same session i
 restart (`--fake-record` argv check); artifacts preview URL resolution, picked-file rule for imports,
 custom model keys stay in the secret store and never appear in `settings.get`.
 
+## Milestone gate tests (`test/gates/`)
+
+Automated proof for each milestone gate, on the same plain-Node services layer as
+`test/integration` (real IPC router, fake `Platform`, tools/fake-claude; never the real CLI).
+`helpers.ts` adds `gateHarness` (cleanup per test), `driveTo(h, id, status | predicate)` (waits,
+clicking "Allow once" on every prompt; `answer: 'deny'` to deny) and the harness options
+`platform` (e.g. a `fetch` for a local marketplace), `onEvent`, `keepEvents: false` and
+`emitErrors` (events dropped by their schema). `marketplace.ts` builds a third-party extension
+tarball (`@acme/oide-textkit`, stdio MCP server `textkit`, tool `text.reverse`, risk `read`) and an
+index entry with its real sha512, served through `Platform.fetch`.
+
+| Gate | File | What it proves | Result (2026-11-25) |
+| --- | --- | --- | --- |
+| M2 | `m2-soak.test.ts` | 6 agents, 3 projects, Max running 3, single + routed. Each agent loops tools, allowed and denied prompts, subagents (with a subagent prompt), review + feedback, `/compact`, rate limit → Stop → Resume (`--resume`), replies, for `OIDE_SOAK_MS` (default 60 s; `OIDE_SOAK_DEBUG=<file>` logs samples). Checks: no queue launch beyond Max; CLI processes read from the OS (command line marker; PIDs are reused on Windows) never exceed one per agent and none outlives its `--resume` replacement; store events = renderer events (same seqs, no duplicates); every turn's `result`; stored summary = supervisor; no dropped emits; heap bounded; after remove + quit no CLI process, MCP endpoint, pending prompt, supervisor or process listener, socket, server, child or timer handle beyond the baseline. | pass: 60 s ≈ 1,350 cycles, 176 launches (170 `--resume`), ≤ 6 alive, ≈ 25,700 events, heap ≈ 63 → 94 MB |
+| M3 | `m3-spawn-to-merge.test.ts` | Spawn → agent commits `committed.txt` (trailer) and leaves `pending.txt` → Review diff lists both → comment + feedback → second turn edits `pending.txt` → Merge locally → branch on main with the agent attribution. | pass; the second test (everything Review showed is on main) is **`it.fails`**: B1, `pending.txt` never reaches main. Accepts either B1 fix (commit before merge, or refuse then `commit-all`). |
+| M4 | `m4-oide-portable.test.ts` | Origin repo commits `.oide/{config,permissions,techniques,extensions}.json`; two userData dirs with different global defaults clone it, install the extension from the index, trust it: identical normalized argv (`--fake-record`), `--mcp-config`, env key names and first message; plan is the project's (mode, preset, allow/deny, techniques, extension). Untrusted third machine: `--setting-sources user --strict-mcp-config`, own default mode, no allow rules, no extension, no techniques, no setup; deny rules and preset still apply. Trusting it gives the same plan. | pass. `it.todo`: the Spawn screen reads mode and preset from global Settings, not `.oide/config.json` (the test computes them with `forProject`, as Spawn should). |
+| M5 | `m5-extension-tool.test.ts` | Index → install (integrity checked; a tampered tarball is refused with `install_failed`) → enable for project A → agent's `--mcp-config` has the stdio server, `--allowedTools` the tool → fake-claude starts the server, `ToolSearch` + `mcp__textkit__text_reverse` → result (from the server's own PID) in the transcript; server ends with the CLI; project B's agent has no such tool. | pass |
+| M6 | `m6-artifacts.test.ts` | Design artifact as a Spawn context chip → `artifacts_read` (pre-allowed) + `artifacts_create` (asks) over the agent's MCP endpoint → doc artifact by `agent:<id>` → "Agents using it" (`read` on the design, `create` on the doc) → user `artifacts.save` = version 2 (author `user`). Also "Give to an agent" on a running agent. | pass |
+
 ## E2E (Playwright for Electron, `apps/desktop/e2e/`)
 
 `pnpm --filter @oide/desktop e2e` builds, then runs the built app with a temp `OIDE_USER_DATA`.
@@ -46,6 +65,13 @@ custom model keys stay in the secret store and never appear in `settings.get`.
   `group "Permission: Run npm test"`, clicking "Allow once" leads to `ready-for-review` and the
   "Ready for review" label, `git.diff` lists the file; the `oide-artifact://` protocol serves an
   artifact with the no-network CSP and answers 404 for `..` escapes.
+- `gates.spec.ts` (UI-visible part of the gates): M4 Settings › Permissions lists the project's committed
+  `.oide/permissions.json` rules; M6 the agent-written doc appears in Artifacts with "Agents using it"
+  (writes / reads) and History shows v2 after the user's save; M3 Focus › Changes › "Review all changes"
+  lists `committed.txt` and `pending.txt` and offers Merge; M2 six agents across three projects, 3 running
+  and 3 queued tiles (after a reload: agents spawned over IPC get no queued summary event; the Spawn screen
+  adds them itself); M5 the Marketplace lists the built-ins, **skipped** while the unpackaged build does
+  not resolve the built-in extensions folder (review-conformance M4).
 
 ## fake-claude (`tools/fake-claude`)
 
@@ -78,7 +104,18 @@ exercised end to end.
 | `crash` | a partial, stderr line, exit code 3 (or `--fake-exit-code n`) |
 | `slow` | 400 text deltas 25 ms apart (for interrupt / pause tests) |
 | `replay:<file>` | replays a fixture from `fixtures/` turn by turn (up to each `result`) |
+| `commit-work` | Write `committed.txt`, Bash `git commit` (prompted; really commits with `Oide-Agent: <name>` from the system prompt), Write `pending.txt` (left uncommitted), Bash `npm test`, submit_for_review |
+| `address-feedback` | Edit `pending.txt` with the first review comment, submit_for_review again |
+| `commit-all` | Bash `git add -A && git commit` (prompted, real), then a question |
+| `mcp-tool` | `ToolSearch select:<tool>` then the tool from `[fake-tool:mcp__srv__tool]` with `[fake-args:{…}]` (default: first tool of the first stdio server); "No MCP tool is available." without one |
+| `artifacts` | `mcp__oide__artifacts_read` of the `{"id":"…"}` in the message (else the first design from `artifacts_list`), then `artifacts_create` of a doc "Notes on <title>" listing its headings |
 | any + `/compact` | compacting status, `compact_boundary`, local-command stdout, result `local_command:"compact"` |
+
+A user message containing `[fake-scenario:<name>]` runs that scenario for its turn, whatever the list says
+(the soak uses it to script each turn). MCP servers in `--mcp-config` are reached over HTTP (`url`) or, for
+`command` entries, started once over stdio (newline-delimited JSON-RPC) and killed when fake-claude exits;
+`mcp__srv__db_schema` is mapped back to the server's own `db.schema` like the CLI does. MCP tool errors and
+`isError` results become `is_error` tool results. `--fake-record` lines also carry `pid`.
 
 Options (flag or env): `--fake-record <file>` / `FAKE_CLAUDE_RECORD` appends argv, env **key names** (never
 values) and stdin lines; `--fake-no-control` / `FAKE_CLAUDE_NO_CONTROL=1` ignores control requests (tests the

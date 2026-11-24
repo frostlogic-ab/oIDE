@@ -13,3 +13,5 @@ Thumbs.db
 test-results/
 playwright-report/
 .vite/
+# Test fixtures that ship a dist/ folder (gitignored elsewhere)
+!packages/extension-host/test/fixtures/**/dist/

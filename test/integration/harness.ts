@@ -43,6 +43,8 @@ export interface Harness {
   userData: string;
   events: Array<{ event: EventName; payload: unknown }>;
   notifications: string[];
+  /** Events the emitter dropped (failed their schema): should stay empty. */
+  emitErrors: string[];
   call<K extends CommandName>(command: K, input: CommandInput<K>): Promise<CommandOutput<K>>;
   /** Resolves with the command's error code (throws if it succeeded). */
   fails<K extends CommandName>(command: K, input: CommandInput<K>): Promise<string>;
@@ -52,10 +54,33 @@ export interface Harness {
 
 const quiet = { debug: () => {}, warn: () => {}, error: (...a: unknown[]) => console.error('[oide]', ...a) };
 
-export async function startHarness(opts: { userData?: string; trust?: boolean } = {}): Promise<Harness> {
+export interface HarnessOptions {
+  userData?: string;
+  trust?: boolean;
+  /** Replaces parts of the fake Platform (e.g. `fetch` for a local marketplace index). */
+  platform?: Partial<Platform>;
+  /** Sees every event sent to the "renderer". */
+  onEvent?: (event: EventName, payload: unknown) => void;
+  /** Keep events in `events` (default true; long soak runs turn it off to measure memory). */
+  keepEvents?: boolean;
+}
+
+export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> {
   const userData = opts.userData ?? tempDir('oide-int-data-');
   const events: Harness['events'] = [];
-  const emit = createEmitter(() => [{ isDestroyed: () => false, send: (_ch: string, m: unknown) => void events.push(m as Harness['events'][number]) }]);
+  const keep = opts.keepEvents ?? true;
+  const emitErrors: string[] = [];
+  const emitLog = { ...quiet, error: (...a: unknown[]) => void emitErrors.push(a.map(String).join(' ')) };
+  const emit = createEmitter(() => [
+    {
+      isDestroyed: () => false,
+      send: (_ch: string, m: unknown) => {
+        const e = m as Harness['events'][number];
+        if (keep) events.push(e);
+        opts.onEvent?.(e.event, e.payload);
+      },
+    },
+  ], emitLog);
   const quitHooks: Array<() => void | Promise<void>> = [];
   const ctx: MainContext = {
     isDev: true,
@@ -84,6 +109,7 @@ export async function startHarness(opts: { userData?: string; trust?: boolean } 
     cliPathOverride: FAKE_CLAUDE,
     terminals,
     background: false,
+    ...opts.platform,
   };
   const services = await createCoreServices({ ctx, platform, terminals });
   const router = new IpcRouter({ validateOutput: true, log: quiet });
@@ -95,6 +121,7 @@ export async function startHarness(opts: { userData?: string; trust?: boolean } 
     userData,
     events,
     notifications,
+    emitErrors,
     async call(command, input) {
       const r = await dispatch(command, input);
       if (!r.ok) throw Object.assign(new Error(`[${r.error.code}] ${r.error.message}`), { code: r.error.code });
