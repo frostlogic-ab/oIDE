@@ -1,0 +1,60 @@
+name: Nightly real CLI
+
+# Smoke suite against a REAL `claude` binary (test/conformance/real-cli.test.ts: spawn, approve a
+# permission prompt in oIDE, stop, restart, resume; model haiku, two short turns).
+#
+# OFF until a maintainer opts in. It runs only when the repository variable OIDE_NIGHTLY_REAL_CLI is
+# 'true', and only on a self-hosted runner labelled `oide-real-cli` where the Claude Code CLI is
+# installed and already signed in by its owner through Anthropic's own flow (`claude` then /login).
+#
+# Open question (docs/wiki/pages/open-questions.md, rows 1 and 17): the build brief's guess is that
+# a nightly job may use a maintainer's own subscription sign-in on a self-hosted runner. Whether that
+# is allowed is part of the question to Anthropic about oIDE driving the user's own CLI. Do not set
+# the variable before Anthropic has answered. An API-key runner (ANTHROPIC_API_KEY set in the
+# runner's own environment, never in this repo) is the fallback if subscription use is not allowed.
+#
+# The workflow never reads, prints or passes Claude credentials: it adds no secrets, oIDE builds the
+# agent env from an allow-list, and the CLI finds its own sign-in. Transcripts stay on the runner
+# (OIDE_REAL_CLI_OUT) and are not uploaded, because they contain the runner's paths.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-real-cli
+  cancel-in-progress: false
+
+jobs:
+  real-cli:
+    name: Real CLI smoke
+    if: vars.OIDE_NIGHTLY_REAL_CLI == 'true'
+    runs-on: [self-hosted, oide-real-cli]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: CLI version
+        shell: bash
+        run: claude --version
+
+      - name: Real CLI conformance (M1 gate)
+        shell: bash
+        env:
+          OIDE_REAL_CLI: '1'
+          OIDE_REAL_CLI_OUT: ${{ runner.temp }}/oide-real-cli
+        run: node node_modules/vitest/vitest.mjs run test/conformance/real-cli.test.ts

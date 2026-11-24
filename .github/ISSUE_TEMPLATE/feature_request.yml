@@ -1,0 +1,51 @@
+name: Feature request
+description: Suggest an idea or an improvement for oIDE.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        oIDE drives your own, unmodified Claude Code CLI and never touches Claude credentials or calls
+        Anthropic's API directly. Requests that would need either cannot be accepted (see CLAUDE.md, "Hard rules").
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: What should oIDE do? Which screen (Wall, Focus, Spawn, Source control, Review, Files, Artifacts, Marketplace, Settings)?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways you considered, including an extension.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Agents and permissions
+        - Worktrees, source control and review
+        - Files and editor
+        - Artifacts
+        - Extensions and marketplace
+        - Settings
+        - Packaging and updates
+        - Docs
+        - Other
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and discussions for this idea.
+          required: false
+        - label: I could help build it.
+          required: false

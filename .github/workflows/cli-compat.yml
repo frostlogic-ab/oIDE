@@ -1,0 +1,173 @@
+name: CLI compatibility
+
+# Weekly check that the newest Claude Code CLI still matches what oIDE's parser and launcher expect
+# (build brief, "CLI compatibility"). tools/fake-claude/record.mjs records sanitized fixtures and
+# test/conformance/cli-compat.test.ts diffs them against tools/fake-claude/fixtures (help output,
+# detected flags, permission modes, tested version range, and every stream-json line through the
+# real parser). Drift opens, or comments on, an issue labelled `cli-compat`.
+#
+# Two parts:
+#   flags     GitHub-hosted, always on. Installs the latest CLI and records `--version` and `--help`.
+#             Needs no sign-in, makes no model call.
+#   session   Opt-in, self-hosted (label `oide-real-cli`, variable OIDE_CLI_COMPAT_SESSION = 'true').
+#             Also records a scripted two-turn stream-json session (model haiku) with the runner
+#             owner's existing sign-in. Same open question as nightly-real-cli.yml: keep it off until
+#             Anthropic has answered whether CI may use a maintainer's subscription sign-in.
+#
+# record.mjs runs the CLI with an allow-listed env, never reads credential files or token env vars,
+# and replaces paths, user/host names, ids, emails and token-like strings before writing anything.
+
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cli-compat
+  cancel-in-progress: false
+
+jobs:
+  flags:
+    name: Latest CLI flags and help
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      drift: ${{ steps.diff.outcome == 'failure' }}
+      version: ${{ steps.record.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Install the latest Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code@latest
+
+      - name: Record
+        id: record
+        shell: bash
+        run: |
+          node tools/fake-claude/record.mjs --out .compat/flags
+          echo "version=$(node -p "require('./.compat/flags/meta.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Diff against parser expectations
+        id: diff
+        continue-on-error: true
+        env:
+          OIDE_COMPAT_DIR: .compat/flags
+        run: node node_modules/vitest/vitest.mjs run test/conformance/cli-compat.test.ts
+
+      - name: Summary
+        if: always()
+        shell: bash
+        run: if [[ -f .compat/flags/report.md ]]; then cat .compat/flags/report.md >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cli-compat-flags
+          path: .compat/flags
+          retention-days: 30
+
+  session:
+    name: Scripted session (self-hosted, opt-in)
+    if: vars.OIDE_CLI_COMPAT_SESSION == 'true'
+    runs-on: [self-hosted, oide-real-cli]
+    timeout-minutes: 20
+    outputs:
+      drift: ${{ steps.diff.outcome == 'failure' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Into a temp prefix, so the runner owner's own CLI install is left alone. The sign-in lives
+      # with the user, not the install, so the fresh binary uses it.
+      - name: Install the latest Claude Code CLI (temporary prefix)
+        shell: bash
+        run: npm install --no-save --prefix "$RUNNER_TEMP/claude-latest" @anthropic-ai/claude-code@latest
+
+      - name: Record
+        shell: bash
+        run: |
+          bin="$RUNNER_TEMP/claude-latest/node_modules/.bin/claude"
+          [[ -f "$bin.cmd" ]] && bin="$bin.cmd"
+          node tools/fake-claude/record.mjs --out .compat/session --session --claude "$bin" --model haiku
+
+      - name: Diff against parser expectations
+        id: diff
+        continue-on-error: true
+        env:
+          OIDE_COMPAT_DIR: .compat/session
+        run: node node_modules/vitest/vitest.mjs run test/conformance/cli-compat.test.ts
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cli-compat-session
+          path: .compat/session
+          retention-days: 30
+
+  issue:
+    name: Open or update the drift issue
+    needs: [flags, session]
+    if: always() && (needs.flags.outputs.drift == 'true' || needs.session.outputs.drift == 'true' || needs.flags.result == 'failure')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      VERSION: ${{ needs.flags.outputs.version }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cli-compat-*
+          path: compat
+
+      - name: File the report
+        shell: bash
+        run: |
+          {
+            echo "The weekly CLI compatibility job found drift with Claude Code CLI ${VERSION:-unknown}."
+            echo
+            echo "Run: $RUN_URL"
+            echo
+            found=0
+            for r in compat/*/report.md; do
+              [[ -f "$r" ]] || continue
+              found=1
+              cat "$r"
+              echo
+            done
+            [[ $found == 1 ]] || echo "No report was written (the recording itself failed); see the run log."
+            echo
+            echo "Next steps: update the parser in packages/agent-core and/or the fixtures in tools/fake-claude/fixtures (the artifacts of this run hold sanitized recordings), then TESTED_CLI_RANGE in packages/protocol."
+          } > body.md
+          gh label create cli-compat --color F2C078 --description "Claude Code CLI compatibility drift" --force
+          existing=$(gh issue list --label cli-compat --state open --json number --jq '.[0].number // empty')
+          if [[ -n "$existing" ]]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "CLI compatibility drift: Claude Code ${VERSION:-latest}" --label cli-compat --body-file body.md
+          fi

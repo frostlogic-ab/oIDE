@@ -43,7 +43,8 @@ pnpm e2e          # Playwright end-to-end against the built app
 pnpm --filter @oide/desktop dist   # build installers for this OS
 ```
 
-Repo layout, conventions and hard rules: [CLAUDE.md](CLAUDE.md). Product documentation lives in the
+User guide and extension author guide: the docs site in [docs/site/](docs/site/) (`pnpm docs:dev`),
+published at https://oide-dev.github.io/oide/. Repo layout, conventions and hard rules: [CLAUDE.md](CLAUDE.md). Product documentation lives in the
 wiki at [docs/wiki/index.md](docs/wiki/index.md); decisions in [docs/adr/](docs/adr/).
 
 ## Status
@@ -54,4 +55,5 @@ terms (see [open questions](docs/wiki/pages/open-questions.md)).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) (`pnpm licenses:notices`).
+Please follow the [Code of Conduct](CODE_OF_CONDUCT.md); changes are listed in [CHANGELOG.md](CHANGELOG.md).

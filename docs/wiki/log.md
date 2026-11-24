@@ -235,3 +235,27 @@ secrets go through a one-time launcher, prompts are capped at 5 per agent. Edits
 (dev repo root for built-in extensions, with an e2e check). PoCs flipped: SEC-01, 02 (2), 03, 05,
 08, 09, 17, conformance B1 (2); new `test/security/core-fixes.test.ts`. Pages updated: security,
 review-security, review-conformance.
+
+## [2026-11-24] build | M7 release engineering
+Auto-update: `apps/desktop/src/main/services/updater.ts` (`UpdaterService` over electron-updater on
+GitHub Releases; `autoDownload`/`autoInstallOnAppQuit` off, download and install are separate clicks,
+install needs `{ consent: true }` and an inline confirm; stable/beta channels with downgrades off and
+`generateUpdatesFilesForAllChannels`; off in dev, portable zip, deb/rpm and `OIDE_DISABLE_UPDATES`;
+unsigned macOS builds link to the release page; `lastCheckedAt` in `<userData>/updates.json`), wired as
+`services.updates` in `services/index.ts` with `handlers/updates.ts`. Additive protocol: `Settings.updates`
+(`channel`, `checkAutomatically`), `UpdateStatus`, IPC `updates.status/check/download/install`, event
+`updates.changed`; store default. Renderer: Settings › Updates. CI/CD: `release.yml` rewritten (tag/version
+check, per-OS builds to a draft release, Azure Trusted Signing / certificates / Developer ID +
+notarization only when secrets exist, SHA256SUMS, optional GPG, prerelease flag for beta tags),
+`nightly-real-cli.yml` (opt-in, self-hosted `oide-real-cli`), `cli-compat.yml` (weekly; new
+`tools/fake-claude/record.mjs` with an allow-listed env and sanitizer, `test/conformance/cli-compat.test.ts`
+diff, `cli-compat` issue on drift), `codeql.yml`, `dependabot.yml`, `docs.yml`. Docs site: VitePress in
+`docs/site/` (guide, every screen, agents and permissions, worktrees and review, extension author guide,
+security model, FAQ with the Anthropic terms note, contributing). OSS: `CODE_OF_CONDUCT.md` (Contributor
+Covenant 2.1), issue forms, PR template, `CHANGELOG.md`, `pnpm licenses:notices` / `licenses:check`
+(`THIRD_PARTY_NOTICES.md`, 140 shipped packages, all MIT-compatible, shipped in `resources/`), original
+icon (`pnpm icons`: SVG to PNG/ICO/ICNS in `apps/desktop/build/`). Name check recorded in
+[open-questions](pages/open-questions.md) (npm scope `@oide` is taken; `oide-dev` free). Fixed: the
+extension-host test fixture `ext-sample/dist/` was gitignored, so fresh checkouts failed
+`host-client.test.ts`; it is now tracked. Pages: [packaging](pages/packaging.md),
+[milestones](pages/milestones.md), [screen-settings](pages/screen-settings.md), [protocol](pages/protocol.md).

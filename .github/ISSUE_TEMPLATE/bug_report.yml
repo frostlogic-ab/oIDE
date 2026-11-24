@@ -1,0 +1,85 @@
+name: Bug report
+description: Something in oIDE does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. **Never paste Claude credentials, OAuth tokens, API keys or the contents of
+        your CLI's credential or config files** into an issue. oIDE never needs them. Redact project paths
+        and code you do not want to share.
+
+        Security problems go to a private advisory (see "Report a vulnerability"), not here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a project
+        2. Spawn an agent with …
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS (Apple silicon)
+        - macOS (Intel)
+        - Linux (AppImage)
+        - Linux (deb)
+        - Linux (rpm)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: os-version
+    attributes:
+      label: OS version
+      placeholder: e.g. Windows 11 24H2, macOS 15.2, Ubuntu 24.04
+  - type: input
+    id: oide-version
+    attributes:
+      label: oIDE version
+      description: Settings › Updates shows it, or the name of the installer you used.
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: cli-version
+    attributes:
+      label: Claude Code CLI version
+      description: Output of `claude --version`.
+      placeholder: e.g. 2.1.325 (Claude Code)
+    validations:
+      required: true
+  - type: input
+    id: git-version
+    attributes:
+      label: git version
+      placeholder: e.g. git version 2.47.1
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Relevant output, with secrets, tokens and private paths removed.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I removed credentials, tokens, keys and private data from everything above.
+          required: true
+        - label: I searched existing issues for this bug.
+          required: false

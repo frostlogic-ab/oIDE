@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/oide-dev/oide/security/advisories/new
+    about: Please report vulnerabilities privately through a GitHub security advisory, not in a public issue.
+  - name: Documentation
+    url: https://oide-dev.github.io/oide/
+    about: Getting started, using oIDE, agents and permissions, extensions, security model and FAQ.

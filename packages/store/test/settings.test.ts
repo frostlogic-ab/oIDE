@@ -81,6 +81,17 @@ describe('SettingsService', () => {
     expect(svc.update({ agents: null }).agents.maxRunning).toBe(3);
   });
 
+  it('updates (M7): defaults to stable with automatic checks, persists the channel, refuses unknown channels', () => {
+    const db = openDatabase(':memory:');
+    const svc = new SettingsService({ db });
+    expect(svc.get().updates).toEqual({ channel: 'stable', checkAutomatically: true });
+    expect(svc.update({ updates: { channel: 'beta' } }).updates).toEqual({ channel: 'beta', checkAutomatically: true });
+    expect(new SettingsService({ db }).get().updates.channel).toBe('beta');
+    expect(() => svc.update({ updates: { channel: 'nightly' } })).toThrow();
+    // Settings saved before M7 have no `updates` key and still parse.
+    expect(Settings.parse({ claude: {}, models: {}, agents: { notifications: {} }, techniques: [], permissions: {}, ui: {} }).updates.channel).toBe('stable');
+  });
+
   it('keeps built-ins when presets/techniques arrays are replaced, and supports reset', async () => {
     const db = openDatabase(':memory:');
     const svc = new SettingsService({ db });

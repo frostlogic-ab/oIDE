@@ -32,6 +32,12 @@ extraResources:
       - "!**/tsconfig*.json"
   - from: ../../tools/marketplace-index/bundled/index.json
     to: marketplace/index.json
+  # Licence of oIDE and the generated notices for every shipped third-party package
+  # (pnpm licenses:notices; CI fails when it is stale). Electron adds LICENSES.chromium.html itself.
+  - from: ../../LICENSE
+    to: LICENSE
+  - from: ../../THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
 
 asar: true
 # Native N-API prebuilds must live outside the asar archive to be loadable.
@@ -60,6 +66,11 @@ publish:
   repo: oide
   releaseType: draft
 
+# Update channels (apps/desktop/src/main/services/updater.ts). A version with a prerelease tag
+# (0.2.0-beta.1) publishes beta*.yml; a plain version publishes latest*.yml and, with this flag, the
+# beta*.yml files too, so beta users also receive stable releases.
+generateUpdatesFilesForAllChannels: true
+
 win:
   target:
     - target: nsis
@@ -67,7 +78,8 @@ win:
     - target: zip
       arch: [x64, arm64]
   artifactName: ${productName}-${version}-win-${arch}.${ext}
-  # Signing (Authenticode, e.g. Azure Trusted Signing) is an open question; builds are unsigned.
+  # Unsigned by default. .github/workflows/release.yml adds Azure Trusted Signing
+  # (-c.win.azureSignOptions.*) or a classic WIN_CSC_LINK certificate only when those secrets exist.
 
 nsis:
   oneClick: false
@@ -85,7 +97,8 @@ mac:
   category: public.app-category.developer-tools
   artifactName: ${productName}-${version}-mac-${arch}.${ext}
   hardenedRuntime: true
-  # Developer ID signing + notarization need an Apple account (open question). Unsigned for now.
+  # Unsigned by default (local `pnpm dist` and CI without secrets). With CSC_LINK + the
+  # MAC_SIGNING_IDENTITY variable, release.yml overrides -c.mac.identity and turns on notarization.
   identity: null
 
 dmg:
@@ -100,6 +113,8 @@ linux:
     - target: rpm
       arch: [x64, arm64]
   category: Development
+  # PNG set from tools/icons/build-icons.mjs (Windows uses build/icon.ico, macOS build/icon.icns).
+  icon: build/icons
   maintainer: oIDE contributors
   synopsis: Run many Claude Code CLI agents in parallel, in one window.
   artifactName: ${productName}-${version}-linux-${arch}.${ext}

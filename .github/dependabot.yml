@@ -1,0 +1,43 @@
+# Dependency updates (build brief, Security: "Lockfile committed; Dependabot or Renovate").
+# One weekly PR per group keeps the review load small; majors come as separate PRs.
+version: 2
+updates:
+  - package-ecosystem: npm
+    # pnpm workspace root: Dependabot reads pnpm-lock.yaml and updates every workspace package.
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    labels: [dependencies]
+    commit-message:
+      prefix: deps
+    groups:
+      # Electron, electron-builder and electron-updater move together (electronVersion is pinned in
+      # apps/desktop/electron-builder.yml and must be bumped with the electron devDependency).
+      electron:
+        patterns: ['electron', 'electron-builder', 'electron-updater', 'electron-vite']
+      dev-tooling:
+        dependency-type: development
+        update-types: [minor, patch]
+        exclude-patterns: ['electron', 'electron-builder', 'electron-vite']
+      runtime:
+        dependency-type: production
+        update-types: [minor, patch]
+        exclude-patterns: ['electron-updater']
+    ignore:
+      # Electron majors change Node and Chromium; upgrade them deliberately (ADR + packaging.md).
+      - dependency-name: electron
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, ci]
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ['*']
