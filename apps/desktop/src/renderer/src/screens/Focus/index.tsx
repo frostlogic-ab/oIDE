@@ -1,53 +1,312 @@
 /**
- * PLACEHOLDER: Focus view (docs/wiki/raw/design/Focus.dc.html), implemented in wave 2.
- * Already wired: J / K / N / Esc through the keymap, the agent from the route, its event tail.
+ * Focus: one agent in depth (docs/wiki/raw/design/Focus.dc.html, docs/wiki/pages/screen-focus.md).
+ *
+ *   [Agents list 216] [Session: header · transcript · permission prompt · composer] [Inspector 300–340]
+ *
+ * The transcript is the agent's full event log (`agents.events`, paged backwards) plus the live
+ * tail, virtualized. Selecting a subagent (route param `subagentId`) shows its own transcript:
+ * events tagged with its Task tool_use id.
  */
-import { ContextRingButton, StatusLabel, contextFraction } from '@oide/ui';
-import { ScreenPlaceholder } from '../../components/ScreenPlaceholder';
-import { useKeymapScope } from '../../lib/useKeymap';
-import { nextNeedsYou, stepAgent, useAgent, useAgentEvents, useAgentHistory, useAgentsInScope } from '../../stores/agents';
+import './focus.css';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { AgentSummary, PermissionMode, SubagentInfo } from '@oide/protocol';
+import { Button, EmptyState, contextFraction } from '@oide/ui';
+import { ipcErrorMessage, oide } from '../../lib/bridge';
+import { useKeymapScope, useShortcutLabel } from '../../lib/useKeymap';
+import { nextNeedsYou, stepAgent, useAgent, useAgentsInScope } from '../../stores/agents';
+import { useCli } from '../../stores/cli';
+import { projectName as nameOf, useProjects } from '../../stores/projects';
 import { useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
+import { useSetting } from '../../stores/settings';
+import { toast } from '../../stores/ui';
+import { AgentList } from './components/AgentList';
+import { CompactDialog } from './components/CompactDialog';
+import { Composer } from './components/Composer';
+import { Inspector, type InspectorTab } from './components/Inspector';
+import { PermissionPrompt } from './components/PermissionPrompt';
+import type { RowContext, ViewRow } from './components/rows';
+import { LeadHeader, SubagentHeader } from './components/SessionHeader';
+import { Streaming } from './components/Streaming';
+import { Transcript } from './components/Transcript';
+import { DEFAULT_SLASH_COMMANDS, nextMode, sortAgentList } from './model/focus';
+import { loadOlder, useFocusHistory, useTranscriptHistory } from './model/history';
+import { buildRows, eventsFor, groupByParent, reportedSlashCommands } from './model/transcript';
+
+const EMPTY_SUBS: Record<string, SubagentInfo> = {};
+
+function useNow(intervalMs = 30_000): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), intervalMs);
+    return () => clearInterval(t);
+  }, [intervalMs]);
+  return now;
+}
 
 export default function FocusScreen() {
   const route = useRouter((s) => s.route);
   const agentId = route.screen === 'focus' ? route.params.agentId : undefined;
+  const subagentId = route.screen === 'focus' ? route.params.subagentId : undefined;
   const agent = useAgent(agentId);
-  useAgentHistory(agentId);
-  const events = useAgentEvents(agentId);
   const scope = useScope((s) => s.scope);
-  const agents = useAgentsInScope(scope);
+  const inScope = useAgentsInScope(scope);
+  const list = useMemo(() => {
+    const sorted = sortAgentList(inScope);
+    // The agent on screen stays listed even when it is outside the project scope.
+    return agent && !sorted.some((a) => a.id === agent.id) ? [agent, ...sorted] : sorted;
+  }, [inScope, agent]);
+  const projects = useProjects((s) => s.list);
+  const projectName = useCallback((id: string) => nameOf(projects, id), [projects]);
+  const warnAt = useSetting((s) => s.agents.contextWarnAt, undefined);
+  const dangerAt = useSetting((s) => s.agents.contextSuggestCompactAt, undefined);
+  const allowBypass = useSetting((s) => s.claude.allowBypass, false);
+  const hasAuto = useCli((s) => s.info?.features['mode:auto']);
   const { replace, navigate } = useRouter.getState();
 
+  const labels = {
+    next: useShortcutLabel('agent.next'),
+    prev: useShortcutLabel('agent.prev'),
+    needs: useShortcutLabel('agent.nextNeedsYou'),
+    back: useShortcutLabel('view.back'),
+    mode: useShortcutLabel('agent.cycleMode'),
+  };
+
+  const go = useCallback((a: AgentSummary | undefined) => a && replace('focus', { agentId: a.id }), [replace]);
+  const selectSub = useCallback((id: string | undefined) => agentId && replace('focus', id ? { agentId, subagentId: id } : { agentId }), [agentId, replace]);
+
+  const cycleMode = useCallback(() => {
+    if (!agent) return;
+    const mode: PermissionMode = nextMode(agent.mode, { allowBypass, inWorktree: !!agent.worktreePath, hasAuto: hasAuto !== false });
+    oide.invoke('agents.setMode', { agentId: agent.id, mode }).catch((err: unknown) => toast(ipcErrorMessage(err), 'error'));
+  }, [agent, allowBypass, hasAuto]);
+
   useKeymapScope('focus', {
-    'agent.next': () => {
-      const a = stepAgent(agents, agentId, 1);
-      if (a) replace('focus', { agentId: a.id });
-    },
-    'agent.prev': () => {
-      const a = stepAgent(agents, agentId, -1);
-      if (a) replace('focus', { agentId: a.id });
-    },
-    'agent.nextNeedsYou': () => {
-      const a = nextNeedsYou(agents, agentId);
-      if (a) replace('focus', { agentId: a.id });
-    },
+    'agent.next': () => go(stepAgent(list, agentId, 1)),
+    'agent.prev': () => go(stepAgent(list, agentId, -1)),
+    'agent.nextNeedsYou': () => go(nextNeedsYou(list, agentId)),
     'view.back': () => navigate('wall'),
+    // Shift+Tab cycles the mode only when nothing has focus; otherwise it moves focus back as usual.
+    // In the composer it is handled by the composer itself (as in the CLI).
+    'agent.cycleMode': () => {
+      const el = document.activeElement;
+      if (el && el !== document.body) return false;
+      cycleMode();
+    },
   });
 
+  if (!agentId || !agent) {
+    return (
+      <EmptyState
+        icon="agents"
+        title={agentId ? 'This agent is gone' : 'No agent selected'}
+        description="Pick an agent on the wall to see it in depth."
+        action={
+          <Button variant="primary" size={32} onClick={() => navigate('wall')}>
+            Back to wall
+          </Button>
+        }
+        className="flex-1"
+      />
+    );
+  }
+
   return (
-    <ScreenPlaceholder title={agent?.title ?? 'Focus'} design="Focus.dc.html" icon="agents" description="Transcript, subagent tree, pinned permission prompt, composer and inspector.">
-      {agent && (
-        <div className="flex flex-col gap-3 text-ink-2">
-          <div className="flex items-center gap-3">
-            <StatusLabel status={agent.status} />
-            <ContextRingButton variant="header" used={contextFraction(agent.contextUsed, agent.contextWindow)} subject={agent.title} />
-          </div>
-          <p className="m-0 text-[12.5px] text-ink-3">
-            {events.length} events loaded. J / K move between agents, N jumps to the next that needs you, Esc goes back.
-          </p>
+    <FocusBody
+      key={agent.id}
+      agent={agent}
+      subagentId={subagentId}
+      list={list}
+      projectName={projectName}
+      warnAt={warnAt}
+      dangerAt={dangerAt}
+      labels={labels}
+      onSelectAgent={(id) => replace('focus', { agentId: id })}
+      onSelectSub={selectSub}
+      onBack={() => navigate('wall')}
+      onCycleMode={cycleMode}
+    />
+  );
+}
+
+interface BodyProps {
+  agent: AgentSummary;
+  subagentId?: string;
+  list: AgentSummary[];
+  projectName(id: string): string;
+  warnAt?: number;
+  dangerAt?: number;
+  labels: { next: string; prev: string; needs: string; back: string; mode: string };
+  onSelectAgent(id: string): void;
+  onSelectSub(id: string | undefined): void;
+  onBack(): void;
+  onCycleMode(): void;
+}
+
+function FocusBody({ agent, subagentId, list, projectName, warnAt, dangerAt, labels, onSelectAgent, onSelectSub, onBack, onCycleMode }: BodyProps) {
+  useTranscriptHistory(agent.id);
+  const events = useFocusHistory((s) => s.events);
+  const hasMore = useFocusHistory((s) => s.hasMore);
+  const loading = useFocusHistory((s) => s.loading);
+  const now = useNow();
+  const [tab, setTab] = useState<InspectorTab>(agent.subagents.length ? 'subs' : 'plan');
+  const [compactOpen, setCompactOpen] = useState(false);
+  const [stopRequested, setStopRequested] = useState<ReadonlySet<string>>(new Set());
+
+  const subs = useMemo(() => Object.fromEntries(agent.subagents.map((s) => [s.id, s])) as Record<string, SubagentInfo>, [agent.subagents]);
+  const sub = subagentId ? subs[subagentId] : undefined;
+  const subEvents = useMemo(() => groupByParent(events), [events]);
+  const leadEvents = useMemo(() => eventsFor(events), [events]);
+  const leadRows = useMemo(() => buildRows(leadEvents), [leadEvents]);
+  const ownSubEvents = subagentId ? subEvents.get(subagentId) : undefined;
+  const rows = useMemo<ViewRow[]>(() => {
+    if (!subagentId) return leadRows;
+    const inner = buildRows(ownSubEvents ?? []);
+    return [
+      { kind: 'sub-intro', key: `intro:${subagentId}`, seq: -1, v: 0, task: sub?.task ?? '' },
+      ...inner,
+      { kind: 'sub-outro', key: `outro:${subagentId}`, seq: Number.MAX_SAFE_INTEGER, v: sub?.status === 'done' ? 1 : 0, done: sub?.status === 'done', report: sub?.report },
+    ];
+  }, [subagentId, leadRows, ownSubEvents, sub?.task, sub?.status, sub?.report]);
+
+  const commands = useMemo(() => reportedSlashCommands(leadEvents) ?? [...DEFAULT_SLASH_COMMANDS], [leadEvents]);
+  const pending = agent.pendingPermission;
+
+  const ctx = useMemo<RowContext>(
+    () => ({
+      agentId: agent.id,
+      subagents: agent.subagents.length ? subs : EMPTY_SUBS,
+      subEvents,
+      pendingToolUseId: pending?.toolUseId,
+      now,
+      onOpenSubagent: (id) => onSelectSub(id),
+      onOpenReview: () => useRouter.getState().navigate('review', { agentId: agent.id }),
+    }),
+    [agent.id, agent.subagents.length, subs, subEvents, pending?.toolUseId, now, onSelectSub],
+  );
+
+  // Polite announcement of new assistant text (not history loaded on open).
+  const announceFrom = useRef<number | null>(null);
+  const [announce, setAnnounce] = useState('');
+  useEffect(() => {
+    const last = [...leadRows].reverse().find((r) => r.kind === 'assistant');
+    if (!last) return;
+    if (announceFrom.current === null) {
+      announceFrom.current = last.seq;
+      return;
+    }
+    if (last.seq > announceFrom.current && last.kind === 'assistant') {
+      announceFrom.current = last.seq;
+      setAnnounce(last.text.length > 300 ? `${last.text.slice(0, 300)}…` : last.text);
+    }
+  }, [leadRows]);
+
+  const doCompact = () => {
+    setCompactOpen(false);
+    oide.invoke('agents.compact', { agentId: agent.id }).then(
+      () => toast(`Sent /compact to ${agent.title}. Compacting…`, 'info'),
+      (err: unknown) => toast(ipcErrorMessage(err), 'error'),
+    );
+  };
+  const act = (cmd: 'agents.pause' | 'agents.resume' | 'agents.stop') => oide.invoke(cmd, { agentId: agent.id }).catch((err: unknown) => toast(ipcErrorMessage(err), 'error'));
+  const stopSub = (id: string) => {
+    setStopRequested((s) => new Set([...s, id]));
+    oide.invoke('agents.stopSubagent', { agentId: agent.id, subagentId: id }).then(
+      () => toast(`${subs[id]?.name ?? 'The subagent'} stops at its next tool call and reports back to the lead agent.`, 'info'),
+      (err: unknown) => {
+        setStopRequested((s) => new Set([...s].filter((x) => x !== id)));
+        toast(ipcErrorMessage(err), 'error');
+      },
+    );
+  };
+
+  const pendingSub = pending?.subagentId ? subs[pending.subagentId] : undefined;
+  const queued = agent.status === 'queued';
+  const placeholder = sub ? `Message the lead agent about ${sub.name}` : 'Steer this agent, or type / for commands';
+  const used = contextFraction(agent.contextUsed, agent.contextWindow);
+
+  return (
+    <>
+      <AgentList
+        agents={list}
+        currentId={agent.id}
+        subagentId={sub ? sub.id : undefined}
+        projectName={projectName}
+        warnAt={warnAt}
+        dangerAt={dangerAt}
+        onBack={onBack}
+        onSelect={onSelectAgent}
+        onSelectSubagent={onSelectSub}
+        labels={labels}
+      />
+      <main className="flex-[999_1_560px] min-w-0 min-h-0 flex flex-col" aria-label={sub ? `Subagent ${sub.name}` : agent.title}>
+        {sub ? (
+          <SubagentHeader agent={agent} sub={sub} now={now} onLead={() => onSelectSub(undefined)} onStop={() => stopSub(sub.id)} stopRequested={stopRequested.has(sub.id)} />
+        ) : (
+          <LeadHeader
+            agent={agent}
+            project={projectName(agent.projectId)}
+            now={now}
+            warnAt={warnAt}
+            dangerAt={dangerAt}
+            modeShortcut={labels.mode}
+            onCycleMode={onCycleMode}
+            onCompact={() => setCompactOpen(true)}
+            onRawTerminal={() => setTab('term')}
+            onPause={() => act('agents.pause')}
+            onResume={() => act('agents.resume')}
+            onStop={() => act('agents.stop')}
+          />
+        )}
+        <Transcript
+          rows={rows}
+          ctx={ctx}
+          resetKey={`${agent.id}:${subagentId ?? ''}`}
+          hasMore={!subagentId && hasMore}
+          loading={!subagentId && loading}
+          onLoadOlder={() => void loadOlder()}
+          footer={<Streaming agentId={agent.id} parent={subagentId} />}
+          label={sub ? `Transcript of subagent ${sub.name}` : 'Transcript'}
+        />
+        <div aria-live="polite" className="sr-only">
+          {announce}
         </div>
-      )}
-    </ScreenPlaceholder>
+        <div className="px-5 pb-4 pt-1">
+          <div className="max-w-[860px] mx-auto flex flex-col gap-2.5">
+            {pending && (
+              <PermissionPrompt
+                agentId={agent.id}
+                request={pending}
+                projectName={projectName(agent.projectId)}
+                subagentName={pendingSub?.name}
+                onViewSubagent={pendingSub ? () => onSelectSub(pendingSub.id) : undefined}
+              />
+            )}
+            <Composer
+              agentId={agent.id}
+              projectId={agent.projectId}
+              placeholder={placeholder}
+              commands={commands}
+              subagentName={sub?.name}
+              disabledReason={queued ? 'Queued: messages open once this agent gets a free slot' : undefined}
+              onCompact={() => setCompactOpen(true)}
+              onCycleMode={sub ? undefined : onCycleMode}
+            />
+          </div>
+        </div>
+      </main>
+      <Inspector
+        agent={agent}
+        events={events}
+        subEvents={subEvents}
+        tab={tab}
+        onTab={setTab}
+        now={now}
+        stopRequested={stopRequested}
+        onOpenSubagent={(id) => onSelectSub(id)}
+        onStopSubagent={stopSub}
+      />
+      <CompactDialog open={compactOpen} agentName={agent.title} used={used} warnAt={warnAt} dangerAt={dangerAt} onCancel={() => setCompactOpen(false)} onConfirm={doCompact} />
+    </>
   );
 }
