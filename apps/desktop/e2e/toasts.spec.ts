@@ -28,7 +28,8 @@ test.beforeAll(async () => {
   writeFileSync(join(repo, 'README.md'), '# fixture\n');
   gitIn(repo, 'add', '-A');
   gitIn(repo, 'commit', '-q', '-m', 'init');
-  ctx = await launchApp({ OIDE_CLAUDE_PATH: FAKE_CLAUDE, OIDE_E2E_TRUST: 'trust' });
+  // Test-only stand-ins for the folder pick (SEC-08) and the extra-flags confirmation (SEC-07).
+  ctx = await launchApp({ OIDE_CLAUDE_PATH: FAKE_CLAUDE, OIDE_E2E_TRUST: 'trust', OIDE_E2E_OPEN_PATHS: repo, OIDE_E2E_CONFIRM: 'accept' });
 });
 
 test.afterAll(async () => {
