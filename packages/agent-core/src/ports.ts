@@ -1,0 +1,94 @@
+import type {
+  AgentEvent,
+  AgentSpec,
+  AgentSummary,
+  CheckResult,
+  CliInfo,
+  CustomModel,
+  PermissionAnswer,
+  PermissionRequest,
+  Settings,
+  Technique,
+} from '@oide/protocol';
+import type { ExtensionToolRef } from './args.js';
+import type { ArtifactResolver } from './messages.js';
+
+/**
+ * Dependencies the Supervisor needs from the rest of main. Implemented by other packages:
+ * WorktreeProvider (packages/git), EventSink + SettingsProvider + SecretProvider (packages/store,
+ * apps/desktop main), PermissionBroker (packages/mcp-server's OideMcpServer satisfies it structurally).
+ */
+
+export interface WorktreeResult {
+  /** Absolute path the agent runs in (its worktree, or the project folder for workIn=project-folder). */
+  path: string;
+  branch?: string;
+  baseRef?: string;
+}
+
+export interface WorktreeProvider {
+  /** Create the agent's worktree (`git worktree add -b oide/<slug> <path> <base>`), or return the project folder. */
+  create(input: { agentId: string; slug: string; spec: AgentSpec }): Promise<WorktreeResult>;
+  /** Run `.oide/setup` (only for trusted projects; the provider decides). Output lines go to the tile. */
+  runSetup?(input: { agentId: string; path: string; spec: AgentSpec; onOutput?: (line: string) => void }): Promise<{ ok: boolean; output?: string }>;
+  /** `git worktree remove` + branch delete, used by `remove(agentId, { deleteWorktree: true })`. */
+  remove?(input: { agentId: string; path: string; branch?: string; projectId: string }): Promise<void>;
+}
+
+export interface EventSink {
+  /** Persist one normalized event plus the raw stdout JSON it came from (when any). */
+  append(event: AgentEvent, raw?: string): void | Promise<void>;
+  /** Optional: every stdout line, including lines that produce no events (hooks, message_start, …). */
+  appendRaw?(agentId: string, line: string): void | Promise<void>;
+  /** Persist the latest summary and spec so agents can be restored after an app restart. */
+  saveSummary?(summary: AgentSummary, spec: AgentSpec): void | Promise<void>;
+  removeAgent?(agentId: string): void | Promise<void>;
+}
+
+export interface ProjectInfo {
+  path: string;
+  trusted: boolean;
+  /** `.oide/permissions.json`. */
+  rules?: { allow: string[]; ask?: string[]; deny: string[] };
+}
+
+export type McpServerEntry =
+  | { type: 'http' | 'sse'; url: string; headers?: Record<string, string> }
+  | { type?: 'stdio'; command: string; args?: string[]; env?: Record<string, string> };
+
+export interface SettingsProvider {
+  get(): Settings | Promise<Settings>;
+  cli(): CliInfo | Promise<CliInfo>;
+  /** Techniques available for this project, in Settings order (global then project). */
+  techniques?(projectId: string): Technique[] | Promise<Technique[]>;
+  project?(projectId: string): ProjectInfo | undefined | Promise<ProjectInfo | undefined>;
+  /** Extension and custom-server tools for this agent, with risk labels. */
+  extensionTools?(spec: AgentSpec): ExtensionToolRef[] | Promise<ExtensionToolRef[]>;
+  /** Extension / custom MCP servers to merge into the agent's mcp.json (never named `oide`). */
+  extraMcpServers?(spec: AgentSpec): Record<string, McpServerEntry> | Promise<Record<string, McpServerEntry>>;
+  customModel?(id: string): CustomModel | undefined | Promise<CustomModel | undefined>;
+  /** "Always in <project>": save an allow rule (e.g. `Bash(npm test)`) to `.oide/permissions.json`. */
+  addAllowRule?(projectId: string, rule: string): void | Promise<void>;
+  resolveArtifact?: ArtifactResolver;
+}
+
+export interface SecretProvider {
+  /** Key of a custom model endpoint from oIDE's keychain store. Never Claude credentials. */
+  customModelKey(customModelId: string): Promise<string | undefined>;
+}
+
+/** Callbacks the MCP server calls for one agent. */
+export interface AgentToolHandlers {
+  onPermissionRequest(request: PermissionRequest): void;
+  onPermissionResolved(requestId: string, behavior: 'allow' | 'deny'): void;
+  onReview(review: { summary: string; checks: CheckResult[] }): void;
+}
+
+export interface PermissionBroker {
+  /** Create the agent's endpoint and write `<app-data>/agents/<id>/mcp.json`. */
+  registerAgent(agentId: string, handlers: AgentToolHandlers, extraServers?: Record<string, McpServerEntry>, options?: { projectId?: string }): Promise<{ mcpConfigPath: string }>;
+  /** Deny the agent's pending prompts and drop its endpoint. */
+  unregisterAgent(agentId: string): Promise<void>;
+  /** Resolve a pending prompt. Returns false unless `requestId` is exactly a pending id. */
+  answer(requestId: string, answer: PermissionAnswer): boolean;
+}

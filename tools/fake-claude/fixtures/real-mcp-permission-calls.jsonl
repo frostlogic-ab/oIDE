@@ -1,0 +1,2 @@
+{"call":"permission_prompt","args":{"tool_name":"Bash","input":{"command":"mkdir deny-me-dir","description":"Create deny-me-dir directory in the working directory"},"tool_use_id":"toolu_01VBtGrgkrrefKXDoztd1ddV"},"meta":{"progressToken":2,"claudecode/toolUseId":"toolu_01VBtGrgkrrefKXDoztd1ddV"}}
+{"reply":{"behavior":"deny","message":"Denied by test server"}}

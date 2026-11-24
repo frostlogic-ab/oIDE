@@ -1,0 +1,10 @@
+{"type":"user","message":{"role":"user","content":"Reply with exactly: hello"}}
+{"type":"control_request","request_id":"req-mode-1","request":{"subtype":"set_permission_mode","mode":"plan"}}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Use the Read tool to read README.txt and tell me its first line. Nothing else."}]}}
+{"type":"user","message":{"role":"user","content":"Write the numbers 1 to 300, one per line, no other text."}}
+{"type":"control_request","request_id":"req-int-1","request":{"subtype":"interrupt"}}
+{"type":"user","message":{"role":"user","content":"/compact"}}
+{"type":"user","message":{"role":"user","content":"Do these three steps in order, using tools, with no commentary: 1) Use the Write tool to create notes.txt containing the single word ok. 2) Use the Bash tool to run: echo deny-me 3) Call the mcp__oide__submit_for_review tool with summary \"Created notes.txt\" and checks [{\"name\":\"write\",\"status\":\"passed\"}]."}}
+{"type":"user","message":{"role":"user","content":"Delegate this to a subagent of type simple-task (do not do it yourself): 'Use the Read tool on README.txt and report its first line, then use the Bash tool to run: mkdir deny-me-dir'. After it returns, reply with one sentence summarizing its report."}}
+{"type":"user","message":{"role":"user","content":"In one short sentence: what was the first thing I asked you in this conversation?"}}
+{"type":"user","message":{"role":"user","content":"hi"}}
