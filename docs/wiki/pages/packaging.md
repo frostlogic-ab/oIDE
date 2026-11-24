@@ -28,9 +28,9 @@ otherwise skips it (it is only reachable through optional wasm packages) and ele
 
 | OS | Artifacts | Signing |
 | --- | --- | --- |
-| Windows x64/arm64 | NSIS installer (per-user, choose folder), zip | Unsigned (Authenticode account is an open question) |
-| macOS arm64/x64 | dmg, zip (for updates) | Unsigned (`identity: null`); hardened runtime on; Developer ID + notarization open |
-| Linux x64/arm64 | AppImage, deb, rpm | Unsigned; Flatpak after v1 |
+| Windows x64/arm64 | NSIS installer (per-user, choose folder), zip | Unsigned unless release secrets exist (Azure Trusted Signing or a certificate) |
+| macOS arm64/x64 | dmg, zip (for updates) | Unsigned by default (`identity: null`); hardened runtime on; release CI signs and notarizes when the Apple secrets exist |
+| Linux x64/arm64 | AppImage, deb, rpm | Optional GPG `.asc` + `SHA256SUMS` on the release; Flatpak after v1 |
 
 `appId: dev.oide.app`, `productName: oIDE`, output `apps/desktop/release/<version>/`.
 
@@ -52,23 +52,90 @@ module scripts, which needs it. Because Node inspection is fused off, Playwright
 packaged build; e2e tests run against `out/` (unpackaged), and a packaged build can be inspected with
 `--remote-debugging-port`.
 
-## Updates and publishing
+## Auto-update (M7)
 
-`publish` targets GitHub Releases (`owner: oide-dev`, `repo: oide`, draft releases). electron-updater
-reads them at runtime (stable/beta channels planned; Linux deb/rpm users update through their package
-manager). Releases are built only in CI from tags.
+`apps/desktop/src/main/services/updater.ts` (`UpdaterService`) wraps electron-updater (lazy
+`import('electron-updater')`, externalized from the main bundle). Created in `services/index.ts` as
+`services.updates` (Electron only; plain-Node integration tests have none and `handlers/updates.ts`
+answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-settings.md)).
 
-## CI
+- **Consent.** `autoDownload` and `autoInstallOnAppQuit` are off. A check only finds out whether a
+  newer version exists. Download is a click (`updates.download`); install is a second click plus an
+  inline confirm (`updates.install` with `consent: true`), which runs `quitAndInstall(false, true)`:
+  oIDE quits through the normal quit hooks (pending permissions deny, agents stop and resume after the
+  restart), the installer runs and oIDE starts again.
+- **Checks.** With Settings › Updates › Check automatically on (default), 15 s after startup and
+  every 6 h; Check now at any time. `lastCheckedAt` is kept in `<userData>/updates.json`.
+- **Channels.** `settings.updates.channel`: `stable` → `channel = latest`, no prereleases; `beta` →
+  `channel = beta`, `allowPrerelease`. `allowDowngrade` stays off on both, so moving from beta back to
+  stable waits for the next stable version above the installed beta. A tag with a prerelease part
+  (`v0.2.0-beta.1`) produces `beta*.yml`; `generateUpdatesFilesForAllChannels: true` makes stable tags
+  publish `beta*.yml` too, so beta users also get stable releases. Changing the channel forgets an
+  update that was found but not downloaded.
+- **Off when:** development builds (`!app.isPackaged`), `OIDE_DISABLE_UPDATES=1`, builds without
+  `resources/app-update.yml` (portable zip), Linux installs that are not an AppImage (`APPIMAGE` unset:
+  deb/rpm users update through their package manager). The state is `disabled` with a reason.
+- **Unsigned builds.**
+  - Windows: NSIS updates install. Without signing, electron-updater has no `publisherName` to verify,
+    so the download is checked only by the sha512 in `latest.yml` (fetched over HTTPS from GitHub);
+    SmartScreen may warn when the new installer runs. With Azure Trusted Signing or a certificate,
+    electron-builder writes `publisherName` into `app-update.yml` and updates are signature-checked.
+  - macOS: Squirrel.Mac installs only Developer ID signed apps. The service asks `codesign -dv` for a
+    `Developer ID Application` authority; without it `canInstall` is false and Settings shows
+    "Open release page" instead of Download.
+  - Linux AppImage: updates in place (no signature check beyond sha512); optional GPG `.asc` files on
+    the release are for people verifying by hand.
+- **Publishing.** Release CI uploads to a **draft** GitHub Release; electron-updater cannot see drafts,
+  so nothing reaches users until a maintainer publishes the release. Beta tags are marked prerelease.
+- Tests: `updater.test.ts` (mocked electron-updater: consent, channels, disabled cases, unsigned
+  macOS, errors, background timer), `UpdatesSection.test.tsx`, store default in `settings.test.ts`.
+
+## CI and release workflows
 
 - `.github/workflows/ci.yml` (push to main, every PR): matrix ubuntu / windows / macos, Node 24,
   pnpm from `packageManager`. Steps: `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm lint`,
-  `pnpm test` (Vitest), `pnpm wiki:lint` (Linux), `pnpm --filter @oide/desktop build`, Playwright for
-  Electron (under `xvfb-run` on Linux, where the e2e launcher adds `--no-sandbox`). Playwright output
-  is uploaded on failure.
-- `.github/workflows/release.yml` (tags `v*`, or manual): same matrix; installs `rpm` on Linux,
-  typechecks and tests, then `electron-builder --publish always` with `GH_TOKEN` and
-  `CSC_IDENTITY_AUTO_DISCOVERY=false` (unsigned), and uploads the installers as workflow artifacts.
+  `pnpm test` (Vitest), `pnpm wiki:lint` and `pnpm licenses:check` (Linux), `pnpm --filter @oide/desktop
+  build`, Playwright for Electron (under `xvfb-run` on Linux, where the e2e launcher adds
+  `--no-sandbox`). Playwright output is uploaded on failure.
+- `release.yml` (tags `v*`, or manual): a verify job fails unless the tag equals `v` + the
+  `apps/desktop/package.json` version, then typecheck, lint, test, licences. One build job per OS runs
+  `electron-builder --publish always` to a draft release. Signing is gated per secret (a step exposes
+  only whether each is set): Windows Azure Trusted Signing (`AZURE_*` secrets + signing vars →
+  `-c.win.azureSignOptions.*`) or `WIN_CSC_LINK`; macOS `CSC_LINK` + `MAC_SIGNING_IDENTITY` →
+  `-c.mac.identity`, notarization with Apple ID or App Store Connect API key secrets; otherwise
+  `identity: null` / `CSC_IDENTITY_AUTO_DISCOVERY=false` and a warning. A last job uploads
+  `SHA256SUMS`, optional GPG signatures (`GPG_PRIVATE_KEY`) and marks prerelease tags as prerelease.
+  The header of the workflow lists every secret and variable.
+- `nightly-real-cli.yml`: opt-in (repo variable `OIDE_NIGHTLY_REAL_CLI=true`), self-hosted runner
+  labelled `oide-real-cli`, runs `test/conformance/real-cli.test.ts` with `OIDE_REAL_CLI=1` on the
+  runner's existing sign-in. Off until Anthropic answers whether CI may use a maintainer's
+  subscription ([open questions](open-questions.md) row 17).
+- `cli-compat.yml` (weekly): a hosted job installs the latest CLI and records `--version` / `--help`
+  with `tools/fake-claude/record.mjs` (allow-listed env, never reads credentials, sanitizes paths,
+  names, ids, emails and token-like strings); `test/conformance/cli-compat.test.ts` (gated by
+  `OIDE_COMPAT_DIR`) diffs them against `tools/fake-claude/fixtures` (detected flags, permission modes,
+  `TESTED_CLI_RANGE`, every stream-json line through the real parser). Drift opens or comments on a
+  `cli-compat` issue. An opt-in self-hosted `session` job (`OIDE_CLI_COMPAT_SESSION=true`) also records
+  a scripted stream-json session.
+- `codeql.yml` (javascript-typescript; push, PR, weekly), `.github/dependabot.yml` (npm and actions
+  weekly, grouped; Electron majors ignored and done by hand), `docs.yml` (VitePress site to GitHub
+  Pages; Pages source must be "GitHub Actions").
 
+## Icon, licences and the docs site
+
+- Icon: `apps/desktop/build/icon.svg` (rounded-square outline in `#7AA2F7` on `#0E1013` with "oI"),
+  rendered by `pnpm icons` (`tools/icons/build-icons.mjs`, @resvg/resvg-js, build-time only) to
+  `icon.png` (1024), `icons/<n>x<n>.png` (Linux, `linux.icon: build/icons`), `icon.ico` and
+  `icon.icns` (containers written by the script). electron-builder picks them up from `build/`.
+- Licences: `pnpm licenses:notices` (`tools/licenses/notices.mjs`) writes `THIRD_PARTY_NOTICES.md` for
+  everything a packaged build ships (desktop `dependencies`, libraries bundled into `out/`, Electron);
+  `pnpm licenses:check` fails on a licence outside the MIT-compatible allow-list or a stale file.
+  `LICENSE` and `THIRD_PARTY_NOTICES.md` are copied to `resources/` (`extraResources`). As of
+  2026-11-24: 140 shipped packages, all MIT-compatible (dompurify is dual MPL-2.0 OR Apache-2.0, used
+  under Apache-2.0). Build-only MPL tools (@resvg/resvg-js, lightningcss) do not ship.
+- Docs site: VitePress 2 (alpha, matches the repo's vite 8) in `docs/site/`, `pnpm docs:dev` /
+  `pnpm docs:build`, base `/oide/` for `oide-dev.github.io/oide`. Holds the user guide, the extension
+  author guide, the security model and the FAQ; it links here for internals.
 ## Local commands
 
 ```

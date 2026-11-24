@@ -16,8 +16,9 @@ import { ModelsSection } from './ModelsSection';
 import { AppearanceSection, ArtifactsSection, KeysSection, PrivacySection, ProjectsSection } from './OtherSections';
 import { PermissionsSection } from './PermissionsSection';
 import { TechniquesSection } from './TechniquesSection';
+import { UpdatesSection } from './UpdatesSection';
 
-export type SectionId = 'cli' | 'models' | 'agents' | 'tech' | 'perms' | 'projects' | 'artifacts' | 'keys' | 'look' | 'privacy';
+export type SectionId = 'cli' | 'models' | 'agents' | 'tech' | 'perms' | 'projects' | 'artifacts' | 'keys' | 'look' | 'privacy' | 'updates';
 export interface LoadError {
   projectId?: string;
   file: string;
@@ -36,6 +37,7 @@ export const SECTIONS: Array<{ id: SectionId; label: string; keywords: string }>
   { id: 'keys', label: 'Keyboard shortcuts', keywords: 'keyboard shortcuts keys bindings' },
   { id: 'look', label: 'Appearance', keywords: 'appearance accent colour color theme' },
   { id: 'privacy', label: 'Privacy', keywords: 'privacy telemetry crash reports usage statistics' },
+  { id: 'updates', label: 'Updates', keywords: 'updates version upgrade channel stable beta check now release download install' },
 ];
 
 const isSection = (s: string | undefined): s is SectionId => SECTIONS.some((x) => x.id === s);
@@ -132,6 +134,8 @@ export default function SettingsScreen() {
             <KeysSection />
           ) : section === 'look' ? (
             <AppearanceSection settings={settings} />
+          ) : section === 'updates' ? (
+            <UpdatesSection settings={settings} />
           ) : (
             <PrivacySection settings={settings} />
           )}

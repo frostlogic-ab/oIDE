@@ -11,7 +11,7 @@ the `.oide/` footer note) and a scrolling main column (padding 22px 32px, conten
 the design's `.row` / `.rl` / `.rt` / `.rd` / `.sec` / `.inp` styles (`ui.tsx`: `Row`, `Rd`, `Sec`,
 `inp`). The section is the route param: `navigate('settings', { section: 'models' })`; clicking a
 section calls `replace('settings', { section })`. Ids: `cli`, `models`, `agents`, `tech`, `perms`,
-`projects`, `artifacts`, `keys`, `look`, `privacy`. Search filters the list by section label plus
+`projects`, `artifacts`, `keys`, `look`, `privacy`, `updates`. Search filters the list by section label plus
 the words of its rows (`SECTIONS[].keywords`); Enter opens the first match.
 
 `settings.loadErrors` (bad JSON or schema errors in the settings document or a project's `.oide/*.json`)
@@ -31,6 +31,7 @@ shows as an amber banner at the top of every section, and per project under Proj
 | Keyboard shortcuts | read-only list from `keymap.getBindings()` and `ACTION_LABELS` | none |
 | Appearance | accent radiogroup (four `ACCENT_OPTIONS` swatches, arrow keys) | `settings.update({ ui: { accent } })`; the settings store applies it |
 | Privacy | Share anonymous usage statistics (off by default) | `settings.update({ ui: { telemetry } })` |
+| Updates (M7) | Current version and state line, Channel (Stable / Beta), Check automatically, Check now with "Last checked …", an available-update card (notes, Download, progress bar, Restart to update with an inline confirm that running agents stop), Open release page when the build cannot install itself, the disabled reason otherwise | `updates.status`, `updates.check`, `updates.download`, `updates.install({ consent: true })`, `updates.changed` event, `settings.update({ updates: { channel / checkAutomatically } })` |
 
 ## Save and validation rules
 
@@ -76,3 +77,7 @@ shows as an amber banner at the top of every section, and per project under Proj
 `{ agents: { maxRunning: 5 } }` and refuses 99 with `aria-invalid`; adding a custom model sends the key
 to `settings.saveCustomModel`, then "Key stored" shows and the key is nowhere in the DOM; an empty form
 does not save.
+
+`UpdatesSection.test.tsx` (jsdom): channel saves `{ updates: { channel: 'beta' } }`; Check now → Download →
+progress → Restart to update only calls `updates.install({ consent: true })` after the inline confirm;
+unsigned builds show Open release page instead of Download; disabled builds explain why; errors use `role=alert`.

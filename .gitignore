@@ -13,3 +13,7 @@ Thumbs.db
 test-results/
 playwright-report/
 .vite/
+docs/site/.vitepress/cache/
+.compat/
+# Test fixture extensions ship prebuilt dist/ (no build step)
+!packages/extension-host/test/fixtures/*/dist/

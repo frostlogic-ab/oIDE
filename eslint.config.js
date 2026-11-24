@@ -17,6 +17,7 @@ export default tseslint.config(
       '**/test-results/**',
       '**/playwright-report/**',
       'docs/wiki/raw/**',
+      'docs/site/.vitepress/cache/**',
       '**/*.dc.html',
     ],
   },

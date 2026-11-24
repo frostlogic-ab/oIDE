@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Effort, Id, ModelStrategy, PermissionMode } from './agent.js';
+import { UpdateChannel } from './updates.js';
 
 export const Technique = z.object({
   id: Id,
@@ -83,6 +84,14 @@ export const Settings = z.object({
     accent: z.string().default('#7AA2F7'),
     telemetry: z.boolean().default(false),
   }),
+  /** Settings › Updates (M7). Defaulted as a whole so settings saved before M7 still parse. */
+  updates: z
+    .object({
+      channel: UpdateChannel.default('stable'),
+      /** Look for updates at startup and every few hours. Downloading and installing always need a click. */
+      checkAutomatically: z.boolean().default(true),
+    })
+    .default({ channel: 'stable', checkAutomatically: true }),
 });
 export type Settings = z.infer<typeof Settings>;
 

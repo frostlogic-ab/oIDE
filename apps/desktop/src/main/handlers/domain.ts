@@ -11,6 +11,7 @@ import { registerGitHandlers, registerReviewHandlers } from './git.js';
 import { registerCliHandlers, registerProjectHandlers } from './projects.js';
 import { registerSettingsHandlers } from './settings.js';
 import { registerTerminalHandlers } from './terminal.js';
+import { registerUpdateHandlers } from './updates.js';
 
 /** Every handler that does not need Electron directly (Electron pieces come via `services.platform`). */
 export function registerDomainHandlers(router: IpcRouter, services: Services, ctx: MainContext): void {
@@ -26,4 +27,5 @@ export function registerDomainHandlers(router: IpcRouter, services: Services, ct
   registerSettingsHandlers(router, services, ctx);
   registerExtensionHandlers(router, services, ctx);
   registerArtifactHandlers(router, services, ctx);
+  registerUpdateHandlers(router, services, ctx);
 }

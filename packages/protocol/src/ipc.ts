@@ -5,6 +5,7 @@ import { AgentEvent } from './events.js';
 import { CustomServer, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
 import { CommitInfo, FileDiff, FileNode, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
 import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settings.js';
+import { UpdateStatus } from './updates.js';
 
 /**
  * The IPC contract. Every renderer → main command is a request/response pair, validated with Zod
@@ -158,6 +159,13 @@ export const Commands = {
   'artifacts.readVersion': cmd(z.object({ id: Id, version: z.number().int().positive() }), z.object({ content: z.string() })),
   'artifacts.previewUrl': cmd(z.object({ id: Id }), z.object({ url: z.string() })),
 
+  // Auto-update (Settings › Updates). Download and install are separate, explicit user actions.
+  'updates.status': cmd(Void, UpdateStatus),
+  'updates.check': cmd(Void, UpdateStatus),
+  'updates.download': cmd(Void, UpdateStatus),
+  /** Quit and install the downloaded update. `consent: true` is the user's click; anything else is refused. */
+  'updates.install': cmd(z.object({ consent: z.literal(true) }), Ok),
+
   // Shell helpers
   'shell.openExternal': cmd(z.object({ url: z.string().url() }), Ok),
   'shell.revealPath': cmd(z.object({ path: z.string() }), Ok),
@@ -188,6 +196,7 @@ export const Events = {
   'artifacts.changed': z.object({ id: Id.optional() }),
   'notify': z.object({ level: z.enum(['info', 'warning', 'error']), message: z.string(), agentId: Id.optional() }),
   'command.invoke': z.object({ commandId: z.string() }),
+  'updates.changed': UpdateStatus,
 } as const;
 
 export type EventName = keyof typeof Events;

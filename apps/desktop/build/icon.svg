@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>oIDE</title>
+  <!-- Source of every app icon; rasterised by tools/icons/build-icons.mjs (pnpm icons). -->
+  <!-- Ground: rounded square in the app's ground colour. -->
+  <rect x="72" y="72" width="880" height="880" rx="196" ry="196" fill="#0E1013"/>
+  <rect x="72.5" y="72.5" width="879" height="879" rx="195.5" ry="195.5" fill="none" stroke="#232830" stroke-width="1"/>
+  <!-- Mark: rounded-square outline in the accent colour, with an "o" and a text cursor inside. -->
+  <rect x="268" y="268" width="488" height="488" rx="116" ry="116" fill="none" stroke="#7AA2F7" stroke-width="56"/>
+  <circle cx="452" cy="540" r="64" fill="none" stroke="#7AA2F7" stroke-width="44"/>
+  <rect x="566" y="400" width="44" height="226" rx="22" ry="22" fill="#7AA2F7"/>
+</svg>

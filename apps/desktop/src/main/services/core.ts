@@ -12,6 +12,7 @@ import { GitService, parcelWatch, type WatchFn } from './git.js';
 import type { Platform } from './platform.js';
 import { ProjectsService } from './projects.js';
 import type { TerminalService } from './terminals.js';
+import type { UpdaterService } from './updater.js';
 
 export interface Services {
   platform: Platform;
@@ -26,6 +27,8 @@ export interface Services {
   agents: AgentsService;
   git: GitService;
   extensions: ExtensionsService;
+  /** Auto-update (Electron only; set by services/index.ts, absent in plain Node). */
+  updates?: UpdaterService;
   /** Paths the user picked in a native dialog (only these may be imported / loaded as extensions). */
   picked: Set<string>;
   /** Notices raised before the window could show them (sent after load). */

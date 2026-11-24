@@ -47,6 +47,10 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: pnpm wiki:lint
 
+      - name: Licences (MIT-compatible, THIRD_PARTY_NOTICES.md current)
+        if: matrix.os == 'ubuntu-latest'
+        run: pnpm licenses:check
+
       - name: Build desktop
         run: pnpm --filter @oide/desktop build
 

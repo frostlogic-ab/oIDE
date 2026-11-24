@@ -108,6 +108,7 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
       return settings;
     },
     'usage.summary': () => fx.usage,
+    'updates.status': () => ({ state: 'disabled', currentVersion: '0.1.0-mock', channel: settings.updates.channel, disabledReason: 'Updates are off in development builds.', canInstall: false }),
     'extensions.installed': () => [],
     'shell.openExternal': ({ url }) => {
       window.open(url, '_blank', 'noopener');

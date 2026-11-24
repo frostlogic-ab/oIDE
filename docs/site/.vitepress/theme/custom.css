@@ -1,0 +1,53 @@
+/* oIDE tokens: accent #7AA2F7, link #9DBBFA, ground #0E1013, chrome #0B0D10, panel #111418, card #15181D. */
+:root {
+  --vp-c-brand-1: #3d6fd9;
+  --vp-c-brand-2: #5585ea;
+  --vp-c-brand-3: #7aa2f7;
+  --vp-c-brand-soft: rgba(122, 162, 247, 0.14);
+  --vp-font-family-base: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --vp-font-family-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+
+.dark {
+  --vp-c-bg: #0e1013;
+  --vp-c-bg-alt: #0b0d10;
+  --vp-c-bg-elv: #111418;
+  --vp-c-bg-soft: #15181d;
+  --vp-c-divider: #232830;
+  --vp-c-gutter: #0b0d10;
+  --vp-c-border: #343a44;
+  --vp-c-text-1: #e6e8eb;
+  --vp-c-text-2: #c9ced6;
+  --vp-c-text-3: #9aa3ae;
+  --vp-c-brand-1: #9dbbfa;
+  --vp-c-brand-2: #7aa2f7;
+  --vp-c-brand-3: #5585ea;
+  --vp-c-brand-soft: rgba(122, 162, 247, 0.16);
+  --vp-code-block-bg: #111418;
+  --vp-c-default-soft: #1e2430;
+  --vp-c-warning-1: #f2c078;
+  --vp-c-danger-1: #f08a8a;
+  --vp-c-tip-1: #7fc8a9;
+}
+
+.dark .VPNav,
+.dark .VPNavBar:not(.home.top) .content-body {
+  background-color: #0b0d10;
+}
+
+.VPHero .name .clip {
+  background: none;
+  -webkit-text-fill-color: #7aa2f7;
+  color: #7aa2f7;
+}
+
+.dark .VPButton.brand {
+  color: #0e1013;
+  background-color: #7aa2f7;
+  border-color: #7aa2f7;
+}
+
+.dark .VPButton.brand:hover {
+  background-color: #9dbbfa;
+  border-color: #9dbbfa;
+}

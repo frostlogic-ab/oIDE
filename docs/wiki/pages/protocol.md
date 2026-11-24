@@ -45,3 +45,7 @@ Fields added after the first cut (all optional or defaulted):
   `InstalledExtension.disabledProjects/disabledTools`, extension/custom IPC commands
   (`extensions.updates/update/addFromGit`, `custom.importSelected/setHeaderToken`) and the
   `extensions.hostState` event. See those packages' pages for meaning.
+- M7 release engineering (2026-11-24): `Settings.updates` (`channel` stable/beta, `checkAutomatically`;
+  defaulted as a whole so older settings parse), `updates.ts` (`UpdateChannel`, `UpdateState`, `UpdateStatus`),
+  IPC `updates.status/check/download/install` (install needs `{ consent: true }`) and the `updates.changed`
+  event. See [packaging](packaging.md).
