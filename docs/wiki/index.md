@@ -47,6 +47,12 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 - [pages/screen-marketplace.md](pages/screen-marketplace.md): Extension marketplace: categories, list and detail, install consent, updates, Add custom (URL, import, command/JSON, folder/git).
 - [pages/screen-settings.md](pages/screen-settings.md): Settings: Claude Code, Models (presets, versions, your models), Agents, Techniques, Permissions, Projects, shortcuts, accent, privacy; save-on-change rules and `.oide/` load errors.
 
+## Reviews
+
+- [pages/review-design.md](pages/review-design.md): design conformance review (2026-11-24): renderer vs the canvas per screen, 0 blocker / 5 major / 21 minor, with evidence and the file to fix.
+- [pages/review-security.md](pages/review-security.md): security review (2026-11-24): 2 critical, 5 high, 9 medium, 11 low findings, PoC tests in `test/security/` (`it.fails` until fixed) and the concrete fix for each.
+- [pages/review-conformance.md](pages/review-conformance.md): brief conformance and gates review (2026-11-24): traceability matrix per brief table, gate results (M1 passed with the real CLI 2.1.325), 1 blocker / 5 major / 10 minor; tests in `test/conformance/`.
+
 ## Decisions
 
 - [../adr/](../adr/): ADRs. 0001 node:sqlite, 0002 TS-source packages, 0003 @lydell/node-pty, 0004 artifact versions as numbered snapshots.

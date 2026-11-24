@@ -240,26 +240,30 @@ function SubagentCard({ row, ctx }: { row: Extract<TranscriptRow, { kind: 'subag
   const sub: SubagentInfo = info ?? { id: row.toolUseId, agentId: ctx.agentId, name, task: row.prompt, status, subagentType: row.subagentType };
   return (
     <div className={`flex flex-col border rounded-[10px] overflow-hidden bg-card ${status === 'needs-permission' ? 'border-warn-line' : 'border-line-2'}`}>
-      <div className="flex items-center gap-2 py-2 pl-1.5 pr-2.5 flex-wrap">
+      {/* One row at any width: nothing wraps mid-phrase; "routed as" gives way first (and drops
+          below 700px of session width), then the name truncates. */}
+      <div className="flex items-center gap-2 py-2 pl-1.5 pr-2.5 min-w-0">
         <button
           type="button"
           aria-expanded={open}
           onClick={toggle}
-          className="flex-1 min-w-[240px] flex items-center gap-2 border-0 bg-transparent px-1 py-0.5 text-ink text-left text-[12.5px]"
+          className="flex-1 min-w-0 flex items-center gap-2 border-0 bg-transparent px-1 py-0.5 text-ink text-left text-[12.5px] whitespace-nowrap overflow-hidden"
         >
-          <span aria-hidden="true" className="text-ink-3 w-2.5 text-[11px]">
+          <span aria-hidden="true" className="text-ink-3 w-2.5 text-[11px] shrink-0">
             {open ? '▾' : '▸'}
           </span>
           <span aria-hidden="true" className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: meta.color }} />
-          <span className="text-[11px] text-ink-3">Subagent</span>
-          <span className="font-semibold">{name}</span>
-          <span className="font-mono text-[10.5px] px-1.5 py-px rounded-[5px] bg-selected text-ink-2">{modelEffort(sub)}</span>
-          <span className="text-[11.5px] text-ink-3">routed as {routeLabel(sub)}</span>
+          <span className="text-[11px] text-ink-3 shrink-0 @max-[700px]:sr-only">Subagent</span>
+          <span className="font-semibold min-w-[4ch] truncate" title={name}>
+            {name}
+          </span>
+          <span className="font-mono text-[10.5px] px-1.5 py-px rounded-[5px] bg-selected text-ink-2 shrink-0">{modelEffort(sub)}</span>
+          <span className="text-[11.5px] text-ink-3 min-w-0 truncate shrink-[8] @max-[700px]:hidden">routed as {routeLabel(sub)}</span>
         </button>
-        <span className="text-[11.5px] whitespace-nowrap" style={{ color: meta.color }}>
+        <span className="text-[11.5px] whitespace-nowrap shrink-0" style={{ color: meta.color }}>
           {subagentStatusText(sub, ctx.now)}
         </span>
-        <Button size={28} className="!h-[26px] !px-[9px] !text-[11.5px]" onClick={() => ctx.onOpenSubagent(row.toolUseId)} aria-label={`Open subagent ${name}`}>
+        <Button size={28} className="!h-[26px] !px-[9px] !text-[11.5px] shrink-0" onClick={() => ctx.onOpenSubagent(row.toolUseId)} aria-label={`Open subagent ${name}`}>
           Open
         </Button>
       </div>

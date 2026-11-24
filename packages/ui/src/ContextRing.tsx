@@ -92,6 +92,8 @@ export interface ContextRingButtonProps
   /** `tile`: borderless 26px pill (Wall); `header`: bordered 30px pill with "Context N%" (Focus). */
   variant?: 'tile' | 'header';
   tooltip?: ReactNode;
+  /** Classes for the word "Context" in the header variant (e.g. hide it when the header is narrow). */
+  labelClassName?: string;
 }
 
 /** Clickable ring: opens the "Compact this session?" confirm. oIDE never compacts without it. */
@@ -100,6 +102,7 @@ export function ContextRingButton({
   subject,
   variant = 'tile',
   tooltip,
+  labelClassName,
   warnAt,
   dangerAt,
   className,
@@ -126,7 +129,8 @@ export function ContextRingButton({
         <span className="font-mono">{pct}%</span>
       ) : (
         <span>
-          Context <span className="font-mono">{pct}%</span>
+          <span className={labelClassName}>Context </span>
+          <span className="font-mono">{pct}%</span>
         </span>
       )}
     </button>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button, Dialog, Icon, LinkButton, Menu, Spinner, buttonClass, type MenuItem } from '@oide/ui';
+import { Button, Dialog, Icon, LinkButton, Menu, Spinner, buttonClass, cn, type MenuItem } from '@oide/ui';
 import type { AgentSummary, OverlapWarning, Project, WorktreeInfo } from '@oide/protocol';
 import { oide } from '../../lib/bridge';
 import { navigate } from '../../stores/router';
@@ -191,9 +191,18 @@ function WorktreeRow({
   ];
 
   return (
-    <li className="flex items-center gap-3 px-3.5 py-[9px] border-t border-[#1A1E24] flex-wrap">
+    // A fixed grid (one row at any width): the name column takes what is left and truncates;
+    // the status, diff and PR columns narrow below 1280px instead of pushing Review onto a new line.
+    <li
+      className={cn(
+        'grid items-center gap-x-3 max-[1279px]:gap-x-2.5 px-3.5 py-[9px] border-t border-[#1A1E24]',
+        showPr
+          ? 'grid-cols-[8px_minmax(0,1fr)_120px_130px_110px_auto] max-[1279px]:grid-cols-[8px_minmax(0,1fr)_100px_118px_84px_auto]'
+          : 'grid-cols-[8px_minmax(0,1fr)_120px_130px_auto] max-[1279px]:grid-cols-[8px_minmax(0,1fr)_100px_118px_auto]',
+      )}
+    >
       <span aria-hidden="true" className="w-2 h-2 rounded-full shrink-0" style={{ background: status.color }} />
-      <div className="flex-[1_1_260px] min-w-0 flex flex-col gap-0.5">
+      <div className="min-w-0 flex flex-col gap-0.5">
         {agent ? (
           <a
             href={`#focus/${agent.id}`}
@@ -208,14 +217,14 @@ function WorktreeRow({
         ) : (
           <span className="text-ink font-medium truncate">{name}</span>
         )}
-        <span className="font-mono text-[11px] text-ink-3 truncate">
+        <span className="font-mono text-[11px] text-ink-3 truncate" title={`${w.branch} · ${baseLabel(w)}`}>
           {w.branch} · {baseLabel(w)}
         </span>
       </div>
-      <span className="flex-[0_0_120px] text-[12px]" style={{ color: status.color }}>
+      <span className="text-[12px] truncate" style={{ color: status.color }} title={status.label}>
         {status.label}
       </span>
-      <span className="flex-[0_0_130px] font-mono text-[11.5px] text-ink-3">
+      <span className="font-mono text-[11.5px] text-ink-3 whitespace-nowrap overflow-hidden">
         {diff ? (
           <>
             {diff.files} {diff.files === 1 ? 'file' : 'files'} · {diff.additions > 0 && <span className="text-ok">+{diff.additions}</span>}{' '}
@@ -231,7 +240,7 @@ function WorktreeRow({
         )}
       </span>
       {showPr && (
-        <span className="flex-[0_0_110px] text-[12px]" style={{ color: pr.color }}>
+        <span className="text-[12px] truncate" style={{ color: pr.color }}>
           {w.pr?.url ? (
             <a href={w.pr.url} style={{ color: pr.color }} className="no-underline hover:underline" onClick={(e) => (e.preventDefault(), void openUrl(w.pr!.url!))}>
               {pr.label}
@@ -241,7 +250,7 @@ function WorktreeRow({
           )}
         </span>
       )}
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 justify-self-end">
         {w.agentId ? (
           <LinkButton
             href={`#review/${w.agentId}`}

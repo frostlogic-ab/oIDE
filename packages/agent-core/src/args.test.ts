@@ -155,9 +155,9 @@ describe('buildLaunch', () => {
   });
 
   it('extra CLI flags are shell-split safely and cannot override protocol flags', () => {
-    const settings = testSettings({ extraFlags: `--add-dir "C:\\My Docs" --fallback-model 'sonnet' --output-format text --dangerously-skip-permissions --model=opus $HOME` });
+    const settings = testSettings({ extraFlags: `--fallback-model 'sonnet' --name "My Docs" --output-format text --dangerously-skip-permissions --model=opus $HOME` });
     const p = buildLaunch(spec(), ctx({ settings }));
-    expect(p.args.slice(-5)).toEqual(['--add-dir', 'C:\\My Docs', '--fallback-model', 'sonnet', '$HOME']);
+    expect(p.args.slice(-5)).toEqual(['--fallback-model', 'sonnet', '--name', 'My Docs', '$HOME']);
     expect(p.args.filter((a) => a === '--output-format')).toHaveLength(1);
     expect(p.args).not.toContain('--dangerously-skip-permissions');
     expect(p.warnings.length).toBe(3);
@@ -179,8 +179,46 @@ describe('helpers', () => {
   });
   it('filterExtraFlags drops reserved flags with their values', () => {
     const w: string[] = [];
-    expect(filterExtraFlags('--session-id abc --verbose --resume xyz --add-dir d', w)).toEqual(['--verbose', '--add-dir', 'd']);
+    expect(filterExtraFlags('--session-id abc --verbose --resume xyz --name d', w)).toEqual(['--verbose', '--name', 'd']);
     expect(w).toHaveLength(2);
+  });
+  it('SEC-27: flags that would undo isolation are reserved, with all their values', () => {
+    const w: string[] = [];
+    const raw =
+      '--settings {"hooks":{}} --setting-sources user,project,local --strict-mcp-config --mcp-config a.json b.json --add-dir C:/ D:/ ' +
+      '--plugin-dir p --plugin-url https://x --tools Bash Edit --allowed-tools Bash --disallowedTools X --permission-mode bypassPermissions ' +
+      '--permission-prompt-tool none --dangerously-skip-permissions --allow-dangerously-skip-permissions --safe-mode --Add_Dir E:/ --verbose';
+    expect(filterExtraFlags(raw, w)).toEqual(['--verbose']);
+    expect(w.length).toBe(16);
+  });
+  it('SEC-02: untrusted projects get --setting-sources user and --strict-mcp-config; trusted ones do not', () => {
+    const u = buildLaunch(spec(), ctx({ trusted: false }));
+    expect(flagValue(u.args, '--setting-sources')).toBe('user');
+    expect(u.args).toContain('--strict-mcp-config');
+    expect(flagValue(u.args, '--mcp-config')).toBe('/app/agents/agt-1/mcp.json'); // oIDE's own server + allowed extension servers
+    const t = buildLaunch(spec(), ctx({ trusted: true }));
+    expect(t.args).not.toContain('--strict-mcp-config');
+    // Extra flags cannot add project settings back.
+    const back = buildLaunch(spec(), ctx({ trusted: false, settings: testSettings({ extraFlags: '--setting-sources user,project --settings x.json' }) }));
+    expect(back.args.filter((a) => a === '--setting-sources')).toHaveLength(1);
+    expect(back.args.filter((a) => a === '--settings')).toHaveLength(1);
+    // A CLI known to lack the flags refuses to start an untrusted agent.
+    const old = CliInfo.parse({ ...cli, features: { ...cli.features, 'setting-sources': false } });
+    expect(() => buildLaunch(spec(), ctx({ trusted: false, cli: old }))).toThrow(LaunchError);
+  });
+  it('SEC-12: edits to .oide/, .claude/ and .mcp.json always ask and are never pre-allowed', () => {
+    const settings = testSettings();
+    settings.permissions.alwaysAllowed = ['Edit(.oide/permissions.json)', 'Write(**/.claude/**)', 'Edit(src/**)'];
+    const p = buildLaunch(spec(), ctx({ settings }));
+    const extra = JSON.parse(flagValue(p.args, '--settings')!) as { permissions: { ask: string[] } };
+    expect(extra.permissions.ask).toEqual(expect.arrayContaining(['Edit(**/.oide/**)', 'Write(**/.claude/**)', 'Edit(**/.mcp.json)', 'MultiEdit(**/.oide/**)']));
+    const allow = flagValue(p.args, '--allowedTools')!.split(',');
+    expect(allow).toContain('Edit(src/**)');
+    expect(allow).not.toContain('Edit(.oide/permissions.json)');
+    expect(allow).not.toContain('Write(**/.claude/**)');
+  });
+  it('SEC-01: the agent env makes Windows skip the cwd when the CLI spawns git/node', () => {
+    expect(buildLaunch(spec(), ctx({ platform: 'win32' })).env.NoDefaultCurrentDirectoryInExePath).toBe('1');
   });
   it('allowListEnv never copies unknown keys', () => {
     expect(allowListEnv({ PATH: 'p', SECRET: 's', lc_ctype: 'x', https_proxy: 'h' })).toEqual({ PATH: 'p', lc_ctype: 'x', https_proxy: 'h' });

@@ -87,10 +87,19 @@ export class ExtensionRegistry {
     }
   }
 
-  /** Add or replace an installed extension (marketplace, folder or git). */
+  /**
+   * Add or replace an installed extension (marketplace, folder or git). A replacement must come
+   * from the same source (SEC-13): otherwise an unreviewed folder or git extension named like an
+   * installed marketplace one would take over its keychain secrets and team enablement. The user
+   * uninstalls the old one first, which deletes its secrets.
+   */
   async add(ext: InstalledExtension, loaded?: LoadedExtension): Promise<InstalledExtension> {
-    const prev = this.items.get(ext.id);
+    const prev = this.items.get(ext.id) ?? this.getByName(ext.name);
     if (prev?.source === 'builtin' && ext.source !== 'builtin') throw new Error(`${ext.name} is built in and cannot be replaced`);
+    if (prev && prev.source !== ext.source) throw new ExtensionConflictError(prev, ext);
+    if (prev && prev.id !== ext.id) throw new ExtensionConflictError(prev, ext);
+    // Two different folders (or git URLs) claiming one name are two different sources too.
+    if (prev && (ext.source === 'folder' || ext.source === 'git') && !samePath(prev.path, ext.path)) throw new ExtensionConflictError(prev, ext);
     this.items.set(ext.id, ext);
     if (loaded) this.loaded.set(ext.id, loaded);
     else this.loaded.delete(ext.id);
@@ -150,7 +159,9 @@ export class ExtensionRegistry {
   async enablement(ext: InstalledExtension, projectId: string): Promise<EnablementReason> {
     if (ext.disabledProjects.includes(projectId)) return 'disabled-in-project';
     if (ext.enabledProjects.includes(projectId)) return 'project';
-    const team = await this.teamRanges(projectId);
+    // `.oide/extensions.json` names marketplace extensions; an unreviewed folder or git extension
+    // that happens to share the name never gets turned on by it (SEC-13).
+    const team = ext.source === 'folder' || ext.source === 'git' ? null : await this.teamRanges(projectId);
     const range = team?.[ext.name];
     if (range !== undefined) {
       if (range === '' || range === '*' || satisfies(ext.version, range)) return 'team';
@@ -198,6 +209,29 @@ export class ExtensionRegistry {
     const list = this.list();
     for (const l of this.listeners) l(list);
   }
+}
+
+/** An add whose name is already taken by an extension from another source. */
+export class ExtensionConflictError extends Error {
+  constructor(
+    readonly existing: InstalledExtension,
+    readonly incoming: InstalledExtension,
+  ) {
+    super(`${existing.displayName} (${existing.name}) is already installed from ${sourceLabel(existing)}. Uninstall it first to add one from ${sourceLabel(incoming)}.`);
+    this.name = 'ExtensionConflictError';
+  }
+}
+
+function sourceLabel(e: InstalledExtension): string {
+  return e.source === 'marketplace' ? 'the marketplace' : e.source === 'builtin' ? 'oIDE' : e.source === 'git' ? 'a git repository' : `the folder ${e.path}`;
+}
+
+function samePath(a: string, b: string): boolean {
+  const n = (p: string) => {
+    const r = path.resolve(p);
+    return process.platform === 'win32' || process.platform === 'darwin' ? r.toLowerCase() : r;
+  };
+  return n(a) === n(b);
 }
 
 export interface DiscoveredBuiltin {

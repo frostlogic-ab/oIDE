@@ -7,6 +7,7 @@ export const C = {
   bad: 'var(--color-bad)',
   review: 'var(--color-review)',
   accent: 'var(--color-accent)',
+  /** ink-4: decorative only (dots, rules). Never for small text: 3.8:1 on a card. */
   muted: 'var(--color-ink-4)',
   dim: 'var(--color-ink-3)',
 } as const;
@@ -21,26 +22,26 @@ export interface StatusMeta {
 }
 
 export const AGENT_STATUS_META: Record<AgentStatus, StatusMeta> = {
-  queued: { label: 'Queued', color: C.muted, tone: 'muted' },
+  queued: { label: 'Queued', color: C.dim, tone: 'muted' },
   starting: { label: 'Starting', color: C.accent, tone: 'default' },
   running: { label: 'Running', color: C.ok, tone: 'default' },
   'needs-permission': { label: 'Needs permission', color: C.warn, tone: 'needs' },
   'has-question': { label: 'Has a question', color: C.warn, tone: 'needs' },
   'ready-for-review': { label: 'Ready for review', color: C.review, tone: 'review' },
   paused: { label: 'Paused', color: C.dim, tone: 'default' },
-  stopped: { label: 'Stopped', color: C.muted, tone: 'muted' },
+  stopped: { label: 'Stopped', color: C.dim, tone: 'muted' },
   'rate-limited': { label: 'Rate limited', color: C.warn, tone: 'needs' },
   error: { label: 'Error', color: C.bad, tone: 'error' },
   done: { label: 'Done', color: C.ok, tone: 'default' },
 };
 
 export const SUBAGENT_STATUS_META: Record<SubagentStatus, StatusMeta> = {
-  queued: { label: 'Queued', color: C.muted, tone: 'muted' },
+  queued: { label: 'Queued', color: C.dim, tone: 'muted' },
   running: { label: 'Running', color: C.accent, tone: 'default' },
   'needs-permission': { label: 'Needs permission', color: C.warn, tone: 'needs' },
   done: { label: 'Done', color: C.ok, tone: 'default' },
   error: { label: 'Error', color: C.bad, tone: 'error' },
-  stopped: { label: 'Stopped', color: C.muted, tone: 'muted' },
+  stopped: { label: 'Stopped', color: C.dim, tone: 'muted' },
 };
 
 export function agentStatusMeta(status: AgentStatus): StatusMeta {

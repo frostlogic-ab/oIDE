@@ -178,7 +178,7 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
             setMenuDismissed(false);
           }}
           onKeyDown={onKeyDown}
-          className="flex-1 min-w-0 resize-none border-0 outline-none bg-transparent text-ink text-[13.5px] leading-[20px] py-[5px] placeholder:text-ink-4 focus-visible:outline-none"
+          className="flex-1 min-w-0 resize-none border-0 outline-none bg-transparent text-ink text-[13.5px] leading-[20px] py-[5px] placeholder:text-ink-3 focus-visible:outline-none"
         />
         <button
           type="button"

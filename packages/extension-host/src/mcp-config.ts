@@ -69,6 +69,15 @@ export function secretEnvName(server: string, key: string): string {
   return `OIDE_MCP_${server.replace(/[^a-zA-Z0-9]/g, '_').toUpperCase()}_${key.replace(/[^a-zA-Z0-9_]/g, '_')}`;
 }
 
+/**
+ * The risk label oIDE uses for an extension tool. Folder and git extensions are unreviewed: their
+ * own `read` labels are never believed, so every tool asks first (SEC-15). Marketplace labels are
+ * cross-checked against the index at install; built-ins ship with oIDE.
+ */
+export function effectiveToolRisk(record: Pick<InstalledExtension, 'source'>, declared: 'read' | 'ask'): 'read' | 'ask' {
+  return record.source === 'folder' || record.source === 'git' ? 'ask' : declared;
+}
+
 export function customServerAppliesTo(server: CustomServer, projectId: string): boolean {
   return server.allProjects || server.projects.includes(projectId);
 }
@@ -102,7 +111,7 @@ export function buildMcpConfig(input: BuildMcpConfigInput): AgentMcpConfig {
       for (const [tool, t] of Object.entries(s.tools)) {
         const full = mcpToolName(name, tool);
         if (off.has(full)) deny.add(full);
-        else if (t.risk === 'read') allow.add(full);
+        else if (effectiveToolRisk(record, t.risk) === 'read') allow.add(full);
       }
     }
   }

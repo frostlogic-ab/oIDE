@@ -9,7 +9,7 @@ import { useSettings } from '../../stores/settings';
 import { toast } from '../../stores/ui';
 
 /** `.inp`: 34px, radius 8, line-3 border, card fill. */
-export const inp = 'h-[34px] px-2.5 rounded-md border border-line-3 bg-card text-ink text-[13px] outline-none focus:border-accent box-border min-w-0 placeholder:text-ink-4 disabled:opacity-50';
+export const inp = 'h-[34px] px-2.5 rounded-md border border-line-3 bg-card text-ink text-[13px] outline-none focus:border-accent box-border min-w-0 placeholder:text-ink-3 disabled:opacity-50';
 export const inpInvalid = '!border-bad';
 /** Small outline button (h30/32 in the design). */
 export const outlineBtn =

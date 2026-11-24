@@ -13,6 +13,9 @@ export function hardenApp(opts: { isAppUrl: (url: string) => boolean; dev: boole
   };
 
   const guard = (contents: WebContents) => {
+    // SEC-18: CSP's connect-src does not cover WebRTC; an artifact preview could otherwise leak
+    // data to a STUN/TURN host. oIDE uses no WebRTC, so UDP and non-proxied candidates are off.
+    contents.setWebRTCIPHandlingPolicy('disable_non_proxied_udp');
     contents.setWindowOpenHandler(({ url }) => {
       openIfAllowed(url);
       return { action: 'deny' };

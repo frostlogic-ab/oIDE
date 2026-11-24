@@ -25,7 +25,17 @@
 .oide-md hr { border: 0; border-top: 1px solid var(--color-line-2); margin: 14px 0; }
 .oide-md img { max-width: 100%; }
 
-/* Detail-pane preview: a smaller page so the first screenful fits in 190px. */
+/* Detail-pane preview: a smaller page so the first screenful fits in 190px. The fade (in the
+   preview box's raised colour) hides the line the fixed height cuts through. */
+.oide-md-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 36px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--color-raised) 85%);
+}
 .oide-md-compact { font-size: 11px; line-height: 1.5; padding: 10px 12px; }
 .oide-md-compact h1 { font-size: 14px; margin: 0 0 6px; }
 .oide-md-compact h2 { font-size: 12.5px; margin: 10px 0 4px; }

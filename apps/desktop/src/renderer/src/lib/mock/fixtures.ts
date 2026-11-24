@@ -122,7 +122,7 @@ const rawAgents = [
     baseRef: 'main',
     activity: ['Submitted for review'],
     contextUsed: 134_000,
-    diff: { files: 8, additions: 342, deletions: 58 },
+    diff: { files: 8, additions: 128, deletions: 24 },
     review: {
       agentId: 'a-webhook',
       summary: 'Added exponential backoff with a dead-letter queue. 18 tests pass.',

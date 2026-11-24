@@ -117,7 +117,7 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
             placeholder={mode === 'sessions' ? 'Type an agent name' : 'Spawn an agent, jump to a session, or run a command'}
-            className="flex-1 min-w-0 h-full border-0 outline-none bg-transparent text-ink text-[14px] placeholder:text-ink-4 focus-visible:outline-none"
+            className="flex-1 min-w-0 h-full border-0 outline-none bg-transparent text-ink text-[14px] placeholder:text-ink-3 focus-visible:outline-none"
           />
           <Kbd>Esc</Kbd>
         </div>

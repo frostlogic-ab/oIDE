@@ -369,6 +369,9 @@ export default function SpawnScreen() {
                 />
               </div>
               <div className="flex flex-col gap-2">
+                {/* One grid for every slot row: the pill groups share a column (sized to the
+                    widest, the orchestrator's with custom models) so the effort selects line up. */}
+                <div className={MODEL_GRID}>
                 {slotRows(form.kind).map((r) => (
                   <ModelRow
                     key={r.key}
@@ -381,6 +384,7 @@ export default function SpawnScreen() {
                     onChange={(patch) => setSlot(r.key, patch)}
                   />
                 ))}
+                </div>
                 <VersionsRow slots={form.slots} keys={slotRows(form.kind).map((r) => r.key)} onChange={(slots) => update({ slots })} />
                 {form.kind === 'routed' && (
                   <span className="text-[12px] text-ink-3 leading-[1.45]">
@@ -517,7 +521,7 @@ function NavLink({ onClick, children }: { onClick: () => void; children: ReactNo
   return (
     <a
       href="#settings"
-      className="text-[12px]"
+      className="text-[12px] underline underline-offset-2"
       onClick={(e) => {
         e.preventDefault();
         onClick();
@@ -529,6 +533,9 @@ function NavLink({ onClick, children }: { onClick: () => void; children: ReactNo
 }
 
 const SELECT = 'h-8 px-2 rounded-md border border-line-3 bg-chrome text-ink text-[12px] outline-none focus:border-accent';
+/** Label · model pills · effort, one shared grid (rows are subgrids). */
+const MODEL_GRID = 'grid grid-cols-[160px_max-content_max-content] items-center gap-x-2.5 gap-y-2';
+const MODEL_ROW = 'grid grid-cols-subgrid col-span-3 items-center justify-items-start';
 
 function ModelRow({
   label,
@@ -556,8 +563,8 @@ function ModelRow({
   ];
   if (!options.some((o) => o.value === value)) options.push({ value, label: slot.model });
   return (
-    <div role="group" aria-label={label} className="flex items-center gap-2.5 flex-wrap">
-      <span className="w-40 text-[12.5px] text-ink-2">{label}</span>
+    <div role="group" aria-label={label} className={MODEL_ROW}>
+      <span className="text-[12.5px] text-ink-2">{label}</span>
       <SegmentedControl
         label={`${label}: model`}
         variant="inset"

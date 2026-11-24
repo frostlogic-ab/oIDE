@@ -107,8 +107,20 @@ describe('MCP authorization', () => {
 
   it('falls back to a header token', async () => {
     const secrets = memorySecrets();
-    await saveHeaderToken(secrets, 's3', 'X-Api-Key', 'k');
+    await saveHeaderToken(secrets, 's3', 'X-Api-Key', 'k', `${base}/mcp`);
     expect(await new TokenSource({ serverId: 's3', url: `${base}/mcp`, secrets }).headers()).toEqual({ 'X-Api-Key': 'k' });
-    await expect(saveHeaderToken(secrets, 's3', 'bad header\n', 'k')).rejects.toThrow();
+    await expect(saveHeaderToken(secrets, 's3', 'bad header\n', 'k', `${base}/mcp`)).rejects.toThrow();
+  });
+
+  it('SEC-09: never attaches a stored token to another origin', async () => {
+    const secrets = memorySecrets();
+    await saveHeaderToken(secrets, 's4', 'Authorization', 'Bearer victim', 'https://mcp.example.com/mcp');
+    expect(await new TokenSource({ serverId: 's4', url: 'https://mcp.example.com/other', secrets }).headers()).toEqual({ Authorization: 'Bearer victim' });
+    const moved = new TokenSource({ serverId: 's4', url: 'https://attacker.example.net/mcp', secrets });
+    expect(await moved.headers()).toEqual({});
+    expect(await moved.refresh()).toBe(false);
+    // Credentials with no recorded origin are sent nowhere.
+    secrets.data.delete(oauthKeys.origin('s4'));
+    expect(await new TokenSource({ serverId: 's4', url: 'https://mcp.example.com/mcp', secrets }).headers()).toEqual({});
   });
 });

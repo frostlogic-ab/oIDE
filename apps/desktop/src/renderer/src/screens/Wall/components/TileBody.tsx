@@ -10,9 +10,15 @@ import { useSetting } from '../../../stores/settings';
 import { answerPermission, openPullRequest, resumeAgent, sendReply, type PermissionChoice } from '../actions';
 import { parseActivity, permissionView, tileBodyKind } from '../logic';
 
+/**
+ * The black box in the middle of a tile. The canvas draws the prompt boxes 92px tall
+ * (border-box) and the activity box 92px of content plus 8/10px padding (content-box, 108px
+ * outer) so five 1.6-leading activity lines fit whole.
+ */
 const BOX = 'mx-3 bg-chrome rounded-md h-[92px] box-border overflow-hidden';
+const ACTIVITY_BOX = 'mx-3 bg-chrome rounded-md h-[108px] box-border overflow-hidden';
 
-/** The 92px black box in the middle of a tile: activity, the permission prompt, the question, … */
+/** The black box in the middle of a tile: activity, the permission prompt, the question, … */
 export function TileBody({ agent }: { agent: AgentSummary }) {
   const kind = tileBodyKind(agent);
   switch (kind) {
@@ -84,7 +90,7 @@ export function TileBody({ agent }: { agent: AgentSummary }) {
 function QueuedBody() {
   const max = useSetting((s) => s.agents.maxRunning, 3);
   return (
-    <div className={`${BOX} p-2.5 flex flex-col gap-1.5 text-[12px] text-ink-2 leading-normal`}>
+    <div className={`${BOX} p-2.5 flex flex-col gap-1.5 text-[12px] text-ink-2 leading-normal opacity-80`}>
       <span>Waiting for a free slot.</span>
       <span className="text-ink-3">
         At most {max} agents run at once (Settings › Agents). This one starts when another finishes.
@@ -97,8 +103,8 @@ function ActivityBody({ agent }: { agent: AgentSummary }) {
   const live = isRunning(agent);
   const lines = parseActivity(agent.activity.slice(-5), agent.subagents, live);
   return (
-    <div className={`${BOX} px-2.5 py-2 font-mono text-[11.5px] leading-[1.6] text-ink-code`} aria-label="Latest activity">
-      {!lines.length && <div className="text-ink-4">{agent.status === 'starting' ? 'Starting claude…' : 'No activity yet'}</div>}
+    <div className={`${ACTIVITY_BOX} px-2.5 py-2 font-mono text-[11.5px] leading-[1.6] text-ink-code`} aria-label="Latest activity">
+      {!lines.length && <div className="text-ink-3">{agent.status === 'starting' ? 'Starting claude…' : 'No activity yet'}</div>}
       {lines.map((l, i) => {
         if (l.kind === 'result')
           return (
@@ -319,7 +325,7 @@ function ReplyBox({ agent }: { agent: AgentSummary }) {
         onChange={(e) => setText(e.target.value)}
         placeholder="Reply…"
         autoComplete="off"
-        className="flex-1 min-w-0 h-7 px-2.5 rounded-sm border border-warn-line bg-chrome text-ink text-[12px] outline-none focus:border-warn placeholder:text-ink-4"
+        className="flex-1 min-w-0 h-7 px-2.5 rounded-sm border border-warn-line bg-chrome text-ink text-[12px] outline-none focus:border-warn placeholder:text-ink-3"
       />
       <Button type="submit" variant="warn" disabled={busy || !text.trim()}>
         Send

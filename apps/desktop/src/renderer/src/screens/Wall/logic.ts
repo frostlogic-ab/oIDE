@@ -184,19 +184,35 @@ export function permissionView(req: PermissionRequest, subagents: SubagentInfo[]
 
 // ---------- mode badge ----------
 
+/** Same words as Spawn and Settings (MODE_OPTIONS), so a badge names the mode the user picked. */
 const MODE_BADGE: Record<PermissionMode, string> = {
   default: 'Manual',
-  acceptEdits: 'Edits',
-  plan: 'Plan',
+  acceptEdits: 'Edit automatically',
+  plan: 'Plan mode',
   auto: 'Auto',
   bypassPermissions: 'Bypass',
 };
 
+const MODE_TITLE: Record<PermissionMode, string> = {
+  default: 'Permission mode: Manual (asks before every edit)',
+  acceptEdits: 'Permission mode: Edit automatically (edits files without asking)',
+  plan: 'Permission mode: Plan (explores, then presents a plan first)',
+  auto: 'Permission mode: Auto (approves safe actions, pauses on risky ones)',
+  bypassPermissions: 'Permission mode: Bypass permissions (never asks)',
+};
+
+export interface ModeBadge {
+  label: string;
+  /** Tooltip / accessible description. */
+  title: string;
+  warn: boolean;
+}
+
 /** Badge for a tile whose mode differs from Settings › default mode. Bypass always shows (warning). */
-export function modeBadge(mode: PermissionMode, defaultMode: PermissionMode): { label: string; warn: boolean } | null {
-  if (mode === 'bypassPermissions') return { label: MODE_BADGE[mode], warn: true };
+export function modeBadge(mode: PermissionMode, defaultMode: PermissionMode): ModeBadge | null {
+  if (mode === 'bypassPermissions') return { label: MODE_BADGE[mode], title: MODE_TITLE[mode], warn: true };
   if (mode === defaultMode) return null;
-  return { label: MODE_BADGE[mode], warn: false };
+  return { label: MODE_BADGE[mode], title: MODE_TITLE[mode], warn: false };
 }
 
 // ---------- tile body ----------

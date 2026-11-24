@@ -21,9 +21,18 @@ export function ArtifactsAside() {
       invokeOr('artifacts.list', scope === 'all' ? {} : { projectId: scope }, []).then(
         (list) => {
           if (cancelled) return;
-          const top = [...list].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 3);
+          // Only artifacts of open projects (and global ones): a closed project's artifacts are
+          // not reachable from here.
+          const open = new Set(useProjects.getState().list.map((p) => p.id));
+          const top = [...list]
+            .filter((a) => !a.projectId || open.has(a.projectId))
+            .sort((a, b) => b.updatedAt - a.updatedAt)
+            .slice(0, 3);
           setItems(top);
-          if (!top.length) return;
+          if (!top.length) {
+            setUsedBy({});
+            return;
+          }
           void invokeOr('artifacts.uses', { ids: top.map((a) => a.id) }, {}).then(
             (uses) => {
               if (cancelled) return;
@@ -48,7 +57,7 @@ export function ArtifactsAside() {
       cancelled = true;
       off();
     };
-  }, [scope]);
+  }, [scope, projects]);
 
   return (
     <aside aria-label="Artifacts" className="w-[280px] shrink-0 hidden min-[1280px]:flex flex-col gap-3 px-4 py-[18px] bg-panel border-l border-line box-border overflow-y-auto">

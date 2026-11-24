@@ -124,8 +124,10 @@ export function ArtifactPreview({ artifactId, title, kind, content, forceInline,
   if (kind === 'design') return <DesignFrame artifactId={artifactId} title={title} html={content} forceInline={forceInline} scaled={compact} version={version} className={cn('w-full h-full', className)} />;
   if (kind === 'doc')
     return (
-      <div className={cn('w-full h-full overflow-auto', compact && 'overflow-hidden', className)}>
+      <div className={cn('relative w-full h-full overflow-auto', compact && 'overflow-hidden', className)}>
         <MarkdownView source={content} className={compact ? 'oide-md-compact' : undefined} />
+        {/* The compact preview is cut at a fixed height: fade the last line out instead of slicing it. */}
+        {compact && <div aria-hidden="true" className="oide-md-fade" />}
       </div>
     );
   return <WhiteboardSvg json={content} title={title} className={cn('w-full h-full', className)} />;

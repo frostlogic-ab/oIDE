@@ -337,7 +337,7 @@ function Banner({
       )}
       <a
         href={`#focus/${agent.id}`}
-        className={`text-[12px] no-underline hover:underline ${tone.link}`}
+        className={`text-[12px] underline underline-offset-2 ${tone.link}`}
         onClick={(e) => {
           e.preventDefault();
           navigate('focus', { agentId: agent.id });

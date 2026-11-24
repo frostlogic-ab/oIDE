@@ -185,10 +185,37 @@ export function displayOf(c: ImportedConfig | PublicImportedConfig): string {
   return c.kind === 'http' ? c.url : [c.command, ...c.args].map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(' ');
 }
 
+/** What goes over IPC: no env or header values, and secret-looking args and URL parts masked (SEC-24). */
 export function toPublic(c: ImportedConfig): PublicImportedConfig {
   return c.kind === 'http'
-    ? { kind: 'http', url: c.url, transport: c.transport, headerKeys: Object.keys(c.headers) }
-    : { kind: 'stdio', command: c.command, args: c.args, envKeys: Object.keys(c.env) };
+    ? { kind: 'http', url: redactUrl(c.url), transport: c.transport, headerKeys: Object.keys(c.headers) }
+    : { kind: 'stdio', command: c.command, args: redactArgs(c.args), envKeys: Object.keys(c.env) };
+}
+
+export const REDACTED = '***';
+const SECRET_NAME = /(api[-_]?key|apikey|token|secret|passw(or)?d|pwd|auth|credential|bearer|cookie|session|private[-_]?key|access[-_]?key|client[-_]?secret|sig(nature)?)/i;
+const TOKEN_SHAPE = /^(sk-|sk_|pk_|rk_|ghp_|gho_|ghu_|ghs_|github_pat_|glpat-|xox[abprs]-|AKIA|AIza|ya29\.|eyJ)[A-Za-z0-9._-]{8,}/;
+
+/** Mask the password in `scheme://user:pass@host` and every query value; keeps it a readable URL. */
+export function redactUrl(url: string): string {
+  let out = url.replace(/(\/\/[^/:@\s]*):[^@/\s]*@/g, `$1:${REDACTED}@`);
+  out = out.replace(/([?&][^=&#\s]+)=([^&#\s]*)/g, (_m, k: string) => `${k}=${REDACTED}`);
+  return out;
+}
+
+/** `--api-key=…`, `--token …`, `API_KEY=…`, URL credentials and token-shaped values come back masked. */
+export function redactArgs(args: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i] as string;
+    const prev = i > 0 ? (args[i - 1] as string) : '';
+    const eq = /^(-{0,2}[A-Za-z0-9_.-]+)=(.*)$/s.exec(a);
+    if (eq && SECRET_NAME.test(eq[1] as string)) out.push(`${eq[1]}=${REDACTED}`);
+    else if (/^--?[A-Za-z0-9_.-]+$/.test(prev) && !prev.includes('=') && SECRET_NAME.test(prev) && !a.startsWith('-')) out.push(REDACTED);
+    else if (TOKEN_SHAPE.test(a) || /^bearer\s+\S+/i.test(a)) out.push(REDACTED);
+    else out.push(/:\/\//.test(a) ? redactUrl(a) : a);
+  }
+  return out;
 }
 
 function isAlreadyAdded(name: string, c: ImportedConfig, existing: CustomServer[]): boolean {
@@ -227,7 +254,7 @@ export async function scanImportsFull(o: ScanOptions = {}): Promise<Array<Import
       const key = `${f.file}\0${s.scope ?? ''}\0${s.name}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ source, file: f.file, name: s.name, alreadyAdded: isAlreadyAdded(s.name, s.config, existing), kind: s.config.kind, display: displayOf(s.config), config: toPublic(s.config), full: s.config });
+      out.push({ source, file: f.file, name: s.name, alreadyAdded: isAlreadyAdded(s.name, s.config, existing), kind: s.config.kind, display: displayOf(toPublic(s.config)), config: toPublic(s.config), full: s.config });
     }
   }
   return out;

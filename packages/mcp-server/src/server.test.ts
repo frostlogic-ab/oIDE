@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -77,8 +78,14 @@ describe('OideMcpServer', () => {
     const { reg } = await setup();
     const cfg = JSON.parse(readFileSync(reg.mcpConfigPath, 'utf8'));
     expect(reg.mcpConfigPath.replace(/\\/g, '/')).toMatch(/agents\/agent-1\/mcp\.json$/);
-    expect(cfg.mcpServers.oide).toEqual({ type: 'http', url: reg.url, headers: { 'X-Oide-Secret': reg.secret } });
+    // SEC-16: no secret in the file; the CLI expands the placeholders from this agent's env only.
+    expect(cfg.mcpServers.oide).toEqual({ type: 'http', url: reg.url, headers: { 'X-Oide-Secret': '${OIDE_MCP_HANDSHAKE}' } });
+    expect(reg.env.OIDE_MCP_HANDSHAKE).toBe(reg.secret);
+    expect(readFileSync(reg.mcpConfigPath, 'utf8')).not.toContain(reg.secret);
     expect(cfg.mcpServers.github.url).toBe('http://127.0.0.1:9/mcp/github');
+    expect(cfg.mcpServers.github.headers['X-Oide-Secret']).toBe('${OIDE_MCP_HEADER_0}');
+    expect(reg.env.OIDE_MCP_HEADER_0).toBe('other');
+    expect(readFileSync(reg.mcpConfigPath, 'utf8')).not.toContain('"other"');
     expect(reg.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp\/agent-1$/);
     expect(reg.secret).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -119,7 +126,59 @@ describe('OideMcpServer', () => {
     for (let i = 0; i < 100 && rec.requests.length < 2; i++) await new Promise((r) => setTimeout(r, 10));
     server.answer(rec.requests[1]!.requestId, { requestId: rec.requests[1]!.requestId, behavior: 'deny', message: 'No thanks' });
     expect(JSON.parse(textOf(await call2))).toEqual({ behavior: 'deny', message: 'No thanks' });
+
+    // SEC-22: the renderer cannot rewrite the input of tools whose prompt does not edit it.
+    const call3 = client.callTool({ name: 'permission_prompt', arguments: { tool_name: 'Write', input: { file_path: 'a.txt', content: 'x' } } });
+    for (let i = 0; i < 100 && rec.requests.length < 3; i++) await new Promise((r) => setTimeout(r, 10));
+    const id3 = rec.requests[2]!.requestId;
+    server.answer(id3, { requestId: id3, behavior: 'allow', always: false, updatedInput: { file_path: '../../.bashrc', content: 'evil' } });
+    expect(JSON.parse(textOf(await call3))).toEqual({ behavior: 'allow', updatedInput: { file_path: 'a.txt', content: 'x' } });
     await client.close();
+  });
+
+  it('caps the prompts one agent may have open at once (SEC-16)', async () => {
+    const { reg, rec } = await setup();
+    const client = await connect(reg.url, reg.secret);
+    const calls = Array.from({ length: 6 }, (_, i) => client.callTool({ name: 'permission_prompt', arguments: { tool_name: 'Bash', input: { command: `echo ${i}` } } }));
+    for (let i = 0; i < 200 && rec.requests.length < 5; i++) await new Promise((r) => setTimeout(r, 10));
+    const settled = await Promise.race([Promise.any(calls), new Promise((r) => setTimeout(() => r('none'), 2000))]);
+    expect(rec.requests).toHaveLength(5);
+    expect(JSON.parse(textOf(settled)).behavior).toBe('deny');
+    await client.close();
+  });
+
+  it('launches secret-bearing stdio servers through the launcher; secrets never reach the file or agent env (SEC-11)', async () => {
+    const appDataDir = mkdtempSync(join(tmpdir(), 'oide-mcp-'));
+    const server = new OideMcpServer({ appDataDir, nodeBinary: process.execPath });
+    servers.push(server);
+    await server.start();
+    const out = join(appDataDir, 'child-env.txt');
+    const script = `require('fs').writeFileSync(${JSON.stringify(out)}, JSON.stringify({ key: process.env.API_KEY, arg: process.argv[1], agent: process.env.OIDE_MCP_HANDSHAKE ?? null }))`;
+    const reg = await server.registerAgent(
+      'agent-1',
+      recorder().handlers,
+      { db: { type: 'stdio', command: process.execPath, args: ['-e', script, '--', '--token=${OIDE_MCP_DB_TOKEN}'], env: { API_KEY: '${OIDE_MCP_DB_API_KEY}' } } },
+      { secretEnv: { OIDE_MCP_DB_API_KEY: 'sk-db-123', OIDE_MCP_DB_TOKEN: 'tok-9', OIDE_MCP_OTHER_X: 'keep' } },
+    );
+    const file = readFileSync(reg.mcpConfigPath, 'utf8');
+    expect(file).not.toContain('sk-db-123');
+    expect(file).not.toContain('tok-9');
+    expect(reg.env).not.toHaveProperty('OIDE_MCP_DB_API_KEY');
+    expect(reg.env).not.toHaveProperty('OIDE_MCP_DB_TOKEN');
+    expect(reg.env.OIDE_MCP_OTHER_X).toBe('keep'); // not used by a launched server: stays (e.g. project .mcp.json)
+    const entry = JSON.parse(file).mcpServers.db as { command: string; args: string[] };
+    expect(entry.command).toBe(process.execPath);
+    const run = (env: Record<string, string>) =>
+      new Promise<number | null>((resolve) => {
+        const c = spawn(entry.command, entry.args, { env: { ...process.env, ...env }, stdio: 'ignore' });
+        c.on('exit', (code) => resolve(code));
+      });
+    // Another agent's secret (or none) is refused.
+    expect(await run({ OIDE_MCP_HANDSHAKE: 'wrong' })).not.toBe(0);
+    expect(await run(reg.env)).toBe(0);
+    expect(JSON.parse(readFileSync(out, 'utf8'))).toEqual({ key: 'sk-db-123', arg: '--token=tok-9', agent: null });
+    // One-time: a second fetch with the same nonce is refused.
+    expect(await run(reg.env)).not.toBe(0);
   });
 
   it('pending prompts deny on shutdown', async () => {

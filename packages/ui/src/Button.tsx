@@ -57,9 +57,16 @@ interface CommonProps {
 export type ButtonProps = CommonProps & ButtonHTMLAttributes<HTMLButtonElement>;
 export type LinkButtonProps = CommonProps & AnchorHTMLAttributes<HTMLAnchorElement> & { href: string };
 
-export function buttonClass(variant: ButtonVariant = 'secondary', size: ButtonSize = 28, className?: string): string {
+export function buttonClass(
+  variant: ButtonVariant = 'secondary',
+  size: ButtonSize = 28,
+  className?: string,
+  /** Underline the label: borderless links (the canvas leaves inline `<a>` underlined). */
+  underline = false,
+): string {
   return cn(
-    'inline-flex items-center justify-center whitespace-nowrap no-underline box-border select-none',
+    'inline-flex items-center justify-center whitespace-nowrap box-border select-none',
+    underline ? 'underline underline-offset-2' : 'no-underline',
     'disabled:opacity-50 disabled:pointer-events-none transition-[background-color,filter,border-color]',
     VARIANT[variant],
     SIZE[size],
@@ -91,13 +98,16 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   );
 });
 
-/** A link styled as a button (the canvas uses <a> for navigation buttons). */
+/**
+ * A link styled as a button (the canvas uses <a> for navigation buttons). A borderless (`ghost`)
+ * link keeps its underline, as on the canvas, so it is not told apart by colour alone (WCAG 1.4.1).
+ */
 export const LinkButton = forwardRef<HTMLAnchorElement, LinkButtonProps>(function LinkButton(
   { variant = 'secondary', size = 28, icon, kbd, className, children, ...rest },
   ref,
 ) {
   return (
-    <a ref={ref} className={buttonClass(variant, size, cn('hover:text-inherit', className))} {...rest}>
+    <a ref={ref} className={buttonClass(variant, size, cn('hover:text-inherit', className), variant === 'ghost')} {...rest}>
       <Inner icon={icon} kbd={kbd} variant={variant} size={size}>
         {children}
       </Inner>

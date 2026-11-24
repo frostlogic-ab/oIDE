@@ -31,21 +31,23 @@ export function StatusBar() {
     };
   }, [byId]);
 
-  const sessions = usage?.sessions ?? derived.sessions;
-  const worktrees = usage?.worktrees ?? derived.worktrees;
-  const subagents = usage?.subagentsActive ?? derived.subagentsActive;
-  const projectsOpen = usage?.projectsOpen ?? projects.length;
+  // Counts come from the live stores (the same `countAgents` the header uses), so the status bar
+  // never disagrees with the header. `usage` supplies only what the renderer cannot count:
+  // tokens today and the last rate-limit reset time.
+  const { sessions, worktrees, subagentsActive: subagents } = derived;
+  const projectsOpen = projects.length;
   const resetAt = usage?.rateLimitResetAt ?? derived.rateLimitResetAt;
   const limited = resetAt !== undefined && resetAt > Date.now();
 
   return (
     <footer className="h-status shrink-0 flex items-center gap-4 px-3.5 bg-chrome border-t border-line text-ink-3 text-[11.5px] whitespace-nowrap overflow-hidden">
       <CliStatus health={cliHealth(info, detected)} version={info?.version} />
-      <span>
+      {/* The left text gives way first when the bar is narrow (1100px with a rate limit). */}
+      <span className="min-w-0 truncate" data-testid="status-counts">
         {plural(sessions, 'session')} · {plural(worktrees, 'worktree')} · {subagents} {subagents === 1 ? 'subagent' : 'subagents'} active
       </span>
       <div className="flex-1" />
-      <div role="group" aria-label="Usage" className="h-[22px] flex items-center gap-1">
+      <div role="group" aria-label="Usage" className="h-[22px] flex items-center gap-1 shrink-0">
         {/* Plan meter only from the CLI's own rate_limit_event utilization (never a guessed %). */}
         {derived.planUsage && <PlanUsageMeter usage={derived.planUsage} />}
         {usage && (
@@ -64,7 +66,7 @@ export function StatusBar() {
           </Tooltip>
         )}
       </div>
-      <span>{plural(projectsOpen, 'project')} open</span>
+      <span className="shrink-0">{plural(projectsOpen, 'project')} open</span>
     </footer>
   );
 }
@@ -76,7 +78,7 @@ function CliStatus({ health, version }: { health: ReturnType<typeof cliHealth>; 
       <button
         type="button"
         onClick={() => openSignIn().catch((err: unknown) => toast(ipcErrorMessage(err), 'error'))}
-        className="flex items-center gap-1.5 border-0 bg-transparent p-0 text-warn text-[11.5px] hover:underline"
+        className="flex items-center gap-1.5 shrink-0 border-0 bg-transparent p-0 text-warn text-[11.5px] hover:underline"
       >
         <StatusDot color="var(--color-warn)" size={6} />
         Sign in to Claude Code CLI
@@ -91,7 +93,7 @@ function CliStatus({ health, version }: { health: ReturnType<typeof cliHealth>; 
     unknown: { color: 'var(--color-ink-4)', text: 'Claude Code CLI status unknown' },
   }[health];
   return (
-    <span className="flex items-center gap-1.5" title={version ? `claude ${version}` : undefined}>
+    <span className="flex items-center gap-1.5 shrink-0" title={version ? `claude ${version}` : undefined}>
       <StatusDot color={meta.color} size={6} />
       {meta.text}
     </span>

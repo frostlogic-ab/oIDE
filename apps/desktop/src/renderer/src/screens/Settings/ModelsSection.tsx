@@ -18,6 +18,8 @@ import { H1, Pills, Rd, Row, Sec, inp, outlineBtn, savePatch } from './ui';
 
 const FAMILY_LABEL: Record<string, string> = { haiku: 'Haiku', sonnet: 'Sonnet', opus: 'Opus', fable: 'Fable' };
 const EFFORT_LABEL: Record<Effort, string> = { low: 'low', medium: 'medium', high: 'high', xhigh: 'x-high', max: 'max' };
+/** Canvas: 32px, 12px, chrome-free card field. Not `inp` (34px / 13px). */
+const EFFORT_SELECT = 'h-8 px-2 rounded-md border border-line-3 bg-card text-ink text-[12px] outline-none focus:border-accent box-border';
 const EFFORTS: Array<{ value: Effort; label: string }> = [
   { value: 'low', label: 'Effort: Low' },
   { value: 'medium', label: 'Effort: Medium' },
@@ -193,12 +195,13 @@ export function ModelsSection({ settings, builtIns }: { settings: Settings; buil
               })}
             </div>
           </div>
-          <div className="flex flex-col gap-2">
+          {/* One grid: the pill groups share a column so the effort selects line up (as on Spawn). */}
+          <div className="grid grid-cols-[170px_max-content_max-content] items-center gap-x-2.5 gap-y-2">
             {slotsOf(preset.strategy).map(({ key, label, slot }) => (
-              <div key={key} className="flex items-center gap-2.5 flex-wrap">
-                <span className="w-[170px] text-[12.5px] text-ink-2">{label}</span>
+              <div key={key} role="group" aria-label={label} className="grid grid-cols-subgrid col-span-3 items-center justify-items-start">
+                <span className="text-[12.5px] text-ink-2">{label}</span>
                 <Pills label={`${label} model`} options={key === 'lead' ? modelOptions : familyOptions} value={slot.model.toLowerCase().startsWith(CUSTOM_PREFIX) ? slot.model : slot.model.toLowerCase()} onChange={(m) => setSlot(key, { model: m })} />
-                <select aria-label={`${label} effort`} className={cn(inp, 'h-8 text-[12px]')} value={slot.effort ?? 'medium'} onChange={(e) => setSlot(key, { effort: e.target.value as Effort })}>
+                <select aria-label={`${label} effort`} className={EFFORT_SELECT} value={slot.effort ?? 'medium'} onChange={(e) => setSlot(key, { effort: e.target.value as Effort })}>
                   {EFFORTS.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}

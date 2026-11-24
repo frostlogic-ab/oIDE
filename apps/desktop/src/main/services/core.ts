@@ -117,7 +117,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     agents: { list: () => agents.list(), send: (id, text) => agents.send(id, { kind: 'text', text }) },
     readArtifact: async (id) => {
       const { meta, content } = await artifacts.read(id);
-      return { id: meta.id, title: meta.title, kind: meta.kind, content, version: meta.version };
+      return { id: meta.id, title: meta.title, kind: meta.kind, content, version: meta.version, ...(meta.projectId ? { projectId: meta.projectId } : {}) };
     },
   });
   agents.extensions = extensions;
@@ -212,8 +212,12 @@ const MIME: Record<string, string> = {
   '.woff': 'font/woff',
 };
 
-/** CSP for artifact previews: inline scripts/styles of the artifact itself, no network at all. */
-export const ARTIFACT_CSP = "default-src 'none'; script-src 'unsafe-inline' oide-artifact:; style-src 'unsafe-inline' oide-artifact:; img-src oide-artifact: data: blob:; font-src oide-artifact: data:; media-src oide-artifact: data: blob:; connect-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'";
+/**
+ * CSP for artifact previews: inline scripts/styles of the artifact itself, no network at all.
+ * `'self'` (not the whole `oide-artifact:` scheme) so one artifact cannot load another's scripts
+ * (SEC-18). WebRTC is not covered by CSP; the session's WebRTC policy turns it off (hardening.ts).
+ */
+export const ARTIFACT_CSP = "default-src 'none'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline' 'self'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'";
 
 /**
  * Resolve `oide-artifact://<id>/<path>` to a file inside that artifact's folder, or null. Refuses
@@ -234,8 +238,20 @@ export function resolveArtifactUrl(artifacts: ArtifactStore, url: string): { fil
   } catch {
     return null;
   }
-  const rel = decodeURIComponent(u.pathname).replace(/^\/+/, '');
-  if (!rel || rel.split(/[\\/]/).some((seg) => seg === '..' || seg === '.versions') || rel === 'artifact.json') return null;
+  let rel: string;
+  try {
+    rel = decodeURIComponent(u.pathname).replace(/^\/+/, '');
+  } catch {
+    return null;
+  }
+  // SEC-17: Windows and macOS file systems ignore case (and Windows trailing dots/spaces), so the
+  // deny checks compare a normalised form, and run again on the real path below.
+  const fold = (s: string) => s.toLowerCase().replace(/[. ]+$/, '');
+  const denied = (p: string) => {
+    const segs = p.split(/[\\/]/).filter(Boolean).map(fold);
+    return segs.some((seg) => seg === '..' || seg === '.versions') || (segs.length === 1 && segs[0] === 'artifact.json');
+  };
+  if (!rel || rel.includes('\0') || denied(rel)) return null;
   const candidate = resolve(dir, rel);
   let real: string;
   try {
@@ -244,7 +260,7 @@ export function resolveArtifactUrl(artifacts: ArtifactStore, url: string): { fil
     return null;
   }
   const r = relative(dir, real);
-  if (!r || r.startsWith('..') || r.includes(`..${sep}`) || resolve(dir, r) !== real) return null;
+  if (!r || r.startsWith('..') || r.includes(`..${sep}`) || resolve(dir, r) !== real || denied(r)) return null;
   if (!statSync(real).isFile()) return null;
   return { file: real, mime: MIME[extname(real).toLowerCase()] ?? 'application/octet-stream' };
 }

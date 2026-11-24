@@ -152,3 +152,53 @@ Electron, `.cmd` shims with multi-line args run their Node target), protocol (`A
 [desktop-shell](pages/desktop-shell.md), [testing](pages/testing.md), [storage](pages/storage.md),
 [extensions](pages/extensions.md). Tests: `test/integration/main-services.test.ts` (6) and
 `apps/desktop/e2e/agents.spec.ts` (3).
+
+## [2026-11-24] review | Design conformance
+Adversarial check of the renderer (dev:web, mock bridge) against the nine canvas screens, rendered to
+static pages with a small DCLogic runtime and compared side by side at 1440 and 1100×700, with
+computed-style measurements, a contrast walk, accessible-name and ARIA-role checks and keyboard flows.
+0 blockers, 5 major, 21 minor. Majors: global `line-height: 1.5` (canvas uses `normal`, every row
+grows), Wall tile bodies 16px short (`box-border` on a content-box 92px, activity lines cut in half),
+"Queued" label at 2.9:1, Focus broken at the 1100×700 minimum, Focus agent list names cut to ~14
+characters. Frame metrics, ARIA labelling and J/K/N/Y/D/Esc/Ctrl+K/Shift+Tab all pass. Page:
+[review-design](pages/review-design.md).
+
+## [2026-11-24] review | Security
+
+Adversarial security review before open-source release: [review-security](pages/review-security.md).
+2 critical (Windows cwd binary planting of `git`/`gh`/`node` from an opened repo; untrusted projects
+still get the CLI's own `.claude/settings.json` hooks and `.mcp.json` servers because `-p` skips the
+CLI trust dialog), 5 high (repo git config exec via oIDE's git calls; renderer-to-exec paths:
+`custom.probeCommand`, `terminal.create` command, `extensions.addFromGit`, cliPath/custom servers),
+9 medium, 11 low. `pnpm audit --prod`: no known vulnerabilities. PoC tests in `test/security/`
+(`it.fails` until fixed). No product code changed.
+
+## [2026-11-24] review | Brief conformance and gates
+
+Brief conformance review: [review-conformance](pages/review-conformance.md). Gates: build, typecheck,
+lint (0 errors), vitest (402 pass), e2e (9 pass), `electron-builder --dir` (packaged exe launches and runs
+an agent) all pass. **M1 passed with the real CLI 2.1.325** on the services layer (haiku: Bash prompt
+reached oIDE, approved, result 42, stop, restart, `--resume`, follow-up answered from memory). M3 fails:
+"Merge worktree into main locally" ignores uncommitted worktree changes, toasts "Merged", and cleanup
+"Right away" deletes the worktree (blocker B1). Also: extension UI contribution points not wired, toasts
+cover Review actions, stale status bar, e2e launch misses built-in extensions. 1 blocker / 5 major /
+10 minor. Tests: `test/conformance/real-cli.test.ts` (opt-in `OIDE_REAL_CLI=1`),
+`test/conformance/review-merge.test.ts` (`it.fails`). No product code changed.
+
+## [2026-11-24] build | Security fixes (extensions)
+
+Fixed the extension and custom-tool findings of [review-security](pages/review-security.md):
+SEC-04, SEC-06, SEC-07 (extension and custom parts), SEC-09 (custom server tokens), SEC-10,
+SEC-13, SEC-15, SEC-23 and SEC-24; SEC-14 is copy and docs only (accepted risk for enforcement).
+New `apps/desktop/src/main/security/confirm.ts` (`confirmNative`, Cancel default, plain Node
+answers no, `OIDE_E2E_CONFIRM` for unpackaged e2e). Native confirmations before a command probe, a
+stdio save or import, newly pre-allowed custom tools, a git clone, and the first enable of a folder
+or git extension. Registry refuses a same-name extension from another source; team files never
+enable folder or git extensions. Custom server credentials are bound to their origin; changed
+commands drop their env secrets. Each agent's proxy secret opens only its own servers. Folder and
+git extension tools always ask. Extension `artifacts.read` is project-scoped and plain settings use
+`extensions:<name>:<key>`. Import scan output masks secret-looking args and URL parts. Checked on
+Electron 45.4.1 that utilityProcess ignores `--permission`, so capabilities stay unenforced; the
+Marketplace copy, [security](pages/security.md), [extensions](pages/extensions.md) and the
+extension-api README now say so. Tests: `test/security/extension-confirm.test.ts` (new),
+SEC-04 and SEC-13 PoCs flipped to `it`, plus oauth, import-scan and registry unit tests.

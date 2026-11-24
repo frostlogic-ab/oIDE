@@ -12,7 +12,6 @@ export const C = {
   review: '#9DBBFA',
   bad: '#F08A8A',
   ink3: '#9AA3AE',
-  ink4: '#6B7584',
   ink: '#E6E8EB',
 };
 
@@ -63,12 +62,12 @@ export function statusView(status: AgentStatus | undefined, orphaned = false): {
   if (status === 'queued') return { label: 'Queued', color: C.ink3 };
   if (status === 'paused') return { label: 'Paused', color: C.ink3 };
   if (status === 'done') return { label: 'Done', color: C.ok };
-  return { label: 'Stopped', color: C.ink4 };
+  return { label: 'Stopped', color: C.ink3 };
 }
 
 /** "No PR", "Ready to open", "Draft PR #18", "PR #42 open". */
 export function prView(pr: WorktreeInfo['pr'], status: AgentStatus | undefined): { label: string; color: string } {
-  if (!pr) return status === 'ready-for-review' ? { label: 'Ready to open', color: C.review } : { label: 'No PR', color: C.ink4 };
+  if (!pr) return status === 'ready-for-review' ? { label: 'Ready to open', color: C.review } : { label: 'No PR', color: C.ink3 };
   const n = pr.number !== undefined ? ` #${pr.number}` : '';
   switch (pr.state.toLowerCase()) {
     case 'draft':
@@ -76,7 +75,7 @@ export function prView(pr: WorktreeInfo['pr'], status: AgentStatus | undefined):
     case 'merged':
       return { label: `Merged${n}`, color: C.ok };
     case 'closed':
-      return { label: `Closed${n}`, color: C.ink4 };
+      return { label: `Closed${n}`, color: C.ink3 };
     default:
       return { label: `PR${n} open`, color: C.review };
   }

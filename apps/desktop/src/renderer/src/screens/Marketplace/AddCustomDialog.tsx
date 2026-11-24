@@ -398,10 +398,8 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
 
   const footer = (
     <>
-      <span className="flex-1 min-w-0 text-[12px] text-ink-3 flex items-center gap-2">
-        <Badge tone="warn" className="shrink-0">not reviewed</Badge>
-        <span>Custom tools aren't reviewed by the marketplace. Only add ones you trust.</span>
-      </span>
+      {/* One line, as drawn: the "not reviewed" badge lives on the detail and in the review step. */}
+      <span className="flex-1 min-w-0 text-[12px] text-ink-3">Custom tools aren't reviewed by the marketplace. Only add ones you trust.</span>
       <Button size={36} variant="secondary" onClick={close}>
         Cancel
       </Button>
@@ -444,7 +442,7 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
                     id={urlId}
                     data-autofocus
                     type="url"
-                    className={cn(inputClass, 'flex-1 font-mono text-[12.5px]')}
+                    className={cn(inputClass, 'flex-1')}
                     placeholder="https://mcp.example.com/mcp"
                     value={url}
                     aria-describedby={`${urlId}-hint`}
@@ -806,7 +804,10 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
   );
 }
 
-/** Declared capabilities, shown for consent (not enforced, open question 12). */
+/**
+ * Declared capabilities, shown for consent. Not enforced (SEC-14): Electron 45's utilityProcess
+ * ignores Node's `--permission` flags and the RunAsNode fuse is off, so the copy must never imply it.
+ */
 export function Capabilities({ caps }: { caps: { network: string[]; spawn: boolean; fs?: string[] } }) {
   const rows: string[] = [
     ...caps.network.map((h) => `Network: ${h}`),
@@ -825,7 +826,9 @@ export function Capabilities({ caps }: { caps: { network: string[]; spawn: boole
           ))}
         </ul>
       )}
-      <span className="text-[11.5px] text-ink-3">Shown so you can decide; oIDE does not enforce them yet.</span>
+      <span className="text-[11.5px] text-ink-3">
+        What the extension says it uses. oIDE does not enforce this: its code runs as you, with the same access to your files, network and programs.
+      </span>
     </div>
   );
 }

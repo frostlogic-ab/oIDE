@@ -82,7 +82,7 @@ export default function SettingsScreen() {
           onKeyDown={(e) => {
             if (e.key === 'Enter' && visible[0]) go(visible[0].id);
           }}
-          className="h-[34px] px-2.5 mb-2.5 rounded-md border border-line-3 bg-card text-ink text-[13px] outline-none focus:border-accent placeholder:text-ink-4"
+          className="h-[34px] px-2.5 mb-2.5 rounded-md border border-line-3 bg-card text-ink text-[13px] outline-none focus:border-accent placeholder:text-ink-3"
         />
         <nav aria-label="Settings" className="flex flex-col gap-0.5">
           {visible.map((s) => (

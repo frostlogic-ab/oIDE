@@ -6,7 +6,7 @@
  */
 const DEFAULT_HOSTS = [
   'github.com',
-  'githubusercontent.com',
+  // Not githubusercontent.com: anyone can host content there (SEC-20).
   'gitlab.com',
   'bitbucket.org',
   'claude.ai',

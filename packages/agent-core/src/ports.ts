@@ -90,8 +90,18 @@ export interface AgentToolHandlers {
 }
 
 export interface PermissionBroker {
-  /** Create the agent's endpoint and write `<app-data>/agents/<id>/mcp.json`. */
-  registerAgent(agentId: string, handlers: AgentToolHandlers, extraServers?: Record<string, McpServerEntry>, options?: { projectId?: string }): Promise<{ mcpConfigPath: string }>;
+  /**
+   * Create the agent's endpoint and write `<app-data>/agents/<id>/mcp.json`. Called on every
+   * launch. `secretEnv` holds custom-server secrets for `${VAR}` placeholders; the broker keeps what
+   * it can out of the agent env (stdio launcher, SEC-11) and returns in `env` what the agent process
+   * must carry (its own MCP secret for the header placeholder, SEC-16, plus leftovers).
+   */
+  registerAgent(
+    agentId: string,
+    handlers: AgentToolHandlers,
+    extraServers?: Record<string, McpServerEntry>,
+    options?: { projectId?: string; secretEnv?: Record<string, string> },
+  ): Promise<{ mcpConfigPath: string; env?: Record<string, string> }>;
   /** Deny the agent's pending prompts and drop its endpoint. */
   unregisterAgent(agentId: string): Promise<void>;
   /** Resolve a pending prompt. Returns false unless `requestId` is exactly a pending id. */

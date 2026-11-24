@@ -21,7 +21,9 @@ export interface AgentListProps {
 /** Mini wall (Focus.dc.html, 216px): the other agents stay visible; the current one shows its tree. */
 export const AgentList = memo(function AgentList({ agents, currentId, subagentId, projectName, warnAt, dangerAt, onBack, onSelect, onSelectSubagent, labels }: AgentListProps) {
   return (
-    <aside aria-label="Other agents" className="w-[216px] shrink-0 flex flex-col gap-1.5 px-2.5 py-3 bg-panel border-r border-line box-border overflow-y-auto">
+    // The list scrolls; the keyboard hints stay pinned at the bottom (visible at 700px tall).
+    <aside aria-label="Other agents" className="w-[216px] shrink-0 flex flex-col bg-panel border-r border-line box-border min-h-0">
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1.5 px-2.5 pt-3 pb-1.5">
       <a
         href="#wall"
         onClick={(e) => {
@@ -43,8 +45,8 @@ export const AgentList = memo(function AgentList({ agents, currentId, subagentId
           </li>
         ))}
       </ul>
-      <div className="flex-1" />
-      <div className="flex flex-col gap-1.5 p-2 text-[11.5px] text-ink-3">
+      </div>
+      <div className="shrink-0 flex flex-col gap-1.5 px-4.5 pt-2 pb-5 text-[11.5px] text-ink-3">
         <span className="flex justify-between">
           Next agent <Kbd>{labels.next}</Kbd>
         </span>
@@ -66,9 +68,12 @@ function AgentCard({ agent, current, project, warnAt, dangerAt, onSelect }: { ag
   const used = contextFraction(agent.contextUsed, agent.contextWindow);
   const body = (
     <>
-      <span className="flex items-center gap-1.5 font-semibold text-[12.5px] min-w-0">
-        <span aria-hidden="true" className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: meta.color }} />
-        <span className="flex-1 min-w-0 truncate">{agent.title}</span>
+      {/* Titles wrap to two lines (as on the canvas) so every agent stays identifiable at 216px. */}
+      <span className="flex items-start gap-1.5 font-semibold text-[12.5px] leading-[1.25] min-w-0">
+        <span aria-hidden="true" className="w-[7px] h-[7px] rounded-full shrink-0 mt-[4px]" style={{ background: meta.color }} />
+        <span className="flex-1 min-w-0 line-clamp-2 break-words" title={agent.title}>
+          {agent.title}
+        </span>
         <ContextMeter used={used} warnAt={warnAt} dangerAt={dangerAt} />
       </span>
       {current ? (

@@ -124,13 +124,15 @@ const SidebarAgent = memo(function SidebarAgent({ agentId }: { agentId: string }
       type="button"
       onClick={select}
       aria-current={focused ? 'true' : undefined}
+      title={title}
       className={cn(
-        'flex items-center gap-2 py-[5px] pr-1.5 pl-8 rounded-sm border-0 text-left text-[13px]',
+        'flex items-start gap-2 py-[5px] pr-1.5 pl-8 rounded-sm border-0 text-left text-[13px] leading-[1.3]',
         focused ? 'bg-selected text-ink' : 'bg-transparent text-ink-2 hover:bg-raised',
       )}
     >
-      {status && <StatusDot status={status} size={7} />}
-      <span className="truncate">{title}</span>
+      {/* Full titles wrap to two lines (the canvas lists short names; ours are the agent's goal). */}
+      {status && <StatusDot status={status} size={7} className="mt-[5px]" />}
+      <span className="line-clamp-2 min-w-0 break-words">{title}</span>
     </button>
   );
 });

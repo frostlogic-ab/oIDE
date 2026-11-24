@@ -26,7 +26,10 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
     void invokeOr('settings.techniques', { projectId }, []).then((all) => {
       if (!live) return;
       // "All projects" edits the global list; a project shows the techniques stored in its .oide/techniques.json.
-      setList(projectId ? all.filter((t) => t.scope === 'project') : all.filter((t) => t.scope !== 'project'));
+      const next = projectId ? all.filter((t) => t.scope === 'project') : all.filter((t) => t.scope !== 'project');
+      setList(next);
+      // As on the canvas, the first technique opens expanded so its editor is visible.
+      setOpen(next[0]?.id ?? '');
     });
     return () => {
       live = false;

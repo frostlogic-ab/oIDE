@@ -226,7 +226,7 @@ export default function ReviewScreen() {
               {root && file.status !== 'deleted' && (
                 <a
                   href="#files"
-                  className="text-[12px] text-link no-underline hover:text-link-hover"
+                  className="text-[12px] text-link underline underline-offset-2 hover:text-link-hover"
                   onClick={(e) => {
                     e.preventDefault();
                     navigate('files', { root, path: file.path });

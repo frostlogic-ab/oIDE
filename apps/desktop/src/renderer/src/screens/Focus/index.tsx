@@ -49,6 +49,8 @@ export default function FocusScreen() {
   const agentId = route.screen === 'focus' ? route.params.agentId : undefined;
   const subagentId = route.screen === 'focus' ? route.params.subagentId : undefined;
   const agent = useAgent(agentId);
+  // A subagent id the agent does not have (stale link, mistyped id) falls back to the lead view.
+  const unknownSub = !!agent && !!subagentId && !agent.subagents.some((s) => s.id === subagentId);
   const scope = useScope((s) => s.scope);
   const inScope = useAgentsInScope(scope);
   const list = useMemo(() => {
@@ -63,6 +65,10 @@ export default function FocusScreen() {
   const allowBypass = useSetting((s) => s.claude.allowBypass, false);
   const hasAuto = useCli((s) => s.info?.features['mode:auto']);
   const { replace, navigate } = useRouter.getState();
+
+  useEffect(() => {
+    if (unknownSub && agentId) replace('focus', { agentId });
+  }, [unknownSub, agentId, replace]);
 
   const labels = {
     next: useShortcutLabel('agent.next'),
@@ -115,7 +121,7 @@ export default function FocusScreen() {
     <FocusBody
       key={agent.id}
       agent={agent}
-      subagentId={subagentId}
+      subagentId={unknownSub ? undefined : subagentId}
       list={list}
       projectName={projectName}
       warnAt={warnAt}
@@ -239,7 +245,8 @@ function FocusBody({ agent, subagentId, list, projectName, warnAt, dangerAt, lab
         onSelectSubagent={onSelectSub}
         labels={labels}
       />
-      <main className="flex-[999_1_560px] min-w-0 min-h-0 flex flex-col" aria-label={sub ? `Subagent ${sub.name}` : agent.title}>
+      {/* A size container: the header and the permission prompt adapt to the session width. */}
+      <main className="@container flex-[999_1_560px] min-w-0 min-h-0 flex flex-col" aria-label={sub ? `Subagent ${sub.name}` : agent.title}>
         {sub ? (
           <SubagentHeader agent={agent} sub={sub} now={now} onLead={() => onSelectSub(undefined)} onStop={() => stopSub(sub.id)} stopRequested={stopRequested.has(sub.id)} />
         ) : (

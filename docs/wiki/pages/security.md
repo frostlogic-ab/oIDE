@@ -88,7 +88,12 @@ Only one agent at a time may hold the project folder (`conflict`).
 - Custom stdio MCP server env values stay in the keychain; mcp.json has `${OIDE_MCP_<SERVER>_<KEY>}`
   placeholders and the values are added to that agent's env at spawn (`SettingsProvider.extraEnv`).
 - Remote MCP servers with OAuth or header tokens go through the loopback proxy (127.0.0.1, per-agent
-  secret issued once per agent, revoked when the agent is removed); tokens never leave main.
+  secret issued once per agent, revoked when the agent is removed); tokens never leave main. An
+  agent's secret opens only the remote servers in that agent's own config (others answer 403).
+- Stored server credentials are bound to the origin they were entered for (`mcp:<id>/origin`): a
+  `custom.save` that moves the URL to another origin deletes them, and the proxy's `TokenSource`
+  attaches nothing when the origins differ. A changed stdio command drops its stored env values
+  unless new ones come in the same call.
 
 ## Extensions and custom tools
 
@@ -97,10 +102,26 @@ Only one agent at a time may hold the project folder (`conflict`).
   refused without consent (`consent_required`).
 - Host code runs in one Electron utility process per extension (`out/main/host-process.js`), only
   for extensions that are on somewhere, with an allow-listed env; secrets are scoped per extension.
+  This is process separation, **not a sandbox**: the host has full Node (files, network, child
+  processes) as the user. Declared `capabilities` are consent text only. Electron 45's
+  utilityProcess accepts `--permission` in `execArgv` but does not enable Node's permission model
+  (checked on 45.4.1), and the RunAsNode fuse is off, so there is no enforcing fallback yet.
 - Folder extensions (unreviewed) only from a folder picked in the dialog; developer-mode reload only
-  for those.
+  for those. Git extensions are cloned only after a native confirmation that names the URL.
+- The first time a folder or git extension is turned on, main shows a native confirmation listing
+  what will run (host code, MCP server and language server command lines). `.oide/extensions.json`
+  never turns on a folder or git extension.
+- An installed name cannot be replaced by an extension from another source (or another folder):
+  uninstall first, which deletes its `ext:<name>/` secrets.
+- Custom tools: `custom.probeCommand`, saving or importing a stdio server, and changing its command
+  each need a native confirmation in main that shows the exact command line and env variable names.
+  A probe confirmation covers saving that same command within 15 minutes.
 - Tool risk labels: `read` tools pre-allowed, `ask` tools always prompt, turned-off tools disallowed;
-  names normalized like the CLI does (verified, see [cli-integration](cli-integration.md)).
+  names normalized like the CLI does (verified, see [cli-integration](cli-integration.md)). Folder
+  and git extensions' own `read` labels are ignored (their tools always ask). A custom server's tool
+  becomes pre-allowed only after a native confirmation naming it.
+- Native confirmations go through `security/confirm.ts` (`confirmNative`): Cancel is the default,
+  plain Node answers no, and only unpackaged builds honour `OIDE_E2E_CONFIRM=accept|deny`.
 
 ## Custom model test ("Test connection")
 

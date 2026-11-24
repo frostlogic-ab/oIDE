@@ -73,7 +73,7 @@ export function ToolRows({ tools, onChange, readOnlyRisk, heading = 'Tools agent
         {tools.map((t, i) => (
           <li key={t.name} className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md bg-panel border border-line">
             {onChange ? <CheckButton checked={t.enabled} onChange={(v) => set(i, { enabled: v })} label={`Allow ${t.name}`} /> : null}
-            <span className={cn('flex-1 min-w-0 font-mono text-[12px] truncate', t.enabled ? 'text-ink' : 'text-ink-4')}>{t.name}</span>
+            <span className={cn('flex-1 min-w-0 font-mono text-[12px] truncate', t.enabled ? 'text-ink' : 'text-ink-3')}>{t.name}</span>
             {t.description && <span className="text-[11.5px] text-ink-3 truncate max-w-[45%]">{t.description}</span>}
             <RiskPill risk={t.risk} toolName={t.name} onToggle={onChange && !readOnlyRisk ? () => set(i, { risk: t.risk === 'read' ? 'ask' : 'read' }) : undefined} />
           </li>

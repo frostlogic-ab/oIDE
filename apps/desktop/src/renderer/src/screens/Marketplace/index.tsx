@@ -185,7 +185,7 @@ export default function MarketplaceScreen() {
               placeholder="Search agent tools, views, themes"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="flex-1 min-w-0 border-0 outline-none bg-transparent text-ink text-[13px] placeholder:text-ink-4"
+              className="flex-1 min-w-0 border-0 outline-none bg-transparent text-ink text-[13px] placeholder:text-ink-3"
             />
           </div>
           <label htmlFor="msort" className="text-[12px] text-ink-3">
@@ -417,7 +417,7 @@ function Detail({ item, busy, projects, onInstall, onUpdate, onRemove, onEdit, o
                   }
                 />
               ) : null}
-              <span className={cn('flex-1 min-w-0 truncate', t.enabled === false ? 'text-ink-4' : 'text-ink')} title={t.description}>
+              <span className={cn('flex-1 min-w-0 truncate', t.enabled === false ? 'text-ink-3' : 'text-ink')} title={t.description}>
                 {t.name}
               </span>
               <span className="font-sans whitespace-nowrap" style={{ color: RISK_COLOR[t.risk] }}>

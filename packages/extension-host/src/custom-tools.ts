@@ -13,7 +13,7 @@ import { ENGINE_VERSION } from './manifest.js';
 import { normalizeEntry as normalize, scanImportsFull, type ImportedConfig, type ScanOptions } from './import-scan.js';
 import type { CustomServerRepository, FetchFn, MaybePromise, OpenExternal, ProjectRef, SecretStore } from './interfaces.js';
 import { customEnvSecretKey } from './mcp-config.js';
-import { authorize, oauthKeys, saveHeaderToken, TokenSource } from './oauth.js';
+import { authorize, credentialKeys, originOf, saveHeaderToken, TokenSource } from './oauth.js';
 
 export interface ProbedTool {
   name: string;
@@ -241,10 +241,51 @@ export async function writeProjectMcpJson(root: string, name: string, entry: Rec
   await rename(tmp, file);
 }
 
+/** One server in a confirmation request: exactly what would run, and which tools skip the prompt. */
+export interface ConfirmServer {
+  name: string;
+  /** stdio servers: the program and its arguments, exactly as they will be spawned. */
+  command?: string;
+  args?: string[];
+  /** Names (never values) of the env variables passed to the command. */
+  envKeys?: string[];
+  /** Remote servers. */
+  url?: string;
+  /** Tools this save newly lets agents call without asking (`risk: 'read'`). */
+  preAllowed: string[];
+}
+
+export interface ConfirmRequest {
+  /** `probe`: start the command once now; `save` / `import`: agents start it from now on. */
+  kind: 'probe' | 'save' | 'import';
+  servers: ConfirmServer[];
+}
+
+/** Thrown when the user declines a confirmation. `code` maps to the IPC error code. */
+export class ConfirmDeclinedError extends Error {
+  readonly code = 'forbidden';
+  constructor(message = 'Cancelled: nothing was run or saved.') {
+    super(message);
+    this.name = 'ConfirmDeclinedError';
+  }
+}
+
+/** A command that was confirmed for a probe counts as confirmed for a save this long. */
+const PROBE_CONFIRM_TTL_MS = 15 * 60_000;
+
+const commandKey = (command: string, args: string[]) => JSON.stringify([command, ...args]);
+
 export interface CustomToolsOptions {
   repo: CustomServerRepository;
   secrets: SecretStore;
   openExternal: OpenExternal;
+  /**
+   * Native confirmation in the main process (SEC-04, SEC-07, SEC-15): before a command is probed,
+   * before a stdio command is saved or changed (agents run it), and before tools become
+   * pre-allowed. Resolve false (or throw) to refuse. Omitted: no confirmation (package tests).
+   */
+  confirm?(req: ConfirmRequest): MaybePromise<boolean>;
+  now?: () => number;
   /** Resolve a project id to its folder (for `.mcp.json`). */
   project(projectId: string): MaybePromise<ProjectRef | undefined>;
   /** Open projects, for the import scan. */
@@ -260,7 +301,19 @@ export interface CustomToolsOptions {
  * Secrets go to the SecretStore only.
  */
 export class CustomTools {
+  /** Commands the user confirmed for a probe, by `commandKey`, with the time. */
+  private readonly probed = new Map<string, number>();
+
   constructor(private readonly o: CustomToolsOptions) {}
+
+  private now(): number {
+    return (this.o.now ?? Date.now)();
+  }
+
+  private async ask(req: ConfirmRequest): Promise<void> {
+    if (!this.o.confirm || !req.servers.length) return;
+    if (!(await this.o.confirm(req))) throw new ConfirmDeclinedError();
+  }
 
   list(): MaybePromise<CustomServer[]> {
     return this.o.repo.list();
@@ -270,7 +323,10 @@ export class CustomTools {
     return probeUrl(url, { ...(headers ? { headers } : {}), ...(this.o.fetch ? { fetch: this.o.fetch } : {}) });
   }
 
-  probeCommand(command: string, args: string[] = [], env: Record<string, string> = {}): Promise<ProbeCommandResult> {
+  /** Runs the command once, after the user confirmed exactly this command line (SEC-04). */
+  async probeCommand(command: string, args: string[] = [], env: Record<string, string> = {}): Promise<ProbeCommandResult> {
+    await this.ask({ kind: 'probe', servers: [{ name: command, command, args, envKeys: Object.keys(env), preAllowed: [] }] });
+    this.probed.set(commandKey(command, args), this.now());
     return probeCommand(command, args, env);
   }
 
@@ -286,7 +342,7 @@ export class CustomTools {
     const existing = await this.o.repo.list();
     const projects = (await this.o.openProjects?.()) ?? [];
     const full = await scanImportsFull({ ...this.o.scan, existing, projects: projects.map((p) => ({ name: p.name, root: p.root })) });
-    const out: CustomServer[] = [];
+    const picked: Array<{ server: CustomServer; env: Record<string, string>; headers: Record<string, string> }> = [];
     for (const it of items) {
       const hit = full.find((c) => c.file === it.file && c.name === it.name);
       if (!hit) continue;
@@ -302,14 +358,24 @@ export class CustomTools {
         reviewed: false as const,
       };
       if (c.kind === 'stdio') {
-        out.push(await this.save(CustomServer.parse({ ...base, transport: { kind: 'stdio', command: c.command, args: c.args, envKeys: Object.keys(c.env) } }), c.env));
+        picked.push({ server: CustomServer.parse({ ...base, transport: { kind: 'stdio', command: c.command, args: c.args, envKeys: Object.keys(c.env) } }), env: c.env, headers: {} });
       } else {
         const headerKeys = Object.keys(c.headers);
-        const server = await this.save(CustomServer.parse({ ...base, transport: { kind: 'http', url: c.url, auth: headerKeys.length ? 'header' : 'none' } }), {});
-        const auth = headerKeys.find((k) => /^authorization$/i.test(k)) ?? headerKeys[0];
-        if (auth) await saveHeaderToken(this.o.secrets, server.id, auth, c.headers[auth] as string);
-        out.push(server);
+        picked.push({ server: CustomServer.parse({ ...base, transport: { kind: 'http', url: c.url, auth: headerKeys.length ? 'header' : 'none' } }), env: {}, headers: c.headers });
       }
+    }
+    // One confirmation for every command the import would let agents start (SEC-07).
+    await this.ask({ kind: 'import', servers: picked.flatMap(({ server: s }) => (s.transport.kind === 'stdio' ? [{ name: s.name, command: s.transport.command, args: s.transport.args, envKeys: s.transport.envKeys, preAllowed: [] }] : [])) });
+    const out: CustomServer[] = [];
+    for (const p of picked) {
+      const server = await this.saveConfirmed(p.server, p.env);
+      const t = server.transport;
+      if (t.kind === 'http') {
+        const headerKeys = Object.keys(p.headers);
+        const auth = headerKeys.find((k) => /^authorization$/i.test(k)) ?? headerKeys[0];
+        if (auth) await saveHeaderToken(this.o.secrets, server.id, auth, p.headers[auth] as string, t.url);
+      }
+      out.push(server);
     }
     return out;
   }
@@ -317,16 +383,38 @@ export class CustomTools {
   /**
    * Save a server. `secrets` are env values (stdio) by env var name; they go to the keychain and
    * the record only keeps their names.
+   *
+   * Asks first (SEC-07, SEC-15) when the save would start a new or changed stdio command, or would
+   * newly let tools run without asking. A changed command or URL never inherits the stored
+   * secrets of the old one (SEC-09): they are deleted unless new values come in the same call.
    */
   async save(input: CustomServer, secrets: Record<string, string> = {}): Promise<CustomServer> {
-    let server = CustomServer.parse(input);
+    const server = CustomServer.parse(input);
+    const prev = (await this.o.repo.list()).find((s) => s.id === server.id);
+    const t = server.transport;
+    const prevReadTools = new Set(prev ? prev.tools.filter((x) => x.risk === 'read' && x.enabled).map((x) => x.name) : []);
+    const preAllowed = server.tools.filter((x) => x.risk === 'read' && x.enabled && !prevReadTools.has(x.name)).map((x) => x.name);
+    const execChanged = t.kind === 'stdio' && !sameCommand(prev, t.command, t.args);
+    const probedAt = t.kind === 'stdio' ? this.probed.get(commandKey(t.command, t.args)) : undefined;
+    const recentlyProbed = probedAt !== undefined && this.now() - probedAt < PROBE_CONFIRM_TTL_MS;
+    if ((execChanged && !recentlyProbed) || preAllowed.length) {
+      const one: ConfirmServer = t.kind === 'stdio' ? { name: server.name, command: t.command, args: t.args, envKeys: [...new Set([...t.envKeys, ...Object.keys(secrets)])], preAllowed } : { name: server.name, url: t.url, preAllowed };
+      await this.ask({ kind: 'save', servers: [one] });
+    }
+    if (t.kind === 'stdio') this.probed.delete(commandKey(t.command, t.args));
+    return this.saveConfirmed(server, secrets, prev);
+  }
+
+  private async saveConfirmed(input: CustomServer, secrets: Record<string, string>, prev?: CustomServer): Promise<CustomServer> {
+    let server = input;
+    prev ??= (await this.o.repo.list()).find((s) => s.id === server.id);
     if (server.transport.kind === 'stdio') {
       const keys = new Set([...server.transport.envKeys, ...Object.keys(secrets)]);
       for (const k of keys) if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) throw new Error(`Invalid env variable name: ${k}`);
       server = { ...server, transport: { ...server.transport, envKeys: [...keys] } };
       for (const [k, v] of Object.entries(secrets)) await this.o.secrets.set(customEnvSecretKey(server.id, k), v);
     }
-    const prev = (await this.o.repo.list()).find((s) => s.id === server.id);
+    await this.dropMovedSecrets(prev, server, secrets);
     if (server.savedTo === 'project-mcp-json') {
       for (const pid of server.projects) {
         const p = await this.o.project(pid);
@@ -346,6 +434,21 @@ export class CustomTools {
     return server;
   }
 
+  /** SEC-09: secrets belong to the command or origin they were entered for. */
+  private async dropMovedSecrets(prev: CustomServer | undefined, next: CustomServer, fresh: Record<string, string>): Promise<void> {
+    if (!prev) return;
+    const p = prev.transport;
+    const n = next.transport;
+    if (p.kind === 'stdio') {
+      const moved = n.kind !== 'stdio' || !sameCommand(prev, n.command, n.args);
+      const kept = n.kind === 'stdio' ? new Set(n.envKeys) : new Set<string>();
+      for (const k of p.envKeys) if ((moved || !kept.has(k)) && !(k in fresh)) await this.o.secrets.delete(customEnvSecretKey(prev.id, k));
+    }
+    if (p.kind === 'http' && (n.kind !== 'http' || originOf(n.url) !== originOf(p.url))) {
+      for (const key of credentialKeys(prev.id)) await this.o.secrets.delete(key);
+    }
+  }
+
   async remove(id: string): Promise<void> {
     const prev = (await this.o.repo.list()).find((s) => s.id === id);
     if (!prev) return;
@@ -356,7 +459,7 @@ export class CustomTools {
       }
     }
     if (prev.transport.kind === 'stdio') for (const k of prev.transport.envKeys) await this.o.secrets.delete(customEnvSecretKey(id, k));
-    for (const key of [oauthKeys.tokens(id), oauthKeys.client(id), oauthKeys.discovery(id), oauthKeys.header(id)]) await this.o.secrets.delete(key);
+    for (const key of credentialKeys(id)) await this.o.secrets.delete(key);
     await this.o.repo.remove(id);
   }
 
@@ -372,7 +475,7 @@ export class CustomTools {
   async setHeaderToken(id: string, header: string, token: string): Promise<void> {
     const server = (await this.o.repo.list()).find((s) => s.id === id);
     if (!server || server.transport.kind !== 'http') throw new Error('Not a remote server');
-    await saveHeaderToken(this.o.secrets, id, header, token);
+    await saveHeaderToken(this.o.secrets, id, header, token, server.transport.url);
     if (server.transport.auth !== 'header') await this.o.repo.upsert({ ...server, transport: { ...server.transport, auth: 'header' } });
   }
 
@@ -381,4 +484,9 @@ export class CustomTools {
     if (server.transport.kind !== 'http') return undefined;
     return new TokenSource({ serverId: server.id, url: server.transport.url, secrets: this.o.secrets, ...(this.o.fetch ? { fetch: this.o.fetch } : {}) });
   }
+}
+
+function sameCommand(prev: CustomServer | undefined, command: string, args: string[]): boolean {
+  const p = prev?.transport;
+  return p?.kind === 'stdio' && p.command === command && commandKey(p.command, p.args) === commandKey(command, args);
 }

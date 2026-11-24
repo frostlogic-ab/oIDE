@@ -67,7 +67,7 @@ export const worktrees: Record<string, WorktreeInfo[]> = {
   'billing-api': [
     wt({
       agentId: 'a-webhook', projectId: 'billing-api', path: `${WT_ROOT}/billing-api/webhook-retry`, branch: 'billing-api/webhook-retry', baseRef: 'main', ahead: 3,
-      diff: { files: 8, additions: 342, deletions: 58 },
+      diff: { files: 8, additions: 128, deletions: 24 },
       changedFiles: ['src/webhooks/retry.ts', 'src/webhooks/handler.ts', 'src/queue/deadLetter.ts', 'db/migrations/0042.sql', 'src/config/stripe.ts', 'test/retry.test.ts', 'test/handler.test.ts', 'README.md'],
     }),
     wt({

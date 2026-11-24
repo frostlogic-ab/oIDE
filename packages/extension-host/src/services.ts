@@ -14,7 +14,8 @@ export interface HostServicesDeps {
   postMessage(agentId: string, text: string): MaybePromise<void>;
   openPanel(ext: string, panelId: string, opts: { agentId?: string; projectId?: string }): MaybePromise<void>;
   postPanelMessage(ext: string, panelId: string, data: unknown): MaybePromise<void>;
-  readArtifact(id: string): MaybePromise<ArtifactContent>;
+  /** `projectId` is the artifact's project, if any; it is checked here and not passed on. */
+  readArtifact(id: string): MaybePromise<ArtifactContent & { projectId?: string | undefined }>;
   log(ext: string, level: 'debug' | 'info' | 'warn' | 'error', message: string): void;
 }
 
@@ -23,9 +24,12 @@ export function extensionSecretKey(ext: string, key: string): string {
   return `extension/${ext}/${key}`;
 }
 
-/** Settings key of an extension's plain setting. */
+/**
+ * Settings key of an extension's plain setting. Package names cannot contain `:`, so the first `:`
+ * after the name ends it: `foo` + `bar.x` and `foo.bar` + `x` stay apart (SEC-23).
+ */
 export function extensionSettingKey(ext: string, key: string): string {
-  return `extensions.${ext}.${key}`;
+  return `extensions:${ext}:${key}`;
 }
 
 /**
@@ -77,7 +81,13 @@ export function createHostServices(d: HostServicesDeps): HostServices {
     },
     openPanel: (name, panelId, opts) => d.openPanel(name, panelId, opts),
     postPanelMessage: (name, panelId, data) => d.postPanelMessage(name, panelId, data),
-    readArtifact: (_name, id) => d.readArtifact(id),
+    // Only artifacts of projects the extension is on for, plus project-less ones (SEC-23).
+    async readArtifact(name, id) {
+      const e = ext(name);
+      const { projectId, ...content } = await d.readArtifact(id);
+      if (projectId && !(await d.isEnabledFor(e, projectId))) throw new Error('artifact not found');
+      return content;
+    },
     canSeeProject: (name, projectId) => d.isEnabledFor(ext(name), projectId),
     log: d.log,
   };

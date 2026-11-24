@@ -13,7 +13,7 @@ const ROW_STYLE: Record<DiffLine['kind'] | 'hunk', CSSProperties> = {
   context: { color: '#B8BFC9' },
   add: { background: '#12261D', color: '#A8E0C6' },
   del: { background: '#2A1618', color: '#F4B8B8' },
-  'no-newline': { color: '#6B7584' },
+  'no-newline': { color: '#9AA3AE' },
 };
 
 export interface Composer {
@@ -51,6 +51,19 @@ export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(funct
 ) {
   const rows = useMemo(() => toRows(parseHunks(file.patch)), [file.patch]);
   const scroller = useRef<HTMLDivElement>(null);
+  // Width of the visible diff column: comment cards are sized to it and stick to the left edge,
+  // so they stay whole while long lines scroll sideways underneath.
+  const [visibleWidth, setVisibleWidth] = useState<number | undefined>(undefined);
+  const hasScroller = rows.length > 0 && !file.binary;
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setVisibleWidth(el.clientWidth));
+    ro.observe(el);
+    setVisibleWidth(el.clientWidth);
+    return () => ro.disconnect();
+    // The scroller only exists when there are rows to show.
+  }, [hasScroller]);
   const virtual = rows.length > VIRTUALIZE_AFTER;
   const v = useVirtualizer({
     count: virtual ? rows.length : 0,
@@ -124,19 +137,23 @@ export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(funct
           {clickable ? (
             <button
               type="button"
-              className="w-11 flex-[0_0_44px] text-right pr-2.5 text-ink-5 select-none bg-transparent border-0 p-0 font-mono text-[12px] leading-5 cursor-pointer focus-visible:outline focus-visible:outline-accent"
+              className="w-11 flex-[0_0_44px] text-right pr-2.5 text-ink-3 select-none bg-transparent border-0 p-0 font-mono text-[12px] leading-5 cursor-pointer focus-visible:outline focus-visible:outline-accent"
               aria-label={removed ? `Comment on removed line ${n}` : `Comment on line ${n}`}
               onClick={openComposer}
             >
               {line.kind === 'del' ? '' : line.newLine}
             </button>
           ) : (
-            <span className="w-11 flex-[0_0_44px] text-right pr-2.5 text-ink-5 select-none" />
+            <span className="w-11 flex-[0_0_44px] text-right pr-2.5 text-ink-3 select-none" />
           )}
           <span className="flex-1 whitespace-pre pl-2.5">{displayText(line)}</span>
         </div>
-        {thread?.map((c) => <CommentCard key={c.id} c={c} onDelete={onDeleteComment} />)}
-        {open && composer && <CommentComposer key={`${index}:${composer.line}`} composer={composer} onCancel={onCancelComposer} onAdd={onAddComment} />}
+        {(!!thread?.length || (open && !!composer)) && (
+          <div className="sticky left-0" style={{ width: visibleWidth ?? '100%' }}>
+            {thread?.map((c) => <CommentCard key={c.id} c={c} onDelete={onDeleteComment} />)}
+            {open && composer && <CommentComposer key={`${index}:${composer.line}`} composer={composer} onCancel={onCancelComposer} onAdd={onAddComment} />}
+          </div>
+        )}
       </>
     );
   };
@@ -147,7 +164,7 @@ export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(funct
   return (
     <div
       ref={scroller}
-      className="font-mono flex-1 min-h-0 overflow-auto text-[12px] leading-5 py-2.5"
+      className="font-mono flex-1 min-h-0 overflow-auto [scrollbar-width:auto] text-[12px] leading-5 py-2.5"
       role="region"
       aria-label={`Changes in ${file.path}`}
       tabIndex={0}

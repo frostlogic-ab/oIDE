@@ -1,3 +1,5 @@
+import { existsSync, statSync } from 'node:fs';
+import { delimiter, isAbsolute, posix, win32 } from 'node:path';
 import { isValidPermissionRule } from '@oide/protocol';
 import type { AgentSpec, CliInfo, CustomModel, Effort, ModelSlot, ModelStrategy, PermissionMode, Settings, SubagentTier, Technique } from '@oide/protocol';
 import { describeContext, textMessage, type ArtifactResolver, type StreamJsonUserMessage } from './messages.js';
@@ -187,8 +189,36 @@ export function shellSplit(input: string): string[] {
   return out;
 }
 
-/** Flags oIDE controls itself; extra flags may not override them. Value = takes a value. */
-const RESERVED_FLAGS: Record<string, boolean> = {
+/**
+ * Flags oIDE controls itself, or that would undo its isolation (SEC-27): settings sources, MCP
+ * configuration, extra directories, plugins, tool lists, permission handling. Extra flags may not
+ * set them. Value: `false` = no value, `true` = one value, `'variadic'` = every following word
+ * up to the next flag.
+ */
+export const RESERVED_FLAGS: Record<string, boolean | 'variadic'> = {
+  '--settings': true,
+  '--setting-sources': true,
+  '--strict-mcp-config': false,
+  '--mcp-config': 'variadic',
+  '--add-dir': 'variadic',
+  '--plugin-dir': true,
+  '--plugin-url': true,
+  '--tools': 'variadic',
+  '--allowedTools': 'variadic',
+  '--allowed-tools': 'variadic',
+  '--disallowedTools': 'variadic',
+  '--disallowed-tools': 'variadic',
+  '--agents': true,
+  '--agent': true,
+  '--append-system-prompt': true,
+  '--append-system-prompt-file': true,
+  '--system-prompt': true,
+  '--system-prompt-file': true,
+  '--safe-mode': false,
+  '--restricted': false,
+  '--bare': false,
+  '--inherit-permission-mode': false,
+  '--fork-session': false,
   '-p': false,
   '--print': false,
   '--input-format': true,
@@ -228,9 +258,23 @@ export function filterExtraFlags(raw: string, warnings: string[]): string[] {
   for (let i = 0; i < words.length; i++) {
     const w = words[i]!;
     const flag = w.includes('=') && w.startsWith('--') ? w.slice(0, w.indexOf('=')) : w;
-    if (flag in RESERVED_FLAGS) {
+    if (Object.hasOwn(RESERVED_FLAGS, flag)) {
       warnings.push(`Ignored extra CLI flag ${flag}: oIDE sets it itself`);
-      if (RESERVED_FLAGS[flag] && !w.includes('=') && words[i + 1] !== undefined && !words[i + 1]!.startsWith('-')) i++;
+      const kind = RESERVED_FLAGS[flag];
+      if (kind && !w.includes('=')) {
+        while (words[i + 1] !== undefined && !words[i + 1]!.startsWith('-')) {
+          i++;
+          if (kind !== 'variadic') break;
+        }
+      }
+      continue;
+    }
+    // A short-flag bundle or an unknown spelling could still hide one; refuse anything that
+    // normalises to a reserved flag (`--Add-Dir`, `--add_dir`).
+    const norm = flag.toLowerCase().replace(/_/g, '-');
+    if (norm.startsWith('--') && Object.keys(RESERVED_FLAGS).some((r) => r.toLowerCase() === norm)) {
+      warnings.push(`Ignored extra CLI flag ${flag}: oIDE sets it itself`);
+      if (!w.includes('=')) while (words[i + 1] !== undefined && !words[i + 1]!.startsWith('-')) i++;
       continue;
     }
     out.push(w);
@@ -343,13 +387,52 @@ export interface CommandLine {
 }
 
 /**
- * `.mjs`/`.js` CLIs (fake-claude) run through Node; everything else is spawned directly. Inside
- * Electron `process.execPath` is the app binary, so `node` from PATH is used there instead.
+ * The Node binary for `.js` CLIs and npm shims. Inside Electron `process.execPath` is the app
+ * binary, so the absolute `node` from PATH is used there (never a bare `node`, which Windows would
+ * look up in the agent's worktree first: SEC-01).
+ */
+export function nodeBinary(env: Record<string, string | undefined> = process.env): string {
+  if (!process.versions.electron) return process.execPath;
+  return findOnPath('node', env, process.platform, ['.exe', '.com']) ?? 'node';
+}
+
+/**
+ * `.mjs`/`.js` CLIs (fake-claude) run through Node; everything else is spawned directly. A bare
+ * name is resolved to an absolute path from PATH.
  */
 export function cliCommand(cliPath: string | undefined): CommandLine {
-  const p = cliPath ?? 'claude';
-  if (/\.(mjs|cjs|js)$/i.test(p)) return { command: process.versions.electron ? 'node' : process.execPath, args: [p] };
+  let p = cliPath ?? 'claude';
+  if (/\.(mjs|cjs|js)$/i.test(p)) return { command: nodeBinary(), args: [p] };
+  if (!isAbsolute(p) && !/[\\/]/.test(p)) p = findOnPath(p) ?? p;
   return { command: p, args: [] };
+}
+
+/**
+ * Find a program on PATH. Windows: honours PATHEXT (or `exts`), prefers `.exe`. Relative and empty
+ * PATH entries are skipped (SEC-01): they would resolve against the current folder.
+ */
+export function findOnPath(name: string, env: Record<string, string | undefined> = process.env, platform: NodeJS.Platform = process.platform, exts?: string[]): string | undefined {
+  const pathVar = env.PATH ?? env.Path ?? env.path ?? '';
+  const absolute = (d: string) => (platform === 'win32' ? /^[A-Za-z]:[\\/]/.test(d) || /^[\\/]{2}[^\\/]/.test(d) : d.startsWith('/'));
+  const dirs = pathVar
+    .split(platform === 'win32' ? ';' : delimiter)
+    .map((d) => d.trim().replace(/^"|"$/g, ''))
+    .filter((d) => d && absolute(d));
+  const list =
+    platform === 'win32'
+      ? (exts ?? ['.exe', ...(env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').map((e) => e.toLowerCase()).filter((e) => e && e !== '.exe')])
+      : [''];
+  for (const dir of dirs) {
+    for (const ext of list) {
+      const candidate = (platform === 'win32' ? win32 : posix).join(dir, name + ext);
+      try {
+        if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
+      } catch {
+        /* unreadable entry */
+      }
+    }
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------- buildLaunch
@@ -359,6 +442,20 @@ function uniq(xs: string[]): string[] {
 }
 
 const OIDE_READ_TOOLS = ['mcp__oide__submit_for_review', 'mcp__oide__artifacts_list', 'mcp__oide__artifacts_read'];
+
+/**
+ * Files that configure the agent itself (SEC-12): oIDE's `.oide/` (permissions, setup, extensions),
+ * the CLI's `.claude/` (settings, hooks, agents, commands) and `.mcp.json`. Editing them always asks
+ * (CLI `ask` rules beat allow rules and acceptEdits), and allow rules naming them are dropped.
+ */
+export const PROTECTED_PATHS = ['**/.oide/**', '**/.claude/**', '**/.mcp.json'] as const;
+export const PROTECTED_EDIT_RULES: readonly string[] = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit'].flatMap((t) => PROTECTED_PATHS.map((p) => `${t}(${p})`));
+
+/** True for an allow rule that names one of the protected paths (`Edit(.oide/permissions.json)`). */
+export function targetsProtectedPath(rule: string): boolean {
+  const m = /^(?:Edit|Write|MultiEdit|NotebookEdit)\((.*)\)$/.exec(rule);
+  return !!m && /(^|[\\/])\.(oide|claude)([\\/]|$)|(^|[\\/])\.mcp\.json$/i.test(m[1]!.replace(/\*+/g, 'x'));
+}
 
 export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
   const warnings: string[] = [];
@@ -388,6 +485,18 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
   }
   const mode = cliPermissionMode(spec.mode, cli, warnings);
   args.push('--permission-mode', mode);
+
+  // Untrusted project (SEC-02): `claude -p` skips the CLI's own trust dialog, so without this the
+  // repo's committed .claude/settings.json (hooks, permissions, env, apiKeyHelper, plugins) and
+  // .mcp.json servers would load on the first spawn. Only user settings and oIDE's --mcp-config.
+  if (ctx.trusted === false) {
+    for (const f of ['setting-sources', 'strict-mcp-config']) {
+      if (cli.features?.[f] === false) throw new LaunchError(`This Claude Code CLI has no --${f}, so oIDE cannot keep an untrusted project's .claude settings and .mcp.json servers out. Trust the project or update the CLI.`);
+    }
+    args.push('--setting-sources', 'user', '--strict-mcp-config');
+  }
+  // Agents can never pre-approve edits to the files that widen their own permissions (SEC-12).
+  args.push('--settings', JSON.stringify({ permissions: { ask: PROTECTED_EDIT_RULES } }));
 
   // MCP config and the permission prompt tool
   if (ctx.mcpConfigPath) {
@@ -433,7 +542,9 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
   // Rules come from .oide/ files and settings: drop any that could split into extra rules.
   const badAllow = allow.filter((r) => !isValidPermissionRule(r));
   if (badAllow.length) warnings.push(`Ignored malformed allow rules: ${badAllow.join(' | ')}`);
-  const okAllow = allow.filter(isValidPermissionRule);
+  const protectedAllow = allow.filter(targetsProtectedPath);
+  if (protectedAllow.length) warnings.push(`Ignored allow rules for .oide/, .claude/ or .mcp.json (edits there always ask): ${protectedAllow.join(' | ')}`);
+  const okAllow = allow.filter((r) => isValidPermissionRule(r) && !targetsProtectedPath(r));
   if (okAllow.length) args.push('--allowedTools', okAllow.join(','));
   // Deny rules pass through: if one splits, it only denies more.
   if (deny.length) args.push('--disallowedTools', deny.join(','));
@@ -445,6 +556,8 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
   const env = allowListEnv(ctx.baseEnv ?? process.env);
   for (const [k, v] of Object.entries(ctx.extraEnv ?? {})) if (ENV_KEY.test(k)) env[k] = v;
   env.OIDE_AGENT_ID = ctx.agentId;
+  // SEC-01: the CLI's own spawns (git, gh, node, shells) never pick a program from the worktree.
+  if ((ctx.platform ?? process.platform) === 'win32') env.NoDefaultCurrentDirectoryInExePath = '1';
   if (spec.strategy.kind === 'subagent-model') env[SUBAGENT_MODEL_ENV] = spec.strategy.subagents.model;
   if (ctx.customModel) Object.assign(env, customModelEnv(ctx.customModel, ctx.customModelSecret));
 

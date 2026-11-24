@@ -105,6 +105,12 @@
   #root {
     height: 100%;
   }
+  /* The canvas never sets a line height, so its text runs at the font's `normal` (Inter ≈ 1.21).
+     Tailwind's preflight sets 1.5; reset it. Multi-line copy sets its own leading
+     (activity 1.6, prose 1.5, notes 1.45). */
+  html {
+    line-height: normal;
+  }
   body {
     margin: 0;
     background: var(--color-ground);

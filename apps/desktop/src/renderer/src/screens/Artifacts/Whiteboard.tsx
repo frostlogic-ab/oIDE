@@ -118,7 +118,7 @@ export function WhiteboardSvg({ json, title, className }: { json: string; title:
         )}
       </defs>
       {scene.elements.length === 0 ? (
-        <text x={b.x + b.w / 2} y={b.y + b.h / 2} textAnchor="middle" fill="#6B7584" fontSize={14}>
+        <text x={b.x + b.w / 2} y={b.y + b.h / 2} textAnchor="middle" fill="#9AA3AE" fontSize={14}>
           Empty whiteboard
         </text>
       ) : (

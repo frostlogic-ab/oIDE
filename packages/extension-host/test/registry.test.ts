@@ -73,7 +73,11 @@ describe('ExtensionRegistry', () => {
         }),
       });
       await reg.load();
-      const ext = await reg.add(record, loaded);
+      // SEC-13: the team file only turns on marketplace (or built-in) extensions, never a folder one of the same name.
+      const folder = await reg.add(record, loaded);
+      expect(await reg.enablement(folder, 'team')).toBe('off');
+      await reg.remove(folder.id);
+      const ext = await reg.add({ ...record, source: 'marketplace', reviewed: true }, loaded);
       expect(await reg.enablement(ext, 'team')).toBe('team');
       expect(await reg.enablement(ext, 'old')).toBe('team-version-mismatch');
       expect(await reg.enablement(ext, 'cloned')).toBe('off');
@@ -105,14 +109,18 @@ describe('createHostServices', () => {
       postMessage: () => undefined,
       openPanel: () => undefined,
       postPanelMessage: () => undefined,
-      readArtifact: (id) => ({ id, title: '', kind: 'doc', content: '' }),
+      readArtifact: (id) => ({ id, title: '', kind: 'doc', content: '', ...(id === 'global' ? {} : { projectId: id }) }),
       log: () => undefined,
     });
     expect((await svc.listAgents('@oide/ext-git', {})).map((a) => a.id)).toEqual(['a1']);
     await expect(svc.postMessage('@oide/ext-git', 'a2', 'hi')).rejects.toThrow();
     expect(await svc.settingsGet('@oide/ext-git', 'git.ghPath')).toBe('gh');
     await svc.settingsSet('@oide/ext-git', 'git.ghPath', '/usr/bin/gh');
-    expect(plain.get('extensions.@oide/ext-git.git.ghPath')).toBe('/usr/bin/gh');
+    expect(plain.get('extensions:@oide/ext-git:git.ghPath')).toBe('/usr/bin/gh');
+    // SEC-23: artifacts only from projects the extension is on for (p2 is off), and never the project id.
+    expect(await svc.readArtifact('@oide/ext-git', 'p1')).toEqual({ id: 'p1', title: '', kind: 'doc', content: '' });
+    expect(await svc.readArtifact('@oide/ext-git', 'global')).toEqual({ id: 'global', title: '', kind: 'doc', content: '' });
+    await expect(svc.readArtifact('@oide/ext-git', 'p2')).rejects.toThrow(/not found/);
     await expect(svc.settingsSet('@oide/ext-git', 'git.ghPath', 3)).rejects.toThrow(/string/);
     expect(secrets.data.has(extensionSecretKey('@oide/ext-git', 'git.ghPath'))).toBe(false);
   });

@@ -1,8 +1,10 @@
 import { execFile } from 'node:child_process';
-import { existsSync, readFileSync, statSync } from 'node:fs';
-import { delimiter, dirname, extname, isAbsolute, join, resolve } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, extname, isAbsolute, resolve } from 'node:path';
 import { TESTED_CLI_RANGE, type CliInfo } from '@oide/protocol';
-import { allowListEnv, cliCommand } from './args.js';
+import { allowListEnv, cliCommand, findOnPath, nodeBinary } from './args.js';
+
+export { findOnPath } from './args.js';
 
 /**
  * CLI discovery and health. Runs `claude --version` and `claude --help` (no model call, no
@@ -44,7 +46,7 @@ export function resolveSpawn(command: string, args: string[], platform: NodeJS.P
     // run that script with Node directly instead.
     if (args.some((a) => /[\r\n]/.test(a))) {
       const script = cmdShimTarget(command);
-      if (script) return { file: process.versions.electron ? 'node' : process.execPath, args: [script, ...args] };
+      if (script) return { file: nodeBinary(), args: [script, ...args] };
       args = args.map((a) => a.replace(/\r?\n/g, ' '));
     }
     const line = [escapeCmdCommand(command), ...args.map((a) => escapeCmdArgument(a, true))].join(' ');
@@ -65,27 +67,6 @@ export function cmdShimTarget(shim: string): string | undefined {
   if (!m) return undefined;
   const target = resolve(dirname(shim), m[1]!);
   return existsSync(target) ? target : undefined;
-}
-
-/** Find `claude` on PATH. Windows: honours PATHEXT, prefers claude.exe over claude.cmd. */
-export function findOnPath(name: string, env: Record<string, string | undefined> = process.env, platform: NodeJS.Platform = process.platform): string | undefined {
-  const pathVar = env.PATH ?? env.Path ?? env.path ?? '';
-  const dirs = pathVar.split(platform === 'win32' ? ';' : delimiter).filter(Boolean);
-  const exts =
-    platform === 'win32'
-      ? ['.exe', ...(env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').map((e) => e.toLowerCase()).filter((e) => e && e !== '.exe')]
-      : [''];
-  for (const dir of dirs) {
-    for (const ext of exts) {
-      const candidate = join(dir.replace(/^"|"$/g, ''), name + ext);
-      try {
-        if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
-      } catch {
-        /* unreadable entry */
-      }
-    }
-  }
-  return undefined;
 }
 
 export function compareVersions(a: string, b: string): number {
@@ -120,6 +101,9 @@ const FLAG_FEATURES = [
   'disallowedTools',
   'input-format',
   'include-hook-events',
+  'setting-sources',
+  'strict-mcp-config',
+  'settings',
 ];
 
 /** Parse `claude --help` into feature flags (`effort`, `mode:auto`, …). */

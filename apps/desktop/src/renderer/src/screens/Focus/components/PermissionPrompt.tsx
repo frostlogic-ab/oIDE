@@ -54,8 +54,14 @@ export function PermissionPrompt({ agentId, request, projectName, subagentName, 
   });
 
   return (
-    <div role="group" aria-label="Permission request" className="flex items-center gap-3 px-3.5 py-3 border border-warn-line bg-warn-bg rounded-xl flex-wrap">
-      <div className="flex flex-col gap-1 flex-1 min-w-[220px]">
+    // Text left, buttons right; when the session is narrower than 700px (the 1100px window) the
+    // text sits above one row of buttons instead of the buttons wrapping one by one.
+    <div
+      role="group"
+      aria-label="Permission request"
+      className="flex items-center gap-3 px-3.5 py-3 border border-warn-line bg-warn-bg rounded-xl @max-[700px]:flex-col @max-[700px]:items-stretch @max-[700px]:gap-2.5"
+    >
+      <div className="flex flex-col gap-1 flex-1 min-w-0">
         <span className="text-[12px] text-warn font-semibold">
           {subagentName ? (
             <>
@@ -71,6 +77,7 @@ export function PermissionPrompt({ agentId, request, projectName, subagentName, 
         </span>
         <span className="font-mono text-[12.5px] text-ink break-all">{detail}</span>
       </div>
+      <div className="flex items-center gap-3 @max-[700px]:gap-2 shrink-0">
       <Button variant="warn" size={32} kbd="Y" disabled={busy} onClick={() => answer('allow')}>
         Allow once
       </Button>
@@ -86,6 +93,7 @@ export function PermissionPrompt({ agentId, request, projectName, subagentName, 
       <Button variant="warn-outline" size={32} kbd="D" disabled={busy} onClick={() => answer('deny')}>
         Deny
       </Button>
+      </div>
     </div>
   );
 }

@@ -13,7 +13,8 @@ const modelKey = (id: string) => `model:${id}`;
 export function isAnthropicHost(url: string): boolean {
   try {
     const h = new URL(url).hostname.toLowerCase();
-    return h === 'anthropic.com' || h.endsWith('.anthropic.com') || h === 'claude.ai' || h.endsWith('.claude.ai');
+    // SEC-19: every Anthropic-operated domain, so a typo in a custom endpoint cannot reach one.
+    return ['anthropic.com', 'claude.ai', 'claude.com'].some((d) => h === d || h.endsWith(`.${d}`));
   } catch {
     return false;
   }

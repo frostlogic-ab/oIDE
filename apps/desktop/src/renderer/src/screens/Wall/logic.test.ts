@@ -71,9 +71,12 @@ describe('tile helpers', () => {
     expect(tileBodyKind({ ...base, status: 'needs-permission' })).toBe('activity'); // no request yet
   });
   it('mode badge: Bypass always warns, others only when not the default', () => {
-    expect(modeBadge('bypassPermissions', 'auto')).toEqual({ label: 'Bypass', warn: true });
+    expect(modeBadge('bypassPermissions', 'auto')).toMatchObject({ label: 'Bypass', warn: true });
     expect(modeBadge('auto', 'auto')).toBeNull();
-    expect(modeBadge('plan', 'auto')).toEqual({ label: 'Plan', warn: false });
+    expect(modeBadge('plan', 'auto')).toMatchObject({ label: 'Plan mode', warn: false });
+    // Same words as Spawn and Settings, not a private abbreviation.
+    expect(modeBadge('acceptEdits', 'auto')).toMatchObject({ label: 'Edit automatically', warn: false });
+    expect(modeBadge('acceptEdits', 'auto')!.title).toMatch(/without asking/);
   });
   it('branch label', () => {
     expect(branchLabel({ branch: 'oide/shell-layout' })).toBe('shell-layout');

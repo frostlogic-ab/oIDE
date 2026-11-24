@@ -3,7 +3,7 @@ import path from 'node:path';
 import { CustomServer } from '@oide/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
 import { CustomTools } from '../src/custom-tools.js';
-import { extractServers, knownConfigFiles, scanImports, stripJsonc } from '../src/import-scan.js';
+import { extractServers, knownConfigFiles, redactArgs, redactUrl, scanImports, stripJsonc, toPublic } from '../src/import-scan.js';
 import { customEnvSecretKey } from '../src/mcp-config.js';
 import { memoryCustomRepo, memorySecrets, tempDir } from './helpers.js';
 
@@ -95,6 +95,24 @@ describe('import scanner', () => {
     expect(extractServers('{"mcpServers":{"a":{"command":"x"}},"secret":"y"}', 'mcpServers')).toEqual([{ name: 'a', config: { kind: 'stdio', command: 'x', args: [], env: {} } }]);
     expect(() => extractServers('{"broken": SECRET', 'mcpServers')).toThrow(/^not valid JSON$/);
     expect(stripJsonc('{"a": "// not a comment", /* c */ "b": [1,],}')).toBe('{"a": "// not a comment",  "b": [1]}');
+  });
+
+  it('SEC-24: masks secret-looking args and URL parts in what goes to the renderer', () => {
+    expect(redactArgs(['-y', 'pkg', '--api-key=sk-live-1234567890', '--token', 'abc123', 'API_KEY=xyz', 'ghp_abcdefghijklmnop', 'postgresql://me:pw@db/x', '--root', '.'])).toEqual([
+      '-y',
+      'pkg',
+      '--api-key=***',
+      '--token',
+      '***',
+      'API_KEY=***',
+      '***',
+      'postgresql://me:***@db/x',
+      '--root',
+      '.',
+    ]);
+    expect(redactUrl('https://u:p@mcp.example.com/sse?key=SECRET&x=1#f')).toBe('https://u:***@mcp.example.com/sse?key=***&x=***#f');
+    const pub = toPublic({ kind: 'http', url: 'https://mcp.example.com/mcp?apiKey=SECRET', transport: 'http', headers: { Authorization: 'Bearer SECRET' } });
+    expect(JSON.stringify(pub)).not.toMatch(/SECRET/);
   });
 
   it('knows the per-OS Claude Desktop path', () => {

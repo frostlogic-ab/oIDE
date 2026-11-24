@@ -103,6 +103,15 @@ export class McpProxy {
     return secret;
   }
 
+  /**
+   * Limit an agent's secret to exactly these servers (SEC-10): the remote servers in its own
+   * MCP config. Other agents' and other projects' servers answer 403.
+   */
+  setAgentServers(agentId: string, servers: string[]): void {
+    const g = this.grants.get(agentId);
+    if (g) g.servers = new Set(servers);
+  }
+
   revokeAgent(agentId: string): void {
     this.grants.delete(agentId);
   }

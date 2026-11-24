@@ -132,9 +132,10 @@ export default function WallScreen() {
     <>
       <ProjectSidebar />
       <main className="flex-1 min-w-0 overflow-y-auto flex flex-col gap-3.5 px-5 py-[18px] box-border" aria-label="Agents">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="m-0 text-[18px] font-semibold tracking-[-0.01em]">{title}</h1>
-          <div role="group" aria-label="Filter" className={cn('flex gap-1.5 flex-wrap', counts.all === 0 && 'hidden')}>
+        {/* One row down to the 1100px window minimum: "Next that needs you" shortens to "Next". */}
+        <div className="flex items-center gap-3 flex-nowrap min-w-0">
+          <h1 className="m-0 min-w-0 truncate text-[18px] font-semibold tracking-[-0.01em]">{title}</h1>
+          <div role="group" aria-label="Filter" className={cn('flex gap-1.5 flex-wrap shrink-0', counts.all === 0 && 'hidden')}>
             {FILTERS.map((f) => (
               <FilterChip key={f.id} selected={filter === f.id} tone={f.tone} onClick={() => useWall.getState().setFilter(f.id)}>
                 {f.label} · {counts[f.id]}
@@ -142,12 +143,25 @@ export default function WallScreen() {
             ))}
           </div>
           <div className="flex-1" />
-          <button type="button" className={buttonClass('warn-outline', 32, cn('text-warn! gap-2!', counts.all === 0 && 'hidden!'))} onClick={() => jumpToNextNeedsYou()} aria-keyshortcuts={nKey}>
-            Next that needs you <Kbd tone="warn">{nKey}</Kbd>
+          <button
+            type="button"
+            className={buttonClass('warn-outline', 32, cn('text-warn! gap-2! shrink-0', counts.all === 0 && 'hidden!'))}
+            onClick={() => jumpToNextNeedsYou()}
+            aria-keyshortcuts={nKey}
+            aria-label="Next that needs you"
+            title="Next that needs you"
+          >
+            <span aria-hidden="true">
+              Next<span className="hidden min-[1280px]:inline"> that needs you</span>
+            </span>
+            <Kbd tone="warn">{nKey}</Kbd>
           </button>
-          <Button variant="primary" size={32} icon="plus" className="text-[13px]! px-3.5! rounded-md!" onClick={() => navigate('spawn', scope === 'all' ? {} : { projectId: scope })}>
-            Spawn agent
-          </Button>
+          {/* Spawn needs a project: with none open, the empty state offers "Open project" instead. */}
+          {!noProjects && (
+            <Button variant="primary" size={32} icon="plus" className="text-[13px]! px-3.5! rounded-md! shrink-0" onClick={() => navigate('spawn', scope === 'all' ? {} : { projectId: scope })}>
+              Spawn agent
+            </Button>
+          )}
         </div>
 
         {noProjects && counts.all === 0 ? (
@@ -157,14 +171,9 @@ export default function WallScreen() {
             description="A project is a git repository. Every agent you spawn in it gets its own worktree and branch, so agents never edit the same files on disk."
             className="flex-1"
             action={
-              <div className="flex gap-2">
-                <Button variant="primary" size={32} icon="plus" onClick={() => void openProject()}>
-                  Open project
-                </Button>
-                <Button size={32} onClick={() => navigate('spawn', {})}>
-                  Spawn agent
-                </Button>
-              </div>
+              <Button variant="primary" size={32} icon="plus" onClick={() => void openProject()}>
+                Open project
+              </Button>
             }
           />
         ) : counts.all === 0 ? (

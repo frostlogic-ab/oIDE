@@ -21,6 +21,8 @@ export interface TabsProps<T extends string> {
    */
   variant?: 'underline' | 'pill';
   className?: string;
+  /** Extra classes for every tab button (e.g. tighter padding in a narrow panel). */
+  tabClassName?: string;
 }
 
 export function tabId(idPrefix: string, id: string): string {
@@ -32,7 +34,7 @@ export function tabPanelProps(idPrefix: string, id: string) {
 }
 
 /** WAI-ARIA tabs with automatic activation and arrow-key navigation. */
-export function Tabs<T extends string>({ tabs, value, onChange, label, idPrefix, variant = 'underline', className }: TabsProps<T>) {
+export function Tabs<T extends string>({ tabs, value, onChange, label, idPrefix, variant = 'underline', className, tabClassName }: TabsProps<T>) {
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
   const enabled = tabs.filter((t) => !t.disabled);
 
@@ -81,6 +83,7 @@ export function Tabs<T extends string>({ tabs, value, onChange, label, idPrefix,
                     'h-8 px-3.5 rounded-md border text-[13px] text-ink flex items-center gap-2',
                     selected ? 'border-accent bg-selected-2' : 'border-line-3 bg-transparent hover:bg-raised',
                   ),
+              tabClassName,
             )}
           >
             {t.label}

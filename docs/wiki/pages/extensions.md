@@ -37,8 +37,20 @@ removed; their enable state is persisted like any other record.
 Enable state per extension: `enabledGlobally`, `enabledProjects`, `disabledProjects` and
 `disabledTools`. For a project the order is: turned off in the project → on in the project → the
 project's `.oide/extensions.json` (name → version range; read through an injected
-`ProjectExtensionsReader`, ignored for untrusted projects) → global. `missingForProject` lists
-team-requested extensions that are not installed. `onChange` feeds the `extensions.changed` event.
+`ProjectExtensionsReader`, ignored for untrusted projects, and never applied to folder or git
+extensions) → global. `missingForProject` lists team-requested extensions that are not installed.
+`onChange` feeds the `extensions.changed` event.
+
+`add` refuses (`ExtensionConflictError`, IPC `conflict`) a record whose name is already installed
+from another source, or from another folder or git URL (SEC-13): a folder extension named like a
+marketplace one would otherwise take over its `ext:<name>/` secrets and team enablement. Uninstall
+first; that deletes the secrets (prefix `ext:<name>/`, so `foo` never takes `foo-bar`'s).
+
+Turning on a folder or git extension for the first time (`ExtensionsService.setEnabled`) shows a
+native confirmation in main that lists the host code, MCP server and language server command lines
+and the declared capabilities (marked "not enforced"). The answer is kept per extension and folder
+(ui kv `ext-run-confirmed:<id>`); declining returns `forbidden`. `addFromGit` asks natively, naming
+the URL, before it clones.
 
 ## Risk labels and agent config (`mcp-config.ts`)
 
@@ -47,6 +59,10 @@ team-requested extensions that are not installed. `onChange` feeds the `extensio
 
 - `read` tools of enabled extensions and custom servers are pre-allowed; `ask` tools never are, so
   they always prompt on the tile; turned-off tools are disallowed.
+- `effectiveToolRisk`: tools of folder and git extensions are always `ask`, whatever their manifest
+  says (SEC-15). `ExtensionsService.agentConfig` applies it to the tool refs agent-core turns into
+  `--allowedTools`. Marketplace labels are trusted because the installer checks them against the
+  index; a custom server's `read` label needs a native confirmation when it is saved.
 - Tool names are `mcp__<server>__<tool>` with characters outside `[A-Za-z0-9_-]` replaced by `_`
   (verified on CLI 2.1.325, see [cli-integration](cli-integration.md), "MCP tool names": `db.schema` → `mcp__postgres__db_schema`).
 - The server name `oide` is reserved for oIDE's own MCP server; duplicate names are skipped with a
@@ -70,12 +86,21 @@ get an allow-listed env, never the full environment.
 in Electron, `nodeFork()` in tests and plain Node (`HOST_PROCESS_ENTRY` is the TypeScript entry;
 the desktop build emits its own bundle and passes `entry`). It implements the extension API over
 the channel by calling an injected `HostServices`; `createHostServices` is the default
-implementation (settings namespaced `extensions.<name>.<key>`, secret ones in the SecretStore under
-`extension/<name>/<key>`, agents and events limited to projects where the extension is enabled).
+implementation (settings namespaced `extensions:<name>:<key>`, a separator package names cannot
+contain; secret ones in the SecretStore under `extension/<name>/<key>`; agents, events and
+`artifacts.read` limited to projects where the extension is enabled, project-less artifacts
+readable by any running extension).
 Commands run with a timeout; panel ids are checked against the manifest. On a crash the client
 emits `reloading` with the extension's panel ids (`extensions.hostState`), restarts with
 exponential backoff (500 ms → 30 s) and gives up as `failed` after 5 crashes in 2 minutes.
 `host-process.ts` only has `node:` and type-only imports so Node can run it directly.
+
+The utility process is separation, not a sandbox (SEC-14): host code has full Node (files, network,
+child processes) as the user. Node's permission model would map `fs` and `spawn` to
+`--allow-fs-*` / `--allow-child-process`, but Electron 45's utilityProcess ignores `--permission` in
+`execArgv` (checked on 45.4.1: `process.permission` is undefined and reads, writes and spawns
+succeed), and `child_process.fork` of the Electron binary needs the RunAsNode fuse, which is off.
+So capabilities stay consent text, and the Marketplace copy says they are not enforced.
 
 ## Developer mode (`dev-mode.ts`)
 
@@ -97,7 +122,8 @@ re-includes `dist/` and `.gitattributes` pins LF so packed hashes match across O
 
 ## Gaps
 
-- Declared `capabilities` are shown for consent, not enforced (open question 12).
+- Declared `capabilities` are shown for consent, not enforced (open question 12, SEC-14): see Host
+  process above. Revisit when Electron's utilityProcess supports Node's permission model.
 - `languages`, `artifactTypes`, `techniques` and `deployTargets` are parsed and resolved, but no
   host code runs them yet; the renderer and settings service consume them.
 - The proxy speaks Streamable HTTP; legacy SSE remotes behind OAuth are not proxied.

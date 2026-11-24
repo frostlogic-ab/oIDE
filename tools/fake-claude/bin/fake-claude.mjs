@@ -127,6 +127,14 @@ function loadMcpServers() {
     const text = v.trim().startsWith('{') ? v : readFileSync(isAbsolute(v) ? v : resolve(v), 'utf8');
     Object.assign(servers, safeJson(text)?.mcpServers ?? {});
   }
+  // Like the real CLI (2.1.325 parses --mcp-config with env expansion): `${VAR}` and
+  // `${VAR:-default}` in url and header values come from this process's env.
+  const expand = (s) => (typeof s === 'string' ? s.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}/g, (_m, name, def) => process.env[name] ?? def ?? '') : s);
+  for (const s of Object.values(servers)) {
+    if (!s || typeof s !== 'object') continue;
+    if (s.url) s.url = expand(s.url);
+    if (s.headers) for (const k of Object.keys(s.headers)) s.headers[k] = expand(s.headers[k]);
+  }
   return servers;
 }
 const mcpServers = loadMcpServers();

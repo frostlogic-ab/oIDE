@@ -25,7 +25,7 @@ const SIZE: Record<FieldSize, string> = {
 
 export function fieldClass(size: FieldSize = 34, surface: Surface = 'card', invalid = false, className?: string): string {
   return cn(
-    'border text-ink placeholder:text-ink-4 outline-none min-w-0 box-border',
+    'border text-ink placeholder:text-ink-3 outline-none min-w-0 box-border',
     'focus:border-accent focus-visible:outline-none disabled:opacity-50',
     invalid ? 'border-bad-line' : 'border-line-3',
     surface === 'card' ? 'bg-card' : 'bg-chrome',
@@ -116,7 +116,7 @@ export const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(function 
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy(inputId, hint, error)}
         className={cn(
-          'resize-none px-3 py-2.5 rounded-lg border text-ink text-[14px] leading-[1.5] outline-none placeholder:text-ink-4',
+          'resize-none px-3 py-2.5 rounded-lg border text-ink text-[14px] leading-[1.5] outline-none placeholder:text-ink-3',
           'focus:border-accent focus-visible:outline-none',
           error ? 'border-bad-line' : 'border-line-3',
           surface === 'card' ? 'bg-card' : 'bg-chrome',

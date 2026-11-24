@@ -14,12 +14,15 @@ export function formatTokens(n: number): string {
   return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
 }
 
-/** "4:00 PM" today, otherwise "Mon 30 Nov, 9:00 AM". */
+/**
+ * "4:00 PM" when the reset is less than 24 hours away (a plan's session window always is),
+ * otherwise "Mon 30 Nov, 9:00 AM". Keeps the status bar and the tile short.
+ */
 export function formatResetTime(ts: number, now = Date.now()): string {
   const d = new Date(ts);
   const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-  const sameDay = new Date(now).toDateString() === d.toDateString();
-  return sameDay ? time : `${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}, ${time}`;
+  const soon = Math.abs(ts - now) < 24 * 60 * 60_000;
+  return soon ? time : `${d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}, ${time}`;
 }
 
 export function plural(n: number, one: string, many = `${one}s`): string {

@@ -51,8 +51,16 @@ Rules oIDE enforces when it loads a manifest:
 - oIDE never runs install scripts and never installs your dependencies. Ship bundled code in `dist/`.
 - `engine` is a semver range for this API (`API_VERSION`, currently `1.0.0`).
 - Tool risk labels: `read` tools are pre-allowed for agents in projects where the extension is
-  enabled; `ask` tools always show a permission prompt. The install dialog shows every tool and
-  every declared capability, and updates that add either ask for consent again.
+  enabled; `ask` tools always show a permission prompt. Labels are believed only for marketplace
+  installs (checked against the index): tools of folder and git extensions always ask first. The
+  install dialog shows every tool and every declared capability, and updates that add either ask
+  for consent again.
+- `capabilities` are declared for consent and **not enforced**. Host code runs in its own process
+  with full Node access (files, network, child processes) as the user. Declare honestly anyway:
+  the marketplace review and the consent dialogs depend on it.
+- A name that is installed from one source (marketplace, folder, git) cannot be replaced by one
+  from another source; uninstall it first. Unreviewed (folder or git) extensions need a native
+  confirmation the first time they are turned on, and `.oide/extensions.json` never turns them on.
 - Agents see your tools as `mcp__<server>__<tool>`.
 
 ## Host code

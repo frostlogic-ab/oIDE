@@ -251,20 +251,22 @@ export class Supervisor {
           }
         }
       }
-      if (!rec.mcpConfigPath) {
-        const extra = (await this.deps.settings.extraMcpServers?.(rec.spec, rec.id)) ?? {};
-        const reg = await this.deps.broker.registerAgent(
-          rec.id,
-          {
-            onPermissionRequest: (req) => this.onPermissionRequest(rec, req),
-            onPermissionResolved: (requestId, behavior) => this.onPermissionResolved(rec, requestId, behavior),
-            onReview: (review) => this.emitDraft(rec, { type: 'review-submitted', review: { agentId: rec.id, summary: review.summary, checks: review.checks, submittedAt: Date.now() } }),
-          },
-          extra,
-          { projectId: rec.spec.projectId },
-        );
-        rec.mcpConfigPath = reg.mcpConfigPath;
-      }
+      // Every launch: the broker writes fresh one-time launch nonces and returns the env the
+      // agent needs for its mcp.json placeholders (no secret is written to the file).
+      const extra = (await this.deps.settings.extraMcpServers?.(rec.spec, rec.id)) ?? {};
+      const secretEnv = (await this.deps.settings.extraEnv?.(rec.spec, rec.id)) ?? {};
+      const reg = await this.deps.broker.registerAgent(
+        rec.id,
+        {
+          onPermissionRequest: (req) => this.onPermissionRequest(rec, req),
+          onPermissionResolved: (requestId, behavior) => this.onPermissionResolved(rec, requestId, behavior),
+          onReview: (review) => this.emitDraft(rec, { type: 'review-submitted', review: { agentId: rec.id, summary: review.summary, checks: review.checks, submittedAt: Date.now() } }),
+        },
+        extra,
+        { projectId: rec.spec.projectId, secretEnv },
+      );
+      rec.mcpConfigPath = reg.mcpConfigPath;
+      const agentEnv = reg.env ?? secretEnv;
       const project = await this.deps.settings.project?.(rec.spec.projectId);
       const customModel = rec.spec.customModel ? await this.deps.settings.customModel?.(rec.spec.customModel.id) : undefined;
       const customModelSecret = customModel?.hasKey ? await this.deps.secrets?.customModelKey(customModel.id) : undefined;
@@ -280,7 +282,7 @@ export class Supervisor {
         ...(project?.rules ? { projectRules: project.rules } : {}),
         trusted: project?.trusted ?? false,
         extensionTools: (await this.deps.settings.extensionTools?.(rec.spec, rec.id)) ?? [],
-        extraEnv: (await this.deps.settings.extraEnv?.(rec.spec, rec.id)) ?? {},
+        extraEnv: agentEnv,
         mcpConfigPath: rec.mcpConfigPath,
         ...(customModel ? { customModel } : {}),
         ...(customModelSecret ? { customModelSecret } : {}),

@@ -2,14 +2,15 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server as HttpServer, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { ArtifactKind, PermissionAnswer, type ArtifactUse, type CheckResult, type PermissionRequest } from '@oide/protocol';
 import { z } from 'zod';
+import { AGENT_SECRET_ENV, LAUNCHER_FILE, LAUNCHER_SOURCE, expandPlaceholders, placeholders } from './launcher.js';
 import { suggestRule, summarizeTool } from './rules.js';
-import type { AgentToolHandlers, McpServerEntry, OideMcpServerOptions, RegisteredAgent } from './types.js';
+import type { AgentToolHandlers, McpServerEntry, OideMcpServerOptions, RegisteredAgent, RegisterOptions } from './types.js';
 
 /**
  * oIDE's own MCP server (Streamable HTTP on 127.0.0.1, random port). Each agent gets its own endpoint
@@ -130,6 +131,33 @@ interface AgentEntry extends RegisteredAgent {
   projectId?: string;
 }
 
+/** A stdio server the launcher may fetch once (SEC-11). */
+interface LaunchSpec {
+  agentId: string;
+  server: string;
+  spec: { command: string; args: string[]; env: Record<string, string> };
+  expiresAt: number;
+}
+const LAUNCH_TTL_MS = 10 * 60_000;
+
+/**
+ * Tools whose input the user may edit in the prompt, and which edits are accepted (SEC-22). For
+ * every other tool an `updatedInput` from the renderer is ignored and the original input is used.
+ */
+const EDITABLE_INPUT: Record<string, (original: unknown, updated: unknown) => unknown> = {
+  // Only the command line itself; every other field stays as the agent sent it.
+  Bash: (o, u) => {
+    const cmd = (u as { command?: unknown } | null)?.command;
+    return typeof cmd === 'string' && o && typeof o === 'object' ? { ...(o as object), command: cmd } : o;
+  },
+};
+
+export function acceptedInput(toolName: string, original: unknown, updated: unknown): unknown {
+  if (updated === undefined) return original;
+  const edit = EDITABLE_INPUT[toolName];
+  return edit ? edit(original, updated) : original;
+}
+
 interface Pending {
   request: PermissionRequest;
   input: unknown;
@@ -145,6 +173,8 @@ export class OideMcpServer {
   private port = 0;
   private readonly agents = new Map<string, AgentEntry>();
   private readonly pending = new Map<string, Pending>();
+  private readonly launches = new Map<string, LaunchSpec>();
+  private launcherPath: string | undefined;
   private closing = false;
 
   constructor(private readonly opts: OideMcpServerOptions) {}
@@ -162,11 +192,30 @@ export class OideMcpServer {
     });
     this.http = http;
     this.port = (http.address() as AddressInfo).port;
+    if (this.opts.nodeBinary && isAbsolute(this.opts.nodeBinary)) {
+      try {
+        const bin = join(this.opts.appDataDir, 'bin');
+        await mkdir(bin, { recursive: true });
+        const file = join(bin, LAUNCHER_FILE);
+        await writeFile(file, LAUNCHER_SOURCE, { encoding: 'utf8', mode: 0o700 });
+        this.launcherPath = file;
+      } catch (err) {
+        this.opts.log?.('could not write the MCP launcher; secret-bearing stdio servers get env placeholders', err);
+      }
+    }
     return { port: this.port };
   }
 
-  /** Create the agent's endpoint and write `<app-data>/agents/<id>/mcp.json` (merging extra servers). */
-  async registerAgent(agentId: string, handlers: AgentToolHandlers, extraServers: Record<string, McpServerEntry> = {}, options: { projectId?: string } = {}): Promise<RegisteredAgent> {
+  /**
+   * Create the agent's endpoint and write `<app-data>/agents/<id>/mcp.json` (merging extra servers).
+   * Call it on every launch: stdio launch nonces are one-time, so each launch writes fresh ones.
+   *
+   * No secret value is written to the file (SEC-16, SEC-11): every http header value becomes a
+   * `${VAR}` placeholder the CLI expands from this agent's env (verified: CLI 2.1.325 parses
+   * `--mcp-config` files with env expansion of url and headers), and stdio servers that use secret
+   * placeholders are started through the launcher.
+   */
+  async registerAgent(agentId: string, handlers: AgentToolHandlers, extraServers: Record<string, McpServerEntry> = {}, options: RegisterOptions = {}): Promise<RegisteredAgent> {
     if (!AGENT_ID.test(agentId)) throw new Error(`Invalid agent id for MCP endpoint: ${agentId}`);
     if (!this.http) await this.start();
     const existing = this.agents.get(agentId);
@@ -174,25 +223,55 @@ export class OideMcpServer {
     const url = `${this.url}/mcp/${agentId}`;
     const dir = join(this.opts.appDataDir, 'agents', agentId);
     const mcpConfigPath = join(dir, 'mcp.json');
+    for (const [nonce, l] of this.launches) if (l.agentId === agentId || l.expiresAt < Date.now()) this.launches.delete(nonce);
+    const secretEnv = options.secretEnv ?? {};
+    const consumed = new Set<string>();
+    const env: Record<string, string> = { [AGENT_SECRET_ENV]: secret };
+    let header = 0;
     const servers: Record<string, McpServerEntry> = {};
     for (const [name, entry] of Object.entries(extraServers)) {
       if (name === 'oide' || !/^[A-Za-z0-9_-]+$/.test(name)) {
         this.opts.log?.(`skipping MCP server entry with reserved or invalid name: ${name}`);
         continue;
       }
-      servers[name] = entry;
+      if (!('command' in entry)) {
+        const headers: Record<string, string> = {};
+        for (const [k, v] of Object.entries(entry.headers ?? {})) {
+          if (v.includes('${')) headers[k] = v;
+          else {
+            const varName = `OIDE_MCP_HEADER_${header++}`;
+            env[varName] = v;
+            headers[k] = `\${${varName}}`;
+          }
+        }
+        servers[name] = { ...entry, ...(entry.headers ? { headers } : {}) };
+        continue;
+      }
+      const used = [...(entry.args ?? []), ...Object.values(entry.env ?? {})].flatMap(placeholders).filter((v) => v in secretEnv);
+      if (used.length && this.launcherPath && this.opts.nodeBinary) {
+        const nonce = randomBytes(24).toString('hex');
+        const expand = (s: string) => expandPlaceholders(s, secretEnv);
+        const realEnv: Record<string, string> = {};
+        for (const [k, v] of Object.entries(entry.env ?? {})) realEnv[k] = expand(v);
+        this.launches.set(nonce, { agentId, server: name, spec: { command: entry.command, args: (entry.args ?? []).map(expand), env: realEnv }, expiresAt: Date.now() + LAUNCH_TTL_MS });
+        servers[name] = { type: 'stdio', command: this.opts.nodeBinary, args: [this.launcherPath, `${this.url}/launch/${agentId}`, nonce] };
+        for (const v of used) consumed.add(v);
+      } else servers[name] = entry;
     }
-    servers.oide = { type: 'http', url, headers: { 'X-Oide-Secret': secret } };
+    // Values no launched server consumed stay in the agent env (e.g. a project .mcp.json read by the CLI itself).
+    for (const [k, v] of Object.entries(secretEnv)) if (!consumed.has(k)) env[k] = v;
+    servers.oide = { type: 'http', url, headers: { 'X-Oide-Secret': `\${${AGENT_SECRET_ENV}}` } };
     await mkdir(dir, { recursive: true });
     await writeFile(mcpConfigPath, `${JSON.stringify({ mcpServers: servers }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
-    const entry: AgentEntry = { agentId, url, secret, mcpConfigPath, handlers, ...(options.projectId ? { projectId: options.projectId } : {}) };
+    const entry: AgentEntry = { agentId, url, secret, mcpConfigPath, env, handlers, ...(options.projectId ? { projectId: options.projectId } : {}) };
     this.agents.set(agentId, entry);
-    return { agentId, url, secret, mcpConfigPath };
+    return { agentId, url, secret, mcpConfigPath, env };
   }
 
   async unregisterAgent(agentId: string): Promise<void> {
     const entry = this.agents.get(agentId);
     for (const [id, p] of this.pending) if (p.request.agentId === agentId) this.settle(id, { behavior: 'deny', message: 'The agent was removed' });
+    for (const [nonce, l] of this.launches) if (l.agentId === agentId) this.launches.delete(nonce);
     this.agents.delete(agentId);
     if (entry) await rm(entry.mcpConfigPath, { force: true }).catch(() => undefined);
   }
@@ -209,7 +288,7 @@ export class OideMcpServer {
     const p = this.pending.get(requestId);
     if (!p) return false;
     const a = parsed.data;
-    if (a.behavior === 'allow') this.settle(requestId, { behavior: 'allow', updatedInput: a.updatedInput ?? p.input });
+    if (a.behavior === 'allow') this.settle(requestId, { behavior: 'allow', updatedInput: acceptedInput(p.request.toolName, p.input, a.updatedInput) });
     else this.settle(requestId, { behavior: 'deny', message: a.message || 'Denied by user' });
     return true;
   }
@@ -261,13 +340,12 @@ export class OideMcpServer {
       if (this.closing) return this.reject(res, 503, 'Shutting down');
       const originProblem = this.checkOrigin(req);
       if (originProblem) return this.reject(res, 403, originProblem);
+      const launch = /^\/launch\/([^/?#]+)$/.exec(req.url ?? '');
+      if (launch) return this.serveLaunch(req, res, decodeURIComponent(launch[1]!));
       const m = /^\/mcp\/([^/?#]+)\/?(?:\?.*)?$/.exec(req.url ?? '');
       const agent = m ? this.agents.get(decodeURIComponent(m[1]!)) : undefined;
       if (!agent) return this.reject(res, 404, 'Unknown endpoint');
-      const given = req.headers[SECRET_HEADER];
-      const a = Buffer.from(typeof given === 'string' ? given : '');
-      const b = Buffer.from(agent.secret);
-      if (a.length !== b.length || !timingSafeEqual(a, b)) return this.reject(res, 401, 'Missing or wrong secret');
+      if (!OideMcpServer.sameSecret(req.headers[SECRET_HEADER], agent.secret)) return this.reject(res, 401, 'Missing or wrong secret');
       const len = Number(req.headers['content-length'] ?? 0);
       if (len > MAX_BODY) return this.reject(res, 413, 'Request too large');
 
@@ -283,6 +361,29 @@ export class OideMcpServer {
       this.opts.log?.('MCP request failed', err);
       if (!res.headersSent) this.reject(res, 500, 'Internal error');
     }
+  }
+
+  private static sameSecret(given: string | string[] | undefined, expected: string): boolean {
+    const a = Buffer.from(typeof given === 'string' ? given : '');
+    const b = Buffer.from(expected);
+    return a.length === b.length && timingSafeEqual(a, b);
+  }
+
+  /**
+   * `POST /launch/<agentId>` from the stdio launcher: the agent's own secret (inherited from the
+   * `claude` process env) plus a one-time nonce from its mcp.json. Returns the real command, args
+   * and env of that one server, then forgets the nonce.
+   */
+  private serveLaunch(req: IncomingMessage, res: ServerResponse, agentId: string): void {
+    const agent = this.agents.get(agentId);
+    if (req.method !== 'POST' || !agent) return this.reject(res, 404, 'Unknown endpoint');
+    if (!OideMcpServer.sameSecret(req.headers[SECRET_HEADER], agent.secret)) return this.reject(res, 401, 'Missing or wrong secret');
+    const nonce = req.headers['x-oide-launch'];
+    const l = typeof nonce === 'string' ? this.launches.get(nonce) : undefined;
+    if (!l || l.agentId !== agentId || l.expiresAt < Date.now()) return this.reject(res, 403, 'Unknown or used launch nonce');
+    this.launches.delete(nonce as string);
+    res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+    res.end(JSON.stringify(l.spec));
   }
 
   // ---------------------------------------------------------------- MCP tools
@@ -388,6 +489,11 @@ export class OideMcpServer {
     if (!r.success) return Promise.resolve(text(JSON.stringify({ behavior: 'deny', message: 'Malformed permission request' })));
     const { tool_name: toolName, input = {}, tool_use_id } = r.data;
     const toolUseId = tool_use_id ?? metaToolUseId;
+    // SEC-16: one agent cannot flood the user with prompts.
+    const open = [...this.pending.values()].filter((p) => p.request.agentId === agent.agentId).length;
+    if (open >= (this.opts.maxPendingPerAgent ?? 5)) {
+      return Promise.resolve(text(JSON.stringify({ behavior: 'deny', message: 'Too many permission requests are waiting for the user. Wait for an answer before asking again.' })));
+    }
     const requestId = `perm-${randomUUID()}`;
     const suggestedRule = suggestRule(toolName, input);
     const request: PermissionRequest = {

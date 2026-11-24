@@ -186,7 +186,7 @@ function CliPathInput({ value, labelledBy, describedById }: { value: string; lab
       type="text"
       aria-labelledby={labelledBy}
       aria-describedby={describedById}
-      className={cn(inp, 'w-[260px] font-mono text-[12px]')}
+      className={cn(inp, 'w-[282px] text-[12px]')}
       placeholder="auto-detect"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
@@ -208,7 +208,7 @@ function ExtraFlagsInput({ value, labelledBy, describedById }: { value: string; 
       type="text"
       aria-labelledby={labelledBy}
       aria-describedby={describedById}
-      className={cn(inp, 'w-[260px] font-mono text-[12px]')}
+      className={cn(inp, 'w-[282px] text-[12px]')}
       placeholder="--verbose"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}

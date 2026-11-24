@@ -38,12 +38,37 @@ export interface OideMcpServerOptions {
   /** Port to bind on 127.0.0.1. Default 0 (random). */
   port?: number;
   log?: (message: string, detail?: unknown) => void;
+  /**
+   * Absolute path of a Node binary for the stdio launcher (SEC-11). Without one, secret-bearing
+   * custom stdio servers fall back to env placeholders in the agent's own env.
+   */
+  nodeBinary?: string;
+  /** Most permission prompts one agent may have open at once; more are denied at once (SEC-16). Default 5. */
+  maxPendingPerAgent?: number;
+}
+
+export interface RegisterOptions {
+  projectId?: string;
+  /**
+   * Values for the `${VAR}` placeholders of the extra servers (custom server secrets). Servers that
+   * use them are started through the launcher when a Node binary is known, so the values never
+   * enter the agent's env; any value no launched server consumed is returned in `env`.
+   */
+  secretEnv?: Record<string, string>;
 }
 
 export interface RegisteredAgent {
   agentId: string;
   url: string;
-  /** Per-agent secret, sent by the CLI as the `X-Oide-Secret` header (from mcp.json). Not a Claude credential. */
+  /**
+   * Per-agent secret, sent by the CLI as the `X-Oide-Secret` header. mcp.json holds only a
+   * `${OIDE_MCP_HANDSHAKE}` placeholder; the value travels in this agent's env (SEC-16). Not a Claude credential.
+   */
   secret: string;
   mcpConfigPath: string;
+  /**
+   * Env the agent's `claude` process must carry: its own secret (expanded by the CLI into the
+   * mcp.json header placeholder), header values of other http servers, leftover secret values.
+   */
+  env: Record<string, string>;
 }

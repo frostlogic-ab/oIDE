@@ -16,7 +16,38 @@ export const oauthKeys = {
   client: (id: string) => `custom/${id}/oauth/client`,
   discovery: (id: string) => `custom/${id}/oauth/discovery`,
   header: (id: string) => `custom/${id}/header`,
+  /** The origin (`https://host:port`) the tokens above were entered or issued for (SEC-09). */
+  origin: (id: string) => `custom/${id}/origin`,
 };
+
+/** Every keychain key that holds a remote server's credentials. */
+export function credentialKeys(id: string): string[] {
+  return [oauthKeys.tokens(id), oauthKeys.client(id), oauthKeys.discovery(id), oauthKeys.header(id), oauthKeys.origin(id)];
+}
+
+/** `https://host:port` of a URL, or null when it does not parse. */
+export function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
+/** Bind the stored credentials of `serverId` to the origin of `url`. */
+export async function bindCredentialOrigin(secrets: SecretStore, serverId: string, url: string): Promise<void> {
+  const o = originOf(url);
+  if (o) await secrets.set(oauthKeys.origin(serverId), o);
+}
+
+/**
+ * Whether stored credentials may be sent to `url`: only when they were bound to its origin. A
+ * record whose URL moved to another host must sign in again (SEC-09).
+ */
+export async function credentialsMatch(secrets: SecretStore, serverId: string, url: string): Promise<boolean> {
+  const bound = await secrets.get(oauthKeys.origin(serverId));
+  return bound !== undefined && bound === originOf(url);
+}
 
 interface StoredTokens extends OAuthTokens {
   /** ms since epoch; computed from expires_in when saved. */
@@ -240,9 +271,13 @@ export async function authorize(o: AuthorizeOptions): Promise<{ ok: boolean; err
     const provider = new SecretOAuthProvider(providerOpts);
     const base = { serverUrl: o.url, ...(o.fetch ? { fetchFn: o.fetch } : {}), ...(o.scope ? { scope: o.scope } : {}) };
     const first = await auth(provider, base);
-    if (first === 'AUTHORIZED' && !redirected) return { ok: true };
+    if (first === 'AUTHORIZED' && !redirected) {
+      await bindCredentialOrigin(o.secrets, o.serverId, o.url);
+      return { ok: true };
+    }
     const code = await loop.waitForCode(provider.state(), o.timeoutMs ?? 5 * 60_000);
     const second = await auth(provider, { ...base, authorizationCode: code });
+    if (second === 'AUTHORIZED') await bindCredentialOrigin(o.secrets, o.serverId, o.url);
     return second === 'AUTHORIZED' ? { ok: true } : { ok: false, error: 'Authorization did not complete' };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
@@ -261,6 +296,8 @@ export class TokenSource {
   ) {}
 
   async headers(): Promise<Record<string, string>> {
+    // Never attach a token to an upstream other than the one it was entered for (SEC-09).
+    if (!(await credentialsMatch(this.o.secrets, this.o.serverId, this.o.url))) return {};
     const header = await readJson<{ header: string; value: string }>(this.o.secrets, oauthKeys.header(this.o.serverId));
     if (header) return { [header.header]: header.value };
     const t = await readJson<StoredTokens>(this.o.secrets, oauthKeys.tokens(this.o.serverId));
@@ -274,6 +311,7 @@ export class TokenSource {
 
   /** Refresh with the stored refresh token. False when the user has to sign in again. */
   async refresh(): Promise<boolean> {
+    if (!(await credentialsMatch(this.o.secrets, this.o.serverId, this.o.url))) return false;
     const t = await readJson<StoredTokens>(this.o.secrets, oauthKeys.tokens(this.o.serverId));
     if (!t?.refresh_token) return false;
     // The SDK only refreshes in interactive mode, so reuse the registered client's redirect URI;
@@ -293,7 +331,8 @@ export class TokenSource {
 }
 
 /** Open question 13 fallback: store a token to send as a header. */
-export async function saveHeaderToken(secrets: SecretStore, serverId: string, header: string, token: string): Promise<void> {
+export async function saveHeaderToken(secrets: SecretStore, serverId: string, header: string, token: string, url: string): Promise<void> {
   if (!/^[A-Za-z0-9-]+$/.test(header)) throw new Error('Invalid header name');
   await secrets.set(oauthKeys.header(serverId), JSON.stringify({ header, value: token }));
+  await bindCredentialOrigin(secrets, serverId, url);
 }

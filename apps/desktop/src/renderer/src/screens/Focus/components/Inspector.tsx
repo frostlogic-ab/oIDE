@@ -43,9 +43,11 @@ export function Inspector({ agent, events, subEvents, tab, onTab, now, stopReque
   ];
 
   return (
-    <aside aria-label="Inspector" className="flex-[1_1_320px] max-w-[340px] min-w-[300px] flex flex-col bg-panel border-l border-line box-border min-h-0">
-      <div className="px-2 pt-2 border-b border-line">
-        <Tabs tabs={tabs} value={tab} onChange={onTab} label="Inspector" idPrefix={ID} />
+    // A size container: below its 340px maximum (the 1100–1280px windows) the five tabs tighten
+    // their padding so "Terminal" is never clipped.
+    <aside aria-label="Inspector" className="@container flex-[1_1_320px] max-w-[340px] min-w-[300px] flex flex-col bg-panel border-l border-line box-border min-h-0">
+      <div className="px-2 @max-[339px]:px-1 pt-2 border-b border-line">
+        <Tabs tabs={tabs} value={tab} onChange={onTab} label="Inspector" idPrefix={ID} tabClassName="@max-[339px]:px-1" />
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col" hidden={tab === 'term'}>
         {tab === 'plan' && <PlanPanel agent={agent} events={events} />}
@@ -169,7 +171,7 @@ function SubagentsPanel({
             </span>
           </div>
         ))}
-        <div className="font-mono flex justify-between pl-[100px] text-[10px] text-ink-4">
+        <div className="font-mono flex justify-between pl-[100px] text-[10px] text-ink-3">
           <span>0m</span>
           <span>{formatDuration(spanMs / 2)}</span>
           <span>now {formatDuration(spanMs)}</span>

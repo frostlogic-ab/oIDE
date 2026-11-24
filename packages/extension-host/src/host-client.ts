@@ -57,7 +57,15 @@ export interface UtilityProcessModule {
   };
 }
 
-/** Electron adapter: `new ExtensionHostClient({ fork: utilityProcessFork(utilityProcess), … })`. */
+/**
+ * Electron adapter: `new ExtensionHostClient({ fork: utilityProcessFork(utilityProcess), … })`.
+ *
+ * This is process separation, not a sandbox (SEC-14): the host has full Node (fs, net,
+ * child_process). Electron 45's utilityProcess accepts `--permission` / `--allow-fs-*` in
+ * `execArgv` but does not enable Node's permission model (`process.permission` stays undefined;
+ * checked on 45.4.1), and the RunAsNode fuse is off, so `child_process.fork` of the Electron binary
+ * is no fallback. Declared capabilities are therefore consent text only.
+ */
 export function utilityProcessFork(up: UtilityProcessModule): ForkFn {
   return (modulePath, o) => {
     const child = up.fork(modulePath, [], { env: o.env, cwd: o.cwd, serviceName: o.serviceName, stdio: 'ignore' });

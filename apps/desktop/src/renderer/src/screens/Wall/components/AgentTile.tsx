@@ -74,7 +74,6 @@ function TileView({ agent, projectName, focused, highlighted }: TileViewProps) {
         'flex flex-col overflow-visible! cursor-pointer outline-none transition-shadow',
         focused && 'ring-2 ring-accent ring-offset-2 ring-offset-ground',
         highlighted && !focused && 'ring-2 ring-accent/60 ring-offset-2 ring-offset-ground',
-        agent.status === 'queued' && 'opacity-80',
       )}
     >
       <span className="sr-only" aria-live="polite" aria-atomic="true">
@@ -101,7 +100,7 @@ function TileView({ agent, projectName, focused, highlighted }: TileViewProps) {
           {agent.title}
         </h2>
         {badge && (
-          <Badge tone={badge.warn ? 'bad' : 'neutral'} icon={badge.warn ? 'warning' : undefined} title={`Permission mode: ${badge.label}`} className="mt-px">
+          <Badge tone={badge.warn ? 'bad' : 'neutral'} icon={badge.warn ? 'warning' : undefined} title={badge.title} className="mt-px">
             {badge.label}
           </Badge>
         )}
@@ -114,7 +113,7 @@ function TileView({ agent, projectName, focused, highlighted }: TileViewProps) {
 }
 
 function SubagentChips({ agent, now }: { agent: AgentSummary; now: number }) {
-  if (!agent.subagents.length) return <div className="px-3 pt-2 text-[11px] text-ink-4">No subagents</div>;
+  if (!agent.subagents.length) return <div className="px-3 pt-2 text-[11px] text-ink-3">No subagents</div>;
   const summary = subagentSummary(agent.subagents);
   return (
     <div role="group" aria-label={`Subagents: ${summary}`} className="flex items-center gap-[5px] px-3 pt-2 flex-wrap">
