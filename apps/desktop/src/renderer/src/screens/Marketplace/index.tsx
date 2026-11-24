@@ -142,6 +142,13 @@ export default function MarketplaceScreen() {
       setData((d) => ({ ...d, installed: d.installed.map((e) => (e.id === rec.id ? rec : e)) }));
     });
 
+  /** Per-tool on/off for an installed extension (fills its `disabledTools`); the row updates from the returned record. */
+  const setToolEnabled = (ext: InstalledExtension, tool: { name: string; server?: string }, enabled: boolean) =>
+    run(async () => {
+      const rec = await oide.invoke('extensions.setToolEnabled', { id: ext.id, tool: tool.name, server: tool.server, enabled });
+      setData((d) => ({ ...d, installed: d.installed.map((e) => (e.id === rec.id ? rec : e)) }));
+    });
+
   return (
     <div className="flex-1 min-w-0 flex min-h-0">
       {/* Categories */}
@@ -269,6 +276,7 @@ export default function MarketplaceScreen() {
             onEdit={() => selected.custom && setDialog({ editing: selected.custom })}
             onSaveCustom={saveCustom}
             onSetEnabled={setEnabled}
+            onSetToolEnabled={setToolEnabled}
           />
         ) : (
           <span className="text-ink-3 text-[12.5px]">Pick an extension to see the tools it gives agents.</span>
@@ -344,9 +352,10 @@ interface DetailProps {
   onEdit(): void;
   onSaveCustom(server: CustomServer): void;
   onSetEnabled(ext: InstalledExtension, projectId: string | undefined, enabled: boolean): void;
+  onSetToolEnabled(ext: InstalledExtension, tool: { name: string; server?: string }, enabled: boolean): void;
 }
 
-function Detail({ item, busy, projects, onInstall, onUpdate, onRemove, onEdit, onSaveCustom, onSetEnabled }: DetailProps) {
+function Detail({ item, busy, projects, onInstall, onUpdate, onRemove, onEdit, onSaveCustom, onSetEnabled, onSetToolEnabled }: DetailProps) {
   const custom = item.custom;
   const ext = item.installed;
   const authorLine = custom
@@ -407,15 +416,7 @@ function Detail({ item, busy, projects, onInstall, onUpdate, onRemove, onEdit, o
                   onChange={(v) => onSaveCustom({ ...custom, tools: custom.tools.map((x, j) => (j === i ? { ...x, enabled: v } : x)) })}
                 />
               ) : ext && item.state !== 'install' ? (
-                <CheckButton
-                  checked={t.enabled !== false}
-                  label={`Allow ${t.name}`}
-                  onChange={(v) =>
-                    void oide
-                      .invoke('extensions.setToolEnabled', { id: ext.id, tool: t.name, server: t.server, enabled: v })
-                      .catch((err) => toast(`Couldn't change ${t.name}: ${ipcErrorMessage(err)}`, 'error'))
-                  }
-                />
+                <CheckButton checked={t.enabled !== false} label={`Allow ${t.name}`} onChange={(v) => onSetToolEnabled(ext, t, v)} />
               ) : null}
               <span className={cn('flex-1 min-w-0 truncate', t.enabled === false ? 'text-ink-3' : 'text-ink')} title={t.description}>
                 {t.name}

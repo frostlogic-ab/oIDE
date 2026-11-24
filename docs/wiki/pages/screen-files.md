@@ -65,3 +65,7 @@ click and ←/→, opening another project, switching to a worktree checkout; `v
 - Tabs get a close button and the tab bar shows Ln/Col and Save (the canvas puts Ln/Col in the app
   status bar, which belongs to the shell).
 - Folders sort before files, so `docs/rfc` lists above `src` in the oide tree.
+- Editor: JetBrains Mono ligatures on (`fontLigatures`), and TypeScript / JavaScript use a derived
+  Monarch tokenizer (`withFunctionNames` in `monaco/setup.ts`) that tints a name followed by `(` as
+  `identifier.function` (`#9DBBFA`), like the canvas. Line numbers are `#7A8494` (5.0:1), not the
+  canvas's `#5E6774` (3.3:1).

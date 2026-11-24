@@ -51,6 +51,7 @@ route (`artifacts.artifactId`, via `replace`).
   A line under the buttons says it is a copy, not synced.
 - Open in claude.ai is hidden for artifacts that did not come from claude.ai.
 - Grid thumbnails stay stylised as drawn; the detail pane shows the real content.
+- The 190px doc preview fades its last line out (`.oide-md-fade`) instead of slicing it.
 
 ## Tests
 

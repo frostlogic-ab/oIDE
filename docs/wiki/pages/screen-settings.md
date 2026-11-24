@@ -59,6 +59,11 @@ shows as an amber banner at the top of every section, and per project under Proj
 - The undesigned sections (Projects, Artifacts & claude.ai, Keyboard shortcuts, Appearance) and an
   extra Privacy section use the same row style; the design shows them as "Not designed yet".
 - Default section is Claude Code (the canvas preview opened on Models).
+- CLI path and Extra CLI flags are Inter 12px, 282px wide: the canvas's `.inp` overrides its `mono`
+  class. 12px fields use `inpSm` (`cn(inp, 'text-[12px]')` cannot shrink the text: `cn` does not
+  merge classes and Tailwind emits 13px later).
+- Techniques open with the first technique expanded, as drawn.
+- Models: the slot rows share a grid so the effort selects (32px / 12px) line up, as in Spawn.
 
 ## Gaps
 

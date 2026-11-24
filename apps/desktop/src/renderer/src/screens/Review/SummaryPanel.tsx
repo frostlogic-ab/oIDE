@@ -18,10 +18,12 @@ export interface SummaryPanelProps {
   prReason?: string;
   onSendFeedback(): Promise<void>;
   onJump(path: string, line?: number): void;
+  /** Changed files that configure agents, git or MCP (FileDiff.sensitive), shown before Merge. */
+  sensitiveFiles?: Array<{ path: string; reason: string }>;
 }
 
 /** Right column of Review: status, title, worktree → base, agent's summary and checks, feedback, decisions. */
-export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason, onSendFeedback, onJump }: SummaryPanelProps) {
+export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason, onSendFeedback, onJump, sensitiveFiles = [] }: SummaryPanelProps) {
   const meta = agentStatusMeta(agent.status);
   const branch = worktree?.branch ?? agent.branch ?? '';
   const base = (worktree?.baseRef ?? agent.baseRef ?? 'main').replace(/^origin\//, '');
@@ -147,6 +149,7 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
       </div>
 
       <div className="flex-1" />
+      {sensitiveFiles.length > 0 && <SensitiveWarning files={sensitiveFiles} onJump={onJump} />}
       <div className="flex flex-col gap-2">
         <Button variant="secondary" size={36} className="rounded-md" disabled={sendState === 'busy' || (sendState !== 'sent' && pending.length === 0)} onClick={() => void send()}>
           {sendLabel}
@@ -202,6 +205,7 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
           )
         }
       >
+        {merge?.step === 'confirm' && sensitiveFiles.length > 0 && <SensitiveWarning files={sensitiveFiles} />}
         {merge?.step === 'conflicts' && (
           <ul className="list-none m-0 p-0 flex flex-col gap-1">
             {merge.conflicts.map((f) => (
@@ -213,6 +217,34 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
         )}
       </Dialog>
     </aside>
+  );
+}
+
+/** SEC-12: the agent changed files that widen what agents, git or MCP servers may do. */
+function SensitiveWarning({ files, onJump }: { files: Array<{ path: string; reason: string }>; onJump?: (path: string) => void }) {
+  return (
+    <div role="alert" className="flex flex-col gap-1.5 p-3 rounded-lg border border-warn text-[12.5px] leading-normal">
+      <span className="flex gap-2 items-center font-semibold text-warn">
+        <Icon name="alert-circle" size={16} />
+        Changes oIDE, Claude Code or git configuration
+      </span>
+      <span className="text-ink-2">Merging these can change what agents may do without asking. Read them before you merge.</span>
+      <ul className="list-none m-0 p-0 flex flex-col gap-1">
+        {files.map((f) => (
+          <li key={f.path} className="min-w-0">
+            {onJump ? (
+              <button type="button" onClick={() => onJump(f.path)} className="bg-transparent border-0 p-0 text-left font-mono text-[12px] text-ink cursor-pointer hover:underline" title={f.reason}>
+                {f.path}
+              </button>
+            ) : (
+              <span className="font-mono text-[12px] text-ink" title={f.reason}>
+                {f.path}
+              </span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

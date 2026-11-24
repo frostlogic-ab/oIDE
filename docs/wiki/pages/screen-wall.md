@@ -88,6 +88,17 @@ this filter" + Show all.
 - **Footer "2 files · 1 doc artifact"** is not reproduced: there is no per-agent artifact count; the
   diff stat is shown instead.
 - Tile order is the store's (creation time), not the canvas order.
+- **Sidebar agent names wrap to two lines** (`line-clamp-2`) instead of the canvas's single line: the
+  canvas lists short labels ("Window shell layout"), ours are the agent's goal, and one line cut them
+  to "Build the window shell lay…" (design review W3).
+- Mode badge words match Spawn and Settings: "Edit automatically", "Plan mode", "Manual", "Auto",
+  "Bypass", with a `title` that explains the mode.
+- Activity box 108px border-box (= the canvas's 92px content-box + padding, five 1.6-leading lines);
+  the prompt, question, review, queued and error boxes are 92px border-box, as drawn.
+- Queued tiles are not dimmed; only the body box is (`opacity-80`); the "Queued" label is `ink-3`.
+- Header stays one row at 1100px: "Next that needs you" shortens to "Next N" below 1280px.
+- With no project open, the header "Spawn agent" is hidden (Spawn needs a project) and the empty
+  state offers only "Open project"; the Artifacts aside lists only artifacts of open projects.
 - Plan percentage meters stay hidden (status bar, see [desktop-shell](desktop-shell.md)).
 
 ## Mock fixtures

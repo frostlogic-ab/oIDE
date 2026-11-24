@@ -133,7 +133,7 @@ export default function WallScreen() {
       <ProjectSidebar />
       <main className="flex-1 min-w-0 overflow-y-auto flex flex-col gap-3.5 px-5 py-[18px] box-border" aria-label="Agents">
         {/* One row down to the 1100px window minimum: "Next that needs you" shortens to "Next". */}
-        <div className="flex items-center gap-3 flex-nowrap min-w-0">
+        <div className="flex items-center gap-3 flex-nowrap min-w-0 min-h-8">
           <h1 className="m-0 min-w-0 truncate text-[18px] font-semibold tracking-[-0.01em]">{title}</h1>
           <div role="group" aria-label="Filter" className={cn('flex gap-1.5 flex-wrap shrink-0', counts.all === 0 && 'hidden')}>
             {FILTERS.map((f) => (

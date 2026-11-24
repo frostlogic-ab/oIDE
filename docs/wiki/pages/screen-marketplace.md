@@ -78,6 +78,12 @@ project is ticked; "Project .mcp.json (shared through git)" saves `projects` = t
 ## Deviations from the design
 
 - Detail tool rows show the risk as coloured text (as drawn); install consent and Add custom use pills.
+- Detail tool rows of installed extensions and custom tools add an on/off checkbox (the canvas draws
+  none). Extensions save it through the screen's `setToolEnabled` → `extensions.setToolEnabled`
+  (fills `disabledTools`; the row updates from the returned record); custom tools through
+  `custom.save`. Covered by `Marketplace.test.tsx`.
+- The Add custom footer is the canvas's single line; the "not reviewed" badge is shown on the detail
+  and in the review step, not in the footer. The URL field is Inter, as drawn.
 - Added: consent dialogs, update box, Declared capabilities, "All projects" checkbox, remove confirm,
   "Use a token instead", the Found review step, and an Edit mode (the design shows only the buttons).
 - Found tab note shows "remote" for http entries instead of "needs sign-in": the scan cannot know

@@ -209,6 +209,14 @@ describe('FocusScreen', () => {
     await waitFor(() => expect(calls('agents.stopSubagent')).toEqual([{ agentId: 'a-bridge', subagentId: 'sa-parser' }]));
   });
 
+  it('falls back to the lead view when the subagent id is unknown', async () => {
+    act(() => useRouter.setState({ route: { screen: 'focus', params: { agentId: 'a-bridge', subagentId: 'no-such-subagent' } }, back: [], forward: [] }));
+    render(<FocusScreen />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Wire the Claude Code CLI bridge' })).toBeTruthy();
+    expect(screen.queryByText('No task text was reported.')).toBeNull();
+    await waitFor(() => expect(useRouter.getState().route).toEqual({ screen: 'focus', params: { agentId: 'a-bridge' } }));
+  });
+
   it('asks before compacting and then calls agents.compact', async () => {
     render(<FocusScreen />);
     fireEvent.click(screen.getByRole('button', { name: /Context 81% full/ }));

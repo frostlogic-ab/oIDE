@@ -3,7 +3,7 @@ import type { Project, Settings } from '@oide/protocol';
 import { cn } from '@oide/ui';
 import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
-import { H1, Rd, Row, Sec, inp, inpInvalid, savePatch } from './ui';
+import { H1, Rd, Row, Sec, inp, inpSm, inpInvalid, savePatch } from './ui';
 
 type Rules = { allow: string[]; ask: string[]; deny: string[] };
 
@@ -158,7 +158,7 @@ function RuleList({ title, rules, onChange }: { title: string; rules: string[]; 
           <input
             id={inputId}
             type="text"
-            className={cn(inp, 'font-mono text-[12px] h-8', error && inpInvalid)}
+            className={cn(inpSm, 'font-mono h-8', error && inpInvalid)}
             placeholder="npm run lint, or Bash(git status:*)"
             value={draft}
             aria-invalid={error ? true : undefined}

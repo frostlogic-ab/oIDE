@@ -10,6 +10,11 @@ import { toast } from '../../stores/ui';
 
 /** `.inp`: 34px, radius 8, line-3 border, card fill. */
 export const inp = 'h-[34px] px-2.5 rounded-md border border-line-3 bg-card text-ink text-[13px] outline-none focus:border-accent box-border min-w-0 placeholder:text-ink-3 disabled:opacity-50';
+/**
+ * `.inp` at 12px. Not `cn(inp, 'text-[12px]')`: `cn` does not merge classes, and Tailwind emits
+ * `text-[13px]` after `text-[12px]`, so the 13px would win.
+ */
+export const inpSm = inp.replace('text-[13px]', 'text-[12px]');
 export const inpInvalid = '!border-bad';
 /** Small outline button (h30/32 in the design). */
 export const outlineBtn =

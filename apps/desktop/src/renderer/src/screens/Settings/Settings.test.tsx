@@ -25,6 +25,8 @@ const invoke = vi.fn(async (command: string, input: unknown): Promise<unknown> =
       return { presets: builtInPresets, techniques: builtInTechniques };
     case 'settings.loadErrors':
       return [];
+    case 'settings.techniques':
+      return builtInTechniques;
     case 'settings.saveCustomModel': {
       const { model, apiKey } = input as { model: CustomModel; apiKey?: string };
       const saved = CustomModel.parse({ ...model, hasKey: Boolean(apiKey) });
@@ -57,6 +59,14 @@ afterEach(() => cleanup());
 const updates = () => invoke.mock.calls.filter(([c]) => c === 'settings.update').map(([, i]) => (i as { patch: unknown }).patch);
 
 describe('Settings screen', () => {
+  it('Techniques opens with the first technique expanded (as on the canvas)', async () => {
+    open('tech');
+    const first = builtInTechniques[0]!;
+    await waitFor(() => expect(screen.getByRole('button', { name: new RegExp(first.name) }).getAttribute('aria-expanded')).toBe('true'));
+    const others = builtInTechniques.slice(1).map((t) => screen.getByRole('button', { name: new RegExp(t.name) }).getAttribute('aria-expanded'));
+    expect(others.every((x) => x === 'false')).toBe(true);
+  });
+
   it('Allow Bypass toggle saves { claude: { allowBypass } }', async () => {
     open('cli');
     const box = screen.getByRole('checkbox', { name: 'Allowed' });

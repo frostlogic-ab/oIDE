@@ -3,7 +3,7 @@ import type { Project, Technique } from '@oide/protocol';
 import { Icon, Toggle, cn } from '@oide/ui';
 import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
-import { H1, Rd, Row, inp } from './ui';
+import { H1, Rd, Row, inp, inpSm } from './ui';
 
 const EDIT_FIELDS = ['name', 'description', 'text', 'placement', 'enabledByDefault'] as const;
 
@@ -199,7 +199,7 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
                     Text added to the prompt
                     <textarea
                       rows={5}
-                      className={cn(inp, 'h-auto p-2.5 font-mono text-[12px] leading-[1.55] resize-y')}
+                      className={cn(inpSm, 'h-auto p-2.5 font-mono leading-[1.55] resize-y')}
                       value={t.text}
                       onChange={(e) => update(t.id, { text: e.target.value })}
                     />

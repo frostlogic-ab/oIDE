@@ -22,8 +22,8 @@ shared components in `packages/ui`. Screens must match the canvas; when in doubt
 | `ink` | `#E6E8EB` | Primary text |
 | `ink-2` | `#C9CED6` | Secondary text |
 | `ink-3` | `#9AA3AE` | Labels, meta, icons |
-| `ink-4` | `#6B7584` | Disabled, placeholders (large text only) |
-| `ink-5` | `#5E6774` | Line numbers |
+| `ink-4` | `#6B7584` | Dots, rules, decorative strokes only. Never small text: 3.8:1 on a card |
+| `ink-5` | `#5E6774` | Not for text (3.1:1). Placeholders, line numbers and disabled labels use `ink-3` |
 | `accent` | `#7AA2F7` | Primary buttons, focus, selected rail icon (user-selectable) |
 | accent options | `#7FC8A9`, `#C4A7E7`, `#F2C078` | Settings › Appearance |
 | `link` | `#9DBBFA` (hover `#C4D6FC`) | Links, "ready for review" |
@@ -40,6 +40,9 @@ Buttons on accent use text `#0B0D10`, weight 600.
 - UI: Inter 400/500/600/700, base 13px. Common sizes 9.5, 10.5, 11, 11.5, 12, 12.5, 13, 14, 16, 18, 20px.
 - Section labels: 11px, weight 600, `letter-spacing: 0.08em`, uppercase, `ink-3`.
 - Code, paths, branches, shas: JetBrains Mono 400/500, 11-12.5px. Diff lines 12px / 20px line height.
+- Line height is the font's `normal` (Inter ≈ 1.21), as on the canvas, which never sets one
+  (`html { line-height: normal }` in `tokens.css` overrides Tailwind's 1.5). Multi-line copy sets its
+  own leading: activity 1.6, prose 1.5, notes and hints 1.45.
 - Fonts are bundled (`@fontsource/inter`, `@fontsource/jetbrains-mono`); no remote font loading (CSP).
 
 ## Shape and layout
@@ -55,6 +58,11 @@ Buttons on accent use text `#0B0D10`, weight 600.
 
 Real `<button>`, `<a href>`, `<input>` + `<label>`; `aria-label` on icon-only buttons; `aria-current`
 on the active rail item; radiogroups for segmented controls; 4.5:1 text contrast; focus rings in accent.
+Every small text pair is ≥ 4.5:1: the smallest-contrast grey for text is `ink-3` (7.0:1 on a card,
+6.1:1 on `selected`). Borderless text links stay underlined (a `ghost` `LinkButton` is underlined), so
+they are not told apart by colour alone. Every screen works at the 1100×700 window minimum: no
+clipped labels, no mid-phrase wraps, no status-bar item past the edge (container queries narrow the
+Focus header, prompt and inspector).
 
 ## Tokens in code
 

@@ -4,7 +4,7 @@ import { cn } from '@oide/ui';
 import { ipcErrorMessage } from '../../lib/bridge';
 import { cliHealth, useCli } from '../../stores/cli';
 import { toast } from '../../stores/ui';
-import { H1, Rd, Row, Sec, describedBy, inp, outlineBtn, savePatch } from './ui';
+import { H1, Rd, Row, Sec, describedBy, inp, inpSm, outlineBtn, savePatch } from './ui';
 
 const MODE_OPTIONS: Array<{ value: PermissionMode; label: string }> = [
   { value: 'auto', label: 'Auto: approves safe actions, pauses on risky ones' },
@@ -186,7 +186,7 @@ function CliPathInput({ value, labelledBy, describedById }: { value: string; lab
       type="text"
       aria-labelledby={labelledBy}
       aria-describedby={describedById}
-      className={cn(inp, 'w-[282px] text-[12px]')}
+      className={cn(inpSm, 'w-[282px]')}
       placeholder="auto-detect"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}
@@ -208,7 +208,7 @@ function ExtraFlagsInput({ value, labelledBy, describedById }: { value: string; 
       type="text"
       aria-labelledby={labelledBy}
       aria-describedby={describedById}
-      className={cn(inp, 'w-[282px] text-[12px]')}
+      className={cn(inpSm, 'w-[282px]')}
       placeholder="--verbose"
       value={draft}
       onChange={(e) => setDraft(e.target.value)}

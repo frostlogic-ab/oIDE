@@ -53,7 +53,16 @@ prefixed `About the subagent "<name>":`.
 
 ## Decisions and deviations
 
-- Inspector basis 320px (canvas 300) so the five tab labels fit without clipping.
+- Inspector basis 320px (canvas 300); below 340px (1100–1280px windows) the tabs tighten their padding
+  (container query) so all five fit at the 300px minimum.
+- At the 1100×700 minimum (session column < 700px, a container query on `<main>`): the header stays
+  one row (title and meta truncate, the model family and the word "worktree" drop, Raw terminal /
+  Pause / "Context" show only their icon with the words kept as accessible names); subagent cards
+  stay one row ("Subagent" and "routed as" drop, the name truncates); the permission prompt puts its
+  text above one row of buttons.
+- Agent list titles wrap to two lines (canvas: "Getting-started rewrite"); the list scrolls and the
+  J / K / N hints stay pinned at the bottom.
+- A subagent id the agent does not have falls back to the lead view (the route is replaced).
 - The lead header adds the model family ("Opus"), which the brief asks for and the canvas omits.
 - The routing line is derived from the tiers seen ("Opus leads and routes each task. Simple goes to Haiku,
   standard to Sonnet."); the canvas's "Balanced focus" preset name is not in `AgentSummary`.

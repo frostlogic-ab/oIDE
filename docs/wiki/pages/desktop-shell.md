@@ -231,6 +231,9 @@ meter (`components/frame/PlanUsage.tsx`: `latestPlanUsage(agents)` + `PlanUsageM
 agent's `planUsage` (the CLI's `rate_limit_event`) carries a utilization; without one it shows only the
 reset time, never a guessed percentage ("Context ring and plan usage" in the
 [build brief](../raw/build-brief.md)). It also shows tokens today and the rate-limit reset time.
+Sessions, worktrees, active subagents and open projects are counted from the live stores
+(`countAgents`, the same as the header), never from `usage.summary`, so the two never disagree; the
+reset time is time-only when under 24h away, and the counts text truncates first at 1100px.
 
 **Add a screen**: add its id and params to `ScreenParams` in `stores/router.ts`, create
 `screens/<Name>/index.tsx` with a default export, add an entry in `SCREENS`. Wave-1 screens are

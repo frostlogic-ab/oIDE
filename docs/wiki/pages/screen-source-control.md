@@ -53,3 +53,5 @@ unpushed notices, scope switching filters cards and calls `scope.set`; label hel
 
 - The overlap card names the agents by their full titles (the canvas uses short names).
 - A Spinner shows while a project first loads; errors appear as a red line inside the card.
+- Worktree rows are a fixed grid so they never wrap: below 1280px the status / diff / PR columns
+  narrow (100 / 118 / 84px) and the name and branch meta truncate (full text in `title`).

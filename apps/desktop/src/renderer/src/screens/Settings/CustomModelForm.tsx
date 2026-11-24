@@ -3,7 +3,7 @@ import type { CustomModel } from '@oide/protocol';
 import { SegmentedControl, cn } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
-import { inp, inpInvalid } from './ui';
+import { inp, inpSm, inpInvalid } from './ui';
 
 type Provider = CustomModel['provider'];
 
@@ -134,7 +134,7 @@ export function CustomModelForm({ editing, onClose }: { editing?: CustomModel; o
           <input
             id="cm-model"
             type="text"
-            className={cn(inp, 'font-mono text-[12px]', tried && errors.model && inpInvalid)}
+            className={cn(inpSm, 'font-mono', tried && errors.model && inpInvalid)}
             value={modelId}
             placeholder={provider === 'local' ? 'qwen3-coder:30b' : 'model id'}
             aria-invalid={tried && errors.model ? true : undefined}
@@ -149,7 +149,7 @@ export function CustomModelForm({ editing, onClose }: { editing?: CustomModel; o
             <input
               id="cm-region"
               type="text"
-              className={cn(inp, 'font-mono text-[12px]')}
+              className={cn(inpSm, 'font-mono')}
               value={region}
               placeholder={provider === 'bedrock' ? 'us-east-1 (uses AWS credentials)' : 'us-east5 (uses Google Cloud credentials)'}
               onChange={(e) => setRegion(e.target.value)}
@@ -161,7 +161,7 @@ export function CustomModelForm({ editing, onClose }: { editing?: CustomModel; o
             <input
               id="cm-url"
               type="text"
-              className={cn(inp, 'font-mono text-[12px]', tried && errors.url && inpInvalid)}
+              className={cn(inpSm, 'font-mono', tried && errors.url && inpInvalid)}
               value={baseUrl}
               aria-invalid={tried && errors.url ? true : undefined}
               aria-describedby={tried && errors.url ? 'cm-url-err' : undefined}

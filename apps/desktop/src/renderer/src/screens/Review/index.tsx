@@ -280,6 +280,7 @@ export default function ReviewScreen() {
         prAvailable={git.prAvailable}
         prReason={git.prReason}
         onSendFeedback={review.sendFeedback}
+        sensitiveFiles={files.flatMap((f) => (f.sensitive ? [{ path: f.path, reason: f.sensitive }] : []))}
         onJump={(path, line) => {
           const i = files.findIndex((f) => f.path === path);
           if (i < 0) return;

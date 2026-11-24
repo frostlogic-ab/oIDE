@@ -46,6 +46,11 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
 - Open pull request → `git.openPr { agentId, title, body }` (body = summary + checks as a task list),
   then opens the URL. With an existing PR it reads "View pull request #n". When `git.prAvailable`
   answers `available: false` it is disabled with the reason (default: install gh and `gh auth login`).
+- Comment cards and the inline composer are sized to the visible diff width and stick to its left
+  edge, so long lines scroll sideways under them; the diff scroller uses full-width scrollbars.
+- The file-list header sums the parsed patches; the Wall, Source control and Ready to review read
+  `AgentSummary.diff` / `WorktreeInfo.diff`. Both come from the same git diff in main; the mock keeps
+  them equal (`lib/mock/mock.test.ts`).
 - Merge locally: confirm dialog → `git.mergeLocal`. Conflicts show in the dialog (main is left
   untouched); "Hand them to a new agent" opens Spawn with a goal and the files as context chips.
 

@@ -53,6 +53,8 @@ section without `mcp-config`.
   per slot: per-slot selects did not fit the 720px dialog, and Settings pins per family too.
 - Footer copy "Runs claude CLI in its own terminal" is kept from the canvas although agents use
   pipes, not a pty.
+- Model rows are one grid (rows are subgrids): only the orchestrator offers custom models, so its
+  pill group is wider; a shared pill column keeps the effort selects (32px / 12px) aligned, as drawn.
 
 ## Tests
 

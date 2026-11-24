@@ -89,6 +89,24 @@ describe('Wall tiles', () => {
     expect(screen.getByRole('button', { name: 'Review · 2' })).toBeTruthy();
   });
 
+  it('shows a queued tile undimmed, with its label in ink-3 (readable), and the long mode name on the badge', () => {
+    const a = structuredClone(agents[0]!);
+    useAgents.getState().applySummary({ ...a, id: 'a-q', status: 'queued', mode: 'acceptEdits', pendingPermission: undefined, createdAt: a.createdAt + 1 });
+    render(<WallScreen />);
+    expect(tile('a-q').className).not.toMatch(/opacity-/);
+    expect(within(tile('a-q')).getByText('Waiting for a free slot.')).toBeTruthy();
+    expect(within(tile('a-q')).getByText('Edit automatically')).toBeTruthy();
+  });
+
+  it('with no project open, offers Open project and no Spawn agent (Spawn needs a project)', () => {
+    useAgents.setState({ byId: {}, order: [] });
+    useProjects.setState({ list: [], loaded: true });
+    render(<WallScreen />);
+    expect(screen.getByText('Open a project to get started')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Open project' }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Spawn agent' })).toBeNull();
+  });
+
   it('filters with the chips', () => {
     render(<WallScreen />);
     fireEvent.click(screen.getByRole('button', { name: 'Needs you · 2' }));
