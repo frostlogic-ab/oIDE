@@ -289,7 +289,8 @@ export class SettingsService {
 
   /**
    * Global settings with `<repo>/.oide/*.json` applied. Workspace trust: untrusted projects get no
-   * setup command, no `allow` rules, no default-mode override, and their techniques are off by default.
+   * setup command, no `allow` rules, no default-mode override, no enabled extensions, and their
+   * techniques are off by default and limited to the first message.
    * A project can never turn on Bypass by itself.
    */
   async forProject(projectPath: string, opts: { trusted: boolean }): Promise<EffectiveProjectSettings> {
@@ -300,13 +301,17 @@ export class SettingsService {
       settings.claude.defaultMode = config.defaultMode;
     }
     if (config.presetId && settings.models.presets.some((p) => p.id === config.presetId)) settings.models.defaultPresetId = config.presetId;
-    const projectTechniques = files.techniques.techniques.map((t) => (opts.trusted ? t : { ...t, enabledByDefault: false }));
+    // Untrusted: project techniques are off, can't reach the system prompt, and are labelled by origin.
+    const projectTechniques = files.techniques.techniques.map((t) =>
+      opts.trusted ? { ...t, scope: 'project' as const } : { ...t, scope: 'project' as const, enabledByDefault: false, placement: 'first-message' as const, name: `${t.name} (from untrusted project)` },
+    );
     return {
       settings,
       config,
       permissions: opts.trusted ? files.permissions : { ...files.permissions, allow: [] },
       techniques: [...settings.techniques, ...projectTechniques],
-      extensions: files.extensions,
+      // Untrusted projects can't pre-enable extension tools (they are MCP servers).
+      extensions: opts.trusted ? files.extensions : { ...files.extensions, enabled: {} },
       setup: opts.trusted ? config.setup : undefined,
       trusted: opts.trusted,
       errors: files.errors,

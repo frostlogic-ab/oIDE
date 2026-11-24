@@ -118,6 +118,7 @@ describe('SettingsService', () => {
     const repo = tempDir();
     await writeOideFile(repo, 'config', { defaultMode: 'acceptEdits', presetId: 'quality', setup: 'pnpm install' });
     await writeOideFile(repo, 'permissions', { allow: ['Bash(npm test)'], ask: ['Bash(git push:*)'], deny: ['Bash(rm -rf:*)'] });
+    await writeOideFile(repo, 'extensions', { enabled: { '@evil/tools': '^1.0.0' } });
     await writeOideFile(repo, 'techniques', { techniques: [{ id: 'team', name: 'Team style', text: 'Use tabs.', placement: 'system-prompt', enabledByDefault: true }] });
     const svc = new SettingsService({ db: openDatabase(':memory:') });
 
@@ -133,7 +134,9 @@ describe('SettingsService', () => {
     expect(untrusted.setup).toBeUndefined();
     expect(untrusted.permissions).toMatchObject({ allow: [], ask: ['Bash(git push:*)'], deny: ['Bash(rm -rf:*)'] });
     expect(untrusted.settings.claude.defaultMode).toBe('auto');
-    expect(untrusted.techniques.at(-1)?.enabledByDefault).toBe(false);
+    expect(untrusted.techniques.at(-1)).toMatchObject({ enabledByDefault: false, placement: 'first-message', name: 'Team style (from untrusted project)' });
+    expect(untrusted.extensions.enabled).toEqual({});
+    expect(trusted.extensions.enabled).toEqual({ '@evil/tools': '^1.0.0' });
 
     await writeOideFile(repo, 'config', { defaultMode: 'bypassPermissions' });
     expect((await svc.forProject(repo, { trusted: true })).settings.claude.defaultMode).toBe('auto');
