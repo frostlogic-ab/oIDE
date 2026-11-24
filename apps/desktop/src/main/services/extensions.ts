@@ -10,6 +10,8 @@ import {
   capabilityList,
   createHostServices,
   effectiveToolRisk,
+  extensionSecretKey,
+  extensionSettingKey,
   ExtensionConflictError,
   loadFromFolder,
   mcpToolName,
@@ -17,15 +19,17 @@ import {
   upstreamFrom,
   type ConfirmRequest,
   type HostExtension,
+  type HostServices,
   type LoadedExtension,
   type ProjectRef,
   type SecretStore as HostSecretStore,
 } from '@oide/extension-host';
-import type { AgentSpec, AgentSummary, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from '@oide/protocol';
+import type { AgentSpec, AgentSummary, ExtensionSettingField, ExtensionSettingValue, ExtensionUpdate, InstalledExtension, MarketplaceEntry, Technique } from '@oide/protocol';
 import { readOideFile, type SecretStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
 import { confirmNative } from '../security/confirm.js';
+import { clonePanelMessage, extensionOrigin, extensionUrl, panelFrameSrc, type ExtensionUiSite } from './extension-ui.js';
 import type { Platform } from './platform.js';
 import type { ProjectsService } from './projects.js';
 
@@ -62,6 +66,8 @@ export class ExtensionsService {
   readonly proxy: McpProxy;
   readonly host: ExtensionHostClient | undefined;
   readonly hostSecrets: HostSecretStore;
+  /** The extension API as main implements it (also used by Settings › Extensions without host code). */
+  readonly hostServices: HostServices;
   private readonly dev: DevModeWatcher;
   private readonly agentSecrets = new Map<string, string>();
   private readonly memo = new Map<string, { at: number; p: Promise<AgentExtensionConfig> }>();
@@ -122,31 +128,40 @@ export class ExtensionsService {
       ...(platform.fetch ? { fetch: platform.fetch } : {}),
     });
     const settingsKv = store.ui.kv;
+    const base = createHostServices({
+      extension: (name) => this.registry.getByName(name),
+      isEnabledFor: (ext, projectId) => this.registry.isEnabledFor(ext, projectId),
+      settings: { get: (k) => settingsKv.get(`ext-setting:${k}`), set: (k, v) => settingsKv.set(`ext-setting:${k}`, v) },
+      secrets: this.hostSecrets,
+      listAgents: () =>
+        o.agents.list().map((a) => ({
+          id: a.id,
+          projectId: a.projectId,
+          title: a.title,
+          status: a.status,
+          model: a.model,
+          ...(a.branch ? { branch: a.branch } : {}),
+          ...(a.worktreePath ? { worktreePath: a.worktreePath } : {}),
+        })),
+      postMessage: (agentId, text) => o.agents.send(agentId, text),
+      openPanel: (ext, panelId, opts) => this.openPanel(ext, panelId, opts),
+      postPanelMessage: (ext, panelId, data) => this.postPanelMessage(ext, panelId, data),
+      readArtifact: (id) => o.readArtifact(id),
+      log: (ext, level, message) => (level === 'error' ? ctx.log.error : level === 'warn' ? ctx.log.warn : ctx.log.debug)(`[ext ${ext}]`, message),
+    });
+    this.hostServices = {
+      ...base,
+      settingsSet: async (name, key, value) => {
+        await base.settingsSet(name, key, value);
+        const rec = this.registry.getByName(name);
+        if (rec) ctx.emit('extensions.settingChanged', { id: rec.id, key });
+      },
+    };
     this.host = platform.forkHost
       ? new ExtensionHostClient({
           fork: platform.forkHost,
           ...(platform.hostEntry ? { entry: platform.hostEntry } : {}),
-          services: createHostServices({
-            extension: (name) => this.registry.getByName(name),
-            isEnabledFor: (ext, projectId) => this.registry.isEnabledFor(ext, projectId),
-            settings: { get: (k) => settingsKv.get(`ext-setting:${k}`), set: (k, v) => settingsKv.set(`ext-setting:${k}`, v) },
-            secrets: this.hostSecrets,
-            listAgents: () =>
-              o.agents.list().map((a) => ({
-                id: a.id,
-                projectId: a.projectId,
-                title: a.title,
-                status: a.status,
-                model: a.model,
-                ...(a.branch ? { branch: a.branch } : {}),
-                ...(a.worktreePath ? { worktreePath: a.worktreePath } : {}),
-              })),
-            postMessage: (agentId, text) => o.agents.send(agentId, text),
-            openPanel: () => undefined,
-            postPanelMessage: () => undefined,
-            readArtifact: (id) => o.readArtifact(id),
-            log: (ext, level, message) => (level === 'error' ? ctx.log.error : level === 'warn' ? ctx.log.warn : ctx.log.debug)(`[ext ${ext}]`, message),
-          }),
+          services: this.hostServices,
         })
       : undefined;
     this.dev = new DevModeWatcher({
@@ -190,6 +205,7 @@ export class ExtensionsService {
       activation: l.activation,
       panelIds: l.panels.map((p) => p.id),
       commandIds: l.manifest.oide.contributes.commands.map((c) => c.id),
+      deployTargetIds: l.manifest.oide.contributes.deployTargets.map((d) => d.id),
     };
   }
 
@@ -450,6 +466,146 @@ export class ExtensionsService {
     return { servers, tools, env: cfg.env, warnings: cfg.warnings };
   }
 
+  // ---------------------------------------------------------------- extension UI contributions
+
+  /** Same rule as host code (`syncHost`): UI loads only for extensions that are on somewhere. */
+  private onSomewhere(e: InstalledExtension): boolean {
+    return e.enabledGlobally || e.enabledProjects.length > 0;
+  }
+
+  private uiExtension(name: string): { record: InstalledExtension; loaded: LoadedExtension } {
+    const record = this.registry.getByName(name);
+    const loaded = record && this.onSomewhere(record) ? this.registry.resolved(record.id) : undefined;
+    if (!record || !loaded) throw new IpcError(`Extension ${name} is not installed or not on`, 'not_found');
+    return { record, loaded };
+  }
+
+  /** `oide-ext://` lookup for the protocol handler. */
+  uiSite(origin: string): ExtensionUiSite | undefined {
+    for (const e of this.registry.list()) {
+      if (!this.onSomewhere(e) || extensionOrigin(e.name) !== origin) continue;
+      const l = this.registry.resolved(e.id);
+      return l ? { name: e.name, dir: l.dir, frameSrc: panelFrameSrc(l.manifest.oide.capabilities.network) } : undefined;
+    }
+    return undefined;
+  }
+
+  /** URL of a panel or artifact viewer entry. */
+  uiUrl(extension: string, kind: 'panel' | 'artifactType', id: string): { url: string } {
+    const { loaded } = this.uiExtension(extension);
+    const entry = kind === 'panel' ? loaded.panels.find((p) => p.id === id)?.entry : loaded.artifactTypes.find((a) => a.id === id)?.entry;
+    const url = entry ? extensionUrl(extension, loaded.dir, entry) : null;
+    if (!url) throw new IpcError(`${extension} has no ${kind === 'panel' ? 'panel' : 'artifact type'} ${id}`, 'not_found');
+    return { url };
+  }
+
+  /** A panel iframe posted data (through the renderer's bridge): forward it to that extension's host code only. */
+  async panelMessage(extension: string, panelId: string, data: unknown): Promise<void> {
+    const { loaded } = this.uiExtension(extension);
+    if (!loaded.panels.some((p) => p.id === panelId)) throw new IpcError(`${extension} has no panel ${panelId}`, 'not_found');
+    const c = clonePanelMessage(data);
+    if (!c.ok) throw new IpcError(c.error, 'invalid_input');
+    await this.host?.sendPanelMessage(extension, panelId, c.value);
+  }
+
+  /** `ctx.panels.open` from host code. An agent id is kept only for agents in projects where the extension is on. */
+  private async openPanel(extension: string, panelId: string, opts: { agentId?: string; projectId?: string }): Promise<void> {
+    const record = this.registry.getByName(extension);
+    if (!record) return;
+    const out: { extension: string; panelId: string; agentId?: string; projectId?: string } = { extension, panelId };
+    const agent = opts.agentId ? this.o.agents.list().find((a) => a.id === opts.agentId) : undefined;
+    if (agent && (await this.registry.isEnabledFor(record, agent.projectId))) {
+      out.agentId = agent.id;
+      out.projectId = agent.projectId;
+    } else if (opts.projectId && (await this.registry.isEnabledFor(record, opts.projectId))) out.projectId = opts.projectId;
+    this.o.ctx.emit('extensions.panelOpen', out);
+  }
+
+  /** `ctx.panels.postMessage` from host code: to the renderer, which posts it into that panel's iframes. */
+  private postPanelMessage(extension: string, panelId: string, data: unknown): void {
+    const c = clonePanelMessage(data);
+    if (!c.ok) throw new Error(c.error);
+    this.o.ctx.emit('extensions.panelMessage', { extension, panelId, data: c.value });
+  }
+
+  /** Settings › Extensions fields. Secret values stay in the keychain; only `hasValue` crosses IPC. */
+  async settingsFor(id: string): Promise<ExtensionSettingField[]> {
+    const rec = this.registry.get(id);
+    if (!rec) throw new IpcError(`Unknown extension ${id}`, 'not_found');
+    const kv = this.o.store.ui.kv;
+    const out: ExtensionSettingField[] = [];
+    for (const [key, decl] of Object.entries(rec.manifest.oide.contributes.settings)) {
+      const def = ['string', 'number', 'boolean'].includes(typeof decl.default) ? (decl.default as string | number | boolean) : undefined;
+      const field: ExtensionSettingField = { key, type: decl.type, secret: decl.secret, hasValue: false, ...(decl.description ? { description: decl.description } : {}), ...(def !== undefined ? { default: def } : {}) };
+      if (decl.secret) {
+        field.hasValue = (await this.hostSecrets.get(extensionSecretKey(rec.name, key))) !== undefined;
+      } else {
+        const v = kv.get<unknown>(`ext-setting:${extensionSettingKey(rec.name, key)}`);
+        if (v !== undefined && v !== null && typeof v === decl.type) {
+          field.value = v as string | number | boolean;
+          field.hasValue = true;
+        }
+      }
+      out.push(field);
+    }
+    return out;
+  }
+
+  async setSetting(id: string, key: string, value: ExtensionSettingValue): Promise<void> {
+    const rec = this.registry.get(id);
+    if (!rec) throw new IpcError(`Unknown extension ${id}`, 'not_found');
+    const decl = rec.manifest.oide.contributes.settings[key];
+    if (!decl) throw new IpcError(`${rec.displayName} has no setting ${key}`, 'not_found');
+    if (value !== null && typeof value !== decl.type) throw new IpcError(`${key} must be a ${decl.type}`, 'invalid_input');
+    if (typeof value === 'string' && value.length > 10_000) throw new IpcError(`${key} is too long`, 'invalid_input');
+    try {
+      await this.hostServices.settingsSet(rec.name, key, value);
+    } catch (err) {
+      throw new IpcError((err as Error).message, decl.secret ? 'secure_storage_unavailable' : 'invalid_input');
+    }
+  }
+
+  /** `contributes.techniques` of extensions on for `projectId` (or on anywhere), as read-only techniques. */
+  async techniques(projectId?: string): Promise<Technique[]> {
+    const list = projectId ? await this.registry.enabledFor(projectId) : this.registry.list().filter((e) => this.onSomewhere(e));
+    return list.flatMap((e) =>
+      e.manifest.oide.contributes.techniques.map((t) => ({
+        id: extensionTechniqueId(e.name, t.id),
+        name: t.name,
+        description: `From ${e.displayName}`,
+        text: t.text,
+        placement: t.placement,
+        builtIn: false,
+        enabledByDefault: false,
+        scope: 'global' as const,
+        extension: e.displayName,
+      })),
+    );
+  }
+
+  /** Review: run a deploy target's host code with the agent and its worktree. */
+  async runDeployTarget(extension: string, targetId: string, agentId: string): Promise<unknown> {
+    const agent = this.o.agents.list().find((a) => a.id === agentId);
+    if (!agent) throw new IpcError(`Unknown agent ${agentId}`, 'not_found');
+    const rec = this.registry.getByName(extension);
+    if (!rec || !(await this.registry.isEnabledFor(rec, agent.projectId))) throw new IpcError(`${extension} is not on for this project`, 'forbidden');
+    const target = rec.manifest.oide.contributes.deployTargets.find((d) => d.id === targetId);
+    if (!target) throw new IpcError(`${rec.displayName} has no deploy target ${targetId}`, 'not_found');
+    if (!this.host) throw new IpcError('Extension host code is not available in this build', 'unavailable');
+    try {
+      return await this.host.runDeployTarget(rec.name, targetId, {
+        agentId: agent.id,
+        projectId: agent.projectId,
+        title: agent.title,
+        ...(agent.branch ? { branch: agent.branch } : {}),
+        ...(agent.baseRef ? { baseRef: agent.baseRef } : {}),
+        ...(agent.worktreePath ? { worktreePath: agent.worktreePath } : {}),
+      });
+    } catch (err) {
+      throw new IpcError((err as Error).message, 'command_failed');
+    }
+  }
+
   revokeAgent(agentId: string): void {
     this.agentSecrets.delete(agentId);
     this.memo.delete(agentId);
@@ -461,6 +617,11 @@ export class ExtensionsService {
     await this.host?.dispose().catch(() => undefined);
     await this.proxy.stop().catch(() => undefined);
   }
+}
+
+/** Technique id of an extension's `contributes.techniques` entry. Package names cannot contain `:`. */
+export function extensionTechniqueId(ext: string, id: string): string {
+  return `ext:${ext}:${id}`.slice(0, 128);
 }
 
 /** ui kv key: the folder the user confirmed running this unreviewed extension from. */

@@ -52,7 +52,8 @@ export interface Harness {
 
 const quiet = { debug: () => {}, warn: () => {}, error: (...a: unknown[]) => console.error('[oide]', ...a) };
 
-export async function startHarness(opts: { userData?: string; trust?: boolean } = {}): Promise<Harness> {
+/** `platform` overrides parts of the plain-Node platform (built-in extension folders, a host-process fork). */
+export async function startHarness(opts: { userData?: string; trust?: boolean; platform?: Partial<Platform> } = {}): Promise<Harness> {
   const userData = opts.userData ?? tempDir('oide-int-data-');
   const events: Harness['events'] = [];
   const emit = createEmitter(() => [{ isDestroyed: () => false, send: (_ch: string, m: unknown) => void events.push(m as Harness['events'][number]) }]);
@@ -84,6 +85,7 @@ export async function startHarness(opts: { userData?: string; trust?: boolean } 
     cliPathOverride: FAKE_CLAUDE,
     terminals,
     background: false,
+    ...opts.platform,
   };
   const services = await createCoreServices({ ctx, platform, terminals });
   const router = new IpcRouter({ validateOutput: true, log: quiet });

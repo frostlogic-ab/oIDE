@@ -11,6 +11,9 @@ import { useKeymapScope } from '../../lib/useKeymap';
 import { toast } from '../../stores/ui';
 import { ArtifactPreview } from './Preview';
 import { KIND_LABEL, validateContent } from './model';
+import { ExtensionArtifactView } from '../../extensions/ExtensionArtifactView';
+import { artifactTypeOf } from '../../extensions/model';
+import { useExtensions } from '../../extensions/store';
 
 type Mode = 'preview' | 'edit';
 
@@ -23,13 +26,15 @@ export interface ViewerProps {
 }
 
 export function Viewer({ meta, content, projectName, onClose, onSaved }: ViewerProps) {
-  const [mode, setMode] = useState<Mode>(meta.kind === 'doc' ? 'edit' : 'preview');
+  const [mode, setMode] = useState<Mode>(meta.kind === 'doc' && !meta.type ? 'edit' : 'preview');
   const [draft, setDraft] = useState(content);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmClose, setConfirmClose] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const dirty = draft !== content;
+  const installed = useExtensions((s) => s.installed);
+  const extType = artifactTypeOf(installed, meta.type);
 
   useEffect(() => setDraft(content), [content]);
   useEffect(() => headingRef.current?.focus(), []);
@@ -90,7 +95,7 @@ export function Viewer({ meta, content, projectName, onClose, onSaved }: ViewerP
             {meta.title}
           </h2>
           <span className="text-[12px] text-ink-3">
-            {KIND_LABEL[meta.kind]} · {projectName || 'Personal'} · v{meta.version}
+            {extType ? `${extType.label} (${extType.displayName})` : KIND_LABEL[meta.kind]} · {projectName || 'Personal'} · v{meta.version}
           </span>
         </div>
         {dirty && <Badge tone="warn">Unsaved changes</Badge>}
@@ -118,8 +123,13 @@ export function Viewer({ meta, content, projectName, onClose, onSaved }: ViewerP
       <div {...tabPanelProps('viewer', mode)} className="flex-1 min-h-0 flex gap-4 p-4 outline-none">
         {mode === 'edit' && editor}
         {(mode === 'preview' || meta.kind === 'doc') && (
-          <div className="flex-1 min-w-0 min-h-0 rounded-xl border border-line-2 bg-raised overflow-hidden">
-            <ArtifactPreview artifactId={meta.id} title={meta.title} kind={meta.kind} content={draft} forceInline={dirty} version={meta.version} />
+          <div className="flex-1 min-w-0 min-h-0 rounded-xl border border-line-2 bg-raised overflow-hidden flex flex-col">
+            {extType && mode === 'preview' ? (
+              // An extension artifact type: its own viewer and editor (sandboxed iframe).
+              <ExtensionArtifactView meta={meta} content={content} type={extType} onSaved={onSaved} />
+            ) : (
+              <ArtifactPreview artifactId={meta.id} title={meta.title} kind={meta.kind} content={draft} forceInline={dirty} version={meta.version} />
+            )}
           </div>
         )}
       </div>

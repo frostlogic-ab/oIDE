@@ -237,8 +237,9 @@ export class AgentsService {
       cli: () => o.cli.ensure(),
       techniques: async (projectId) => {
         const p = o.projects.get(projectId);
-        if (!p) return o.settings.get().techniques;
-        return (await o.settings.forProject(p.path, { trusted: p.trusted })).techniques;
+        const ext = (await this.extensions?.techniques(projectId)) ?? [];
+        if (!p) return [...o.settings.get().techniques, ...ext];
+        return [...(await o.settings.forProject(p.path, { trusted: p.trusted })).techniques, ...ext];
       },
       project: async (projectId) => {
         const p = o.projects.get(projectId);

@@ -6,6 +6,8 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { loadManifest, mcpToolName, probeCommand, requireBundled } from '@oide/extension-host';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { CommandHandler, ExtensionContext } from '@oide/extension-api';
+import { activate } from '../dist/host.js';
 import { checkLocalUrl, titleOf } from '../dist/preview.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -68,5 +70,41 @@ describe('browser-preview extension', () => {
     expect(() => checkLocalUrl('file:///etc/passwd')).toThrow();
     expect(() => checkLocalUrl('http://user:pw@localhost/')).toThrow();
     expect(titleOf('<title>a\n b</title>')).toBe('a b');
+  });
+});
+
+describe('browser-preview host code (panel bridge)', () => {
+  function fakeCtx(saved?: string) {
+    const commands = new Map<string, CommandHandler>();
+    const listeners: Array<(d: unknown) => void> = [];
+    const posted: unknown[] = [];
+    const opened: unknown[] = [];
+    const ctx = {
+      subscriptions: [],
+      log: { debug() {}, info() {}, warn() {}, error() {} },
+      commands: { register: (id: string, fn: CommandHandler) => (commands.set(id, fn), { dispose() {} }) },
+      settings: { get: async () => saved, set: async () => {} },
+      panels: {
+        open: async (id: string, o?: unknown) => void opened.push([id, o]),
+        postMessage: async (id: string, d: unknown) => void posted.push([id, d]),
+        onMessage: (_id: string, l: (d: unknown) => void) => (listeners.push(l), { dispose() {} }),
+      },
+    } as unknown as ExtensionContext;
+    activate(ctx);
+    return { commands, listeners, posted, opened };
+  }
+
+  it('answers a panel that says ready with the saved default URL (no navigation)', async () => {
+    const f = fakeCtx('http://localhost:5173/');
+    f.listeners[0]!({ type: 'ready' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(f.posted).toEqual([['browserPreview.panel', { type: 'init', url: 'http://localhost:5173/' }]]);
+  });
+
+  it('"Open browser preview" opens the panel for the agent and navigates it', async () => {
+    const f = fakeCtx();
+    expect(await f.commands.get('browserPreview.open')!({ agentId: 'a1' })).toEqual({ url: 'http://localhost:3000' });
+    expect(f.opened).toEqual([['browserPreview.panel', { agentId: 'a1' }]]);
+    expect(f.posted).toEqual([['browserPreview.panel', { type: 'navigate', url: 'http://localhost:3000' }]]);
   });
 });

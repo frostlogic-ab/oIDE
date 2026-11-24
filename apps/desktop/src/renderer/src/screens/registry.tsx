@@ -8,7 +8,8 @@ import WallScreen from './Wall';
  * `ScreenParams` in stores/router.ts, create screens/<Name>/index.tsx with a default export, and
  * add an entry here. Screens other than the Wall load lazily.
  */
-export type RailItemId = 'agents' | 'artifacts' | 'files' | 'source-control' | 'marketplace' | 'settings';
+/** xtension: a full-screen extension panel; the rail marks its own button (see Rail.tsx). */
+export type RailItemId = 'agents' | 'artifacts' | 'files' | 'source-control' | 'marketplace' | 'settings' | 'extension';
 
 export interface ScreenDef {
   id: ScreenId;
@@ -49,6 +50,7 @@ export const SCREENS: Record<ScreenId, ScreenDef> = {
   artifacts: { id: 'artifacts', title: 'Artifacts', rail: 'artifacts', header: 'title', component: lazy(() => import('./Artifacts')) },
   marketplace: { id: 'marketplace', title: 'Marketplace', rail: 'marketplace', header: 'title', component: lazy(() => import('./Marketplace')) },
   settings: { id: 'settings', title: 'Settings', rail: 'settings', header: 'title', component: lazy(() => import('./Settings')) },
+  extension: { id: 'extension', title: 'Extension', rail: 'extension', header: 'title', customTitle: true, component: lazy(() => import('./Extension')) },
 };
 
 export interface RailItem {

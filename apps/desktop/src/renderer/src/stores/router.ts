@@ -17,13 +17,15 @@ export interface ScreenParams {
   artifacts: { artifactId?: string };
   marketplace: { extension?: string };
   settings: { section?: string };
+  /** A full-screen extension panel (`contributes.panels` with `location: "screen"`). */
+  extension: { extension: string; panelId: string };
 }
 
 export type ScreenId = keyof ScreenParams;
 
 export type Route = { [K in ScreenId]: { screen: K; params: ScreenParams[K] } }[ScreenId];
 
-export const SCREEN_IDS: ScreenId[] = ['wall', 'focus', 'spawn', 'source-control', 'review', 'files', 'artifacts', 'marketplace', 'settings'];
+export const SCREEN_IDS: ScreenId[] = ['wall', 'focus', 'spawn', 'source-control', 'review', 'files', 'artifacts', 'marketplace', 'settings', 'extension'];
 
 interface RouterState {
   route: Route;

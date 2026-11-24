@@ -6,6 +6,7 @@ import { connectSettings, useSettings } from '../stores/settings';
 import { connectNotifications } from '../stores/ui';
 import { isNotImplemented } from './bridge';
 import { connectCommands, registerCoreCommands } from './coreCommands';
+import { connectExtensions } from '../extensions/store';
 
 /**
  * Subscribes every store to main's events, then loads initial state. Called once from App.
@@ -21,6 +22,7 @@ export function startStores(): () => void {
     connectNotifications(),
     registerCoreCommands(),
     connectCommands(),
+    connectExtensions(),
   ];
 
   const quiet = (p: Promise<unknown>) =>

@@ -164,10 +164,10 @@ Paths are relative to the repo root.
 | Spawn | done | Builds `AgentSpec`; presets and techniques from settings |
 | Source control | done | m2 (loading looks empty) |
 | Review | partial | Merge is wrong (B1). Toasts block the actions (M2). |
-| Files | done | Language servers from extensions are missing (see contribution points) |
+| Files | done | Language servers from extensions deferred (ADR 0008) |
 | Artifacts | partial | Whiteboard is a read-only SVG render, not an embedded editor (m7). claude.ai stays manual import (as briefed). |
 | Marketplace | done (packaged) | Not available in e2e-style launches (M4) |
-| Settings | done | Extension `settings` fields are not shown (M1) |
+| Settings | done | Extension `settings` fields in Settings › Extensions (M1 fixed) |
 | Status bar | partial | Polls every 15 s: it shows "0 sessions · 0 worktrees · 0 projects open" while agents run (M3). Plan meters come from `rate_limit_event` utilization (the brief said hide them; a documented source was found, so this is acceptable, but it needs an ADR). |
 | Command bar | done | Core and extension `commands` |
 
@@ -189,13 +189,13 @@ Paths are relative to the repo root.
 | --- | --- | --- |
 | `mcpServers` with risk labels | done | `extension-host/src/mcp-config.ts`, `args.ts` |
 | `commands` | done | `coreCommands.ts`, `extensions.runCommand` |
-| `panels` (sandboxed iframe + postMessage) | **missing in renderer** | The host RPC `panels.open` and `panels.postMessage` exist (`host-client.ts`), but no renderer component hosts an extension iframe |
-| `settings` (fields in Settings, secret → keychain) | partial | Storage and host API exist (`extension-host/src/services.ts`); no fields in the Settings screen |
-| `themes` | **missing** | The manifest is parsed, but the renderer never applies extension colour tokens (`extensions/themes` does nothing) |
-| `techniques` | **missing** | Not merged into Spawn or Settings techniques |
-| `artifactTypes` | **missing** | Parsed in `manifest.ts`; no viewer |
-| `languages` | **missing** | Parsed; no language-server process, no Monaco LSP wiring |
-| `deployTargets` | **missing** | Schema only; no Review action |
+| `panels` (sandboxed iframe + postMessage) | done (fixed 2026-11-24) | `oide-ext://` protocol (`services/extension-ui.ts`), `ExtensionFrame` in Focus's inspector and the `extension` screen, validated bridge (`extensions/panelBridge.ts` → `extensions.panelMessage` → host). E2E: `e2e/extensions.spec.ts` |
+| `settings` (fields in Settings, secret → keychain) | done (fixed 2026-11-24) | Settings › Extensions (`extensions/ExtensionSettingsSection.tsx`, `extensions.settings` / `setSetting`); secrets never cross IPC |
+| `themes` | done (fixed 2026-11-24) | Settings › Appearance lists contributed themes; `applyTheme` sets allow-listed tokens |
+| `techniques` | done (fixed 2026-11-24) | Merged by main into `settings.techniques` and the supervisor (Spawn), read-only in Settings › Techniques |
+| `artifactTypes` | done, with ADR 0009 (2026-11-24) | Typed artifacts (`ArtifactMeta.type`) open in the extension's viewer iframe; storage stays one of the three kinds |
+| `languages` | deferred, ADR 0008 (2026-11-24) | Parsed and shown in the first-run consent; no process |
+| `deployTargets` | done (fixed 2026-11-24) | Review summary actions (`extensions/DeployActions.tsx` → `extensions.runDeployTarget`) |
 
 ### Security bullets
 
@@ -224,7 +224,9 @@ used) is M7 scope.
 
 ### Major
 
-- **M1. Extension UI contribution points are not wired.** `panels`, `themes`, `techniques`,
+- **M1. Extension UI contribution points are not wired.** *Fixed 2026-11-24: see Contribution points
+  above and [extensions](extensions.md#ui-contributions); `languages` deferred by ADR 0008.* Original finding:
+  `panels`, `themes`, `techniques`,
   `artifactTypes`, `languages` and `deployTargets` are parsed but never reach the product. Extension `settings`
   have storage but no fields. Files: a panel host (sandboxed `<iframe sandbox="allow-scripts">` + `postMessage`
   bridge to `panels.postMessage`) in `renderer/src/screens/Focus/components/Inspector.tsx` and a full-screen route;

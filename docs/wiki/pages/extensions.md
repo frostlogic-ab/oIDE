@@ -102,6 +102,28 @@ child processes) as the user. Node's permission model would map `fs` and `spawn`
 succeed), and `child_process.fork` of the Electron binary needs the RunAsNode fuse, which is off.
 So capabilities stay consent text, and the Marketplace copy says they are not enforced.
 
+## UI contributions
+
+Every v1 contribution point reaches the product. Security details: [security](security.md#extension-panel-isolation).
+
+| Point | Where it shows | How it works |
+| --- | --- | --- |
+| `panels` | `inspector`: a tab in Focus's inspector, for agents in projects where the extension is on. `screen`: a full screen (route `extension`), with a letter button in the rail under the top group. Both also get "Open <title>" in Ctrl K. | `<iframe sandbox="allow-scripts">` on `oide-ext://<hash of name>/<entry>` (`ExtensionFrame.tsx`), served by main from the extension folder with a no-network CSP (`services/extension-ui.ts`). Inspector frames mount on first view and stay mounted while hidden. |
+| panel ⇄ host | `ctx.panels.postMessage` / `onMessage` / `open` | Panel → `parent.postMessage(data, '*')` → renderer bridge (`extensions/panelBridge.ts`, checks `event.source`) → `extensions.panelMessage` → main (extension on, panel declared, JSON ≤ 256 KB) → `ExtensionHostClient.sendPanelMessage`, which starts stopped host code first (internal event `onPanel:<id>`). Host → `extensions.panelMessage` event → every loaded frame of that panel (queued until it loads). `ctx.panels.open` → `extensions.panelOpen` event → Focus tab for that agent (or the agent already in Focus), otherwise full screen. The app sends `{ type: 'oide:context', agentId, projectId, worktreePath, branch }` when a frame loads; `oide:*` messages never reach host code. |
+| `commands` | Ctrl K, grouped under the extension | `extensions.runCommand` in the host. In Focus the argument is `{ agentId }`. Only extensions that are on somewhere are listed. |
+| `settings` | Settings › Extensions | `extensions.settings` / `extensions.setSetting` (type-checked; `extensions.settingChanged` event). Secret fields are password inputs; values go to the keychain (`ext:<name>/<key>`) and never come back, only `hasValue`. Host code reads them with `ctx.settings.get`. |
+| `themes` | Settings › Appearance lists the themes of extensions that are on (falls back to the canvas's four accents); "Next accent colour" in Ctrl K | The choice is stored as `ui.accent` (the theme's `accent` token). `extensions/store.ts` `applyTheme` sets allow-listed tokens: `accent`, `accent-contrast` (→ `--color-on-accent`), `link`, `link-hover`, `#rrggbb` only. |
+| `techniques` | Spawn agent › Advanced techniques, and a read-only "From extensions" list in Settings › Techniques | Main appends them to `settings.techniques` and to the supervisor's technique list as `ext:<name>:<id>` with `extension` = display name, off by default. Editing or deleting one is `forbidden`; a settings file cannot mark its own techniques as an extension's. |
+| `deployTargets` | Review's summary column, above Open pull request | `extensions.runDeployTarget({ extension, targetId, agentId })` checks the agent and that the extension is on for its project, then calls the host command registered under the target id with `{ agentId, projectId, title, branch, baseRef, worktreePath }`. Deploy targets are not plain commands (Ctrl K and `runCommand` cannot run them). A result `{ message, url }` becomes a toast with an Open link (https only). |
+| `artifactTypes` | Artifacts › Open, for artifacts whose `artifact.json` has `type: "<name>:<type id>"` | The extension's entry in the same sandboxed iframe (`ExtensionArtifactView.tsx`). It receives `{ type: 'oide:artifact', artifact: { id, title, kind, type, version, content } }` on load (or when it posts `oide:ready`) and saves with `{ type: 'oide:artifact.save', content }`, a new version of that artifact only. Storage stays one of the three kinds (ADR [0009](../../adr/0009-extension-artifact-types-use-existing-storage-kinds.md)). |
+| `languages` | Not started | Deferred, ADR [0008](../../adr/0008-defer-extension-language-servers.md): parsed and shown in the first-run consent, no process runs. |
+
+The fixture `packages/extension-host/test/fixtures/ui-builtins/ext-ui` (`@oide-test/ui`) has one of
+each point; `test/integration/extension-ui.test.ts`, `packages/extension-host/test/host-client-ui.test.ts`,
+`renderer/src/extensions/*.test.ts(x)` and the e2e `apps/desktop/e2e/extensions.spec.ts` (Browser
+preview in Focus, its default URL from Settings › Extensions, Ctrl K "Open browser preview", the
+frame's opaque origin and blocked fetch) cover them.
+
 ## Developer mode (`dev-mode.ts`)
 
 `DevModeWatcher` watches a folder the user picked (`source: 'folder'`, `devMode: true`; refused
@@ -114,8 +136,8 @@ host code (`client.restart(name)`) and tells the supervisor the extension's MCP 
 | Extension | Contributes |
 | --- | --- |
 | `@oide/ext-git` (Git) | Commands `git.openPullRequest` (`gh pr create --web --fill`) and `git.viewPullRequest` (`gh pr view --json …`, or `--web`) for an agent's worktree; no deploy targets, no agent tools. Capabilities: spawn, network github.com. |
-| `@oide/ext-browser-preview` (Browser preview) | Dependency-free stdio MCP server with one read-only tool `preview_url` (status, content type, redirect and `<title>` of a localhost URL; other hosts refused); panel `browserPreview.panel` that iframes a localhost URL; command `browserPreview.open`. |
-| `@oide/ext-themes` (Accent themes) | Themes Blue `#7AA2F7`, Green `#7FC8A9`, Violet `#C4A7E7`, Amber `#F2C078` (token `accent`), command `themes.nextAccent`. |
+| `@oide/ext-browser-preview` (Browser preview) | Dependency-free stdio MCP server with one read-only tool `preview_url` (status, content type, redirect and `<title>` of a localhost URL; other hosts refused); inspector panel `browserPreview.panel` that iframes a localhost URL (posts `ready`, host answers `init` with the `browserPreview.defaultUrl` setting; no `<form>`, since the sandbox has no `allow-forms`); command `browserPreview.open` (opens the panel for the agent in Focus and navigates it). |
+| `@oide/ext-themes` (Accent themes) | Manifest only: themes Blue `#7AA2F7`, Green `#7FC8A9`, Violet `#C4A7E7`, Amber `#F2C078` (tokens `accent`, `accent-contrast`). Its old `themes.nextAccent` host command changed a setting nothing read; the renderer's "Next accent colour" replaces it. |
 
 Their bundled code lives in `dist/` (plain ESM, checked with `checkJs`); `extensions/.gitignore`
 re-includes `dist/` and `.gitattributes` pins LF so packed hashes match across OSes.
@@ -124,6 +146,8 @@ re-includes `dist/` and `.gitattributes` pins LF so packed hashes match across O
 
 - Declared `capabilities` are shown for consent, not enforced (open question 12, SEC-14): see Host
   process above. Revisit when Electron's utilityProcess supports Node's permission model.
-- `languages`, `artifactTypes`, `techniques` and `deployTargets` are parsed and resolved, but no
-  host code runs them yet; the renderer and settings service consume them.
+- `languages` are parsed but not started (ADR 0008). Typed artifacts cannot be created from the UI
+  yet (ADR 0009).
+- UI loads for extensions that are on globally or in some project; one that only a team file
+  (`.oide/extensions.json`) turns on gets its agent tools but no host code or panels, as before.
 - The proxy speaks Streamable HTTP; legacy SSE remotes behind OAuth are not proxied.

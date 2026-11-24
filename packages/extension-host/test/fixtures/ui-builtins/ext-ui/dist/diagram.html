@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Diagram</title>
+<style>body { margin: 0; padding: 12px; background: #111418; color: #E6E8EB; font: 13px system-ui, sans-serif; } textarea { width: 100%; height: 120px; }</style>
+</head>
+<body>
+<!-- Viewer of the "diagram" artifact type: one edge per line, "A -> B". -->
+<ul id="edges" aria-label="Edges"></ul>
+<label>Source <textarea id="src"></textarea></label>
+<button type="button" id="save">Save</button>
+<script>
+  const src = document.getElementById('src');
+  function render(text) {
+    const ul = document.getElementById('edges');
+    ul.textContent = '';
+    for (const line of text.split('\n')) {
+      const m = /^\s*(.+?)\s*->\s*(.+?)\s*$/.exec(line);
+      if (!m) continue;
+      const li = document.createElement('li');
+      li.textContent = m[1] + ' \u2192 ' + m[2];
+      ul.append(li);
+    }
+  }
+  window.addEventListener('message', (e) => {
+    if (e.source !== parent || !e.data || e.data.type !== 'oide:artifact') return;
+    src.value = e.data.artifact.content;
+    render(src.value);
+  });
+  document.getElementById('save').addEventListener('click', () => parent.postMessage({ type: 'oide:artifact.save', content: src.value }, '*'));
+  parent.postMessage({ type: 'oide:ready' }, '*');
+</script>
+</body>
+</html>

@@ -6,12 +6,14 @@ import { formatDuration, formatTokens } from '../../../lib/format';
 import { navigate } from '../../../stores/router';
 import { isSubagentActive, modelEffort, routeLabel, routingLine, subagentStatusText, subagentSummary, subagentTokenShare, timeline, tokenCount } from '../model/focus';
 import { subagentFiles } from '../model/transcript';
+import { InspectorPanelFrames, useInspectorPanels } from '../../../extensions/InspectorPanels';
 import { Markdown } from './Markdown';
 
 /** xterm loads only when the Terminal tab is first opened. */
 const TerminalPanel = lazy(() => import('./TerminalPanel').then((m) => ({ default: m.TerminalPanel })));
 
-export type InspectorTab = 'plan' | 'subs' | 'changes' | 'artifacts' | 'term';
+/** `ext:<extension>::<panel id>`: an extension panel (`contributes.panels`, location "inspector"). */
+export type InspectorTab = 'plan' | 'subs' | 'changes' | 'artifacts' | 'term' | `ext:${string}`;
 
 export interface InspectorProps {
   agent: AgentSummary;
@@ -34,12 +36,15 @@ export function Inspector({ agent, events, subEvents, tab, onTab, now, stopReque
     if (tab === 'term') setTermMounted(true);
   }, [tab]);
 
-  const tabs = [
-    { id: 'plan' as const, label: 'Plan' },
-    { id: 'subs' as const, label: `Subagents${agent.subagents.length ? ` ${agent.subagents.length}` : ''}` },
-    { id: 'changes' as const, label: 'Changes' },
-    { id: 'artifacts' as const, label: 'Artifacts' },
-    { id: 'term' as const, label: 'Terminal' },
+  const extTabs = useInspectorPanels(agent, onTab, ID);
+  const isExt = tab.startsWith('ext:');
+  const tabs: Array<{ id: InspectorTab; label: string }> = [
+    { id: 'plan', label: 'Plan' },
+    { id: 'subs', label: `Subagents${agent.subagents.length ? ` ${agent.subagents.length}` : ''}` },
+    { id: 'changes', label: 'Changes' },
+    { id: 'artifacts', label: 'Artifacts' },
+    { id: 'term', label: 'Terminal' },
+    ...extTabs.map((t) => ({ id: t.id, label: t.label })),
   ];
 
   return (
@@ -47,9 +52,18 @@ export function Inspector({ agent, events, subEvents, tab, onTab, now, stopReque
     // their padding so "Terminal" is never clipped.
     <aside aria-label="Inspector" className="@container flex-[1_1_320px] max-w-[340px] min-w-[300px] flex flex-col bg-panel border-l border-line box-border min-h-0">
       <div className="px-2 @max-[339px]:px-1 pt-2 border-b border-line">
-        <Tabs tabs={tabs} value={tab} onChange={onTab} label="Inspector" idPrefix={ID} tabClassName="@max-[339px]:px-1" />
+        <Tabs
+          tabs={tabs}
+          value={tab}
+          onChange={onTab}
+          label="Inspector"
+          idPrefix={ID}
+          // Extension panels add tabs: tighter padding, and the row scrolls without a scrollbar.
+          className="[scrollbar-width:none]"
+          tabClassName={extTabs.length ? 'px-1' : '@max-[339px]:px-1'}
+        />
       </div>
-      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col" hidden={tab === 'term'}>
+      <div className="flex-1 min-h-0 overflow-y-auto flex flex-col" hidden={tab === 'term' || isExt}>
         {tab === 'plan' && <PlanPanel agent={agent} events={events} />}
         {tab === 'subs' && <SubagentsPanel agent={agent} subEvents={subEvents} now={now} stopRequested={stopRequested} onOpen={onOpenSubagent} onStop={onStopSubagent} />}
         {tab === 'changes' && <ChangesPanel agent={agent} />}
@@ -62,7 +76,8 @@ export function Inspector({ agent, events, subEvents, tab, onTab, now, stopReque
           </Suspense>
         </div>
       )}
-      {tab !== 'term' && <AgentTools projectId={agent.projectId} />}
+      <InspectorPanelFrames agent={agent} tabs={extTabs} tab={tab} idPrefix={ID} />
+      {tab !== 'term' && !isExt && <AgentTools projectId={agent.projectId} />}
     </aside>
   );
 }

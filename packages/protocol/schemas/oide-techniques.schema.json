@@ -56,6 +56,9 @@
               "global",
               "project"
             ]
+          },
+          "extension": {
+            "type": "string"
           }
         },
         "required": [

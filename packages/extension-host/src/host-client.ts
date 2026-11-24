@@ -105,6 +105,11 @@ export interface HostExtension {
   panelIds: string[];
   /** Commands from `contributes.commands`. */
   commandIds: string[];
+  /**
+   * `contributes.deployTargets` ids. Host code registers a command with the same id; Review runs it
+   * through `runDeployTarget` with the agent and its worktree as the argument.
+   */
+  deployTargetIds?: string[];
 }
 
 export type HostState = 'stopped' | 'starting' | 'running' | 'reloading' | 'failed';
@@ -213,7 +218,7 @@ export class ExtensionHostClient {
   /** Commands currently available (contributed plus registered at runtime). */
   commands(): Array<{ extension: string; commandId: string }> {
     const out: Array<{ extension: string; commandId: string }> = [];
-    for (const r of this.runners.values()) for (const id of new Set([...r.ext.commandIds, ...r.commands])) out.push({ extension: r.ext.name, commandId: id });
+    for (const r of this.runners.values()) for (const id of new Set([...r.ext.commandIds, ...r.commands])) if (!r.ext.deployTargetIds?.includes(id)) out.push({ extension: r.ext.name, commandId: id });
     return out;
   }
 
@@ -226,11 +231,31 @@ export class ExtensionHostClient {
     }
   }
 
-  /** Data a panel iframe posted to its host code. */
-  sendPanelMessage(extension: string, panelId: string, data: unknown): void {
+  /**
+   * Data a panel iframe posted to its host code. A stopped host is started first (`onPanel:<id>`),
+   * so a panel the user opened can talk to code that was not activated yet. Resolves false when the
+   * extension has no such panel or its host code cannot run.
+   */
+  async sendPanelMessage(extension: string, panelId: string, data: unknown): Promise<boolean> {
     const r = this.runners.get(extension);
-    if (!r?.child || r.state !== 'running' || !r.ext.panelIds.includes(panelId)) return;
+    if (!r || !r.ext.panelIds.includes(panelId)) return false;
+    try {
+      await this.ensureStarted(r, `onPanel:${panelId}`);
+    } catch {
+      return false;
+    }
+    if (!r.child || r.state !== 'running') return false;
     r.child.postMessage({ t: 'panel', panelId, data });
+    return true;
+  }
+
+  /** Run one of `extension`'s deploy targets (a command its host code registered under the target id). */
+  async runDeployTarget(extension: string, targetId: string, arg: Record<string, unknown>): Promise<unknown> {
+    const r = this.runners.get(extension);
+    if (!r || !(r.ext.deployTargetIds ?? []).includes(targetId)) throw new Error(`${extension} has no deploy target ${targetId}`);
+    await this.ensureStarted(r, `onDeploy:${targetId}`);
+    if (!r.commands.has(targetId)) throw new Error(`${r.ext.name} did not register a handler for deploy target ${targetId}`);
+    return this.call(r, { t: 'run', commandId: targetId, args: [arg] }, `deploy target ${targetId}`);
   }
 
   /** Restart one extension's host code (developer mode). Keeps its activation event. */
@@ -258,8 +283,12 @@ export class ExtensionHostClient {
     return { ext, child: null, state: 'stopped', activatedBy: null, commands: new Set(), subscribed: false, ready: null, pending: new Map(), crashes: [], stopping: false, restartTimer: null, generation: 0 };
   }
 
+  /** Deploy targets are not commands: only `runDeployTarget` (Review, with a checked agent) runs them. */
   private ownerOf(commandId: string): Runner | undefined {
-    for (const r of this.runners.values()) if (r.ext.commandIds.includes(commandId) || r.commands.has(commandId)) return r;
+    for (const r of this.runners.values()) {
+      if (r.ext.deployTargetIds?.includes(commandId)) continue;
+      if (r.ext.commandIds.includes(commandId) || r.commands.has(commandId)) return r;
+    }
     return undefined;
   }
 

@@ -1,18 +1,46 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { app, dialog, Notification, protocol, safeStorage, shell, utilityProcess } from 'electron';
 import { utilityProcessFork } from '@oide/extension-host';
 import type { ArtifactStore } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { ARTIFACT_CSP, ARTIFACT_SCHEME, resolveArtifactUrl } from './core.js';
+import { EXTENSION_SCHEME, resolveExtensionUrl, type ExtensionUiLookup } from './extension-ui.js';
 import type { Platform } from './platform.js';
 import type { TerminalService } from './terminals.js';
 
-/** Must run before `app.whenReady()`: the artifact preview scheme. */
+/** Must run before `app.whenReady()`: the artifact preview and extension UI schemes (one call registers both). */
 export function registerArtifactScheme(): void {
   protocol.registerSchemesAsPrivileged([
     { scheme: ARTIFACT_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: false, corsEnabled: false, stream: true, bypassCSP: false } },
+    { scheme: EXTENSION_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: false, corsEnabled: false, stream: true, bypassCSP: false } },
   ]);
+}
+
+/**
+ * Serve `oide-ext://<origin>/<file>`: panel and artifact-viewer files of one extension, only from
+ * inside its folder, with a CSP that blocks network access (see extension-ui.ts). The renderer shows
+ * them in `<iframe sandbox="allow-scripts">`.
+ */
+export function handleExtensionScheme(lookup: ExtensionUiLookup): void {
+  protocol.handle(EXTENSION_SCHEME, async (req) => {
+    if (req.method !== 'GET') return new Response('Method not allowed', { status: 405 });
+    const hit = resolveExtensionUrl(lookup, req.url);
+    if (!hit) return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } });
+    const body = await readFile(hit.file);
+    return new Response(body, {
+      status: 200,
+      headers: {
+        'content-type': hit.mime,
+        'content-security-policy': hit.csp,
+        'x-content-type-options': 'nosniff',
+        'cache-control': 'no-store',
+        'cross-origin-resource-policy': 'same-site',
+        'referrer-policy': 'no-referrer',
+      },
+    });
+  });
 }
 
 /**
@@ -42,12 +70,27 @@ const TRUST_DETAIL =
   'Trusted projects may run their .oide/setup command when an agent starts, pre-approve tool calls with .oide/permissions.json allow rules, ' +
   'and start the MCP servers listed in .mcp.json. Untrusted projects ignore all three. You can change this later in the project menu.';
 
+/**
+ * The monorepo root in unpackaged builds (dev and e2e). `app.getAppPath()` is `apps/desktop` under
+ * `electron-vite dev` but `apps/desktop/out/main` when launched as `electron out/main/index.js`, so
+ * walk up to the folder that holds `pnpm-workspace.yaml`.
+ */
+export function devRepoRoot(start: string): string {
+  let dir = resolve(start);
+  for (;;) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) return dir;
+    const up = dirname(dir);
+    if (up === dir) return resolve(start, '..', '..');
+    dir = up;
+  }
+}
+
 export function electronPlatform(ctx: MainContext, terminals: TerminalService): Platform {
   const win = () => {
     const w = ctx.getWindow();
     return w && !w.isDestroyed() ? w : undefined;
   };
-  const repoRoot = resolve(app.getAppPath(), '..', '..');
+  const repoRoot = app.isPackaged ? '' : devRepoRoot(app.getAppPath());
   // E2E only (unpackaged builds): answer the trust dialog without showing it.
   const autoTrust = !app.isPackaged ? process.env.OIDE_E2E_TRUST : undefined;
   return {

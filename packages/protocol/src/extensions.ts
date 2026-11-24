@@ -121,6 +121,25 @@ export const InstalledExtension = z.object({
 });
 export type InstalledExtension = z.infer<typeof InstalledExtension>;
 
+/** A value of an extension setting (`contributes.settings`). */
+export const ExtensionSettingValue = z.union([z.string(), z.number(), z.boolean(), z.null()]);
+export type ExtensionSettingValue = z.infer<typeof ExtensionSettingValue>;
+
+/**
+ * One field of Settings › Extensions. Secret fields live in the keychain and never cross IPC:
+ * `value` is absent for them and `hasValue` says whether one is stored.
+ */
+export const ExtensionSettingField = z.object({
+  key: z.string(),
+  type: z.enum(['string', 'number', 'boolean']),
+  secret: z.boolean(),
+  description: z.string().optional(),
+  default: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  hasValue: z.boolean(),
+});
+export type ExtensionSettingField = z.infer<typeof ExtensionSettingField>;
+
 /** Add custom: all four routes end in this record. */
 export const CustomTool = z.object({
   name: z.string(),

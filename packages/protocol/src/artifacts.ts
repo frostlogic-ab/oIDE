@@ -16,6 +16,11 @@ export const ArtifactMeta = z.object({
   /** Entry file relative to the artifact folder (index.html, doc.md, board.excalidraw). */
   entry: z.string(),
   importedFrom: z.string().url().optional(),
+  /**
+   * Extension artifact type (`contributes.artifactTypes`) as `<extension name>:<type id>`. The kind
+   * still decides the storage format; the extension's viewer iframe shows and edits the content.
+   */
+  type: z.string().max(300).optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });
