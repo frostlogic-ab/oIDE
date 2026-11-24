@@ -6,7 +6,9 @@
  *   lower scopes from seeing keys. Listens on the renderer window only; never registers OS-global
  *   shortcuts.
  * - Keystrokes inside inputs, textareas, selects and contenteditable are ignored unless chorded
- *   (Ctrl, Cmd/Meta or Alt held), so typing "j" in the composer never jumps agents.
+ *   (Ctrl, Cmd/Meta or Alt held), so typing "j" in the composer never jumps agents. The same goes
+ *   for anything inside a Monaco editor (its EditContext input is a plain div), a contenteditable
+ *   ancestor, or the Excalidraw whiteboard (its text editor and its own single-key tool shortcuts).
  * - `Mod` means Cmd on macOS and Ctrl elsewhere.
  */
 
@@ -149,6 +151,13 @@ export function comboLabel(combo: string, isMac: boolean): string {
     .join(' ');
 }
 
+/**
+ * Containers whose keys belong to an embedded editor: Monaco (Files, artifact editors), any
+ * contenteditable region, and Excalidraw (`.excalidraw`, with its `.excalidraw-wysiwyg` text editor).
+ */
+export const EDITOR_CONTAINER_SELECTOR =
+  '.monaco-editor, [contenteditable]:not([contenteditable="false"]), .excalidraw, .excalidraw-wysiwyg';
+
 export function isEditableTarget(target: EventTarget | null): boolean {
   if (!target || typeof (target as { tagName?: unknown }).tagName !== 'string') return false;
   const el = target as HTMLElement;
@@ -158,7 +167,8 @@ export function isEditableTarget(target: EventTarget | null): boolean {
     const type = ((el as HTMLInputElement).type || 'text').toLowerCase();
     return !['checkbox', 'radio', 'button', 'submit', 'reset', 'range', 'color', 'file'].includes(type);
   }
-  return el.isContentEditable === true || el.getAttribute?.('contenteditable') === 'true';
+  if (el.isContentEditable === true || el.getAttribute?.('contenteditable') === 'true') return true;
+  return typeof el.closest === 'function' && el.closest(EDITOR_CONTAINER_SELECTOR) !== null;
 }
 
 function isChorded(e: KeyEventLike): boolean {

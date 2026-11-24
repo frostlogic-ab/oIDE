@@ -269,7 +269,9 @@ useKeymapScope('my-dialog', {}, { modal: true }); // blocks scopes underneath
 ```
 
 The newest scope wins; a handler returning `false` falls through. Unchorded keys inside inputs,
-textareas, selects and contenteditable are ignored; chorded ones (Ctrl/Cmd/Alt) still fire.
+textareas, selects and contenteditable are ignored, and so is anything inside a Monaco editor
+(`.monaco-editor`: its EditContext input is a plain div), a contenteditable ancestor or Excalidraw
+(`.excalidraw`, `.excalidraw-wysiwyg`) (`EDITOR_CONTAINER_SELECTOR`); chorded ones (Ctrl/Cmd/Alt) still fire.
 Rebinds live in Settings (`keybindings`: action → combos, only changed actions; `[]` unbinds): `keymap.rebind`,
 `assign` (takes a combo from the actions that had it) and `resetBinding` send a patch through
 `settings.update`, and `settings.changed` feeds `keymap.setOverrides`. Combos are saved portable

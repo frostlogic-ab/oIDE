@@ -332,3 +332,13 @@ chunk unchanged, Excalidraw 1.8 MB lazy, fonts 13.1 MB (Xiaolai CJK 12.6 MB). Te
 (`Editors.test.tsx`, `excalidraw-env.test.ts`, model), e2e (`e2e/artifacts.spec.ts`: doc edited to v2,
 whiteboard saved under the production CSP). Found: the keymap does not treat Monaco's EditContext as
 editable, so plain-key shortcuts can fire while typing in other Monaco hosts.
+
+## [2026-11-25] build | Integration: release, ux, extui, artplus merged
+Branch `integrate` merges `wave4/release`, `main` (ea5cbd9), `wave4/ux`, `wave4/extui` and `wave4/artplus`.
+No store migration or ADR collisions (migration 2 from ux; ADRs 0005-0007 ux, 0008-0009 extui). Settings
+gains both `updates` and `keybindings`; Settings has Extensions and Updates sections; Review keeps the
+sensitive-files warning beside deploy actions; the artifact Viewer keeps artplus's editors and extui's
+extension artifact types. Tests from the branches now use main's SEC-07/SEC-08 stand-ins. Fixed: the
+keymap ignored Monaco's EditContext input, so J/K/N/Y/D fired while typing in the Files editor; unchorded
+keys inside `.monaco-editor`, contenteditable ancestors and Excalidraw are now ignored
+([desktop-shell](pages/desktop-shell.md)).
