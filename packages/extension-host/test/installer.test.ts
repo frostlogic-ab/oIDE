@@ -74,8 +74,8 @@ describe('tarball extraction', () => {
       { path: 'package/sub/x', type: '2', linkpath: '..' },
       { path: 'package/a', type: '2', linkpath: 'sub/x' },
       { path: 'package/esc', type: '2', linkpath: 'a/..' },
-    ];
-    await expect(inspectTarball(makeTar(chain))).rejects.toThrow(/symbolic link/);
+    ] as const;
+    await expect(inspectTarball(makeTar([...chain]))).rejects.toThrow(/symbolic link/);
   });
 
   it('enforces size limits', async () => {
