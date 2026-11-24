@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TESTED_CLI_RANGE, type PermissionMode, type Settings } from '@oide/protocol';
 import { cn } from '@oide/ui';
-import { ipcErrorMessage } from '../../lib/bridge';
+import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { cliHealth, useCli } from '../../stores/cli';
 import { toast } from '../../stores/ui';
 import { H1, Rd, Row, Sec, describedBy, inp, inpSm, outlineBtn, savePatch } from './ui';
@@ -181,18 +181,32 @@ function CliPathInput({ value, labelledBy, describedById }: { value: string; lab
     if (v === value) return;
     void savePatch({ claude: { cliPath: v ? v : null } });
   };
+  // SEC-29: a typed path asks for a native confirmation in main; one chosen here does not.
+  const browse = async () => {
+    try {
+      const p = await oide.invoke('dialog.pickCli', undefined);
+      if (p) void savePatch({ claude: { cliPath: p } });
+    } catch (err) {
+      toast(`Could not open the file picker: ${ipcErrorMessage(err)}`, 'error');
+    }
+  };
   return (
-    <input
-      type="text"
-      aria-labelledby={labelledBy}
-      aria-describedby={describedById}
-      className={cn(inpSm, 'w-[282px]')}
-      placeholder="auto-detect"
-      value={draft}
-      onChange={(e) => setDraft(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => e.key === 'Enter' && commit()}
-    />
+    <span className="inline-flex items-center gap-2">
+      <input
+        type="text"
+        aria-labelledby={labelledBy}
+        aria-describedby={describedById}
+        className={cn(inpSm, 'w-[200px]')}
+        placeholder="auto-detect"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === 'Enter' && commit()}
+      />
+      <button type="button" className={outlineBtn} onClick={() => void browse()}>
+        Browse…
+      </button>
+    </span>
   );
 }
 

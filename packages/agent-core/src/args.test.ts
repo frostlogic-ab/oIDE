@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AgentSpec, CliInfo, Technique } from '@oide/protocol';
-import { allowListEnv, buildLaunch, filterExtraFlags, LaunchError, shellSplit, type LaunchContext } from './args.js';
+import { allowListEnv, buildLaunch, customModelEnv, deniedModelEnvKeys, filterExtraFlags, isDeniedModelEnvKey, LaunchError, shellSplit, type LaunchContext } from './args.js';
 import { testSettings } from '../test/helpers.js';
 
 const cli = CliInfo.parse({ found: true, path: 'C:\\bin\\claude.exe', version: '2.1.325', inTestedRange: true, features: { effort: true, 'mode:auto': true, agents: true, 'permission-prompt-tool': true, 'include-partial-messages': true, 'forward-subagent-text': true } });
@@ -219,6 +219,24 @@ describe('helpers', () => {
   });
   it('SEC-01: the agent env makes Windows skip the cwd when the CLI spawns git/node', () => {
     expect(buildLaunch(spec(), ctx({ platform: 'win32' })).env.NoDefaultCurrentDirectoryInExePath).toBe('1');
+  });
+  it('SEC-28: a custom model env cannot set loaders, PATH, proxies, TLS, Electron, Claude Code or oIDE variables', () => {
+    for (const k of ['NODE_OPTIONS', 'node_options', 'Path', 'PATH', 'PATHEXT', 'HTTPS_PROXY', 'https_proxy', 'ALL_PROXY', 'NO_PROXY', 'LD_PRELOAD', 'ld_library_path', 'DYLD_INSERT_LIBRARIES', 'ELECTRON_RUN_AS_NODE', 'CLAUDE_CODE_GIT_BASH_PATH', 'CLAUDE_CODE_SHELL_PREFIX', 'CLAUDE_CODE_USE_BEDROCK', 'ANTHROPIC_BASE_URL', 'ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_CUSTOM_HEADERS', 'ANTHROPIC_BEDROCK_BASE_URL', 'NODE_TLS_REJECT_UNAUTHORIZED', 'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'PYTHONPATH', 'PERL5OPT', 'GIT_SSH_COMMAND', 'BASH_ENV', 'COMSPEC', 'OIDE_AGENT_ID', 'OIDE_MCP_HANDSHAKE', 'CLAUDE_CONFIG_DIR', 'AWS_ENDPOINT_URL_BEDROCK_RUNTIME', 'NoDefaultCurrentDirectoryInExePath', 'bad-name', '']) {
+      expect(isDeniedModelEnvKey(k), k).toBe(true);
+    }
+    for (const k of ['AWS_REGION', 'AWS_PROFILE', 'CLOUD_ML_REGION', 'ANTHROPIC_VERTEX_PROJECT_ID', 'ANTHROPIC_DEFAULT_SONNET_MODEL', 'anthropic_small_fast_model', 'CLAUDE_CODE_MAX_OUTPUT_TOKENS', 'FOO_BAR', 'PATHS_EXTRA', 'NODEJS_FLAVOR']) {
+      expect(isDeniedModelEnvKey(k), k).toBe(false);
+    }
+    expect(deniedModelEnvKeys({ AWS_REGION: 'x', NODE_OPTIONS: 'y' })).toEqual(['NODE_OPTIONS']);
+    const warnings: string[] = [];
+    const env = customModelEnv({ id: 'm', name: 'M', provider: 'bedrock', model: 'x', hasKey: false, extraEnv: { AWS_REGION: 'eu-west-1', NODE_OPTIONS: '--require x', https_proxy: 'http://evil', ANTHROPIC_BEDROCK_BASE_URL: 'https://evil' } }, undefined, warnings);
+    expect(env).toEqual({ AWS_REGION: 'eu-west-1', CLAUDE_CODE_USE_BEDROCK: '1', ANTHROPIC_MODEL: 'x' });
+    expect(warnings[0]).toMatch(/NODE_OPTIONS, https_proxy, ANTHROPIC_BEDROCK_BASE_URL/);
+    // buildLaunch: a stored model with a denied key (e.g. from before SEC-28) still cannot set it.
+    const p = buildLaunch(spec({ customModel: { id: 'cm1' } }), ctx({ baseEnv: { PATH: '/usr/bin' }, customModel: { id: 'cm1', name: 'L', provider: 'local', baseUrl: 'http://127.0.0.1:1', model: 'q', hasKey: false, extraEnv: { PATH: '/evil', NODE_OPTIONS: '--require x' } } }));
+    expect(p.env.PATH).toBe('/usr/bin');
+    expect(p.env.NODE_OPTIONS).toBeUndefined();
+    expect(p.warnings.join(' | ')).toMatch(/PATH, NODE_OPTIONS/);
   });
   it('allowListEnv never copies unknown keys', () => {
     expect(allowListEnv({ PATH: 'p', SECRET: 's', lc_ctype: 'x', https_proxy: 'h' })).toEqual({ PATH: 'p', lc_ctype: 'x', https_proxy: 'h' });

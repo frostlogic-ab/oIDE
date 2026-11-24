@@ -45,10 +45,10 @@ describe('core security fixes', () => {
     const s = await h.call('settings.get', undefined);
     expect(s.claude.cliPath).toBeUndefined();
     expect(s.claude.extraFlags).toBe('');
-    // Clearing needs no confirmation; a path picked in the file dialog this session needs none either.
+    // Clearing needs no confirmation; a path picked in the CLI picker this session needs none either (SEC-29).
     await h.call('settings.update', { patch: { claude: { extraFlags: '' } } });
     const { pathKey } = await import('../../packages/git/src/index.js');
-    h.services.picked.add(pathKey('C:\\picked\\claude.exe'));
+    h.services.pickedCli.add(pathKey('C:\\picked\\claude.exe'));
     expect((await h.call('settings.update', { patch: { claude: { cliPath: 'C:\\picked\\claude.exe' } } })).claude.cliPath).toBe('C:\\picked\\claude.exe');
   });
 
@@ -71,7 +71,7 @@ describe('core security fixes', () => {
   });
 
   it('SEC-09: a key re-entered with the new URL works; the old one is gone', async () => {
-    const h = await harness();
+    const h = await harness({ confirm: 'accept' }); // endpoint changes ask first (SEC-28)
     const model = { id: 'm1', name: 'Mine', provider: 'compatible-api' as const, baseUrl: 'https://a.example.invalid', model: 'x', hasKey: false, extraEnv: {} };
     expect((await h.call('settings.saveCustomModel', { model, apiKey: 'sk-1' })).hasKey).toBe(true);
     // Re-pointing through a raw settings.update does not carry the key either.

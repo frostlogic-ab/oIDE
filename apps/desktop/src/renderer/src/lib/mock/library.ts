@@ -555,6 +555,7 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
       return { ok: true as const };
     },
     'dialog.pickFile': () => '/Users/you/Downloads/pricing-page.html',
+    'dialog.pickCli': () => '/usr/local/bin/claude',
 
     /* ---- marketplace */
     'extensions.index': () => marketplaceEntries,

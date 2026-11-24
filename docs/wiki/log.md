@@ -259,3 +259,15 @@ icon (`pnpm icons`: SVG to PNG/ICO/ICNS in `apps/desktop/build/`). Name check re
 extension-host test fixture `ext-sample/dist/` was gitignored, so fresh checkouts failed
 `host-client.test.ts`; it is now tracked. Pages: [packaging](pages/packaging.md),
 [milestones](pages/milestones.md), [screen-settings](pages/screen-settings.md), [protocol](pages/protocol.md).
+
+## [2026-11-24] build | Security fixes (custom model env, CLI path)
+
+Fixed three findings from an automated scan of the core security fixes (review-security SEC-28..30).
+SEC-28 (high): a custom model's `extraEnv` can no longer set loader, interpreter, PATH, proxy, TLS,
+Electron, `ANTHROPIC_*`, `CLAUDE_CODE_*` or `OIDE_*` variables (`DENIED_MODEL_ENV` in agent-core,
+case-insensitive and prefix-aware); main refuses them at save time and asks through a native
+confirmation whenever a model's base URL, provider or env changes. SEC-29 (medium): only a path
+picked in the new `dialog.pickCli` (Settings › Claude Code › CLI path › Browse…) skips the CLI path
+confirmation, once; other dialog picks no longer count. SEC-30 (medium): custom model keys are bound
+to a hash of origin, provider and the whole `extraEnv`. New `test/security/custom-model-env.test.ts`
+and agent-core denylist tests. Pages updated: security, review-security.
