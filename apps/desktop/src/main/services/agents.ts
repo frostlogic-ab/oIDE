@@ -6,6 +6,7 @@ import { ENTRY_FILES, readOideFile, type SecretStore, type SettingsService, type
 import type { AgentEvent, AgentSpecInput, AgentStatus, AgentSummary, ArtifactKind, PermissionAnswer, PermissionMode, UserMessage } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
+import { boundModelKey } from '../security/model-keys.js';
 import type { CliService } from './cli.js';
 import type { ExtensionsService } from './extensions.js';
 import type { GitService } from './git.js';
@@ -267,7 +268,13 @@ export class AgentsService {
   }
 
   private secretProvider(): SecretProvider {
-    return { customModelKey: async (id) => this.o.secrets.get(`model:${id}`) };
+    // SEC-09: only while the model still points at the origin the key was entered for.
+    return {
+      customModelKey: async (id) => {
+        const m = this.o.settings.get().models.custom.find((x) => x.id === id);
+        return m ? boundModelKey(this.o.secrets, m) : undefined;
+      },
+    };
   }
 
   // ---------------------------------------------------------------- summaries, notifications
@@ -278,7 +285,7 @@ export class AgentsService {
     if (s.worktreePath && !o.ctx.roots.list('worktree').some((r) => samePath(r, s.worktreePath!))) {
       const p = o.projects.get(s.projectId);
       if (p && !samePath(p.path, s.worktreePath)) o.ctx.roots.add(s.worktreePath, 'worktree');
-      this.git?.watch(s.worktreePath, s.projectId);
+      if (p?.trusted) this.git?.watch(s.worktreePath, s.projectId);
     }
     const prev = this.lastStatus.get(s.id);
     if (prev === s.status) return;

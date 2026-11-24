@@ -93,7 +93,8 @@ export function killTree(child: ChildProcess, platform: NodeJS.Platform = proces
   if (pid === undefined || child.exitCode !== null) return;
   if (platform === 'win32') {
     try {
-      const tk = spawn('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+      // Absolute, never a bare name (SEC-01).
+      const tk = spawn(`${process.env.SystemRoot ?? 'C:\\Windows'}\\System32\\taskkill.exe`, ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
       tk.on('error', () => child.kill());
     } catch {
       child.kill();

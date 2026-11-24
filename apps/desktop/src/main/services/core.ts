@@ -1,8 +1,9 @@
 import { existsSync, realpathSync, statSync } from 'node:fs';
-import { extname, join, relative, resolve, sep } from 'node:path';
+import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { AgentDriver } from '@oide/agent-core';
-import { WorktreeManager, type GhCli } from '@oide/git';
+import { WorktreeManager, isInside, resolveTool, setRepoTrustResolver, type GhCli } from '@oide/git';
 import { OideMcpServer, type ArtifactsBackend as McpArtifactsBackend } from '@oide/mcp-server';
+import type { ArtifactMeta } from '@oide/protocol';
 import { ArtifactStore, SqliteSecretStore, openStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { AgentsService } from './agents.js';
@@ -45,16 +46,32 @@ export interface CoreOptions {
   gh?: GhCli;
 }
 
-/** Artifacts store → the MCP server's ctx-based backend (agent attribution and project scoping). */
-function mcpArtifacts(store: ArtifactStore): McpArtifactsBackend {
+/**
+ * Artifacts store → the MCP server's ctx-based backend (agent attribution and project scoping).
+ * SEC-26: artifacts committed in an untrusted repo (`.oide/artifacts/`) are a prompt-injection
+ * channel, so agents neither list nor read them until the project is trusted; and an agent only
+ * reaches its own project's artifacts (plus project-less ones).
+ */
+export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) => boolean): McpArtifactsBackend {
+  const hidden = (id: string) => `Artifact ${id} is not available to this agent (another project, or a repo artifact of an untrusted project).`;
+  const visible = (ctx: { projectId?: string }, m: ArtifactMeta) =>
+    (!m.projectId || !ctx.projectId || m.projectId === ctx.projectId) && !(m.location === 'repo' && m.projectId && !trusted(m.projectId));
   return {
     list: async (ctx, f) => {
       const all = await store.list({ ...(f.kind ? { kind: f.kind } : {}) }, ctx.agentId);
       const q = f.query?.toLowerCase();
-      return all.filter((m) => (!m.projectId || !ctx.projectId || m.projectId === ctx.projectId) && (!q || m.title.toLowerCase().includes(q)));
+      return all.filter((m) => visible(ctx, m) && (!q || m.title.toLowerCase().includes(q)));
     },
-    read: (ctx, id) => store.read(id, ctx.agentId),
-    write: (ctx, id, content) => store.write(id, content, ctx.agentId),
+    read: async (ctx, id) => {
+      const r = await store.read(id);
+      if (!visible(ctx, r.meta)) throw new Error(hidden(id));
+      store.recordUse(id, ctx.agentId, 'read');
+      return r;
+    },
+    write: async (ctx, id, content) => {
+      if (!visible(ctx, (await store.read(id)).meta)) throw new Error(hidden(id));
+      return store.write(id, content, ctx.agentId);
+    },
     create: (ctx, input) => store.createForAgent({ title: input.title, kind: input.kind, content: input.content, ...(ctx.projectId ? { projectId: ctx.projectId } : {}) }, ctx.agentId),
   };
 }
@@ -87,14 +104,17 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
 
   const mcp = new OideMcpServer({
     appDataDir: ctx.userDataDir,
-    artifacts: mcpArtifacts(artifacts),
+    artifacts: mcpArtifacts(artifacts, (id) => store.projects.get(id)?.trusted === true),
     onArtifactUse: (u) => ctx.emit('artifacts.changed', u.artifactId && u.artifactId !== '*' ? { id: u.artifactId } : {}),
     log: (m, d) => ctx.log.debug('[mcp]', m, d ?? ''),
+    // SEC-11: secret-bearing custom stdio servers start through the launcher (needs an absolute node).
+    ...(nodeForLauncher() ? { nodeBinary: nodeForLauncher()! } : {}),
   });
   await mcp.start();
 
   const cli = new CliService({ settings, emit: ctx.emit, override: platform.cliPathOverride });
-  const projects = new ProjectsService({ ctx, store, platform });
+  const picked = new Set<string>();
+  const projects = new ProjectsService({ ctx, store, platform, picked });
   const agents = new AgentsService({ ctx, store, settings, secrets, worktrees, mcp, projects, cli, platform, ...(opts.driver ? { driver: opts.driver } : {}) });
   const git = new GitService({
     ctx,
@@ -123,9 +143,24 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   agents.extensions = extensions;
   agents.git = git;
 
+  // SEC-03: the repo's own git config (hooks, filters, fsmonitor, ...) runs only in trusted checkouts.
+  setRepoTrustResolver((cwd) => {
+    try {
+      return store.projects.list().some((p) => p.trusted && (isInside(p.path, cwd) || isInside(worktrees.root(p.id, p.path, 'app-data'), cwd) || isInside(worktrees.root(p.id, p.path, 'sibling'), cwd) || agents.list().some((a) => a.projectId === p.id && a.worktreePath && isInside(a.worktreePath, cwd))));
+    } catch {
+      return false;
+    }
+  });
+
+  // No watcher (status runs) and no background fetch until a project is trusted.
   projects.onOpened(async (p) => {
-    git.watch(p.path, p.id);
+    if (p.trusted) git.watch(p.path, p.id);
     await artifacts.rescan([{ id: p.id, path: p.path }]).catch((err) => ctx.log.warn('artifact rescan failed', err));
+  });
+  projects.onTrustChanged(async (p) => {
+    if (!p.trusted) return git.unwatchProject(p.id);
+    git.watch(p.path, p.id);
+    for (const a of agents.list()) if (a.projectId === p.id && a.worktreePath) git.watch(a.worktreePath, p.id);
   });
   projects.onRemoved(async (p) => {
     for (const a of agents.list().filter((x) => x.projectId === p.id)) await agents.remove(a.id, false).catch(() => undefined);
@@ -171,7 +206,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     agents,
     git,
     extensions,
-    picked: new Set(),
+    picked,
     notices,
     flushNotices() {
       for (const n of notices.splice(0)) ctx.emit('notify', n);
@@ -186,6 +221,12 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     },
   };
   return services;
+}
+
+/** Absolute Node for the stdio MCP launcher, or undefined (then secrets fall back to env). */
+function nodeForLauncher(): string | undefined {
+  const n = process.versions.electron ? resolveTool('node') : process.execPath;
+  return isAbsolute(n) ? n : undefined;
 }
 
 // ---------------------------------------------------------------- artifact preview protocol

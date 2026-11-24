@@ -26,7 +26,8 @@ import { cleanup, makeRepo, tempDir, waitFor } from '../integration/harness.js';
 const enabled = Boolean(process.env.OIDE_REAL_CLI);
 const outDir = process.env.OIDE_REAL_CLI_OUT ?? tempDir('oide-real-cli-out-');
 const log: string[] = [];
-const note = (m: string, d?: unknown) => log.push(`${new Date().toISOString()} ${m}${d === undefined ? '' : ' ' + JSON.stringify(d)}`);
+const openable: string[] = [];
+const note =(m: string, d?: unknown) => log.push(`${new Date().toISOString()} ${m}${d === undefined ? '' : ' ' + JSON.stringify(d)}`);
 
 interface H {
   services: Services;
@@ -59,6 +60,8 @@ async function start(userData: string): Promise<H> {
     openExternal: async () => {},
     builtinExtensionDirs: [],
     cliPathOverride: undefined,
+    // Test-only stand-in for a folder-picker pick (SEC-08): tmp repos only.
+    openablePaths: openable,
     terminals,
     background: false,
   };
@@ -100,6 +103,7 @@ describe.skipIf(!enabled)('M1 gate with the real claude CLI (opt-in)', () => {
 
   it('spawn → permission prompt in oIDE → allow → result → stop → restart → --resume → follow-up', async () => {
     const repo = makeRepo();
+    openable.push(repo);
     const userData = tempDir('oide-real-data-');
     dirs.push(repo, userData);
 

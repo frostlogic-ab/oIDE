@@ -17,7 +17,7 @@ import {
   type PrInfo,
   type WorktreeManager,
 } from '@oide/git';
-import type { AgentSummary, CommitInfo, FileDiff, OverlapWarning, Project, SyncState, WorktreeInfo } from '@oide/protocol';
+import { sensitivePathReason, type AgentSummary, type CommitInfo, type FileDiff, type OverlapWarning, type Project, type SyncState, type WorktreeInfo } from '@oide/protocol';
 import type { SettingsService, Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
@@ -206,10 +206,15 @@ export class GitService {
     return detectOverlaps(projectId, p.path, live);
   }
 
-  diff(agentId: string): Promise<FileDiff[]> {
+  /** The agent's changes; files that configure agents, git or MCP are marked `sensitive` (SEC-12). */
+  async diff(agentId: string): Promise<FileDiff[]> {
     const a = this.agent(agentId);
-    if (!a.worktreePath || !a.baseRef) return Promise.resolve([]);
-    return fileDiffs(a.worktreePath, a.baseRef);
+    if (!a.worktreePath || !a.baseRef) return [];
+    const diffs = await fileDiffs(a.worktreePath, a.baseRef);
+    return diffs.map((d) => {
+      const why = sensitivePathReason(d.path) ?? (d.oldPath ? sensitivePathReason(d.oldPath) : undefined);
+      return why ? { ...d, sensitive: why } : d;
+    });
   }
 
   /** Merge the agent's branch into the main checkout (`--no-ff`); cleanup follows Settings. */
@@ -217,15 +222,40 @@ export class GitService {
     const a = this.agent(agentId);
     const p = this.project(a.projectId);
     if (!a.branch || !a.worktreePath || samePath(a.worktreePath, p.path)) throw new IpcError('This agent works in the project folder; there is no branch to merge.', 'conflict');
+    // Review shows committed AND uncommitted changes, so Merge merges both: pending worktree
+    // changes are committed first, on the agent's behalf (Oide-Agent trailer).
+    if (existsSync(a.worktreePath) && (await this.hasLocalChanges(a.worktreePath))) {
+      const subject = (a.review?.summary ?? '').split(/\r?\n/)[0]!.trim().slice(0, 72) || `${a.title}: uncommitted work`;
+      try {
+        await gitCommit(a.worktreePath, { message: subject, agent: a.title });
+      } catch (err) {
+        throw new IpcError(`Could not commit the worktree's uncommitted changes before merging: ${(err as Error).message}`, 'git_failed');
+      }
+    }
     const r = await gitMergeLocal(p.path, a.branch, { message: `Merge ${a.branch} (${a.title})` });
     if (r.error && !r.conflicts.length) throw new IpcError(r.error, 'git_failed');
     this.changed(p.id);
-    if (r.ok) {
+    if (r.ok && (await this.fullyMerged(p.path, a.worktreePath, a.branch))) {
       const cleanup = this.o.settings.get().agents.cleanup;
       if (cleanup === 'right-away') await this.o.removeAgent(agentId);
       else if (cleanup === 'after-7-days') this.o.store.ui.kv.set(MERGED_KEY(agentId), Date.now());
     }
     return { ok: r.ok, conflicts: r.conflicts };
+  }
+
+  private async hasLocalChanges(worktree: string): Promise<boolean> {
+    const out = await new Git({ cwd: worktree }).out(['status', '--porcelain', '-z', '--untracked-files=all'], { env: { GIT_OPTIONAL_LOCKS: '0' } });
+    return out.length > 0;
+  }
+
+  /** Cleanup may only delete a worktree whose branch is in main and which holds no other changes. */
+  private async fullyMerged(main: string, worktree: string, branch: string): Promise<boolean> {
+    try {
+      const inMain = await new Git({ cwd: main }).test(['merge-base', '--is-ancestor', '--end-of-options', branch, 'HEAD']);
+      return inMain && !(existsSync(worktree) && (await this.hasLocalChanges(worktree)));
+    } catch {
+      return false;
+    }
   }
 
   /** Startup sweep: agents merged more than 7 days ago lose their worktree (cleanup "After 7 days"). */
@@ -357,6 +387,8 @@ export class GitService {
   /** Background fetch of every project (the only remote command that runs without a click). */
   async fetchAll(): Promise<void> {
     for (const p of this.o.projects.list()) {
+      // SEC-03: nothing runs on its own in a project the user has not trusted.
+      if (!p.trusted) continue;
       const hasRemote = (await new Git({ cwd: p.path }).out(['remote']).catch(() => '')).trim();
       if (!hasRemote) continue;
       await this.fetch(p.id).catch((err) => this.o.ctx.log.debug('background fetch failed', p.path, (err as Error).message));

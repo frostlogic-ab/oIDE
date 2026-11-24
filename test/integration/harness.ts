@@ -8,6 +8,7 @@ import type { MainContext } from '../../apps/desktop/src/main/context.js';
 import { registerDomainHandlers } from '../../apps/desktop/src/main/handlers/domain.js';
 import { createAgentEventBatcher, createEmitter } from '../../apps/desktop/src/main/ipc/emit.js';
 import { IpcRouter } from '../../apps/desktop/src/main/ipc/router.js';
+import { setConfirmOverride } from '../../apps/desktop/src/main/security/confirm.js';
 import { AllowedRoots } from '../../apps/desktop/src/main/security/roots.js';
 import { createCoreServices, type Services } from '../../apps/desktop/src/main/services/core.js';
 import type { Platform } from '../../apps/desktop/src/main/services/platform.js';
@@ -47,12 +48,22 @@ export interface Harness {
   /** Resolves with the command's error code (throws if it succeeded). */
   fails<K extends CommandName>(command: K, input: CommandInput<K>): Promise<string>;
   eventsOf<K extends EventName>(name: K): Array<EventPayload<K>>;
+  /**
+   * Test-only stand-in for picking `path` in the native folder dialog, so `projects.open({ path })`
+   * accepts it (SEC-08). Main has no IPC path to this; a packaged build has no equivalent.
+   */
+  allowOpen(path: string): void;
   close(): Promise<void>;
 }
 
 const quiet = { debug: () => {}, warn: () => {}, error: (...a: unknown[]) => console.error('[oide]', ...a) };
 
-export async function startHarness(opts: { userData?: string; trust?: boolean } = {}): Promise<Harness> {
+/**
+ * `confirm`: how native confirmations in main (security/confirm.ts) are answered. Default: no
+ * override, which in plain Node means Cancel, so PoCs see the secure default.
+ */
+export async function startHarness(opts: { userData?: string; trust?: boolean; confirm?: 'accept' | 'deny' } = {}): Promise<Harness> {
+  if (opts.confirm) setConfirmOverride(() => opts.confirm === 'accept');
   const userData = opts.userData ?? tempDir('oide-int-data-');
   const events: Harness['events'] = [];
   const emit = createEmitter(() => [{ isDestroyed: () => false, send: (_ch: string, m: unknown) => void events.push(m as Harness['events'][number]) }]);
@@ -82,6 +93,7 @@ export async function startHarness(opts: { userData?: string; trust?: boolean } 
     openExternal: async () => {},
     builtinExtensionDirs: [],
     cliPathOverride: FAKE_CLAUDE,
+    openablePaths: [],
     terminals,
     background: false,
   };
@@ -105,10 +117,14 @@ export async function startHarness(opts: { userData?: string; trust?: boolean } 
       if (r.ok) throw new Error(`${command} unexpectedly succeeded`);
       return r.error.code ?? 'internal';
     },
+    allowOpen(path) {
+      platform.openablePaths!.push(path);
+    },
     eventsOf(name) {
       return events.filter((e) => e.event === name).map((e) => e.payload) as never;
     },
     async close() {
+      if (opts.confirm) setConfirmOverride(null);
       ctx.agentEvents.dispose();
       await services.dispose();
     },
@@ -127,5 +143,5 @@ export async function waitFor<T>(fn: () => T | undefined | false | Promise<T | u
 }
 
 export function cleanup(...dirs: string[]): void {
-  for (const d of dirs) rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+  for (const d of dirs) rmSync(d, { recursive: true, force: true, maxRetries: 15, retryDelay: 250 });
 }

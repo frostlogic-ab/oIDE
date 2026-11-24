@@ -202,3 +202,36 @@ Electron 45.4.1 that utilityProcess ignores `--permission`, so capabilities stay
 Marketplace copy, [security](pages/security.md), [extensions](pages/extensions.md) and the
 extension-api README now say so. Tests: `test/security/extension-confirm.test.ts` (new),
 SEC-04 and SEC-13 PoCs flipped to `it`, plus oauth, import-scan and registry unit tests.
+
+## [2026-11-24] build | Design review fixes
+
+Fixed 25 of the 26 findings in [review-design](pages/review-design.md) (5 major, 20 minor); SE3 needed
+no change (the Remove button is already `#9AA3AE`). Global: `line-height: normal` (canvas metrics),
+`ink-4`/`ink-5` no longer used for small text (placeholders, meta, line numbers → `ink-3`), borderless
+links underlined, status-bar counts from the live stores and a time-only reset label. Wall: whole
+activity lines (108px box), readable Queued, two-line sidebar names, one-row header at 1100,
+"Edit automatically" badge, no Spawn without a project. Focus: container queries keep the header,
+subagent cards, prompt and inspector tabs whole at 1100×700; two-line agent names; unknown subagent
+ids fall back to the lead. Also: aligned model grids (Spawn, Settings), fixed-grid worktree rows,
+sticky review comments, doc-preview fade, Marketplace per-tool toggles through screen state, Monaco
+ligatures and function tint, Settings `inpSm`, first technique expanded. Pages updated:
+design-system, desktop-shell, screen-wall, screen-focus, screen-spawn, screen-source-control,
+screen-review, screen-artifacts, screen-marketplace, screen-files, screen-settings.
+
+## [2026-11-24] build | Security fixes (core)
+
+Fixed the core findings of [review-security](pages/review-security.md): SEC-01, SEC-02, SEC-03,
+SEC-05, SEC-07 (cliPath, extra flags), SEC-08, SEC-09 (custom model keys), SEC-11, SEC-12, SEC-16,
+SEC-17 to SEC-22, SEC-26 (agents) and SEC-27; SEC-25 is an accepted risk. Main sets
+`NoDefaultCurrentDirectoryInExePath` first thing and git, gh and node run from absolute paths.
+Untrusted projects start agents with `--setting-sources user --strict-mcp-config`, get their repo
+git config neutralised (no hooks, filters, fsmonitor, external programs) and have no watcher or
+background fetch. `terminal.create` lost `command`; `projects.open({ path })` needs a dialog pick or a
+known project; cliPath and extra flags need a native confirmation; model keys are bound to their
+origin. mcp.json holds no secret (`${VAR}` headers, checked against the 2.1.325 binary), custom stdio
+secrets go through a one-time launcher, prompts are capped at 5 per agent. Edits to `.oide/`,
+`.claude/` and `.mcp.json` always ask, and Review warns about them. Also fixed review-conformance B1
+(merge commits pending work, reports ok only when main moved, never deletes unmerged work) and M4
+(dev repo root for built-in extensions, with an e2e check). PoCs flipped: SEC-01, 02 (2), 03, 05,
+08, 09, 17, conformance B1 (2); new `test/security/core-fixes.test.ts`. Pages updated: security,
+review-security, review-conformance.

@@ -221,6 +221,10 @@ used) is M7 scope.
   commit the worktree's pending changes first, with an `Oide-Agent: <name>` trailer, or refuse with "N
   uncommitted files: commit them or ask the agent to" and offer that action. Report `ok` only when HEAD on main
   changed. Never remove a worktree that has uncommitted or unmerged changes. Flip the two `it.fails` to `it`.
+  **Status (2026-11-24): fixed.** `GitService.mergeLocal` commits pending worktree changes first (subject from
+  the review summary or the title, `Oide-Agent:` trailer); `mergeLocal` in `packages/git/src/merge.ts` reports
+  ok only when HEAD moved ("Nothing to merge" otherwise); cleanup runs only when the branch is an ancestor of
+  main's HEAD and the worktree is clean. Both tests in `review-merge.test.ts` are `it`.
 
 ### Major
 
@@ -248,6 +252,9 @@ used) is M7 scope.
   real app shows "Could not load the marketplace: index unavailable" and 0 installed. The packaged build is fine.
   This makes every e2e test of M5 hollow. Expected: resolve the repo root from `import.meta.dirname`
   (`out/main` → `../../../..`) or from an env set by electron-vite, and add an e2e check that the 3 built-ins are installed.
+  **Status (2026-11-24): fixed.** `devRepoRoot` walks up from `app.getAppPath()` to the folder with
+  `pnpm-workspace.yaml` (unpackaged builds only). `e2e/agents.spec.ts` checks that at least 3 built-ins are
+  installed and the bundled index lists entries.
 - **M5. The M5 and M6 gates have no end-to-end proof.** Expected per Milestones: a fake-claude scenario where the
   agent calls an extension tool installed from the (bundled) index through `--mcp-config`, and one where it calls
   `mcp__oide__artifacts_read` on a design and `artifacts_create` for a doc that the user then edits. Add them in

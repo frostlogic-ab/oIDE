@@ -67,8 +67,26 @@ export const FileDiff = z.object({
   binary: z.boolean().default(false),
   /** Unified diff hunks text. */
   patch: z.string(),
+  /**
+   * Set when the file configures agents, git or MCP (`.oide/`, `.claude/`, `.mcp.json`,
+   * `.gitattributes`, `.gitmodules`): why merging it deserves a closer look (SEC-12).
+   */
+  sensitive: z.string().optional(),
 });
 export type FileDiff = z.infer<typeof FileDiff>;
+
+/** Why a changed path is security-sensitive, or undefined (SEC-12). */
+export function sensitivePathReason(path: string): string | undefined {
+  const p = path.replace(/\\/g, '/').toLowerCase();
+  const segs = p.split('/');
+  if (segs.includes('.oide')) return 'oIDE project config (.oide/): permissions, setup command, extensions';
+  if (segs.includes('.claude')) return 'Claude Code project config (.claude/): settings, hooks, agents, commands';
+  const name = segs.at(-1);
+  if (name === '.mcp.json') return 'MCP servers (.mcp.json)';
+  if (name === '.gitattributes') return 'git attributes (.gitattributes): filters and diff/merge drivers';
+  if (name === '.gitmodules') return 'git submodules (.gitmodules)';
+  return undefined;
+}
 
 export const ReviewComment = z.object({
   id: Id,

@@ -3,7 +3,7 @@ import { mkdir, readdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { WorktreeInfo } from '@oide/protocol';
 import { diffStat, changedFiles } from './diff.js';
-import { Git, GitError, runShellCommand, toGit, type Repo, type StreamResult } from './git.js';
+import { Git, GitError, isSafeRef, runShellCommand, toGit, type Repo, type StreamResult } from './git.js';
 import { fromGitPath, isInside, pathKey, samePath, worktreeRoot } from './paths.js';
 
 /** Branch prefix for every agent branch. */
@@ -153,7 +153,8 @@ export class WorktreeManager {
     const path = join(root, slug);
     const branch = BRANCH_PREFIX + slug;
     await mkdir(dirname(path), { recursive: true });
-    await git.run(['worktree', 'add', '-b', branch, path, baseRef], { timeoutMs: 10 * 60_000 });
+    if (!isSafeRef(baseRef)) throw new Error(`Invalid base ref: ${baseRef}`);
+    await git.run(['worktree', 'add', '-b', branch, '--', path, baseRef], { timeoutMs: 10 * 60_000 });
     return { path, branch, slug, baseRef, baseSha };
   }
 

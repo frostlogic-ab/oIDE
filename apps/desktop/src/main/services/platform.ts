@@ -30,6 +30,12 @@ export interface Platform {
   builtinExtensionDirs: string[];
   /** `tools/marketplace-index/bundled/index.json` (or the packaged copy). */
   bundledIndexPath?: string;
+  /**
+   * Tests only: folders `projects.open({ path })` may open without a dialog pick (SEC-08). Set by
+   * the integration harness, and by electron-platform from `OIDE_E2E_OPEN_PATHS` in unpackaged
+   * builds only; never in a packaged app.
+   */
+  openablePaths?: string[];
   /** Path override for the CLI (`OIDE_CLAUDE_PATH`, tests); wins over Settings. */
   cliPathOverride?: string;
   /** Terminal service (node-pty), for the sign-in terminal. */

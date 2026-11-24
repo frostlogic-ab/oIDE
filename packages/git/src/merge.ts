@@ -20,11 +20,14 @@ export async function mergeLocal(mainCheckout: Repo, branch: string, opts: { mes
     return { ok: false, conflicts: [], error: 'A merge is already in progress in the main checkout.' };
   }
   if (!(await git.revParse(branch))) return { ok: false, conflicts: [], error: `Unknown branch: ${branch}` };
+  const before = await git.revParse('HEAD');
   const message = opts.message ?? `Merge ${branch}`;
-  const r = await git.run(['merge', '--no-ff', '--no-edit', '-m', message, branch], { okExitCodes: [0, 1, 2, 128] });
+  const r = await git.run(['merge', '--no-ff', '--no-edit', '-m', message, '--end-of-options', branch], { okExitCodes: [0, 1, 2, 128] });
   if (r.exitCode === 0) {
     const sha = await git.revParse('HEAD');
-    return { ok: true, conflicts: [], sha };
+    // "Already up to date" also exits 0: report success only when the checkout actually moved.
+    if (sha === before) return { ok: false, conflicts: [], error: `Nothing to merge: ${branch} has no commits that are not already in the main checkout.` };
+    return { ok: true, conflicts: [], ...(sha ? { sha } : {}) };
   }
   const conflicted = (await git.out(['diff', '--name-only', '--diff-filter=U', '-z'])).split('\0').filter(Boolean);
   const inMerge = await git.test(['rev-parse', '--verify', '--quiet', 'MERGE_HEAD']);

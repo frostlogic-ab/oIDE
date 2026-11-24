@@ -71,7 +71,8 @@ describe('TerminalService', () => {
   });
 
   it('picks a platform shell', () => {
-    expect(defaultShell('win32').file).toBe('powershell.exe');
+    // Absolute, never a bare name a repo folder could shadow (SEC-01).
+    expect(defaultShell('win32').file).toMatch(/^[A-Za-z]:\\.*\\powershell\.exe$/i);
     expect(defaultShell('win32', 'claude').args).toContain('-Command');
     expect(defaultShell('linux', 'claude').args).toEqual(['-l', '-c', 'claude']);
   });

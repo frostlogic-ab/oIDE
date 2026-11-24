@@ -29,7 +29,9 @@ test.beforeAll(async () => {
   writeFileSync(join(repo, 'README.md'), '# fixture\n');
   gitIn(repo, 'add', '-A');
   gitIn(repo, 'commit', '-q', '-m', 'init');
-  ctx = await launchApp({ OIDE_CLAUDE_PATH: FAKE_CLAUDE, OIDE_E2E_TRUST: 'trust' });
+  // OIDE_E2E_OPEN_PATHS: the test-only stand-in for a folder-picker pick (SEC-08); OIDE_E2E_CONFIRM
+  // answers the native confirmation that extra CLI flags need (SEC-07). Both work only unpackaged.
+  ctx = await launchApp({ OIDE_CLAUDE_PATH: FAKE_CLAUDE, OIDE_E2E_TRUST: 'trust', OIDE_E2E_OPEN_PATHS: repo, OIDE_E2E_CONFIRM: 'accept' });
 });
 
 test.afterAll(async () => {
@@ -99,6 +101,16 @@ test('artifact preview protocol serves the artifact and blocks network', async (
   expect(res.csp).toContain("connect-src 'none'");
   const escape = await ctx.app.evaluate(async ({ net }, url) => (await net.fetch(url.replace('index.html', '..%2F..%2Foide.db'))).status, result.url);
   expect(escape).toBe(404);
+});
+
+test('built-in extensions and the bundled marketplace index are found when run as electron out/main/index.js', async () => {
+  const { page } = ctx;
+  const invoke = (command: string, input: unknown) =>
+    page.evaluate(([c, i]) => (window as unknown as { oide: { invoke: Invoke } }).oide.invoke(c as string, i), [command, input] as const);
+  const installed = (await invoke('extensions.installed', undefined)) as Array<{ id: string; source: string }>;
+  expect(installed.filter((e) => e.source === 'builtin').length).toBeGreaterThanOrEqual(3);
+  const index = (await invoke('extensions.index', { refresh: false })) as Array<{ name: string }>;
+  expect(index.length).toBeGreaterThan(0);
 });
 
 test('no console errors', async () => {

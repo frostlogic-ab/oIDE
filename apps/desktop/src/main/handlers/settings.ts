@@ -1,13 +1,15 @@
-import { samePath } from '@oide/git';
+import { resolve } from 'node:path';
+import { pathKey, samePath } from '@oide/git';
 import type { CustomModel, Settings } from '@oide/protocol';
 import { BUILTIN_PRESETS, BUILTIN_TECHNIQUES, readOideFile } from '@oide/store';
 import { ZodError } from 'zod';
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
+import { confirmNative } from '../security/confirm.js';
+import { boundModelKey, deleteModelKey, endpointOrigin, hasBoundKey, storeModelKey } from '../security/model-keys.js';
 import type { Services } from '../services/index.js';
 
 const OK = { ok: true as const };
-const modelKey = (id: string) => `model:${id}`;
 
 /** Never Anthropic's API on the user's plan: a custom endpoint test only talks to third-party hosts. */
 export function isAnthropicHost(url: string): boolean {
@@ -55,13 +57,14 @@ export async function testCustomModel(model: CustomModel, key: string | undefine
 }
 
 /** settings.* and usage.summary */
-export function registerSettingsHandlers(router: IpcRouter, s: Services, _ctx: MainContext): void {
+export function registerSettingsHandlers(router: IpcRouter, s: Services, ctx: MainContext): void {
   const svc = s.store.settings;
-  const withKeys = (st: Settings): Settings => ({ ...st, models: { ...st.models, custom: st.models.custom.map((m) => ({ ...m, hasKey: s.secrets.has(modelKey(m.id)) })) } });
+  const withKeys = (st: Settings): Settings => ({ ...st, models: { ...st.models, custom: st.models.custom.map((m) => ({ ...m, hasKey: hasBoundKey(s.secrets, m) })) } });
   const project = (id: string) => s.projects.require(id);
 
   router.register('settings.get', () => withKeys(svc.get()));
-  router.register('settings.update', ({ patch }) => {
+  router.register('settings.update', async ({ patch }) => {
+    await confirmExecSettings(s, ctx, patch);
     try {
       return withKeys(svc.update(patch));
     } catch (err) {
@@ -84,28 +87,33 @@ export function registerSettingsHandlers(router: IpcRouter, s: Services, _ctx: M
     return OK;
   });
   // The key goes to the keychain store only and never comes back over IPC (hasKey says it exists).
+  // SEC-09: a key is bound to the endpoint origin it was entered for; pointing the model at another
+  // origin without a new key in the same call deletes the old one.
   router.register('settings.saveCustomModel', ({ model, apiKey }) => {
+    const prev = svc.get().models.custom.find((m) => m.id === model.id);
     if (apiKey !== undefined && apiKey !== '') {
       try {
-        s.secrets.set(modelKey(model.id), apiKey);
+        storeModelKey(s.secrets, model, apiKey);
       } catch (err) {
-        throw new IpcError((err as Error).message, 'secure_storage_unavailable');
+        throw new IpcError((err as Error).message, /valid base URL/.test((err as Error).message) ? 'invalid_input' : 'secure_storage_unavailable');
       }
+    } else if (prev && endpointOrigin(prev) !== endpointOrigin(model)) {
+      deleteModelKey(s.secrets, model.id);
     }
     const list = svc.get().models.custom.filter((m) => m.id !== model.id);
-    const saved: CustomModel = { ...model, hasKey: s.secrets.has(modelKey(model.id)) };
+    const saved: CustomModel = { ...model, hasKey: hasBoundKey(s.secrets, model) };
     svc.update({ models: { custom: [...list, saved] } });
     return saved;
   });
   router.register('settings.deleteCustomModel', ({ id }) => {
-    s.secrets.delete(modelKey(id));
+    deleteModelKey(s.secrets, id);
     svc.update({ models: { custom: svc.get().models.custom.filter((m) => m.id !== id) } });
     return OK;
   });
   router.register('settings.testCustomModel', ({ id }) => {
     const m = svc.get().models.custom.find((x) => x.id === id);
     if (!m) throw new IpcError(`Unknown custom model ${id}`, 'not_found');
-    return testCustomModel(m, s.secrets.get(modelKey(id)), s.platform.fetch);
+    return testCustomModel(m, boundModelKey(s.secrets, m), s.platform.fetch);
   });
   router.register('settings.projectPermissions', async ({ projectId }) => {
     const f = await readOideFile(project(projectId).path, 'permissions');
@@ -143,4 +151,40 @@ export function registerSettingsHandlers(router: IpcRouter, s: Services, _ctx: M
       ...(resets.length ? { rateLimitResetAt: Math.min(...resets) } : {}),
     };
   });
+}
+
+/**
+ * SEC-07: settings that make main execute something (the CLI path, which `cli.detect` runs at once;
+ * extra CLI flags, passed to every agent) are changed from the renderer only after a native
+ * confirmation in main that shows the exact value. A CLI path the user picked in the file dialog
+ * this session needs no second confirmation. Clearing either value needs none.
+ */
+export async function confirmExecSettings(s: Services, ctx: MainContext, patch: Record<string, unknown>): Promise<void> {
+  const claude = patch.claude;
+  if (!claude || typeof claude !== 'object') return;
+  const cur = s.store.settings.get().claude;
+  const c = claude as { cliPath?: unknown; extraFlags?: unknown };
+  if (typeof c.cliPath === 'string' && c.cliPath.trim() && c.cliPath !== cur.cliPath) {
+    const picked = s.picked.has(pathKey(resolve(c.cliPath)));
+    const ok =
+      picked ||
+      (await confirmNative(ctx, {
+        title: 'Use this Claude Code CLI?',
+        message: 'oIDE will run this program as the Claude Code CLI for every agent.',
+        detail: `${c.cliPath}\n\nOnly continue if you typed or chose this path yourself.`,
+        confirmLabel: 'Use this CLI',
+        danger: true,
+      }));
+    if (!ok) throw new IpcError('The CLI path was not changed.', 'forbidden');
+  }
+  if (typeof c.extraFlags === 'string' && c.extraFlags.trim() && c.extraFlags.trim() !== cur.extraFlags.trim()) {
+    const ok = await confirmNative(ctx, {
+      title: 'Pass these flags to every agent?',
+      message: 'oIDE will add these extra flags to every Claude Code agent it starts.',
+      detail: `${c.extraFlags}\n\nFlags that would change oIDE's own settings, MCP servers, permissions or directories are ignored.`,
+      confirmLabel: 'Use these flags',
+      danger: true,
+    });
+    if (!ok) throw new IpcError('The extra CLI flags were not changed.', 'forbidden');
+  }
 }

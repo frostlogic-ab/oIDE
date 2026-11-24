@@ -3,10 +3,11 @@ import type { IpcRouter } from '../ipc/router.js';
 import type { Services } from '../services/index.js';
 
 export function registerTerminalHandlers(router: IpcRouter, { terminals }: Services, ctx: MainContext): void {
-  router.register('terminal.create', ({ cwd, command, cols, rows }) => {
-    // A renderer may only open terminals inside a known project, worktree or artifact folder.
-    const realCwd = ctx.roots.assertAllowed(cwd);
-    return terminals.create({ cwd: realCwd, command, cols, rows });
+  router.register('terminal.create', ({ cwd, cols, rows }) => {
+    // SEC-05: an interactive shell only (no renderer-chosen command line), and only inside a known
+    // project or agent worktree, never app-data, artifact or extension folders.
+    const realCwd = ctx.roots.assertAllowed(cwd, ['project', 'worktree']);
+    return terminals.create({ cwd: realCwd, cols, rows });
   });
   router.register('terminal.write', ({ terminalId, data }) => {
     terminals.write(terminalId, data);

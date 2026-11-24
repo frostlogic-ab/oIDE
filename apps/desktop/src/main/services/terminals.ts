@@ -57,7 +57,9 @@ const STRIP_ENV = /^(ELECTRON_|NODE_OPTIONS$|VITE_|OIDE_USER_DATA$|CHROME_)/;
 
 export function defaultShell(platform: NodeJS.Platform, command?: string): { file: string; args: string[] } {
   if (platform === 'win32') {
-    const file = 'powershell.exe';
+    // Absolute (SEC-01): a bare name could resolve against the terminal's cwd, a repo folder.
+    const root = process.env.SystemRoot ?? process.env.windir ?? 'C:\\Windows';
+    const file = `${root}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
     return command ? { file, args: ['-NoLogo', '-NoProfile', '-Command', command] } : { file, args: ['-NoLogo'] };
   }
   const file = process.env.SHELL || (platform === 'darwin' ? '/bin/zsh' : '/bin/bash');

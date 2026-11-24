@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { resolveTool } from './bin.js';
 
 /**
  * Optional GitHub CLI wrapper used for PR state and "Open pull request". It uses the user's own
@@ -25,7 +26,7 @@ export class GhCli {
   private availableCache: Promise<boolean> | undefined;
 
   constructor(opts: { ghBinary?: string; timeoutMs?: number } = {}) {
-    this.bin = opts.ghBinary ?? 'gh';
+    this.bin = opts.ghBinary ?? resolveTool('gh');
     this.timeoutMs = opts.timeoutMs ?? 30_000;
   }
 

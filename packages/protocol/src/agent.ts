@@ -6,6 +6,9 @@ import { z } from 'zod';
  */
 
 export const Id = z.string().min(1).max(128);
+
+/** A git ref, branch or sha safe on a git command line: no leading '-', no whitespace or '..' (SEC-21). */
+export const GitRef = z.string().regex(/^(?!-)(?!.*\.\.)[A-Za-z0-9._/@{}~^+-]{1,255}$/, 'Not a valid git ref');
 export type Id = z.infer<typeof Id>;
 
 /** Permission modes as shown in Spawn. Values are the CLI's `--permission-mode` values. */
@@ -66,7 +69,7 @@ export const AgentSpec = z.object({
   context: z.array(ContextChip).default([]),
   workIn: WorkIn.default('worktree-from-main'),
   /** Start the worktree from this branch or ref instead of the one `workIn` picks (reconcile agents). */
-  baseRef: z.string().min(1).max(256).optional(),
+  baseRef: GitRef.optional(),
   mode: PermissionMode.default('auto'),
   strategy: ModelStrategy,
   customModel: CustomModelRef.optional(),

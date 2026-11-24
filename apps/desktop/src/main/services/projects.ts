@@ -1,6 +1,6 @@
 import { existsSync, statSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
-import { Git } from '@oide/git';
+import { Git, pathKey, samePath } from '@oide/git';
 import type { Project } from '@oide/protocol';
 import type { Store } from '@oide/store';
 import type { MainContext } from '../context.js';
@@ -20,7 +20,7 @@ export class ProjectsService {
   private readonly trustChanged = new Set<ProjectHook>();
 
   constructor(
-    private readonly o: { ctx: MainContext; store: Store; platform: Platform },
+    private readonly o: { ctx: MainContext; store: Store; platform: Platform; /** `Services.picked` (native dialog picks this session). */ picked?: Set<string> },
   ) {}
 
   onOpened(fn: ProjectHook): void {
@@ -57,8 +57,16 @@ export class ProjectsService {
     return list;
   }
 
-  /** Open a folder (picker when `path` is omitted). Must be inside a git repository. */
+  /**
+   * Open a folder (picker when `path` is omitted). Must be inside a git repository.
+   *
+   * SEC-08: an explicit `path` from the renderer is accepted only when the user picked it in a
+   * native dialog this session, it is already a known project, or a test-only hook of an unpackaged
+   * build lists it (`Platform.openablePaths`). Otherwise a compromised renderer could make main run
+   * git in any folder and add it to the file-access roots.
+   */
   async open(path?: string): Promise<Project | null> {
+    if (path !== undefined && !this.mayOpen(path)) throw new IpcError('Open projects with the folder picker.', 'forbidden_path');
     const picked = path ?? (await this.o.platform.pickFolder('Open a project (a git repository)'));
     if (!picked) return null;
     const abs = resolve(picked);
@@ -79,6 +87,14 @@ export class ProjectsService {
     await this.fire(this.opened, p);
     this.emitChanged();
     return p;
+  }
+
+  private mayOpen(path: string): boolean {
+    const abs = resolve(path);
+    const key = pathKey(abs);
+    if (this.o.picked?.has(key)) return true;
+    if (this.o.platform.openablePaths?.some((p) => pathKey(resolve(p)) === key)) return true;
+    return this.list().some((p) => samePath(p.path, abs));
   }
 
   async trust(id: string, trusted: boolean): Promise<Project> {

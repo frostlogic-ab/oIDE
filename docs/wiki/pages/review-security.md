@@ -43,6 +43,15 @@ vulnerabilities.
   have `findOnPath` skip relative or empty `PATH` entries. Make that resolved path the default for
   `GitOptions.gitBinary`, `GhCli` and `cliCommand`/`resolveSpawn`, and never spawn a bare name with
   a repo as cwd.
+- **Status:** **fixed.** `apps/desktop/src/main/security/early-env.ts` (first import of
+  `index.ts`) sets `NoDefaultCurrentDirectoryInExePath=1`, and `buildLaunch` sets it in the agent
+  env on Windows. New `packages/git/src/bin.ts` (`findExecutable`, `resolveTool`) resolves `git`
+  and `gh` to absolute paths and skips relative or empty PATH entries; it is the default of
+  `Git` and `GhCli`. agent-core `findOnPath` (now in `args.ts`) skips relative entries,
+  `cliCommand` resolves a bare CLI name, and `nodeBinary()` replaces the bare `node` in
+  `cliCommand`/`resolveSpawn`. `powershell.exe` (terminals) and `taskkill.exe` (driver) are
+  absolute. Files: `packages/git/src/{bin,git,gh,index}.ts`, `packages/agent-core/src/{args,cli,driver}.ts`,
+  `apps/desktop/src/main/{index.ts,security/early-env.ts,services/terminals.ts}`. PoC flipped.
 
 ### SEC-02 Untrusted projects still get their `.claude/settings.json` hooks and `.mcp.json` servers run
 
@@ -67,6 +76,14 @@ vulnerabilities.
   `enabledPlugins`) are still loaded. Add them to the dialog text, or use a stricter mode for
   untrusted repos. Add `--setting-sources` and `--strict-mcp-config` to `RESERVED_FLAGS` (see
   SEC-27). Update the trust dialog and [security](security.md).
+- **Status:** **fixed.** Untrusted projects launch with `--setting-sources user
+  --strict-mcp-config` (both in the pinned 2.1.325 help; detected as features, and a CLI known to
+  lack them refuses an untrusted spawn). `--mcp-config` still carries oIDE's own server and the
+  extension and custom servers main allows for the agent. Both flags are reserved (SEC-27). The trust
+  dialog text now says what untrusted means, including the residual: CLAUDE.md, skills, agents and
+  commands in the repo can still reach the agent as text (they are prompts, not settings; hooks,
+  permissions, env, `apiKeyHelper` and plugins come only from settings and are off). Files:
+  `packages/agent-core/src/{args,cli}.ts`, `services/electron-platform.ts`. PoC flipped.
 
 ## High
 
@@ -92,6 +109,19 @@ vulnerabilities.
   `commit`/`merge` can take `--no-verify`, and setting `GIT_CONFIG_NOSYSTEM` is not enough on its
   own. Better: until a project is trusted, do no git work beyond `rev-parse`, and run no background
   fetch. Show git's `safe.directory` warning when it fires.
+- **Status:** **fixed.** `Git.run` treats a checkout as untrusted unless main's trust
+  resolver (`setRepoTrustResolver`, set in `services/core.ts`: trusted projects and their
+  worktrees) says otherwise. Untrusted: it lists `git config --show-scope` and overrides every
+  exec-capable key from local/worktree scope (fsmonitor, hooksPath, sshCommand, askPass, gitProxy,
+  pager, editor, diff.external and drivers, filter clean/smudge/process, merge drivers, gpg
+  programs, credential helpers, uploadpack/receivepack, trailer commands,
+  alternateRefsCommand, submodule update), always sets an empty `core.hooksPath` and turns
+  signing off. Overrides go through `GIT_CONFIG_COUNT`/`KEY_n`/`VALUE_n`, so a subsection with
+  `=` cannot dodge them. Every call gets `protocol.ext.allow=never` and `log.showSignature=false`,
+  and diff/log/show get `--no-ext-diff --no-textconv`. No watcher and no background fetch until a
+  project is trusted (watchers start on trust). Trusted projects keep their own config and hooks
+  (said in the trust dialog). Not done: surfacing git's `safe.directory` warning. Files:
+  `packages/git/src/git.ts`, `services/{core,git,agents}.ts`. PoC flipped.
 
 ### SEC-04 `custom.probeCommand` runs any command line the renderer sends
 
@@ -124,6 +154,10 @@ vulnerabilities.
 - **Fix:** drop `command` from the IPC contract (keep it in the service for `cli.openSignIn`), and
   call `assertAllowed(cwd, ['project', 'worktree'])`. An interactive shell is still a big
   capability, so keep SEC-06 and SEC-07 tight as well.
+- **Status:** **fixed.** `command` is gone from the IPC contract (`z.strictObject`), the
+  sign-in terminal still calls the service from main, and `terminal.create` accepts only
+  `project`/`worktree` roots. Files: `packages/protocol/src/ipc.ts`, `handlers/terminal.ts`. PoC
+  flipped; `test/security/core-fixes.test.ts` checks app-data is refused.
 
 ### SEC-06 `extensions.addFromGit` clones and registers unreviewed code with no confirmation in main
 
@@ -162,6 +196,11 @@ vulnerabilities.
   dialog per import), and enabling a folder or git extension asks as in SEC-06. Tests in
   `test/security/extension-confirm.test.ts`. The settings rows (`cliPath`, `extraFlags`) belong to
   the core fix.
+- **Status (settings):** **fixed.** `settings.update` asks through `confirmNative`, showing
+  the exact value, before it sets a non-empty `claude.cliPath` (unless the path was picked in
+  `dialog.pickFile` this session) or changed `claude.extraFlags`; Cancel leaves Settings as they
+  were (`forbidden`). Clearing needs no confirmation. Files: `handlers/settings.ts`. Tests:
+  `test/security/core-fixes.test.ts`.
 
 ## Medium
 
@@ -179,6 +218,12 @@ vulnerabilities.
   project, or it arrived through a main-side drop or second-instance path. Today
   `test/integration/*` opens repos by path, so add a test-only platform hook that marks those
   paths as picked.
+- **Status:** **fixed.** `ProjectsService.open` accepts an explicit path only when it is in
+  `services.picked`, is already a known project, or is listed in `Platform.openablePaths`, a test
+  hook set only by the integration harness (`h.allowOpen`) and, in unpackaged builds only, by
+  `OIDE_E2E_OPEN_PATHS`. Otherwise `forbidden_path`, before any git runs. Files:
+  `services/{projects,platform,electron-platform,core}.ts`, `test/integration/harness.ts`. PoC
+  flipped.
 
 ### SEC-09 Stored secrets follow a record when its URL is changed, so keys can be exfiltrated
 
@@ -206,6 +251,12 @@ vulnerabilities.
   env values unless new ones come in the call. Tests: `packages/extension-host/test/oauth.test.ts`
   ("SEC-09") and `test/security/extension-confirm.test.ts`. The custom model key row belongs to the
   core fix.
+- **Status (custom model key):** **fixed.** New `security/model-keys.ts`: the key is stored
+  with the origin of the base URL (`model:<id>:origin`) and handed out (Test connection, agent env,
+  `hasKey`) only while the model still has that origin, whether the URL changed through
+  `saveCustomModel` or a raw `settings.update`. `saveCustomModel` with a new origin and no key
+  deletes the old key. Keys saved before this change must be entered again. Files:
+  `handlers/settings.ts`, `services/agents.ts`, `security/model-keys.ts`. PoC flipped.
 
 ### SEC-10 One agent's proxy secret opens every remote MCP server, including other projects' servers
 
@@ -235,6 +286,16 @@ vulnerabilities.
   env for that server only from main over the authenticated loopback channel and then `exec`s the
   real command. Or run them behind the loopback proxy. At the very least, include only the servers
   this agent actually gets.
+- **Status:** **fixed** (residual below). A custom stdio server whose env or args use a
+  secret placeholder is written into mcp.json as `node <app-data>/bin/oide-mcp-launch.cjs
+  <url> <nonce>`; the launcher (`packages/mcp-server/src/launcher.ts`) fetches that one server's
+  real command, args and env from the oIDE MCP server (agent secret + one-time nonce, fresh mcp.json
+  on every launch), drops the agent secret from the child env and runs it. Secret values are no
+  longer in the `claude` env or on disk. Residual: values for a project `.mcp.json` (read by the
+  CLI itself) stay in the agent env, and with no absolute `node` on PATH the old env placeholders
+  are used. Files: `packages/mcp-server/src/{launcher,server,types}.ts`,
+  `packages/agent-core/src/{supervisor,ports}.ts`, `services/core.ts`. Test:
+  `packages/mcp-server/src/server.test.ts`.
 
 ### SEC-12 An agent can widen its own permissions through `.oide/` and `.claude/` in trusted projects
 
@@ -251,6 +312,14 @@ vulnerabilities.
   `.mcp.json` to the `ask` set (never pre-allowed) for every agent. In Review, flag any diff that
   touches `.oide/`, `.claude/`, `.mcp.json` or `.gitattributes`/`.gitmodules` with a warning banner
   before Merge.
+- **Status:** **fixed.** Every agent gets `--settings {"permissions":{"ask":[…]}}` with
+  `Edit/Write/MultiEdit/NotebookEdit` on `**/.oide/**`, `**/.claude/**` and `**/.mcp.json`
+  (CLI ask rules beat allow rules and acceptEdits), and allow rules that name those paths are
+  dropped. `git.diff` marks such files and `.gitattributes`/`.gitmodules` with
+  `FileDiff.sensitive`; Review shows a warning in the summary column and in the Merge dialog.
+  Residual: a Bash command the user allowed can still write these files. Files:
+  `packages/agent-core/src/args.ts`, `packages/protocol/src/project.ts`, `services/git.ts`,
+  `renderer/src/screens/Review/{SummaryPanel,index}.tsx`. Tests: `args.test.ts`, `core-fixes.test.ts`.
 
 ### SEC-13 An unreviewed extension with the same name replaces a marketplace extension and inherits its secrets
 
@@ -319,6 +388,14 @@ vulnerabilities.
 - **Fix:** put a `${OIDE_MCP_SECRET}` placeholder in the file and pass the value through that
   agent's env only. The CLI expands env vars in MCP config; verify this on the pinned version. Or
   tighten the ACL on the agent folder. Cap pending prompts per agent, for example at 3.
+- **Status:** **fixed** (residual below). mcp.json holds `X-Oide-Secret: ${OIDE_MCP_HANDSHAKE}`
+  and every other header value as `${OIDE_MCP_HEADER_n}`; the values go only into that agent's
+  env. Verified in the pinned CLI 2.1.325 binary: `--mcp-config` files are parsed with env
+  expansion of url and headers (names on the CLI's credential list are withheld; ours are not on
+  it). fake-claude expands the same way. Pending prompts are capped at 5 per agent; more are denied
+  at once. Residual: a process of the same user can still read another process's environment.
+  Files: `packages/mcp-server/src/server.ts`, `tools/fake-claude/bin/fake-claude.mjs`. Tests:
+  `server.test.ts`, `core-fixes.test.ts`.
 
 ## Low
 
@@ -328,6 +405,8 @@ vulnerabilities.
 `apps/desktop/src/main/services/core.ts:238`. PoC: `test/security/artifact-url-case.test.ts`.
 **Fix:** compare in lowercase on case-insensitive platforms, or serve only
 files whose real path is not under `.versions` and is not `artifact.json`.
+**Status:** **fixed.** Deny checks fold case and trailing dots/spaces and run again on the real
+path. File: `services/core.ts`. PoC flipped.
 
 ### SEC-18 The artifact CSP leaves some leaks open
 
@@ -338,16 +417,22 @@ See `apps/desktop/src/main/services/core.ts` (`ARTIFACT_CSP`). **Fix:** use `scr
 'unsafe-inline' 'self'`, and disable WebRTC for the artifact frames. Electron's
 `webRTCIPHandlingPolicy: 'disable_non_proxied_udp'` on the session does this, or deny it in a
 `session.setPermissionCheckHandler` keyed on the frame origin.
+**Status:** **fixed.** `ARTIFACT_CSP` uses `'self'` instead of the whole scheme (plus
+`worker-src 'none'`), and every webContents gets `setWebRTCIPHandlingPolicy('disable_non_proxied_udp')`.
+Files: `services/core.ts`, `security/hardening.ts`.
 
 ### SEC-19 `isAnthropicHost` misses `claude.com`
 
 See `apps/desktop/src/main/handlers/settings.ts:13-19`. **Fix:** add `claude.com` and its
 subdomains. Hard rule 4 is not broken today, but this keeps it from being broken by a typo.
+**Status:** **fixed.** `claude.com` and subdomains count. File: `handlers/settings.ts`.
 
 ### SEC-20 The external-link allow-list includes `githubusercontent.com`
 
 Anyone can host content there. See `apps/desktop/src/main/security/external.ts:7-18`. **Fix:**
 drop it unless a feature needs it.
+**Status:** **fixed.** Removed; no link feature needs it (the marketplace index is fetched, not
+opened). File: `security/external.ts`.
 
 ### SEC-21 Renderer-supplied refs reach git without `--end-of-options`
 
@@ -356,12 +441,19 @@ the `rev-parse --verify <ref>^{commit}` pre-check stops `--output=…`-style inj
 `packages/git/src/log.ts:37-39` and `packages/git/src/worktrees.ts:156`. **Fix:** put
 `--end-of-options` before refs, and validate refs with `git check-ref-format` or a strict regex in
 Zod.
+**Status:** **fixed.** `GitRef` in the protocol (no leading `-`, no whitespace or `..`) for
+`git.log` and `AgentSpec.baseRef`; `isSafeRef` in `revParse` and `worktree add`;
+`--end-of-options` in `rev-parse`, `log`, `merge-base` and `merge`, and `--` in `worktree add`.
+Files: `packages/protocol/src/{agent,ipc}.ts`, `packages/git/src/{git,log,diff,merge,worktrees}.ts`.
 
 ### SEC-22 The renderer may rewrite a tool's input when allowing it
 
 `answer` honours `updatedInput` from the renderer. See `packages/mcp-server/src/server.ts:212`.
 **Fix:** accept `updatedInput` only for the tools whose UI edits the input, and keep it within
 that tool's schema.
+**Status:** **fixed.** `answer` keeps the agent's input except for tools whose prompt may edit
+it: only Bash, and only its `command` field. File: `packages/mcp-server/src/server.ts`. Test:
+`server.test.ts`.
 
 ### SEC-23 The extension host's `artifacts.read` is not scoped
 
@@ -392,12 +484,19 @@ and `display` is built from the masked config. Test in
 It stays on so that `file://` keeps its extra privileges. See
 `apps/desktop/electron-builder.yml`. **Fix (later):** serve the renderer from a custom `app://`
 protocol and turn the fuse off.
+**Status:** **accepted risk.** Turning the fuse off needs the renderer served from an `app://`
+protocol first, which is a packaging change for after the release; the window is sandboxed with
+context isolation, so the extra privileges only matter together with a renderer compromise.
 
 ### SEC-26 Repo artifacts of untrusted projects are indexed and given to agents
 
 Artifacts under `.oide/artifacts/` are offered to agents through `artifacts_list`/`artifacts_read`,
 which makes them a prompt-injection channel. Their previews are sandboxed correctly. **Fix:** label
 them "from untrusted project", and leave them out of `artifacts_list` until the project is trusted.
+**Status:** **fixed (agents).** The MCP artifacts backend hides repo artifacts of untrusted
+projects from `artifacts_list`/`artifacts_read`/`artifacts_write` until the project is trusted,
+and an agent reaches only its own project's (and project-less) artifacts. Not done: an "untrusted"
+label in the Artifacts screen (renderer). File: `services/core.ts`. Test: `core-fixes.test.ts`.
 
 ### SEC-27 Extra CLI flags can undo the isolation once SEC-02 is fixed
 
@@ -406,6 +505,12 @@ These flags are not reserved: `--settings`, `--setting-sources`, `--strict-mcp-c
 `--disallowed-tools` (kebab aliases), and `--safe-mode`/`--restricted`. See
 `packages/agent-core/src/args.ts:191-215`. **Fix:** reserve them, or at least the ones that change
 settings sources or MCP configuration.
+**Status:** **fixed.** Reserved, with all their values (variadic flags too) and case or `_`
+spellings: `--settings`, `--setting-sources`, `--strict-mcp-config`, `--mcp-config`, `--add-dir`,
+`--plugin-dir`, `--plugin-url`, `--tools`, `--allowed-tools`/`--allowedTools`,
+`--disallowed-tools`/`--disallowedTools`, `--agents`, `--agent`, the system-prompt flags,
+`--safe-mode`, `--restricted`, `--bare`, `--inherit-permission-mode`, `--fork-session`, besides the
+existing permission flags. File: `packages/agent-core/src/args.ts`. Test: `args.test.ts`.
 
 ## What held
 

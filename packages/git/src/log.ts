@@ -36,7 +36,7 @@ export function parseLog(text: string): CommitInfo[] {
 export async function log(repo: Repo, ref = 'HEAD', limit = 20): Promise<CommitInfo[]> {
   const git = toGit(repo);
   if (!(await git.revParse(ref))) return [];
-  const out = await git.out(['log', '-z', `-n${Math.max(1, Math.floor(limit))}`, `--format=${FORMAT}`, ref, '--']);
+  const out = await git.out(['log', '-z', `-n${Math.max(1, Math.floor(limit))}`, `--format=${FORMAT}`, '--end-of-options', ref, '--']);
   return parseLog(out);
 }
 

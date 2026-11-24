@@ -40,7 +40,7 @@ describe('compromised renderer → main', () => {
   });
 
   // SEC-05 (high): terminal.create takes any `command`, and any registered root as cwd, including app-data (userData).
-  it.fails('terminal.create refuses a renderer-chosen command line in the app-data folder', async () => {
+  it('terminal.create refuses a renderer-chosen command line in the app-data folder', async () => {
     const h = await harness();
     h.ctx.roots.add(h.userData, 'app-data'); // as apps/desktop/src/main/index.ts:95 does
     const code = await h.fails('terminal.create', { cwd: h.userData, command: 'calc.exe' }).catch(() => 'succeeded');
@@ -49,7 +49,7 @@ describe('compromised renderer → main', () => {
 
   // SEC-08 (medium): projects.open({ path }) accepts any path the renderer names (no dialog),
   // adds it to the file-access roots, and runs git there.
-  it.fails('projects.open refuses an explicit path that was never picked in a dialog', async () => {
+  it('projects.open refuses an explicit path that was never picked in a dialog', async () => {
     const h = await harness();
     const repo = makeRepo();
     dirs.push(repo);
@@ -60,7 +60,7 @@ describe('compromised renderer → main', () => {
 
   // SEC-09 (medium): a stored custom-model key can be exfiltrated by re-pointing baseUrl and
   // pressing "Test connection" (the key is kept when apiKey is omitted).
-  it.fails('settings.testCustomModel does not send a stored key to a changed base URL', async () => {
+  it('settings.testCustomModel does not send a stored key to a changed base URL', async () => {
     const h = await harness();
     let seen: string | undefined;
     const srv = createServer((req, res) => {

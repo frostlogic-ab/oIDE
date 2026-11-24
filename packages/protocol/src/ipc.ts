@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AgentSpec, AgentSummary, Id, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
+import { AgentSpec, AgentSummary, GitRef, Id, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
 import { ArtifactKind, ArtifactMeta, ArtifactUse, ArtifactVersion } from './artifacts.js';
 import { AgentEvent } from './events.js';
 import { CustomServer, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
@@ -60,7 +60,7 @@ export const Commands = {
   'git.pull': cmd(z.object({ projectId: Id }), SyncState),
   'git.push': cmd(z.object({ projectId: Id }), SyncState),
   'git.commit': cmd(z.object({ projectId: Id, message: z.string().min(1), files: z.array(z.string()).optional() }), CommitInfo),
-  'git.log': cmd(z.object({ projectId: Id, ref: z.string().default('HEAD'), limit: z.number().int().default(20) }), z.array(CommitInfo)),
+  'git.log': cmd(z.object({ projectId: Id, ref: GitRef.default('HEAD'), limit: z.number().int().default(20) }), z.array(CommitInfo)),
   'git.worktrees': cmd(z.object({ projectId: Id }), z.array(WorktreeInfo)),
   'git.overlaps': cmd(z.object({ projectId: Id }), z.array(OverlapWarning)),
   'git.diff': cmd(z.object({ agentId: Id }), z.array(FileDiff)),
@@ -89,7 +89,8 @@ export const Commands = {
   'files.mentionedIn': cmd(z.object({ root: z.string(), path: z.string() }), z.array(ArtifactMeta)),
 
   // Terminals
-  'terminal.create': cmd(z.object({ cwd: z.string(), command: z.string().optional(), cols: z.number().int().default(100), rows: z.number().int().default(30) }), z.object({ terminalId: Id })),
+  // No `command` (SEC-05): renderers get interactive shells only; the sign-in terminal runs in main.
+  'terminal.create': cmd(z.strictObject({ cwd: z.string(), cols: z.number().int().default(100), rows: z.number().int().default(30) }), z.object({ terminalId: Id })),
   'terminal.write': cmd(z.object({ terminalId: Id, data: z.string() }), Ok),
   'terminal.resize': cmd(z.object({ terminalId: Id, cols: z.number().int(), rows: z.number().int() }), Ok),
   'terminal.kill': cmd(z.object({ terminalId: Id }), Ok),

@@ -29,7 +29,7 @@ const MAX_UNTRACKED_FILES = 2000;
 
 export async function mergeBase(repo: Repo, base: string, head = 'HEAD'): Promise<string> {
   const git = toGit(repo);
-  const r = await git.run(['merge-base', base, head], { okExitCodes: [0, 1] });
+  const r = await git.run(['merge-base', '--end-of-options', base, head], { okExitCodes: [0, 1] });
   const sha = r.stdout.trim();
   if (r.exitCode === 0 && sha) return sha;
   // No common ancestor: diff against the base itself.

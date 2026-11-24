@@ -1,4 +1,6 @@
-// Must stay the first import: silences the node:sqlite ExperimentalWarning before anything loads it.
+// Must stay the first import: no bare-name program lookup in the cwd on Windows (SEC-01).
+import './security/early-env.js';
+// Must stay before the rest: silences the node:sqlite ExperimentalWarning before anything loads it.
 import './warnings.js';
 
 import { join } from 'node:path';

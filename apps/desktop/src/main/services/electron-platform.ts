@@ -1,5 +1,6 @@
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { app, dialog, Notification, protocol, safeStorage, shell, utilityProcess } from 'electron';
 import { utilityProcessFork } from '@oide/extension-host';
 import type { ArtifactStore } from '@oide/store';
@@ -39,17 +40,38 @@ export function handleArtifactScheme(artifacts: ArtifactStore): void {
 }
 
 const TRUST_DETAIL =
-  'Trusted projects may run their .oide/setup command when an agent starts, pre-approve tool calls with .oide/permissions.json allow rules, ' +
-  'and start the MCP servers listed in .mcp.json. Untrusted projects ignore all three. You can change this later in the project menu.';
+  'A trusted project may run its .oide/setup command when an agent starts, pre-approve tool calls with .oide/permissions.json allow rules, ' +
+  "start the MCP servers in .mcp.json, and have Claude Code load its .claude settings (hooks, permissions, plugins). oIDE's git calls also " +
+  'honour its git config and hooks, and it is watched and fetched in the background.\n\n' +
+  'An untrusted project gets none of this: agents only load your own Claude Code settings and oIDE\'s MCP servers, git runs with the ' +
+  "repository's hooks, filters and other programs switched off, and nothing runs in the background. CLAUDE.md, skills and commands in the " +
+  'repo can still reach the agent as text. You can change this later in the project menu.';
+
+/**
+ * The monorepo root in unpackaged builds (dev and e2e). `app.getAppPath()` is `apps/desktop` under
+ * `electron-vite dev` but `apps/desktop/out/main` when launched as `electron out/main/index.js`, so
+ * walk up to the folder that holds `pnpm-workspace.yaml`.
+ */
+export function devRepoRoot(start: string): string {
+  let dir = resolve(start);
+  for (;;) {
+    if (existsSync(join(dir, 'pnpm-workspace.yaml'))) return dir;
+    const up = dirname(dir);
+    if (up === dir) return resolve(start, '..', '..');
+    dir = up;
+  }
+}
 
 export function electronPlatform(ctx: MainContext, terminals: TerminalService): Platform {
   const win = () => {
     const w = ctx.getWindow();
     return w && !w.isDestroyed() ? w : undefined;
   };
-  const repoRoot = resolve(app.getAppPath(), '..', '..');
+  const repoRoot = app.isPackaged ? '' : devRepoRoot(app.getAppPath());
   // E2E only (unpackaged builds): answer the trust dialog without showing it.
   const autoTrust = !app.isPackaged ? process.env.OIDE_E2E_TRUST : undefined;
+  // E2E only (unpackaged builds): folders projects.open may open by path (SEC-08).
+  const openable = !app.isPackaged && process.env.OIDE_E2E_OPEN_PATHS ? process.env.OIDE_E2E_OPEN_PATHS.split(delimiter).filter(Boolean) : undefined;
   return {
     cipher: {
       encrypt: (s) => safeStorage.encryptString(s),
@@ -96,6 +118,7 @@ export function electronPlatform(ctx: MainContext, terminals: TerminalService): 
     builtinExtensionDirs: app.isPackaged ? [join(process.resourcesPath, 'extensions')] : [join(repoRoot, 'extensions')],
     bundledIndexPath: app.isPackaged ? join(process.resourcesPath, 'marketplace', 'index.json') : join(repoRoot, 'tools', 'marketplace-index', 'bundled', 'index.json'),
     ...(process.env.OIDE_CLAUDE_PATH ? { cliPathOverride: process.env.OIDE_CLAUDE_PATH } : {}),
+    ...(openable ? { openablePaths: openable } : {}),
     terminals,
     background: true,
   };

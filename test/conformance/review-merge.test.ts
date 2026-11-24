@@ -13,8 +13,9 @@ import { cleanup, git, makeRepo, startHarness, waitFor, type Harness } from '../
  * merge is a no-op that reports ok, and with cleanup "Right away" the worktree holding the only
  * copy of the change is force-removed.
  *
- * Marked it.fails (they FAIL today) until that is fixed (commit the worktree's changes with an
- * `Oide-Agent:` trailer before merging, or refuse to merge while it has uncommitted changes).
+ * Fixed (B1): `git.mergeLocal` first commits the worktree's pending changes on the agent's behalf
+ * (`Oide-Agent:` trailer), reports ok only when the main checkout moved, and cleanup removes a
+ * worktree only when its branch is in main and it holds no other changes.
  */
 
 const open: Harness[] = [];
@@ -29,10 +30,11 @@ const strategy = { kind: 'single' as const, lead: { model: 'sonnet' } };
 async function readyAgent(cleanupMode: 'right-away' | 'never'): Promise<{ h: Harness; repo: string; a: AgentSummary }> {
   const repo = makeRepo();
   dirs.push(repo);
-  const h = await startHarness();
+  const h = await startHarness({ confirm: 'accept' });
   open.push(h);
   dirs.push(h.userData);
   await h.call('settings.update', { patch: { claude: { extraFlags: '--fake-scenario review' }, agents: { cleanup: cleanupMode } } });
+  h.allowOpen(repo);
   const project = (await h.call('projects.open', { path: repo }))!;
   const [spawned] = await h.call('agents.spawn', { projectId: project.id, title: 'Uncommitted', goal: 'Add feature.txt', mode: 'acceptEdits', strategy });
   const id = spawned!.id;
@@ -43,8 +45,7 @@ async function readyAgent(cleanupMode: 'right-away' | 'never'): Promise<{ h: Har
 }
 
 describe('conformance: Review → Merge locally merges what Review showed', () => {
-  // Known gap: remove .fails once fixed (see docs/wiki/pages/review-conformance.md).
-  it.fails('Review lists the uncommitted file and Merge locally brings it to main', async () => {
+  it('Review lists the uncommitted file and Merge locally brings it to main', async () => {
     const { h, repo, a } = await readyAgent('never');
     expect(git(a.worktreePath!, 'status', '--porcelain')).toContain('feature.txt');
     const diff = await h.call('git.diff', { agentId: a.id });
@@ -56,7 +57,7 @@ describe('conformance: Review → Merge locally merges what Review showed', () =
     else expect(merged.ok).toBe(false);
   });
 
-  it.fails('cleanup "Right away" never deletes a worktree whose change was not merged', async () => {
+  it('cleanup "Right away" never deletes a worktree whose change was not merged', async () => {
     const { h, repo, a } = await readyAgent('right-away');
     const merged = await h.call('git.mergeLocal', { agentId: a.id }).catch(() => ({ ok: false, conflicts: [] }));
     const changeOnMain = existsSync(join(repo, 'feature.txt'));

@@ -17,7 +17,8 @@ afterEach(async () => {
 });
 
 async function harness(opts: Parameters<typeof startHarness>[0] = {}): Promise<Harness> {
-  const h = await startHarness(opts);
+  // These flows set --fake-scenario extra flags, which main confirms natively (SEC-07): accept.
+  const h = await startHarness({ confirm: 'accept', ...opts });
   open.push(h);
   dirs.push(h.userData);
   return h;
@@ -52,7 +53,11 @@ describe('main services (plain Node, fake-claude)', () => {
     const h = await harness();
     await h.call('settings.update', { patch: { claude: { extraFlags: '--fake-scenario review' }, agents: { cleanup: 'right-away' } } });
 
-    expect(await h.fails('projects.open', { path: tempDir('oide-int-notrepo-') })).toBe('not_a_repo');
+    const notRepo = tempDir('oide-int-notrepo-');
+    dirs.push(notRepo);
+    h.allowOpen(notRepo);
+    expect(await h.fails('projects.open', { path: notRepo })).toBe('not_a_repo');
+    h.allowOpen(repo);
     const project = (await h.call('projects.open', { path: repo }))!;
     expect(project.trusted).toBe(true);
     expect(h.eventsOf('projects.changed').at(-1)?.map((p) => p.id)).toContain(project.id);
@@ -139,6 +144,7 @@ describe('main services (plain Node, fake-claude)', () => {
     git(repo, 'commit', '-q', '-m', 'setup');
     const h = await harness({ trust: false });
     await h.call('settings.update', { patch: { claude: { extraFlags: '--fake-scenario basic' } } });
+    h.allowOpen(repo);
     const project = (await h.call('projects.open', { path: repo }))!;
     expect(project.trusted).toBe(false);
     const [a] = await h.call('agents.spawn', { projectId: project.id, title: 'Untrusted', goal: 'hi', mode: 'acceptEdits', strategy });
@@ -161,6 +167,7 @@ describe('main services (plain Node, fake-claude)', () => {
     dirs.push(repo);
     const h = await harness();
     await h.call('settings.update', { patch: { claude: { extraFlags: '--fake-scenario permission' }, agents: { maxRunning: 1 } } });
+    h.allowOpen(repo);
     const project = (await h.call('projects.open', { path: repo }))!;
     const [a, b] = await h.call('agents.spawn', { projectId: project.id, title: 'Q', goal: 'Run tests', mode: 'default', attempts: 2, strategy });
     expect(b!.attemptGroup).toBe(a!.attemptGroup);
@@ -179,6 +186,7 @@ describe('main services (plain Node, fake-claude)', () => {
     dirs.push(join(record, '..'));
     const h1 = await harness();
     await h1.call('settings.update', { patch: { claude: { extraFlags: `--fake-scenario slow --fake-record ${JSON.stringify(record)}` } } });
+    h1.allowOpen(repo);
     const project = (await h1.call('projects.open', { path: repo }))!;
     const [a] = await h1.call('agents.spawn', { projectId: project.id, title: 'Long job', goal: 'Count', mode: 'acceptEdits', strategy });
     const running = await status(h1, a!.id, 'running');
