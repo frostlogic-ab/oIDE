@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod';
-import { AgentSummary, CustomServer, InstalledExtension } from '@oide/protocol';
+import type { AgentSummary, CustomServer, InstalledExtension } from '@oide/protocol';
 import { EventsRepo, openStore } from '../src/index.js';
 import { spec } from './helpers.js';
 
@@ -131,6 +131,9 @@ describe('usage, review, ui state', () => {
     const c1 = s.review.addComment({ agentId: 'a1', path: 'src/a.ts', line: 3, body: 'Rename this' }, 1);
     s.review.addComment({ agentId: 'a1', path: 'src/b.ts', body: 'Why?' }, 2);
     expect(s.review.comments('a1').map((c) => c.body)).toEqual(['Rename this', 'Why?']);
+    const removed = s.review.addComment({ agentId: 'a1', path: 'src/a.ts', line: 3, side: 'old', body: 'Keep this line' }, 3);
+    expect(s.review.comments('a1').map((c) => [c.line, c.side])).toEqual([[3, 'new'], [undefined, 'new'], [3, 'old']]);
+    s.review.deleteComment(removed.id);
     expect(s.review.takeUnsent('a1')).toHaveLength(2);
     expect(s.review.takeUnsent('a1')).toHaveLength(0);
     expect(s.review.comments('a1').every((c) => c.sent)).toBe(true);

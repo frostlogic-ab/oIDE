@@ -80,6 +80,7 @@ export function defaultSettings(): Settings {
     permissions: {},
     ui: {},
     updates: { channel: 'stable', checkAutomatically: true },
+    keybindings: {},
   });
 }
 

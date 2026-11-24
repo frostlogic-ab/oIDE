@@ -72,6 +72,10 @@ describe('main services (plain Node, fake-claude)', () => {
     expect(asking.branch).toBe('oide/add-feature');
     expect(asking.pendingPermission).toMatchObject({ toolName: 'Bash', summary: 'Run npm test' });
     expect(h.notifications.some((n) => /needs permission/.test(n))).toBe(true);
+    // The renderer retires this toast when exactly this prompt resolves.
+    expect(h.eventsOf('notify').find((n) => n.kind === 'needs-permission')).toMatchObject({ agentId: a!.id, requestId: asking.pendingPermission!.requestId });
+    // A repo without a remote cannot open a pull request (m6).
+    expect(await h.call('git.prAvailable', { projectId: project.id })).toMatchObject({ available: false, reason: expect.stringMatching(/no git remote/) });
 
     // Only the exact pending id is accepted.
     expect(await h.fails('agents.answerPermission', { agentId: a!.id, answer: { requestId: 'perm-bogus', behavior: 'allow' } })).toBe('not_found');
@@ -99,6 +103,9 @@ describe('main services (plain Node, fake-claude)', () => {
 
     // Review comments → one review-feedback message with file:line refs; comments marked sent.
     const c = await h.call('review.addComment', { agentId: a!.id, path: 'feature.txt', line: 1, body: 'Say more' });
+    expect(c.side).toBe('new');
+    const old = await h.call('review.addComment', { agentId: a!.id, path: 'feature.txt', line: 1, side: 'old', body: 'Was fine' });
+    expect((await h.call('review.comments', { agentId: a!.id })).find((x) => x.id === old.id)).toMatchObject({ line: 1, side: 'old' });
     await h.call('review.sendFeedback', { agentId: a!.id, note: 'Thanks' });
     expect((await h.call('review.comments', { agentId: a!.id })).find((x) => x.id === c.id)?.sent).toBe(true);
     const userTexts = await waitFor(async () => {

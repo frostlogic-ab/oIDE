@@ -93,6 +93,8 @@ export const ReviewComment = z.object({
   agentId: Id,
   path: z.string(),
   line: z.number().int().optional(),
+  /** Which side of the diff `line` numbers: `old` for a removed line, `new` (default) otherwise. */
+  side: z.enum(['old', 'new']).default('new'),
   body: z.string().min(1),
   sent: z.boolean().default(false),
   createdAt: z.number(),

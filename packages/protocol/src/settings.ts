@@ -92,6 +92,11 @@ export const Settings = z.object({
       checkAutomatically: z.boolean().default(true),
     })
     .default({ channel: 'stable', checkAutomatically: true }),
+  /**
+   * Settings › Keyboard shortcuts: the user's rebinds, action id → key combos ("Mod+K", "J").
+   * Only changed actions are stored; a missing action uses the built-in default, `[]` unbinds it.
+   */
+  keybindings: z.record(z.string().min(1).max(100), z.array(z.string().min(1).max(40)).max(4)).default({}),
 });
 export type Settings = z.infer<typeof Settings>;
 

@@ -122,6 +122,8 @@ export const AgentEvent = z.discriminatedUnion('type', [
     type: z.literal('permission-resolved'),
     requestId: z.string(),
     behavior: z.enum(['allow', 'deny']),
+    /** Set when oIDE answered for the user: `quit` = denied because oIDE was closing. */
+    reason: z.enum(['quit']).optional(),
   }),
   z.object({ ...base, type: z.literal('todos'), todos: z.array(TodoItem) }),
   z.object({ ...base, type: z.literal('subagent'), subagent: SubagentInfo }),

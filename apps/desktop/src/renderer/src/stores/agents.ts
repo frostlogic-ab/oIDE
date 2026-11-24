@@ -12,6 +12,9 @@ import { invokeOr, oide } from '../lib/bridge';
  */
 export const MAX_EVENTS_PER_AGENT = 2000;
 
+/** Shown on the tile and in Focus when a prompt was still waiting for an answer as oIDE quit (it was denied then). */
+export const INTERRUPTED_PERMISSION_NOTE = 'oIDE closed while waiting for your answer; send a message to continue.';
+
 export interface AgentCounts {
   total: number;
   running: number;

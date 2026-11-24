@@ -49,3 +49,7 @@ Fields added after the first cut (all optional or defaulted):
   defaulted as a whole so older settings parse), `updates.ts` (`UpdateChannel`, `UpdateState`, `UpdateStatus`),
   IPC `updates.status/check/download/install` (install needs `{ consent: true }`) and the `updates.changed`
   event. See [packaging](packaging.md).
+- Conformance UX fixes (2026-11-24): `Settings.keybindings` (action → combos, default `{}`);
+  `ReviewComment.side` and `review.addComment { side }` (`old` | `new`, default `new`), `side` on
+  `review-feedback` comments; `permission-resolved.reason` (`quit`); `AgentSummary.interruptedPermission`;
+  `notify.kind` / `notify.requestId`. The `init.slashCommands` field is now filled by the parser.

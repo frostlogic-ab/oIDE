@@ -35,9 +35,9 @@ export function useReview(agentId: string | undefined) {
   }, [reload]);
 
   const addComment = useCallback(
-    async (path: string, line: number | undefined, body: string) => {
+    async (path: string, line: number | undefined, body: string, side: 'old' | 'new' = 'new') => {
       if (!agentId) return;
-      const c = await oide.invoke('review.addComment', { agentId, path, line, body });
+      const c = await oide.invoke('review.addComment', { agentId, path, line, side, body });
       setComments((prev) => [...prev, c]);
       return c;
     },

@@ -83,6 +83,27 @@ describe('AgentReducer', () => {
     expect(s.pendingPermission).toBeUndefined();
   });
 
+  it('a prompt denied at quit is remembered until the user sends a message', () => {
+    const req = { requestId: 'r1', agentId: 'agent-1', toolName: 'Bash', input: { command: 'npm i' }, summary: 'Run npm i', createdAt: 1 };
+    const quit = run([
+      ev({ type: 'status', status: 'running' }),
+      ev({ type: 'permission-request', request: req }),
+      ev({ type: 'permission-resolved', requestId: 'r1', behavior: 'deny', reason: 'quit' }),
+      ev({ type: 'status', status: 'stopped' }),
+    ]);
+    expect(quit.s.pendingPermission).toBeUndefined();
+    expect(quit.s.interruptedPermission).toMatchObject({ toolName: 'Bash', summary: 'Run npm i' });
+    // A user's own deny is not a quit.
+    const denied = run([ev({ type: 'permission-request', request: { ...req, requestId: 'r2' } }), ev({ type: 'permission-resolved', requestId: 'r2', behavior: 'deny' })]);
+    expect(denied.s.interruptedPermission).toBeUndefined();
+    // A subagent's text does not clear it; the user's message does.
+    const r = new AgentReducer(quit.s);
+    r.apply(ev({ type: 'user-text', text: 'sub', parentToolUseId: 'task-1' }));
+    expect(r.summary.interruptedPermission).toBeDefined();
+    r.apply(ev({ type: 'user-text', text: 'go on' }));
+    expect(r.summary.interruptedPermission).toBeUndefined();
+  });
+
   it('a new user message resets ready-for-review; result without review = has-question', () => {
     const { s } = run([
       ev({ type: 'review-submitted', review: { agentId: 'agent-1', summary: 'x', checks: [], submittedAt: 1 } }),

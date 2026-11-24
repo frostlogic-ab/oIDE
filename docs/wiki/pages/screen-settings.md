@@ -28,7 +28,7 @@ shows as an amber banner at the top of every section, and per project under Proj
 | Permissions | Defaults (edit files, shell, network); Rules for (project), Always allowed / Always denied lists with Remove and Add rule | `settings.update` (`permissions.defaults`), `settings.projectPermissions`, `settings.saveProjectPermissions` |
 | Projects | open projects with path, Trusted checkbox, their `.oide/` errors | `projects.trust`, `settings.loadErrors` |
 | Artifacts & claude.ai | where artifacts live, import is a copy (not synced), Open in claude.ai | none (link to the Artifacts screen) |
-| Keyboard shortcuts | read-only list from `keymap.getBindings()` and `ACTION_LABELS` | none |
+| Keyboard shortcuts | every action with its keys; Change records the next combo (Esc cancels), a combo another action uses shows a warning and Save takes it from there; Reset per action and Reset all (`KeysSection.tsx`) | `settings.update { keybindings: { <action>: [combo] \| null } }` |
 | Appearance | accent radiogroup (four `ACCENT_OPTIONS` swatches, arrow keys) | `settings.update({ ui: { accent } })`; the settings store applies it |
 | Privacy | Share anonymous usage statistics (off by default) | `settings.update({ ui: { telemetry } })` |
 | Updates (M7) | Current version and state line, Channel (Stable / Beta), Check automatically, Check now with "Last checked …", an available-update card (notes, Download, progress bar, Restart to update with an inline confirm that running agents stop), Open release page when the build cannot install itself, the disabled reason otherwise | `updates.status`, `updates.check`, `updates.download`, `updates.install({ consent: true })`, `updates.changed` event, `settings.update({ updates: { channel / checkAutomatically } })` |
@@ -71,12 +71,14 @@ shows as an amber banner at the top of every section, and per project under Proj
 - Custom models are offered only in the lead slot (stored as `custom:<id>`; `agents.spawn` maps it to
   `AgentSpec.customModel`). Subagent slots list the model families only: the CLI cannot route
   subagents to another endpoint.
-- Keyboard shortcuts are read-only here (rebinding lives in `keymap.rebind`, persisted to localStorage).
 - "Custom (last used)" depends on Spawn writing `models.lastUsedStrategy`.
 - `settings.builtIns`, `settings.loadErrors` and `projects.trust` need main handlers; without them the
   screen hides "edited"/Reset and the banner.
 
 ## Tests
+
+`KeysSection.test.tsx`: records and saves a rebind, resets it, warns on a conflict and takes the combo from the
+other action, Esc cancels, follows `settings.changed`, moves old browser-storage rebinds into Settings once.
 
 `Settings.test.tsx` (jsdom): Allow Bypass sends `{ claude: { allowBypass: false } }`; max running sends
 `{ agents: { maxRunning: 5 } }` and refuses 99 with `aria-invalid`; adding a custom model sends the key

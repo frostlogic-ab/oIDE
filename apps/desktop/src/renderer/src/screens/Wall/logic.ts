@@ -217,10 +217,15 @@ export function modeBadge(mode: PermissionMode, defaultMode: PermissionMode): Mo
 
 // ---------- tile body ----------
 
-export type TileBodyKind = 'permission' | 'question' | 'review' | 'queued' | 'rate-limited' | 'error' | 'activity';
+export type TileBodyKind = 'permission' | 'interrupted' | 'question' | 'review' | 'queued' | 'rate-limited' | 'error' | 'activity';
+
+/** Statuses in which an agent waits for the user (nothing is running on its own). */
+const IDLE_FOR_USER = new Set<AgentSummary['status']>(['has-question', 'stopped', 'paused', 'done']);
 
 export function tileBodyKind(a: AgentSummary): TileBodyKind {
   if (a.status === 'needs-permission' && a.pendingPermission) return 'permission';
+  // A prompt was still open when oIDE quit (it was denied then): say so until the user replies.
+  if (a.interruptedPermission && IDLE_FOR_USER.has(a.status)) return 'interrupted';
   if (a.status === 'has-question') return 'question';
   if (a.status === 'ready-for-review') return 'review';
   if (a.status === 'queued') return 'queued';

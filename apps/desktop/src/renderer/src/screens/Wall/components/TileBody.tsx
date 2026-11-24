@@ -4,7 +4,7 @@ import { Button, DiffStat, LinkButton, Tooltip } from '@oide/ui';
 import { invokeOr } from '../../../lib/bridge';
 import { formatResetTime } from '../../../lib/format';
 import { useShortcutLabel } from '../../../lib/useKeymap';
-import { isRunning } from '../../../stores/agents';
+import { INTERRUPTED_PERMISSION_NOTE, isRunning } from '../../../stores/agents';
 import { navigate } from '../../../stores/router';
 import { useSetting } from '../../../stores/settings';
 import { answerPermission, openPullRequest, resumeAgent, sendReply, type PermissionChoice } from '../actions';
@@ -39,6 +39,18 @@ export function TileBody({ agent }: { agent: AgentSummary }) {
             {v.target}
           </span>
           {v.note && <span className="text-[12px] text-ink-3 line-clamp-2">{v.note}</span>}
+        </div>
+      );
+    }
+    case 'interrupted': {
+      const p = agent.interruptedPermission!;
+      return (
+        <div className={`${BOX} p-2.5 flex flex-col gap-1.5 text-[12px] leading-normal`} role="note" aria-label="Unanswered permission prompt">
+          <span className="text-warn">{INTERRUPTED_PERMISSION_NOTE}</span>
+          <span className="text-ink-3 truncate" title={p.summary ?? p.toolName}>
+            It was asking to use <span className="font-mono text-ink-2">{p.toolName}</span>
+            {p.summary ? `: ${p.summary}` : ''}
+          </span>
         </div>
       );
     }

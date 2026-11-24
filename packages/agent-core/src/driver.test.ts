@@ -86,7 +86,7 @@ describe('ClaudeCliDriver against fake-claude', () => {
       const s = await start(`--fake-scenario basic --fake-record ${JSON.stringify(rec)}`);
       h = s.handle;
       await waitFor(() => results(s.events).length === 1, 10_000, 'result');
-      h.send({ kind: 'review-feedback', comments: [{ path: 'src/a.ts', line: 12, body: 'Rename this' }, { path: 'README.md', body: 'Typo' }], note: 'Nice work' });
+      h.send({ kind: 'review-feedback', comments: [{ path: 'src/a.ts', line: 12, body: 'Rename this' }, { path: 'src/a.ts', line: 7, side: 'old', body: 'Keep it' }, { path: 'README.md', body: 'Typo' }], note: 'Nice work' });
       await waitFor(() => results(s.events).length === 2, 10_000, 'second result');
       await h.dispose();
       await s.done;
@@ -98,6 +98,6 @@ describe('ClaudeCliDriver against fake-claude', () => {
     expect(keys).not.toContain('OIDE_TEST_SECRET_VALUE');
     expect(keys).toContain('OIDE_AGENT_ID');
     const feedback = lines.find((l) => l.stdin?.message?.content?.[0]?.text?.includes('Review feedback'));
-    expect(feedback.stdin.message.content[0].text).toMatch(/- src\/a\.ts:12: Rename this\n- README\.md: Typo/);
+    expect(feedback.stdin.message.content[0].text).toMatch(/- src\/a\.ts:12: Rename this\n- src\/a\.ts \(removed line 7\): Keep it\n- README\.md: Typo/);
   });
 });

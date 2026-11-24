@@ -54,7 +54,7 @@ export class UsageRepo {
 /* ----------------------------------------------------------------- review */
 
 function toComment(r: Row): ReviewComment {
-  return ReviewComment.parse({ id: r.id, agentId: r.agent_id, path: r.path, line: opt(num(r.line)), body: r.body, sent: num(r.sent) === 1, createdAt: num(r.created_at) });
+  return ReviewComment.parse({ id: r.id, agentId: r.agent_id, path: r.path, line: opt(num(r.line)), side: r.side === 'old' ? 'old' : 'new', body: r.body, sent: num(r.sent) === 1, createdAt: num(r.created_at) });
 }
 
 export class ReviewRepo {
@@ -64,9 +64,12 @@ export class ReviewRepo {
     return (this.d.db.prepare('SELECT * FROM review_comments WHERE agent_id = ? ORDER BY created_at, rowid').all(agentId) as Row[]).map(toComment);
   }
 
-  addComment(input: { agentId: string; path: string; line?: number; body: string }, now = Date.now()): ReviewComment {
+  /** `side: 'old'` for a comment on a removed line (its `line` is the old-side number). */
+  addComment(input: { agentId: string; path: string; line?: number; side?: 'old' | 'new'; body: string }, now = Date.now()): ReviewComment {
     const c = ReviewComment.parse({ id: newId(), ...input, sent: false, createdAt: now });
-    this.d.db.prepare('INSERT INTO review_comments (id, agent_id, path, line, body, sent, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)').run(c.id, c.agentId, c.path, c.line ?? null, c.body, c.createdAt);
+    this.d.db
+      .prepare('INSERT INTO review_comments (id, agent_id, path, line, side, body, sent, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?)')
+      .run(c.id, c.agentId, c.path, c.line ?? null, c.side, c.body, c.createdAt);
     return c;
   }
 

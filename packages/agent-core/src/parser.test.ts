@@ -24,6 +24,7 @@ describe('parser against real CLI 2.1.325 recordings', () => {
     expect(init.model).toBe('claude-haiku-5-5');
     expect(init.permissionMode).toBe('auto');
     expect(init.cliVersion).toBe('2.1.325');
+    expect(init.slashCommands).toEqual(['compact', 'context', 'init']);
     expect(byType(ev, 'partial').some((p) => p.kind === 'text' && p.delta === 'hello')).toBe(true);
     expect(byType(ev, 'partial').some((p) => p.kind === 'tool-input')).toBe(true);
     expect(byType(ev, 'assistant-text').map((t) => t.text)).toContain('hello');
@@ -47,6 +48,15 @@ describe('parser against real CLI 2.1.325 recordings', () => {
     expect(plan.utilization).toBe(0.65);
     expect(plan.resetsAt).toBe(1795568400_000);
     expect(byType(ev, 'unknown')).toHaveLength(0);
+  });
+
+  it('init slash_commands: strings only, leading slash dropped, de-duplicated; a bad list is ignored', () => {
+    const init = (extra: Record<string, unknown>) =>
+      parseLine(JSON.stringify({ type: 'system', subtype: 'init', session_id: 's', ...extra })).events[0] as Extract<ReturnType<typeof parseTranscript>[number], { type: 'init' }>;
+    expect(init({ slash_commands: ['compact', '/review', 'compact', 3, ''] }).slashCommands).toEqual(['compact', 'review']);
+    expect(init({ slash_commands: 'compact' }).type).toBe('init');
+    expect(init({ slash_commands: 'compact' }).slashCommands).toBeUndefined();
+    expect(init({}).slashCommands).toBeUndefined();
   });
 
   it('control responses are surfaced, not turned into events', () => {

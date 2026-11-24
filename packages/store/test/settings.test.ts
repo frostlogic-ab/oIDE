@@ -92,6 +92,18 @@ describe('SettingsService', () => {
     expect(Settings.parse({ claude: {}, models: {}, agents: { notifications: {} }, techniques: [], permissions: {}, ui: {} }).updates.channel).toBe('stable');
   });
 
+  it('keeps keyboard shortcut rebinds per action; null resets one, [] unbinds, bad combos are refused', () => {
+    const db = openDatabase(':memory:');
+    const svc = new SettingsService({ db });
+    expect(svc.get().keybindings).toEqual({});
+    svc.update({ keybindings: { 'agent.next': ['L'], 'commandBar.open': ['Mod+P'] } });
+    svc.update({ keybindings: { 'agent.prev': [] } });
+    expect(new SettingsService({ db }).get().keybindings).toEqual({ 'agent.next': ['L'], 'commandBar.open': ['Mod+P'], 'agent.prev': [] });
+    expect(svc.update({ keybindings: { 'agent.next': null } }).keybindings).toEqual({ 'commandBar.open': ['Mod+P'], 'agent.prev': [] });
+    expect(() => svc.update({ keybindings: { 'agent.next': [''] } })).toThrow();
+    expect(svc.update({ keybindings: null }).keybindings).toEqual({});
+  });
+
   it('keeps built-ins when presets/techniques arrays are replaced, and supports reset', async () => {
     const db = openDatabase(':memory:');
     const svc = new SettingsService({ db });

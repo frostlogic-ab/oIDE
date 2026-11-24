@@ -274,6 +274,11 @@ export class OideMcpServer {
     for (const [nonce, l] of this.launches) if (l.agentId === agentId) this.launches.delete(nonce);
     this.agents.delete(agentId);
     if (entry) await rm(entry.mcpConfigPath, { force: true }).catch(() => undefined);
+    // The whole per-agent folder (<app-data>/agents/<id>/) goes with the agent. The id is ours, but
+    // never let one that looks like a path reach rm.
+    if (/^[A-Za-z0-9._-]+$/.test(agentId) && agentId !== '.' && agentId !== '..') {
+      await rm(join(this.opts.appDataDir, 'agents', agentId), { recursive: true, force: true }).catch(() => undefined);
+    }
   }
 
   /** Pending prompts, optionally for one agent. */
@@ -293,14 +298,16 @@ export class OideMcpServer {
     return true;
   }
 
-  private settle(requestId: string, result: { behavior: 'allow'; updatedInput: unknown } | { behavior: 'deny'; message: string }): void {
+  private settle(requestId: string, result: { behavior: 'allow'; updatedInput: unknown } | { behavior: 'deny'; message: string }, reason?: 'quit'): void {
     const p = this.pending.get(requestId);
     if (!p) return;
     this.pending.delete(requestId);
     if (p.timer) clearTimeout(p.timer);
     p.resolve(result);
     try {
-      this.agents.get(p.request.agentId)?.handlers.onPermissionResolved(requestId, result.behavior);
+      const h = this.agents.get(p.request.agentId)?.handlers;
+      if (reason) h?.onPermissionResolved(requestId, result.behavior, reason);
+      else h?.onPermissionResolved(requestId, result.behavior);
     } catch (err) {
       this.opts.log?.('onPermissionResolved threw', err);
     }
@@ -309,7 +316,7 @@ export class OideMcpServer {
   /** Deny every pending prompt (app quit) and stop listening. */
   async close(): Promise<void> {
     this.closing = true;
-    for (const id of [...this.pending.keys()]) this.settle(id, { behavior: 'deny', message: 'oIDE is shutting down' });
+    for (const id of [...this.pending.keys()]) this.settle(id, { behavior: 'deny', message: 'oIDE is shutting down' }, 'quit');
     const http = this.http;
     delete this.http;
     if (http) {

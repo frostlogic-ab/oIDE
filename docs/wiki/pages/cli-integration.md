@@ -88,6 +88,8 @@ messages; oIDE uses only the two above. If the CLI sends a `control_request` to 
 
 Details worth knowing:
 
+- `system/init.slash_commands` (e.g. `["compact","context","init"]`) becomes `init.slashCommands`; Focus's `/`
+  menu lists them. A malformed list is dropped, never fatal.
 - One API message is split into several `assistant` lines (one per content block) that **repeat the same
   `message.id` and `usage`**. Usage is de-duplicated by message id.
 - Haiku 5.5 thinking blocks come back with empty `thinking` text and a signature; oIDE only shows "Thinking…".

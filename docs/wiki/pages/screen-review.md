@@ -62,10 +62,14 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
 ## Tests
 
 `Review.test.tsx`: hunk numbering, reverse-apply, rendered numbers and colours, click-to-comment,
-`review.addComment` arguments, Send feedback, Viewed toggle.
+`review.addComment` arguments (with `side`), removed-line threads, Send feedback, Viewed toggle.
+
+## Comment side
+
+`ReviewComment.side` is `old` for a comment on a removed line (its `line` is the old-side number) and `new`
+otherwise (default; store column from migration 2). `UnifiedDiff` keys threads by side and line, so a removed-line
+comment sits under that removed line, and the summary list and the feedback message say "removed line N".
 
 ## Gaps
 
-- `ReviewComment` has no side, so a comment on a removed line is shown under the new-side line with
-  the same number.
 - The design's summary text differs from the shared fixture's (the Wall uses the shorter one).

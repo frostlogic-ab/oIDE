@@ -99,7 +99,11 @@ this filter" + Show all.
 - Header stays one row at 1100px: "Next that needs you" shortens to "Next N" below 1280px.
 - With no project open, the header "Spawn agent" is hidden (Spawn needs a project) and the empty
   state offers only "Open project"; the Artifacts aside lists only artifacts of open projects.
-- Plan percentage meters stay hidden (status bar, see [desktop-shell](desktop-shell.md)).
+- Plan meters show only from the CLI's `rate_limit_event` utilization (status bar, see [desktop-shell](desktop-shell.md), ADR 0007).
+- A tile whose prompt was cut off by quitting oIDE (`AgentSummary.interruptedPermission`, while the agent is idle)
+  shows "oIDE closed while waiting for your answer; send a message to continue." and the tool it asked for
+  (`tileBodyKind` → `interrupted`).
+- Queued spawns from any caller (IPC, extensions) appear at once: the supervisor publishes the queued summary.
 
 ## Mock fixtures
 

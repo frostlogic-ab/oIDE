@@ -22,7 +22,7 @@ and the Security and Settings screen pages once written.
   store-only shapes). Events that no longer validate read back as `{ type: 'unknown', rawType }`
   so a timeline never breaks.
 
-## Tables (migration 1)
+## Tables (migration 1, plus 2: `review_comments.side`)
 
 | Table | Contents | Repository |
 | --- | --- | --- |
@@ -32,8 +32,8 @@ and the Security and Settings screen pages once written.
 | `events` | agent_id, seq (PK with agent_id), type, ts, normalized `AgentEvent` JSON, raw CLI JSON | `EventsRepo` (below) |
 | `event_summaries` | compacted ranges: seq/ts range, counts by type, tools used, tokens, last text/result | `EventsRepo.summaries` |
 | `usage_samples` | agent, subagent, ts, model, input/output/cache tokens | `UsageRepo`: `add`, `totals({ since, agentId })`, `bySubagent`, `deleteOlderThan` |
-| `review_comments`, `review_viewed` | Review threads and Viewed checkboxes | `ReviewRepo`: `comments`, `addComment`, `deleteComment`, `takeUnsent` (marks sent atomically), `viewed`, `setViewed` |
-| `settings` | the global `Settings` document (key `global`) | `SettingsService` |
+| `review_comments`, `review_viewed` | Review threads and Viewed checkboxes; `side` (`old` for a removed line, `new` default; migration 2) | `ReviewRepo`: `comments`, `addComment({ …, side? })`, `deleteComment`, `takeUnsent` (marks sent atomically), `viewed`, `setViewed` |
+| `settings` | the global `Settings` document (key `global`), including `keybindings` (action → combos; only changed actions) | `SettingsService` |
 | `ui_state` | small JSON docs; `scope:<window>` holds the project scope | `UiStateRepo`: `scope(window='main')`, `setScope` |
 | `artifacts`, `artifact_uses` | artifacts index (meta JSON, folder) and the per-agent uses log | `ArtifactStore` ([artifacts.md](artifacts.md)) |
 | `extensions` | `InstalledExtension` JSON | `ExtensionsRepo`: `list`, `get`, `byName`, `upsert`, `remove` |

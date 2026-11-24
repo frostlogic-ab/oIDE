@@ -36,6 +36,8 @@ const RawInit = z.looseObject({
   mcp_servers: z.array(z.looseObject({ name: z.string(), status: z.string().default('unknown') })).default([]),
   permissionMode: z.string().optional(),
   claude_code_version: z.string().optional(),
+  /** Commands the session accepts (without "/"); a malformed list is dropped, never fatal. */
+  slash_commands: z.array(z.unknown()).optional().catch(undefined),
 });
 
 const RawAssistant = z.looseObject({
@@ -232,6 +234,13 @@ function rawTypeOf(json: unknown): string {
   return typeof json;
 }
 
+/** `slash_commands` → `{ slashCommands }`: strings only, leading "/" dropped, de-duplicated. */
+function slashCommandsOf(list: unknown[] | undefined): { slashCommands?: string[] } {
+  if (!list) return {};
+  const names = [...new Set(list.filter((c): c is string => typeof c === 'string').map((c) => c.trim().replace(/^\//, '')).filter(Boolean))];
+  return names.length ? { slashCommands: names } : {};
+}
+
 function parseObject(json: unknown, log?: ParserLogger): Omit<ParsedLine, 'json'> {
   const type = json && typeof json === 'object' ? (json as { type?: unknown }).type : undefined;
   const subtype = json && typeof json === 'object' ? (json as { subtype?: unknown }).subtype : undefined;
@@ -258,6 +267,7 @@ function parseObject(json: unknown, log?: ParserLogger): Omit<ParsedLine, 'json'
               mcpServers: m.mcp_servers.map((s) => ({ name: s.name, status: s.status })),
               ...(m.permissionMode ? { permissionMode: m.permissionMode } : {}),
               ...(m.claude_code_version ? { cliVersion: m.claude_code_version } : {}),
+              ...slashCommandsOf(m.slash_commands),
             },
           ],
         };

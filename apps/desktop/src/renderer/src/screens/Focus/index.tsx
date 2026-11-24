@@ -13,7 +13,7 @@ import type { AgentSummary, PermissionMode, SubagentInfo } from '@oide/protocol'
 import { Button, EmptyState, contextFraction } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { useKeymapScope, useShortcutLabel } from '../../lib/useKeymap';
-import { nextNeedsYou, stepAgent, useAgent, useAgentsInScope } from '../../stores/agents';
+import { INTERRUPTED_PERMISSION_NOTE, nextNeedsYou, stepAgent, useAgent, useAgentsInScope } from '../../stores/agents';
 import { useCli } from '../../stores/cli';
 import { projectName as nameOf, useProjects } from '../../stores/projects';
 import { useRouter } from '../../stores/router';
@@ -288,6 +288,15 @@ function FocusBody({ agent, subagentId, list, projectName, warnAt, dangerAt, lab
                 subagentName={pendingSub?.name}
                 onViewSubagent={pendingSub ? () => onSelectSub(pendingSub.id) : undefined}
               />
+            )}
+            {!pending && agent.interruptedPermission && (
+              <div role="note" aria-label="Unanswered permission prompt" className="flex flex-col gap-1 px-3.5 py-2.5 rounded-lg border border-warn-line bg-card text-[12.5px] leading-normal">
+                <span className="text-warn">{INTERRUPTED_PERMISSION_NOTE}</span>
+                <span className="text-ink-3">
+                  It was asking to use <span className="font-mono text-ink-2">{agent.interruptedPermission.toolName}</span>
+                  {agent.interruptedPermission.summary ? `: ${agent.interruptedPermission.summary}` : ''}. The agent was told no; tell it what to do next.
+                </span>
+              </div>
             )}
             <Composer
               agentId={agent.id}

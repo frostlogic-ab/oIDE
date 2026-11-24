@@ -74,7 +74,7 @@ export const Commands = {
 
   // Review
   'review.comments': cmd(z.object({ agentId: Id }), z.array(ReviewComment)),
-  'review.addComment': cmd(z.object({ agentId: Id, path: z.string(), line: z.number().int().optional(), body: z.string().min(1) }), ReviewComment),
+  'review.addComment': cmd(z.object({ agentId: Id, path: z.string(), line: z.number().int().optional(), side: z.enum(['old', 'new']).default('new'), body: z.string().min(1) }), ReviewComment),
   'review.deleteComment': cmd(z.object({ commentId: Id }), Ok),
   'review.sendFeedback': cmd(z.object({ agentId: Id, note: z.string().optional() }), Ok),
   'review.setViewed': cmd(z.object({ agentId: Id, path: z.string(), viewed: z.boolean() }), Ok),
@@ -197,7 +197,15 @@ export const Events = {
   /** The extension host crashed (panels show "reloading") or came back. */
   'extensions.hostState': z.object({ name: z.string(), state: z.enum(['starting', 'running', 'reloading', 'failed', 'stopped']), panelIds: z.array(z.string()).default([]), error: z.string().optional() }),
   'artifacts.changed': z.object({ id: Id.optional() }),
-  'notify': z.object({ level: z.enum(['info', 'warning', 'error']), message: z.string(), agentId: Id.optional() }),
+  'notify': z.object({
+    level: z.enum(['info', 'warning', 'error']),
+    message: z.string(),
+    agentId: Id.optional(),
+    /** What the notice is about, so the renderer can retire it (a needs-permission toast goes when its prompt resolves). */
+    kind: z.enum(['needs-permission', 'ready-for-review', 'agent-error']).optional(),
+    /** The permission request a `needs-permission` notice is for. */
+    requestId: z.string().optional(),
+  }),
   'command.invoke': z.object({ commandId: z.string() }),
   'updates.changed': UpdateStatus,
 } as const;

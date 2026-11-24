@@ -67,15 +67,18 @@ prefixed `About the subagent "<name>":`.
 - The routing line is derived from the tiers seen ("Opus leads and routes each task. Simple goes to Haiku,
   standard to Sonnet."); the canvas's "Balanced focus" preset name is not in `AgentSummary`.
 - Stop subagent explains that it takes effect at its next tool call (open question 9) in a tooltip and a toast.
-- Slash commands: the CLI's `slash_commands` from init (protocol `init.slashCommands`, added); until
-  reported, the 2.1.325 list `compact, context, init`. Only known commands are sent as `command`
+- Slash commands: the CLI's `slash_commands` from init (protocol `init.slashCommands`, filled by agent-core's
+  parser: strings only, leading `/` dropped, de-duplicated); until reported, the 2.1.325 list `compact, context, init`. Only known commands are sent as `command`
   messages; `/compact` always goes through the confirm.
 - Tool errors show a red dot (the canvas draws only done / running / needs-you).
 
 ## Protocol additions
 
-- `init` event: optional `slashCommands: string[]`. **agent-core's parser must fill it from
-  `system/init.slash_commands`** (not done here).
+- `init` event: optional `slashCommands: string[]`, filled from `system/init.slash_commands` (`parser.ts`).
+- `AgentSummary.interruptedPermission { toolName, summary?, at }`: the prompt that was open when oIDE quit
+  (the broker denies it with `permission-resolved.reason: 'quit'`). Focus shows "oIDE closed while waiting for
+  your answer; send a message to continue." above the composer until the user sends a message (the reducer
+  clears it on the lead's next `user-text`). `Resumed.test.tsx` covers the note and the `/` menu.
 
 ## Mock data (`lib/mock/focus.ts`)
 

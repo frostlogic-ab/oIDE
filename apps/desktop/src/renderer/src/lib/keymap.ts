@@ -50,6 +50,10 @@ export const ACTION_LABELS: Readonly<Record<string, string>> = {
   'agent.cycleMode': 'Switch permission mode',
   'nav.back': 'Go back',
   'nav.forward': 'Go forward',
+  'review.nextFile': 'Review: next file',
+  'review.prevFile': 'Review: previous file',
+  'review.nextHunk': 'Review: next change',
+  'review.prevHunk': 'Review: previous change',
 };
 
 export interface KeyEventLike {
@@ -161,10 +165,21 @@ function isChorded(e: KeyEventLike): boolean {
   return e.ctrlKey || e.metaKey || e.altKey;
 }
 
+/** A change to the user's rebinds: action → combos, `null` = back to the default; `null` overall = reset all. */
+export type KeybindingPatch = Record<string, string[] | null> | null;
+
 export interface KeymapOptions {
   isMac?: boolean;
-  /** Persist user rebinds (localStorage in the app). */
-  storage?: { get(): string | null; set(value: string): void } | null;
+  /** Persist user rebinds. The app sends them to Settings (`keybindings`); see lib/keybindings.ts. */
+  persist?: ((patch: KeybindingPatch) => void) | null;
+}
+
+/** "Ctrl+K" on Windows and Linux, "Meta+K" on macOS → "Mod+K", so a rebind travels between machines. */
+export function portableCombo(combo: string, isMac: boolean): string {
+  const parts = normalizeCombo(combo, isMac).split('+');
+  const mod = isMac ? 'Meta' : 'Ctrl';
+  const out = parts.map((p) => (p === mod ? 'Mod' : p.length === 1 ? p.toUpperCase() : p));
+  return [...out.filter((p) => p === 'Mod'), ...out.filter((p) => p !== 'Mod')].join('+');
 }
 
 export class Keymap {
@@ -174,17 +189,28 @@ export class Keymap {
   private defaults: Record<string, readonly string[]> = { ...DEFAULT_BINDINGS };
   private listeners = new Set<() => void>();
   private isMac: boolean;
-  private storage: KeymapOptions['storage'];
+  private persistFn: KeymapOptions['persist'];
 
   constructor(opts: KeymapOptions = {}) {
     this.isMac = opts.isMac ?? false;
-    this.storage = opts.storage ?? null;
-    try {
-      const saved = this.storage?.get();
-      if (saved) this.overrides = JSON.parse(saved) as Record<string, string[]>;
-    } catch {
-      this.overrides = {};
-    }
+    this.persistFn = opts.persist ?? null;
+    this.rebuild();
+  }
+
+  get mac(): boolean {
+    return this.isMac;
+  }
+
+  /** Where rebinds are saved (the app wires Settings in after boot). */
+  setPersist(fn: KeymapOptions['persist']): void {
+    this.persistFn = fn ?? null;
+  }
+
+  /** Replace the user's rebinds with the saved ones (from Settings). Does not persist. */
+  setOverrides(overrides: Readonly<Record<string, readonly string[]>>): void {
+    const next = Object.fromEntries(Object.entries(overrides).map(([a, c]) => [a, [...c]]));
+    if (JSON.stringify(next) === JSON.stringify(this.overrides)) return;
+    this.overrides = next;
     this.rebuild();
   }
 
@@ -200,20 +226,53 @@ export class Keymap {
   }
 
   rebind(action: ActionId, combos: string[]): void {
-    this.overrides[action] = combos;
-    this.persist();
+    this.overrides[action] = [...combos];
+    this.persist({ [action]: [...combos] });
+    this.rebuild();
+  }
+
+  /**
+   * Bind `combo` to `action` as its only key, taking it away from every other action that had it
+   * (the "Saving removes it there" choice in Settings). One persisted patch.
+   */
+  assign(action: ActionId, combo: string): void {
+    const patch: Record<string, string[]> = {};
+    for (const other of this.conflicts(combo, action)) {
+      const left = (this.bindings.get(other) ?? []).filter((c) => normalizeCombo(c, this.isMac) !== normalizeCombo(combo, this.isMac));
+      this.overrides[other] = left;
+      patch[other] = left;
+    }
+    this.overrides[action] = [combo];
+    patch[action] = [combo];
+    this.persist(patch);
     this.rebuild();
   }
 
   resetBinding(action?: ActionId): void {
     if (action) delete this.overrides[action];
     else this.overrides = {};
-    this.persist();
+    this.persist(action ? { [action]: null } : null);
     this.rebuild();
   }
 
   getBindings(): Record<string, string[]> {
     return Object.fromEntries(this.bindings);
+  }
+
+  /** Built-in combos of an action (what Reset goes back to). */
+  defaultsFor(action: ActionId): readonly string[] {
+    return this.defaults[action] ?? [];
+  }
+
+  /** True when the user changed this action's keys. */
+  isCustom(action: ActionId): boolean {
+    return Object.prototype.hasOwnProperty.call(this.overrides, action);
+  }
+
+  /** Other actions that `combo` already triggers (for the conflict warning). */
+  conflicts(combo: string, except?: ActionId): string[] {
+    const want = normalizeCombo(combo, this.isMac);
+    return this.actionsFor(want).filter((a) => a !== except);
   }
 
   /** First combo of an action, formatted for display ("Ctrl K"). */
@@ -284,11 +343,11 @@ export class Keymap {
     this.emit();
   }
 
-  private persist(): void {
+  private persist(patch: KeybindingPatch): void {
     try {
-      this.storage?.set(JSON.stringify(this.overrides));
+      this.persistFn?.(patch);
     } catch {
-      /* storage unavailable */
+      /* saving failed; the rebind still applies until the next start */
     }
   }
 
@@ -297,17 +356,8 @@ export class Keymap {
   }
 }
 
-function localStorageAdapter(): KeymapOptions['storage'] {
-  try {
-    if (typeof localStorage === 'undefined') return null;
-    return {
-      get: () => localStorage.getItem('oide.keybindings'),
-      set: (v) => localStorage.setItem('oide.keybindings', v),
-    };
-  } catch {
-    return null;
-  }
-}
-
-/** The app-wide keymap. main.tsx attaches it to `window` and sets the platform. */
-export const keymap = new Keymap({ storage: localStorageAdapter() });
+/**
+ * The app-wide keymap. main.tsx attaches it to `window` and sets the platform; lib/keybindings.ts
+ * loads the user's rebinds from Settings and saves changes back there.
+ */
+export const keymap = new Keymap();

@@ -58,9 +58,10 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
 
   useEffect(() => {
     const ts = timers.current;
+    const waiting = pending.current;
     return () => {
       // Save anything still waiting when the section unmounts.
-      for (const id of [...pending.current.keys()]) flush(id);
+      for (const id of [...waiting.keys()]) flush(id);
       ts.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

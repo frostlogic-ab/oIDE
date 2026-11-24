@@ -3,6 +3,7 @@ import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { useScope } from '../../stores/scope';
 import SourceControlScreen from './index';
+import { ProjectCard } from './ProjectCard';
 import { baseLabel, commitAuthor, prView, syncView } from './model';
 import { setupMockApp } from './testing';
 
@@ -36,6 +37,22 @@ describe('Source control screen', () => {
     // the heads-up about oide is out of scope now
     expect(screen.queryByText('Two worktrees change the same file')).toBeNull();
     expect(invoke).toHaveBeenCalledWith('scope.set', { scope: 'billing-api' });
+  });
+});
+
+describe('Source control while git state loads (m2)', () => {
+  it('says it is loading instead of "0 agent worktrees" and "No commits yet"', () => {
+    const project = { id: 'p1', name: 'oide', path: '/r/oide', trusted: true, createdAt: 0 };
+    const props = { project, agents: {}, open: true, onToggle: () => {}, logOpen: true, onToggleLog: () => {} };
+    const { rerender } = render(<ProjectCard {...props} git={{ worktrees: [], log: [], overlaps: [], loading: true }} />);
+    expect(screen.getByText('Loading agent worktrees…')).toBeTruthy();
+    expect(screen.getByText('Loading commits…')).toBeTruthy();
+    expect(screen.queryByText('No commits yet.')).toBeNull();
+    expect(screen.queryByText(/Agent worktrees · 0/)).toBeNull();
+    rerender(<ProjectCard {...props} git={{ worktrees: [], log: [], overlaps: [], loading: false, loadedAt: 1 }} />);
+    expect(screen.getByText('No commits yet.')).toBeTruthy();
+    expect(screen.getByText('Agent worktrees · 0')).toBeTruthy();
+    expect(screen.queryByText('Loading agent worktrees…')).toBeNull();
   });
 });
 

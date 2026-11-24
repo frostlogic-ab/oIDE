@@ -51,7 +51,9 @@ export function toStreamJson(msg: UserMessage, resolve?: ArtifactResolver): Stre
     case 'command':
       return commandMessage(msg.command);
     case 'review-feedback': {
-      const lines = msg.comments.map((c) => `- ${c.path}${c.line !== undefined ? `:${c.line}` : ''}: ${c.body}`);
+      // A comment on a removed line names the old-side line: that line no longer exists in the file.
+      const ref = (c: (typeof msg.comments)[number]) => (c.line === undefined ? c.path : c.side === 'old' ? `${c.path} (removed line ${c.line})` : `${c.path}:${c.line}`);
+      const lines = msg.comments.map((c) => `- ${ref(c)}: ${c.body}`);
       const parts = ['Review feedback on your changes. Address each comment below.'];
       if (lines.length) parts.push(lines.join('\n'));
       if (msg.note) parts.push(`Overall note: ${msg.note}`);

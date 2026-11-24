@@ -213,12 +213,24 @@ commands reject with `[not_implemented]` exactly like main.
 | `useProjects` | `list`, `loaded` | `load`, `open(path?)`, `remove`; `projectName(list, id)` |
 | `useScope` | `scope` (`'all'` or project id) | `load`, `setScope` (persists via `scope.set`, follows `scope.changed`) |
 | `useSettings` | `settings` (null until loaded) | `load`, `update(patch)`; `useSetting(select, fallback)`; applies the accent colour |
-| `useCli` | `info`, `detected`, `usage` | `detect`, `refreshUsage` (every 15 s), `openSignIn`; `cliHealth(info)` |
-| `useUi` | `toasts`, `commandBar`, `headerSlots` | `pushToast` / `toast(msg, level)`, `openCommandBar(mode?)`, `closeCommandBar` |
+| `useCli` | `info`, `detected`, `usage` | `detect`, `refreshUsage` (on agent/project events, see below), `openSignIn`; `cliHealth(info)` |
+| `useUi` | `toasts`, `commandBar`, `headerSlots` | `pushToast` / `toast(msg, level)`, `dismissToast`, `holdToast` / `releaseToast`, `retireStaleToasts(byId)`, `openCommandBar(mode?)`, `closeCommandBar` |
 
 `lib/boot.ts` subscribes every store to its events (`agents.*`, `projects.changed`, `scope.changed`,
 `settings.changed`, `cli.changed`, `notify` → toasts, `extensions.changed`, `command.invoke`) and
 loads initial state; `not_implemented` answers resolve to empty state without console noise.
+`connectUsage` refreshes `usage.summary` (debounced 2 s) on `agents.summary`, `agents.removed` and
+`projects.changed`, and once after local midnight (tokens today roll over without an event); there is no
+fixed-interval polling. `connectKeybindings` (`lib/keybindings.ts`) loads keyboard rebinds from Settings.
+
+**Toasts** (`components/frame/Toasts.tsx`, `stores/ui.ts`): bottom-left, right of the rail and 12px above the
+status bar, so they never cover a screen's action column. Info and success leave after 5 s, warnings after
+10 s, errors stay until Dismiss (`TOAST_DURATION`); hover or focus holds one. A repeat of the same toast
+(same `key`, or level + agent + message) refreshes it and shows ×N. At most 3 (`MAX_TOASTS`); the oldest
+non-error goes first. `notify` carries an optional `kind` (`needs-permission`, `ready-for-review`,
+`agent-error`) and `requestId`: one toast per agent and kind, and `retireStaleToasts` (subscribed to the
+agents store) removes a needs-permission toast as soon as that prompt resolves, and a ready-for-review toast
+when the agent works again. The region is `aria-live="polite"`; errors are `role="alert"`.
 
 ### Screens and the frame
 
@@ -230,10 +242,8 @@ breadcrumb), `overlay` (Spawn renders as a dialog over the Wall). The status bar
 meter (`components/frame/PlanUsage.tsx`: `latestPlanUsage(agents)` + `PlanUsageMeter`) only when an
 agent's `planUsage` (the CLI's `rate_limit_event`) carries a utilization; without one it shows only the
 reset time, never a guessed percentage ("Context ring and plan usage" in the
-[build brief](../raw/build-brief.md)). It also shows tokens today and the rate-limit reset time.
-Sessions, worktrees, active subagents and open projects are counted from the live stores
-(`countAgents`, the same as the header), never from `usage.summary`, so the two never disagree; the
-reset time is time-only when under 24h away, and the counts text truncates first at 1100px.
+[build brief](../raw/build-brief.md); [ADR 0007](../../adr/0007-plan-usage-meters-from-rate-limit-events.md)).
+It also shows tokens today and the rate-limit reset time. Sessions, worktrees, active subagents and open projects are counted from the live stores (`countAgents`, the same as the header), never from `usage.summary`, so the two never disagree; the reset time is time-only when under 24h away, and the counts text truncates first at 1100px.
 
 **Add a screen**: add its id and params to `ScreenParams` in `stores/router.ts`, create
 `screens/<Name>/index.tsx` with a default export, add an entry in `SCREENS`. Wave-1 screens are
@@ -253,8 +263,12 @@ useKeymapScope('my-dialog', {}, { modal: true }); // blocks scopes underneath
 
 The newest scope wins; a handler returning `false` falls through. Unchorded keys inside inputs,
 textareas, selects and contenteditable are ignored; chorded ones (Ctrl/Cmd/Alt) still fire.
-`keymap.rebind(action, combos)` persists to localStorage (move to settings when a field exists);
-extensions' `contributes.commands[].keybinding` are registered with `keymap.define`.
+Rebinds live in Settings (`keybindings`: action → combos, only changed actions; `[]` unbinds): `keymap.rebind`,
+`assign` (takes a combo from the actions that had it) and `resetBinding` send a patch through
+`settings.update`, and `settings.changed` feeds `keymap.setOverrides`. Combos are saved portable
+(`portableCombo`: Ctrl on Windows/Linux, Cmd on macOS → `Mod`). Rebinds from older builds' localStorage are
+moved into Settings once. Settings › Keyboard shortcuts is the editor ([screen-settings](screen-settings.md)).
+Extensions' `contributes.commands[].keybinding` are registered with `keymap.define`.
 
 ### Command bar
 

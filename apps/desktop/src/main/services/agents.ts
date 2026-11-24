@@ -126,12 +126,13 @@ export class AgentsService {
         o.ctx.roots.add(wt.path, 'worktree');
         return { path: wt.path, branch: wt.branch, baseRef: wt.baseRef };
       },
-      runSetup: async ({ path, spec, onOutput }) => {
+      runSetup: async ({ path, spec, onStart, onOutput }) => {
         const p = o.projects.get(spec.projectId);
         // Workspace trust: an untrusted repo's .oide/setup never runs. Nor in the user's own checkout.
         if (!p?.trusted || spec.workIn === 'project-folder' || samePath(path, p.path)) return { ok: true };
         const eff = await o.settings.forProject(p.path, { trusted: true });
         if (!eff.setup) return { ok: true };
+        onStart?.();
         let buf = '';
         let tail = '';
         const r = await o.worktrees.runSetup(path, eff.setup, {
@@ -306,13 +307,19 @@ export class AgentsService {
     };
     if (s.status === 'needs-permission' && n.needsPermission) {
       const what = s.pendingPermission?.summary ?? 'a tool call';
-      this.o.ctx.emit('notify', { level: 'warning', message: `${s.title} needs permission: ${what}`, agentId: s.id });
+      this.o.ctx.emit('notify', {
+        level: 'warning',
+        message: `${s.title} needs permission: ${what}`,
+        agentId: s.id,
+        kind: 'needs-permission',
+        ...(s.pendingPermission ? { requestId: s.pendingPermission.requestId } : {}),
+      });
       this.o.platform.notify(`${s.title} needs permission`, what, focus);
     } else if (s.status === 'ready-for-review' && n.readyForReview) {
-      this.o.ctx.emit('notify', { level: 'info', message: `${s.title} is ready for review`, agentId: s.id });
+      this.o.ctx.emit('notify', { level: 'info', message: `${s.title} is ready for review`, agentId: s.id, kind: 'ready-for-review' });
       this.o.platform.notify(`${s.title} is ready for review`, s.review?.summary.slice(0, 200) ?? '', focus);
     } else if (s.status === 'error' && n.error) {
-      this.o.ctx.emit('notify', { level: 'error', message: `${s.title} stopped with an error${s.error ? `: ${s.error}` : ''}`, agentId: s.id });
+      this.o.ctx.emit('notify', { level: 'error', message: `${s.title} stopped with an error${s.error ? `: ${s.error}` : ''}`, agentId: s.id, kind: 'agent-error' });
       this.o.platform.notify(`${s.title} stopped with an error`, s.error ?? '', focus);
     }
   }

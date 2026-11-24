@@ -222,6 +222,11 @@ export const AgentSummary = z.object({
   exitCode: z.number().nullable().optional(),
   /** Plan text from plan mode (ExitPlanMode input), shown in the Plan tab. Added by agent-core. */
   planText: z.string().optional(),
+  /**
+   * The prompt that was still waiting for an answer when oIDE quit (it was denied then). Cleared when
+   * the user sends the agent a message. Tile and Focus say "send a message to continue".
+   */
+  interruptedPermission: z.object({ toolName: z.string(), summary: z.string().optional(), at: z.number() }).optional(),
   /** Background subagent tasks still running after the lead's turn ended (`system/background_tasks_changed`). */
   backgroundTasks: z.number().int().nonnegative().default(0),
   /** Latest plan usage window from the CLI's `rate_limit_event` (utilization is 0..1 when reported). */
@@ -244,7 +249,7 @@ export const UserMessage = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('command'), command: z.string().regex(/^\//) }),
   z.object({
     kind: z.literal('review-feedback'),
-    comments: z.array(z.object({ path: z.string(), line: z.number().int().optional(), body: z.string() })),
+    comments: z.array(z.object({ path: z.string(), line: z.number().int().optional(), side: z.enum(['old', 'new']).optional(), body: z.string() })),
     note: z.string().optional(),
   }),
   z.object({ kind: z.literal('artifact'), artifactId: Id, note: z.string().optional() }),

@@ -169,4 +169,10 @@ CREATE TABLE secrets (
 );
 `,
   },
+  {
+    version: 2,
+    name: 'review comment side',
+    // Which side of the diff a comment's line number refers to; existing comments were all new-side.
+    up: `ALTER TABLE review_comments ADD COLUMN side TEXT NOT NULL DEFAULT 'new' CHECK (side IN ('old', 'new'));`,
+  },
 ];
