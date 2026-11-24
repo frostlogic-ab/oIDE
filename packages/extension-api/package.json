@@ -1,12 +1,34 @@
 {
   "name": "@oide/extension-api",
-  "version": "0.1.0",
-  "private": true,
+  "version": "1.0.0",
+  "description": "Typed API for writing oIDE extensions: commands, settings, agents, panels, artifacts.",
   "license": "MIT",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc --noEmit -p ." },
-  "dependencies": { "@oide/protocol": "workspace:*", "zod": "^4.6.7" }
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "repository": { "type": "git", "url": "https://github.com/oide-dev/oide.git", "directory": "packages/extension-api" },
+  "keywords": ["oide", "extension", "mcp", "claude-code"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p .",
+    "prepublishOnly": "tsc -p tsconfig.build.json"
+  }
 }

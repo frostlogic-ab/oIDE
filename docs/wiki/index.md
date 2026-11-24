@@ -49,4 +49,4 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 
 ## Decisions
 
-- [../adr/](../adr/): ADRs. 0001 node:sqlite, 0002 TS-source packages, 0003 @lydell/node-pty.
+- [../adr/](../adr/): ADRs. 0001 node:sqlite, 0002 TS-source packages, 0003 @lydell/node-pty, 0004 artifact versions as numbered snapshots.

@@ -135,6 +135,8 @@ export const PermissionRequest = z.object({
   requestId: Id,
   agentId: Id,
   subagentId: Id.optional(),
+  /** The CLI's tool_use id for the call being approved (from the prompt tool's `tool_use_id`). */
+  toolUseId: z.string().optional(),
   toolName: z.string(),
   input: z.unknown(),
   /** Short human summary, e.g. "Run npm test". */
@@ -213,6 +215,19 @@ export const AgentSummary = z.object({
   error: z.string().optional(),
   rateLimitResetAt: z.number().optional(),
   exitCode: z.number().nullable().optional(),
+  /** Plan text from plan mode (ExitPlanMode input), shown in the Plan tab. Added by agent-core. */
+  planText: z.string().optional(),
+  /** Background subagent tasks still running after the lead's turn ended (`system/background_tasks_changed`). */
+  backgroundTasks: z.number().int().nonnegative().default(0),
+  /** Latest plan usage window from the CLI's `rate_limit_event` (utilization is 0..1 when reported). */
+  planUsage: z
+    .object({
+      status: z.string(),
+      window: z.string().optional(),
+      utilization: z.number().optional(),
+      resetsAt: z.number().optional(),
+    })
+    .optional(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

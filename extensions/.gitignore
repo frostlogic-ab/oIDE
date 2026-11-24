@@ -1,0 +1,2 @@
+# Built-in extensions ship their bundled code: keep dist/ in git here (the root ignores dist/).
+!dist/

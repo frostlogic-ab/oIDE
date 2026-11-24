@@ -1,0 +1,95 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-24T21:04:08.530Z",
+  "extensions": [
+    {
+      "name": "@oide/ext-browser-preview",
+      "displayName": "Browser preview",
+      "publisher": "oide",
+      "description": "Lets agents check a local dev server (status and page title) and shows it in a panel.",
+      "categories": [
+        "agent-tools",
+        "views-panels"
+      ],
+      "verified": true,
+      "source": "builtin",
+      "downloads": 0,
+      "versions": [
+        {
+          "version": "1.0.0",
+          "tarball": "https://registry.npmjs.org/@oide/ext-browser-preview/-/ext-browser-preview-1.0.0.tgz",
+          "integrity": "sha512-iiSgPokSMrv9z/XLLX+xSrjffurqSzJtal3L5BWyid3GtmcM9kmn6Inc8l6756IGy2YA/bYEEF0PjJPt7aCOIQ==",
+          "engine": "^1.0.0",
+          "tools": [
+            {
+              "name": "preview_url",
+              "risk": "read",
+              "description": "Fetch a localhost URL and report its HTTP status and page title"
+            }
+          ],
+          "capabilities": {
+            "network": [
+              "localhost"
+            ],
+            "spawn": false
+          }
+        }
+      ],
+      "repository": "https://github.com/oide-dev/oide"
+    },
+    {
+      "name": "@oide/ext-git",
+      "displayName": "Git",
+      "publisher": "oide",
+      "description": "Open and view pull requests for an agent's branch with the GitHub CLI (gh).",
+      "categories": [
+        "review-testing"
+      ],
+      "verified": true,
+      "source": "builtin",
+      "downloads": 0,
+      "versions": [
+        {
+          "version": "1.0.0",
+          "tarball": "https://registry.npmjs.org/@oide/ext-git/-/ext-git-1.0.0.tgz",
+          "integrity": "sha512-ZVPPL+JsQJmERuf/dWvN6cS82O8j+90B740MSvMOacA1mr0sapZR28K7V207QH9hqja7VX8szymyefabzpgRHg==",
+          "engine": "^1.0.0",
+          "tools": [],
+          "capabilities": {
+            "network": [
+              "github.com"
+            ],
+            "spawn": true
+          }
+        }
+      ],
+      "repository": "https://github.com/oide-dev/oide"
+    },
+    {
+      "name": "@oide/ext-themes",
+      "displayName": "Accent themes",
+      "publisher": "oide",
+      "description": "The four oIDE accent themes: Blue, Green, Violet and Amber.",
+      "categories": [
+        "themes"
+      ],
+      "verified": true,
+      "source": "builtin",
+      "downloads": 0,
+      "versions": [
+        {
+          "version": "1.0.0",
+          "tarball": "https://registry.npmjs.org/@oide/ext-themes/-/ext-themes-1.0.0.tgz",
+          "integrity": "sha512-pnV/j90ruJ7PEOJDpf/ZwAKqLeCG3KacaxpN9whJPuDUnUXOb4iKkiWRIhw4o5qhXsOmO3U0D6gEvL3J8tbt3A==",
+          "engine": "^1.0.0",
+          "tools": [],
+          "capabilities": {
+            "network": [],
+            "spawn": false
+          }
+        }
+      ],
+      "repository": "https://github.com/oide-dev/oide"
+    }
+  ]
+}

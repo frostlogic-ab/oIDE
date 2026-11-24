@@ -10,10 +10,12 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit -p ."
+    "typecheck": "tsc --noEmit -p .",
+    "test": "vitest run --root ../.. packages/extension-host"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@oide/extension-api": "workspace:*",
     "@oide/protocol": "workspace:*",
     "tar": "^7.5.23",
     "zod": "^4.6.7"

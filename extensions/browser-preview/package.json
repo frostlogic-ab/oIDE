@@ -1,0 +1,39 @@
+{
+  "name": "@oide/ext-browser-preview",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lets agents check a local dev server (status and page title) and shows it in a panel.",
+  "license": "MIT",
+  "type": "module",
+  "files": ["dist"],
+  "repository": { "type": "git", "url": "https://github.com/oide-dev/oide.git", "directory": "extensions/browser-preview" },
+  "scripts": { "typecheck": "tsc --noEmit -p ." },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@oide/extension-api": "workspace:*",
+    "@oide/extension-host": "workspace:*"
+  },
+  "oide": {
+    "engine": "^1.0.0",
+    "displayName": "Browser preview",
+    "publisher": "oide",
+    "categories": ["agent-tools", "views-panels"],
+    "activation": [],
+    "main": "dist/host.js",
+    "mcpServers": {
+      "browser-preview": {
+        "command": "node",
+        "args": ["dist/mcp.js"],
+        "tools": {
+          "preview_url": { "risk": "read", "description": "Fetch a localhost URL and report its HTTP status and page title" }
+        }
+      }
+    },
+    "contributes": {
+      "panels": [{ "id": "browserPreview.panel", "title": "Preview", "entry": "dist/panel.html", "location": "inspector" }],
+      "commands": [{ "id": "browserPreview.open", "title": "Open browser preview" }],
+      "settings": { "browserPreview.defaultUrl": { "type": "string", "default": "http://localhost:3000", "description": "URL the preview panel opens first" } }
+    },
+    "capabilities": { "network": ["localhost"], "spawn": false }
+  }
+}

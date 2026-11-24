@@ -36,3 +36,31 @@ export const ArtifactUse = z.object({
   ts: z.number(),
 });
 export type ArtifactUse = z.infer<typeof ArtifactUse>;
+
+/** What `artifacts.get` returns and the MCP `artifacts.read` tool reads. */
+export interface ArtifactContent {
+  meta: ArtifactMeta;
+  content: string;
+}
+
+/**
+ * The shape oIDE's MCP server needs for the `artifacts.*` tools. Implemented by `ArtifactStore`
+ * in `@oide/store`; every call is logged as an `ArtifactUse` (fills "Agents using it").
+ */
+export interface ArtifactsBackend {
+  list(filter: { projectId?: string; kind?: ArtifactKind }, agentId?: string): Promise<ArtifactMeta[]>;
+  read(id: string, agentId?: string): Promise<ArtifactContent>;
+  write(id: string, content: string, agentId: string): Promise<ArtifactMeta>;
+  create(input: { title: string; kind: ArtifactKind; content?: string; projectId?: string }, agentId: string): Promise<ArtifactMeta>;
+}
+
+/**
+ * Future sync source (claude.ai or another service). Not implemented in v1: there is no public
+ * API for claude.ai artifacts. Kept so a source can be added without changing how agents use artifacts.
+ */
+export interface ArtifactSource {
+  readonly id: string;
+  list(): Promise<Array<{ remoteId: string; title: string; kind: ArtifactKind; url: string; updatedAt?: number }>>;
+  fetch(remoteId: string): Promise<{ title: string; kind: ArtifactKind; content: string; url: string }>;
+  push(meta: ArtifactMeta, content: string): Promise<{ remoteId: string; url: string }>;
+}

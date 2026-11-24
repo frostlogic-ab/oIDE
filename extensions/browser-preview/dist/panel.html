@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; frame-src http://localhost:* http://127.0.0.1:* http://[::1]:*">
+<title>Browser preview</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #111418; color: #E6E8EB; font: 13px Inter, system-ui, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+  form { display: flex; gap: 6px; padding: 8px; border-bottom: 1px solid #232830; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  input { flex: 1; height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid #343A44; background: #0B0D10; color: #E6E8EB; font: 12px 'JetBrains Mono', ui-monospace, monospace; }
+  button { height: 30px; padding: 0 12px; border-radius: 8px; border: 1px solid #343A44; background: #15181D; color: #E6E8EB; font: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 2px solid #7AA2F7; outline-offset: 1px; }
+  p { margin: 0; padding: 6px 10px; color: #F08A8A; font-size: 12px; }
+  iframe { flex: 1; border: 0; background: #fff; }
+</style>
+</head>
+<body>
+<form id="bar">
+  <label class="sr" for="url">Local URL</label>
+  <input id="url" type="text" value="http://localhost:3000" spellcheck="false" autocomplete="off">
+  <button type="submit">Go</button>
+  <button type="button" id="reload">Reload</button>
+</form>
+<p id="err" role="alert" hidden></p>
+<iframe id="view" title="Local preview" sandbox="allow-scripts allow-forms allow-same-origin" referrerpolicy="no-referrer"></iframe>
+<script>
+  const input = document.getElementById('url');
+  const view = document.getElementById('view');
+  const err = document.getElementById('err');
+  const isLocal = (u) => {
+    try {
+      const x = new URL(u);
+      return (x.protocol === 'http:' || x.protocol === 'https:') && ['localhost', '127.0.0.1', '[::1]'].includes(x.hostname);
+    } catch {
+      return false;
+    }
+  };
+  function go(u) {
+    if (!isLocal(u)) {
+      err.textContent = 'Only localhost URLs can be previewed.';
+      err.hidden = false;
+      return;
+    }
+    err.hidden = true;
+    input.value = u;
+    view.src = u;
+    parent.postMessage({ type: 'navigated', url: u }, '*');
+  }
+  document.getElementById('bar').addEventListener('submit', (e) => {
+    e.preventDefault();
+    go(input.value.trim());
+  });
+  document.getElementById('reload').addEventListener('click', () => {
+    if (view.src) view.src = view.src;
+  });
+  window.addEventListener('message', (e) => {
+    if (e.source === parent && e.data && e.data.type === 'navigate' && typeof e.data.url === 'string') go(e.data.url);
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+{
+  "name": "@oide/ext-themes",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The four oIDE accent themes: Blue, Green, Violet and Amber.",
+  "license": "MIT",
+  "type": "module",
+  "files": ["dist"],
+  "repository": { "type": "git", "url": "https://github.com/oide-dev/oide.git", "directory": "extensions/themes" },
+  "scripts": { "typecheck": "tsc --noEmit -p ." },
+  "devDependencies": {
+    "@oide/extension-api": "workspace:*",
+    "@oide/extension-host": "workspace:*"
+  },
+  "oide": {
+    "engine": "^1.0.0",
+    "displayName": "Accent themes",
+    "publisher": "oide",
+    "categories": ["themes"],
+    "activation": [],
+    "main": "dist/host.js",
+    "contributes": {
+      "themes": [
+        { "id": "blue", "label": "Blue", "tokens": { "accent": "#7AA2F7", "accent-contrast": "#0B0D10" } },
+        { "id": "green", "label": "Green", "tokens": { "accent": "#7FC8A9", "accent-contrast": "#0B0D10" } },
+        { "id": "violet", "label": "Violet", "tokens": { "accent": "#C4A7E7", "accent-contrast": "#0B0D10" } },
+        { "id": "amber", "label": "Amber", "tokens": { "accent": "#F2C078", "accent-contrast": "#0B0D10" } }
+      ],
+      "commands": [{ "id": "themes.nextAccent", "title": "Next accent colour" }],
+      "settings": { "themes.accent": { "type": "string", "default": "blue", "description": "Accent theme id" } }
+    }
+  }
+}

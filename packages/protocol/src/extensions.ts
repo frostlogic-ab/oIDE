@@ -52,6 +52,8 @@ export const MarketplaceEntry = z.object({
   categories: z.array(z.string()),
   repository: z.string().optional(),
   verified: z.boolean().default(false),
+  /** `builtin` entries ship inside the app and are never downloaded; `npm` entries come from the registry. */
+  source: z.enum(['npm', 'builtin']).default('npm'),
   downloads: z.number().int().nonnegative().default(0),
   rating: z.number().min(0).max(5).optional(),
   versions: z.array(
@@ -75,6 +77,29 @@ export const MarketplaceIndex = z.object({
 });
 export type MarketplaceIndex = z.infer<typeof MarketplaceIndex>;
 
+/** Marketplace categories, in the order the Browse list shows them (Marketplace design). */
+export const MARKETPLACE_CATEGORIES = [
+  { id: 'agent-tools', label: 'Agent tools' },
+  { id: 'review-testing', label: 'Review & testing' },
+  { id: 'deploy-targets', label: 'Deploy targets' },
+  { id: 'artifact-types', label: 'Artifact types' },
+  { id: 'views-panels', label: 'Views & panels' },
+  { id: 'themes', label: 'Themes' },
+  { id: 'languages', label: 'Languages' },
+] as const;
+
+/** One update the Marketplace "Updates" count shows. `needsConsent` when it adds tools or capabilities. */
+export const ExtensionUpdate = z.object({
+  id: Id,
+  name: z.string(),
+  from: z.string(),
+  to: z.string(),
+  needsConsent: z.boolean(),
+  addedTools: z.array(z.string()).default([]),
+  addedCapabilities: z.array(z.string()).default([]),
+});
+export type ExtensionUpdate = z.infer<typeof ExtensionUpdate>;
+
 export const InstalledExtension = z.object({
   id: Id,
   name: z.string(),
@@ -84,6 +109,10 @@ export const InstalledExtension = z.object({
   path: z.string(),
   enabledProjects: z.array(Id).default([]),
   enabledGlobally: z.boolean().default(false),
+  /** Projects where a globally (or team-) enabled extension is turned off. */
+  disabledProjects: z.array(Id).default([]),
+  /** Tools the user turned off, as `mcp__<server>__<tool>` names. They join `--disallowedTools`. */
+  disabledTools: z.array(z.string()).default([]),
   reviewed: z.boolean().default(false),
   devMode: z.boolean().default(false),
   manifest: ExtensionManifest,

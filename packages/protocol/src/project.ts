@@ -38,7 +38,10 @@ export type WorktreeInfo = z.infer<typeof WorktreeInfo>;
 
 export const CommitInfo = z.object({
   sha: z.string(),
+  /** Subject line. */
   message: z.string(),
+  /** Rest of the message (including trailers), when present. Added by @oide/git. */
+  body: z.string().optional(),
   author: z.string(),
   /** Agent name from the `Oide-Agent:` trailer, if any. */
   agent: z.string().optional(),

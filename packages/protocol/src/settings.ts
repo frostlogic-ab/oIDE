@@ -19,6 +19,8 @@ export const FocusPreset = z.object({
   name: z.string(),
   description: z.string().default(''),
   strategy: ModelStrategy,
+  /** Shipped with oIDE (Cheap, Balanced, Quality); can be edited and reset, not deleted. */
+  builtIn: z.boolean().default(false),
 });
 export type FocusPreset = z.infer<typeof FocusPreset>;
 
@@ -46,6 +48,10 @@ export const Settings = z.object({
     presets: z.array(FocusPreset).default([]),
     defaultEffort: Effort.optional(),
     custom: z.array(CustomModel).default([]),
+    /** Model family (haiku, sonnet, opus, fable) → 'latest' or a pinned version from KNOWN_MODEL_VERSIONS. */
+    versions: z.record(z.string(), z.string()).default({}),
+    /** Strategy last used in Spawn, for the "Custom (last used)" default focus. */
+    lastUsedStrategy: ModelStrategy.optional(),
   }),
   agents: z.object({
     maxRunning: z.number().int().min(1).max(32).default(3),
@@ -64,6 +70,14 @@ export const Settings = z.object({
   permissions: z.object({
     alwaysAllowed: z.array(z.string()).default([]),
     alwaysDenied: z.array(z.string()).default([]),
+    /** Settings > Permissions > Defaults. Project rules override these. */
+    defaults: z
+      .object({
+        editFiles: z.enum(['allow', 'ask']).default('allow'),
+        shell: z.enum(['ask', 'allow']).default('ask'),
+        network: z.enum(['ask', 'allow', 'block']).default('ask'),
+      })
+      .default({ editFiles: 'allow', shell: 'ask', network: 'ask' }),
   }),
   ui: z.object({
     accent: z.string().default('#7AA2F7'),
@@ -127,4 +141,34 @@ export function contextWindowFor(model: string | undefined): number {
   if (!model) return 200_000;
   for (const c of CONTEXT_WINDOWS) if (c.match.test(model)) return c.tokens;
   return 200_000;
+}
+
+/**
+ * Model families Presets and Spawn refer to, and the versions oIDE knows for each (newest first).
+ * Settings > Models > Model versions pins a family to one of these; "latest" passes the family alias
+ * to the CLI so it follows new releases. Used when the CLI cannot list models itself.
+ */
+export const MODEL_FAMILIES = ['haiku', 'sonnet', 'opus', 'fable'] as const;
+export type ModelFamily = (typeof MODEL_FAMILIES)[number];
+export const KNOWN_MODEL_VERSIONS: Record<ModelFamily, Array<{ version: string; id: string }>> = {
+  haiku: [{ version: '5.5', id: 'claude-haiku-5-5' }],
+  sonnet: [{ version: '5.5', id: 'claude-sonnet-5-5' }],
+  opus: [
+    { version: '5.5', id: 'claude-opus-5-5' },
+    { version: '5', id: 'claude-opus-5' },
+    { version: '4.8', id: 'claude-opus-4-8' },
+  ],
+  fable: [{ version: '5.2', id: 'claude-fable-5-2' }],
+};
+
+/**
+ * Turn a slot model ("opus", or an exact id) into what goes to `--model`: the family alias when the
+ * family is on "latest" (or unknown), the pinned model id otherwise. Exact ids pass through.
+ */
+export function resolveModel(model: string, versions: Record<string, string> = {}): string {
+  const fam = model.toLowerCase() as ModelFamily;
+  if (!(MODEL_FAMILIES as readonly string[]).includes(fam)) return model;
+  const pinned = versions[fam];
+  if (!pinned || pinned === 'latest') return fam;
+  return KNOWN_MODEL_VERSIONS[fam].find((v) => v.version === pinned || v.id === pinned)?.id ?? fam;
 }

@@ -1,0 +1,32 @@
+{
+  "name": "@oide/ext-git",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Open and view pull requests for an agent's branch with the GitHub CLI (gh).",
+  "license": "MIT",
+  "type": "module",
+  "files": ["dist"],
+  "repository": { "type": "git", "url": "https://github.com/oide-dev/oide.git", "directory": "extensions/git" },
+  "scripts": { "typecheck": "tsc --noEmit -p ." },
+  "devDependencies": {
+    "@oide/extension-api": "workspace:*",
+    "@oide/extension-host": "workspace:*"
+  },
+  "oide": {
+    "engine": "^1.0.0",
+    "displayName": "Git",
+    "publisher": "oide",
+    "categories": ["review-testing"],
+    "activation": [],
+    "main": "dist/host.js",
+    "contributes": {
+      "commands": [
+        { "id": "git.openPullRequest", "title": "Open pull request" },
+        { "id": "git.viewPullRequest", "title": "View pull request" }
+      ],
+      "deployTargets": [],
+      "settings": { "git.ghPath": { "type": "string", "default": "gh", "description": "Path to the GitHub CLI" } }
+    },
+    "capabilities": { "network": ["github.com"], "spawn": true }
+  }
+}

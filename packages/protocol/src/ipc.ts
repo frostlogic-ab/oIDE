@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AgentSpec, AgentSummary, Id, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
 import { ArtifactKind, ArtifactMeta, ArtifactUse, ArtifactVersion } from './artifacts.js';
 import { AgentEvent } from './events.js';
-import { CustomServer, InstalledExtension, MarketplaceEntry } from './extensions.js';
+import { CustomServer, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
 import { CommitInfo, FileDiff, FileNode, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
 import { CliInfo, CustomModel, Settings, Technique } from './settings.js';
 
@@ -121,12 +121,19 @@ export const Commands = {
   'extensions.addFromFolder': cmd(z.object({ path: z.string().optional(), devMode: z.boolean().default(false) }), InstalledExtension.nullable()),
   'extensions.runCommand': cmd(z.object({ commandId: z.string(), args: z.array(z.unknown()).default([]) }), z.unknown()),
   'custom.list': cmd(Void, z.array(CustomServer)),
-  'custom.probeUrl': cmd(z.object({ url: z.string().url() }), z.object({ reached: z.boolean(), transport: z.string().optional(), serverInfo: z.string().optional(), needsAuth: z.boolean().default(false), tools: z.array(z.object({ name: z.string(), description: z.string().optional(), readOnlyHint: z.boolean().optional(), destructiveHint: z.boolean().optional() })).default([]), error: z.string().optional() })),
+  'extensions.updates': cmd(Void, z.array(ExtensionUpdate)),
+  'extensions.update': cmd(z.object({ id: Id, consent: z.boolean().default(false) }), InstalledExtension),
+  'extensions.addFromGit': cmd(z.object({ url: z.string().url() }), InstalledExtension),
+  'custom.probeUrl': cmd(z.object({ url: z.string().url() }), z.object({ reached: z.boolean(), transport: z.string().optional(), serverInfo: z.string().optional(), serverName: z.string().optional(), serverVersion: z.string().optional(), needsAuth: z.boolean().default(false), tools: z.array(z.object({ name: z.string(), description: z.string().optional(), readOnlyHint: z.boolean().optional(), destructiveHint: z.boolean().optional() })).default([]), error: z.string().optional() })),
   'custom.probeCommand': cmd(z.object({ command: z.string(), args: z.array(z.string()).default([]), env: z.record(z.string(), z.string()).default({}) }), z.object({ started: z.boolean(), tools: z.array(z.object({ name: z.string(), description: z.string().optional(), readOnlyHint: z.boolean().optional(), destructiveHint: z.boolean().optional() })).default([]), error: z.string().optional() })),
-  'custom.scanImports': cmd(Void, z.array(z.object({ source: z.string(), file: z.string(), name: z.string(), alreadyAdded: z.boolean(), config: z.unknown() }))),
+  'custom.scanImports': cmd(Void, z.array(z.object({ source: z.string(), file: z.string(), name: z.string(), alreadyAdded: z.boolean(), config: z.unknown(), display: z.string().optional(), kind: z.enum(['stdio', 'http']).optional() }))),
+  /** Copies the chosen scanned entries; env values go straight to the keychain and never cross IPC. */
+  'custom.importSelected': cmd(z.object({ items: z.array(z.object({ file: z.string(), name: z.string() })), savedTo: z.enum(['my-settings', 'project-mcp-json']).default('my-settings'), projects: z.array(Id).default([]), allProjects: z.boolean().default(true) }), z.array(CustomServer)),
+  /** Open question 13 fallback: a token sent as a header secret for a remote server. */
+  'custom.setHeaderToken': cmd(z.object({ id: Id, header: z.string().default('Authorization'), token: z.string() }), Ok),
   'custom.save': cmd(z.object({ server: CustomServer, secrets: z.record(z.string(), z.string()).default({}) }), CustomServer),
   'custom.remove': cmd(z.object({ id: Id }), Ok),
-  'custom.authorize': cmd(z.object({ id: Id }), z.object({ ok: z.boolean(), error: z.string().optional() })),
+  'custom.authorize': cmd(z.object({ id: Id, clientId: z.string().optional() }), z.object({ ok: z.boolean(), error: z.string().optional() })),
 
   // Artifacts
   'artifacts.list': cmd(z.object({ projectId: Id.optional(), kind: ArtifactKind.optional() }), z.array(ArtifactMeta)),
@@ -160,6 +167,8 @@ export const Events = {
   'terminal.data': z.object({ terminalId: Id, data: z.string() }),
   'terminal.exit': z.object({ terminalId: Id, code: z.number().nullable() }),
   'extensions.changed': z.array(InstalledExtension),
+  /** The extension host crashed (panels show "reloading") or came back. */
+  'extensions.hostState': z.object({ name: z.string(), state: z.enum(['starting', 'running', 'reloading', 'failed', 'stopped']), panelIds: z.array(z.string()).default([]), error: z.string().optional() }),
   'artifacts.changed': z.object({ id: Id.optional() }),
   'notify': z.object({ level: z.enum(['info', 'warning', 'error']), message: z.string(), agentId: Id.optional() }),
   'command.invoke': z.object({ commandId: z.string() }),

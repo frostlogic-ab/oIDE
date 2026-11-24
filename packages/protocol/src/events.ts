@@ -70,6 +70,48 @@ export const AgentEvent = z.discriminatedUnion('type', [
     totalCostUsd: z.number().optional(),
     text: z.string().optional(),
     usage: TokenUsage.optional(),
+    /** Context window of the lead model as reported in the result's `modelUsage` (authoritative over the table). */
+    contextWindow: z.number().optional(),
+    /** Set for local slash commands such as `/compact`. */
+    localCommand: z.string().optional(),
+    /** HTTP status of the API error that ended the turn (401, 404, 429, ...). */
+    apiErrorStatus: z.number().nullable().optional(),
+  }),
+  /** Permission mode changed (from a set_permission_mode control request or plan-mode exit). */
+  z.object({ ...base, type: z.literal('mode-changed'), mode: z.string() }),
+  /** `/compact` lifecycle: `started` on status=compacting, `done` on compact_boundary. */
+  z.object({
+    ...base,
+    type: z.literal('compact'),
+    phase: z.enum(['started', 'done', 'failed']),
+    preTokens: z.number().optional(),
+    postTokens: z.number().optional(),
+  }),
+  /** The CLI's own subagent task lifecycle (`system/task_started|task_progress|task_updated|task_notification`). */
+  z.object({
+    ...base,
+    type: z.literal('subagent-task'),
+    phase: z.enum(['started', 'progress', 'updated', 'notification']),
+    /** The lead's Agent/Task tool_use id, when the CLI reports it. */
+    toolUseId: z.string().optional(),
+    taskId: z.string(),
+    status: z.string().optional(),
+    description: z.string().optional(),
+    subagentType: z.string().optional(),
+    summary: z.string().optional(),
+    lastToolName: z.string().optional(),
+    totalTokens: z.number().optional(),
+  }),
+  /** Number of background tasks (async subagents) still running. */
+  z.object({ ...base, type: z.literal('background-tasks'), count: z.number().int().nonnegative() }),
+  /** Plan usage from `rate_limit_event` with status allowed / allowed_warning (not a limit hit). */
+  z.object({
+    ...base,
+    type: z.literal('plan-usage'),
+    status: z.string(),
+    window: z.string().optional(),
+    utilization: z.number().optional(),
+    resetsAt: z.number().optional(),
   }),
   z.object({ ...base, type: z.literal('status'), status: AgentStatus, detail: z.string().optional() }),
   z.object({ ...base, type: z.literal('permission-request'), request: PermissionRequest }),
@@ -90,7 +132,13 @@ export const AgentEvent = z.discriminatedUnion('type', [
   }),
   z.object({ ...base, type: z.literal('stderr'), text: z.string() }),
   z.object({ ...base, type: z.literal('exit'), code: z.number().nullable(), signal: z.string().nullable() }),
-  z.object({ ...base, type: z.literal('error'), message: z.string() }),
+  z.object({
+    ...base,
+    type: z.literal('error'),
+    message: z.string(),
+    /** Machine-readable cause when known: `auth`, `model_not_found`, `api_error`, `spawn`, `protocol`. */
+    code: z.string().optional(),
+  }),
   z.object({ ...base, type: z.literal('unknown'), rawType: z.string() }),
 ]);
 export type AgentEvent = z.infer<typeof AgentEvent>;
