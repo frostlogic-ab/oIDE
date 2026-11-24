@@ -6,6 +6,7 @@ import { connectSettings, useSettings } from '../stores/settings';
 import { connectNotifications, retireStaleToasts } from '../stores/ui';
 import { isNotImplemented, oide } from './bridge';
 import { connectCommands, registerCoreCommands } from './coreCommands';
+import { connectExtensions } from '../extensions/store';
 import { connectKeybindings } from './keybindings';
 
 /** Agent summaries stream while agents work; one `usage.summary` per this window is plenty. */
@@ -69,6 +70,7 @@ export function startStores(): () => void {
     }),
     registerCoreCommands(),
     connectCommands(),
+    connectExtensions(),
   ];
 
   void quiet(useSettings.getState().load());

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Sample board</title>
+<style>body { margin: 0; padding: 12px; background: #111418; color: #E6E8EB; font: 13px system-ui, sans-serif; }</style>
+</head>
+<body>
+<h1 style="font-size: 14px">Sample board</h1>
+<button type="button" id="ping">Ping host</button>
+<output id="out"></output>
+<script>
+  let n = 0;
+  document.getElementById('ping').addEventListener('click', () => parent.postMessage({ type: 'ping', n: ++n }, '*'));
+  window.addEventListener('message', (e) => {
+    if (e.source === parent) document.getElementById('out').textContent = JSON.stringify(e.data);
+  });
+</script>
+</body>
+</html>

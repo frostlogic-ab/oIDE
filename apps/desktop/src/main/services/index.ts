@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import type { MainContext } from '../context.js';
 import { createCoreServices, type Services } from './core.js';
-import { electronPlatform, handleArtifactScheme } from './electron-platform.js';
+import { electronPlatform, handleArtifactScheme, handleExtensionScheme } from './electron-platform.js';
 import { TerminalService } from './terminals.js';
 import { UpdaterService } from './updater.js';
 
@@ -18,6 +18,7 @@ export async function createServices(ctx: MainContext): Promise<Services> {
   ctx.onQuit(() => terminals.disposeAll());
   const services = await createCoreServices({ ctx, platform: electronPlatform(ctx, terminals), terminals });
   handleArtifactScheme(services.artifacts);
+  handleExtensionScheme((origin) => services.extensions.uiSite(origin));
   services.updates = new UpdaterService({
     currentVersion: ctx.appVersion,
     platform: ctx.platform,

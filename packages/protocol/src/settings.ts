@@ -12,6 +12,8 @@ export const Technique = z.object({
   builtIn: z.boolean().default(false),
   enabledByDefault: z.boolean().default(false),
   scope: z.enum(['global', 'project']).default('global'),
+  /** Display name of the extension that contributes it (`contributes.techniques`); read-only in Settings. */
+  extension: z.string().optional(),
 });
 export type Technique = z.infer<typeof Technique>;
 

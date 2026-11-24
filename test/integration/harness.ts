@@ -61,8 +61,9 @@ const quiet = { debug: () => {}, warn: () => {}, error: (...a: unknown[]) => con
 /**
  * `confirm`: how native confirmations in main (security/confirm.ts) are answered. Default: no
  * override, which in plain Node means Cancel, so PoCs see the secure default.
+ * `platform` overrides parts of the plain-Node platform (built-in extension folders, a host-process fork).
  */
-export async function startHarness(opts: { userData?: string; trust?: boolean; confirm?: 'accept' | 'deny' } = {}): Promise<Harness> {
+export async function startHarness(opts: { userData?: string; trust?: boolean; confirm?: 'accept' | 'deny'; platform?: Partial<Platform> } = {}): Promise<Harness> {
   if (opts.confirm) setConfirmOverride(() => opts.confirm === 'accept');
   const userData = opts.userData ?? tempDir('oide-int-data-');
   const events: Harness['events'] = [];
@@ -96,6 +97,7 @@ export async function startHarness(opts: { userData?: string; trust?: boolean; c
     openablePaths: [],
     terminals,
     background: false,
+    ...opts.platform,
   };
   const services = await createCoreServices({ ctx, platform, terminals });
   const router = new IpcRouter({ validateOutput: true, log: quiet });

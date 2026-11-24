@@ -245,6 +245,13 @@ reset time, never a guessed percentage ("Context ring and plan usage" in the
 [build brief](../raw/build-brief.md); [ADR 0007](../../adr/0007-plan-usage-meters-from-rate-limit-events.md)).
 It also shows tokens today and the rate-limit reset time. Sessions, worktrees, active subagents and open projects are counted from the live stores (`countAgents`, the same as the header), never from `usage.summary`, so the two never disagree; the reset time is time-only when under 24h away, and the counts text truncates first at 1100px.
 
+Extension UI lives in `src/extensions/` ([extensions](extensions.md#ui-contributions)): the
+`extension` screen (`screens/Extension`, params `{ extension, panelId }`) shows a full-screen panel;
+the rail lists those panels under the top group (`ExtensionRailItems`, a letter tile each, rail id
+`extension`); Focus's inspector adds a tab per inspector panel; `connectExtensions()` (boot) keeps
+`useExtensions` (installed list, host state, panel requests) current, runs the panel bridge and
+applies theme tokens.
+
 **Add a screen**: add its id and params to `ScreenParams` in `stores/router.ts`, create
 `screens/<Name>/index.tsx` with a default export, add an entry in `SCREENS`. Wave-1 screens are
 placeholders marked `PLACEHOLDER` (the Wall placeholder lists agents with the shared components).
@@ -275,8 +282,10 @@ Extensions' `contributes.commands[].keybinding` are registered with `keymap.defi
 `lib/commands.ts` is the registry (`commands.register(cmd | cmd[])` returns an unregister) with a
 fuzzy filter. Core commands (`lib/coreCommands.ts`): Spawn an agent, Jump to session… (switches the
 bar to an agent list), Next agent that needs you, Go to each screen, Show all projects, Open project.
-Extension commands from `extensions.installed` run through `extensions.runCommand`; main can run any
-command with the `command.invoke` event. Typing in command mode also offers matching sessions.
+Extension commands from `extensions.installed` (extensions on somewhere) run through
+`extensions.runCommand`, with `{ agentId }` as the argument in Focus; panels add "Open <title>" and
+contributed themes add "Next accent colour" (`extensions/commands.ts`). Main can run any command with
+the `command.invoke` event. Typing in command mode also offers matching sessions.
 
 ## Tests
 

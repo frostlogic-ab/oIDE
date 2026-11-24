@@ -288,3 +288,28 @@ migrated once); a tile and Focus note when a prompt was denied because oIDE quit
 (`permission-resolved.reason: 'quit'` → `AgentSummary.interruptedPermission`); review comments keep
 `side: 'old' | 'new'` (store migration 2). Pages: desktop-shell, protocol, storage, cli-integration,
 screen-focus, screen-review, screen-settings, screen-source-control, screen-wall. New e2e: `toasts.spec.ts`.
+
+## [2026-11-24] build | Extension UI contributions
+
+Wired every v1 contribution point end to end (review-conformance M1). Panels: new privileged
+`oide-ext://<hash of name>/<file>` scheme (`apps/desktop/src/main/services/extension-ui.ts`) serving
+only files inside an extension's folder with a no-network CSP (loopback frames only for manifests
+that declare `network: ["localhost"]`); the renderer shows them in `<iframe sandbox="allow-scripts">`
+as Focus inspector tabs or the new `extension` screen (rail letter tiles, "Open <title>" in Ctrl K).
+Panel bridge `renderer/src/extensions/panelBridge.ts` (checks `event.source`, rate and size) →
+`extensions.panelMessage` → main (extension on, panel declared, ≤ 256 KB) →
+`ExtensionHostClient.sendPanelMessage`, which now starts stopped host code (`onPanel:<id>`); host
+`panels.open` / `panels.postMessage` are implemented as `extensions.panelOpen` / `extensions.panelMessage`
+events. Commands get `{ agentId }` in Focus. Settings › Extensions (`extensions.settings` /
+`setSetting`, secrets keychain-only, `extensions.settingChanged`). Settings › Appearance lists
+contributed themes and applies allow-listed tokens; the themes extension is manifest-only now.
+Extension techniques are merged by main (`ext:<name>:<id>`, read-only). Review shows
+`deployTargets` (`extensions.runDeployTarget`, agent and project checked; not runnable as commands).
+Typed artifacts (`ArtifactMeta.type`) open in the extension's viewer iframe (ADR 0009).
+`languages` deferred (ADR 0008). Browser preview: panel without `<form>` (no `allow-forms`), asks
+host code for its default URL. Unpackaged builds find the repo root by walking up to
+`pnpm-workspace.yaml` (review M4), so e2e loads the built-ins. Fixture `@oide-test/ui` has one of
+every point; tests in `test/integration/extension-ui.test.ts`, `host-client-ui.test.ts`,
+`extension-ui.test.ts`, `renderer/src/extensions/*.test.ts(x)` and e2e `extensions.spec.ts`.
+Pages: [extensions](pages/extensions.md#ui-contributions), [security](pages/security.md#extension-panel-isolation),
+[desktop-shell](pages/desktop-shell.md), [review-conformance](pages/review-conformance.md).

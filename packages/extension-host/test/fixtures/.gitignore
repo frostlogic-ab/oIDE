@@ -1,0 +1,2 @@
+# Test fixtures ship their (tiny, hand-written) dist/ code: the root ignores dist/.
+!dist/

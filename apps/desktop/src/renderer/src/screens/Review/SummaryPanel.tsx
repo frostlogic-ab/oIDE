@@ -7,6 +7,7 @@ import { toast } from '../../stores/ui';
 import { useGit } from '../SourceControl/gitStore';
 import { shortBranch } from '../SourceControl/model';
 import { baseName } from './diff';
+import { DeployActions } from '../../extensions/DeployActions';
 
 const SECTION_LABEL = 'text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3';
 
@@ -149,6 +150,7 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
       </div>
 
       <div className="flex-1" />
+      <DeployActions agent={agent} />
       {sensitiveFiles.length > 0 && <SensitiveWarning files={sensitiveFiles} onJump={onJump} />}
       <div className="flex flex-col gap-2">
         <Button variant="secondary" size={36} className="rounded-md" disabled={sendState === 'busy' || (sendState !== 'sent' && pending.length === 0)} onClick={() => void send()}>

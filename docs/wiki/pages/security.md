@@ -16,7 +16,8 @@ rules in [constraints](constraints.md). Where things live: [desktop-shell](deskt
   `clipboard-sanitized-write`.
 - CSP (`security/csp.ts`, injected as `<meta>` at build and as a header for the dev server):
   `script-src 'self'` (no inline, no eval), `object-src 'none'`, `base-uri 'none'`,
-  `form-action 'none'`, `frame-src oide-artifact:` (artifact previews only).
+  `form-action 'none'`, `frame-src oide-artifact: oide-ext:` (artifact previews and extension panels only,
+  so no frame the app embeds can navigate to remote content).
 - Electron fuses in packaged builds: `RunAsNode` off, `NODE_OPTIONS` and `--inspect` off, asar
   integrity, load only from asar (`electron-builder.yml`). `grantFileProtocolExtraPrivileges` stays
   on until the renderer moves to an `app://` protocol (accepted risk, SEC-25).
@@ -72,6 +73,50 @@ connect-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none'` (no
 `'self'` so one artifact cannot load another's scripts), `nosniff` and
 `no-store`. The renderer shows it in `<iframe sandbox="allow-scripts">` (no `allow-same-origin`), so
 the page has an opaque origin and no access to `window.oide`.
+
+## Extension panel isolation
+
+Extension panels and artifact viewers (`contributes.panels`, `contributes.artifactTypes`) never run
+in the app's document and never reach IPC directly.
+
+- **Protocol.** `oide-ext://<origin>/<file>` is a second privileged standard scheme
+  (`services/extension-ui.ts`, registered with the artifact scheme in `electron-platform.ts`). The
+  origin is a hash of the extension name, so each extension has its own. `resolveExtensionUrl`
+  serves only real files inside that extension's folder, and only for extensions that are on
+  somewhere: `..`, dot files and folders (`.git`, `.env`), `node_modules`, `:` (alternate data
+  streams), symlinks that resolve outside the folder and any type outside a small MIME table (HTML,
+  CSS, JS, JSON, images, fonts, wasm) answer 404. Deny checks fold case and trailing dots (SEC-17).
+- **CSP on every response:** `default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'
+  'unsafe-inline'; img-src 'self' data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none';
+  object-src 'none'; form-action 'none'; base-uri 'none'`, plus `nosniff`, `no-store`,
+  `no-referrer`. No fetch, XHR or WebSocket; no remote scripts, styles, images or frames. The only
+  exception is `frame-src http(s)://localhost:* http(s)://127.0.0.1:*` for extensions whose manifest
+  declares `capabilities.network: ["localhost"]` (Browser preview shows the agent's dev server).
+  The app's own CSP allows only `oide-artifact:` and `oide-ext:` frames, so a panel that navigates
+  itself elsewhere is blocked too.
+- **Sandbox.** The renderer embeds them as `<iframe sandbox="allow-scripts">` (no
+  `allow-same-origin`, forms, popups, modals or top navigation; `referrerpolicy="no-referrer"`). The
+  frame is an opaque origin: no `window.oide`, no access to `parent`'s DOM, no storage shared with
+  the app. Frames nested in a panel inherit the same sandbox (the Browser preview page runs as an
+  opaque origin without forms).
+- **The only channel is `postMessage`**, through the renderer's panel bridge
+  (`renderer/src/extensions/panelBridge.ts`): a `message` is accepted only when its `source` is the
+  window of a frame the bridge registered, and it is forwarded as `extensions.panelMessage` for that
+  frame's own extension and panel id (never one the frame names), at most 50 per second and 256 KB.
+  Main checks again: the extension is on, the panel id is in its manifest, the data is JSON under
+  256 KB; then only that extension's host process receives it. Host replies
+  (`ctx.panels.postMessage`) are size-checked in main and posted only into frames of that panel.
+  Messages typed `oide:*` are between the app and the frame (context, artifact load and save) and
+  never reach host code; an artifact viewer can only save the artifact it was opened for, as text.
+- **Host requests** to open a panel keep an agent id only for agents in projects where the
+  extension is on. Deploy targets (`contributes.deployTargets`) run only through
+  `extensions.runDeployTarget`, which checks the agent exists and the extension is on for its
+  project; they are not runnable as plain commands.
+- **Settings.** `extensions.settings` never returns a secret value (only `hasValue`);
+  `extensions.setSetting` writes secrets to the keychain under `ext:<name>/<key>` and checks the
+  declared type. Settings › Extensions uses password fields and never shows a stored value.
+- **Themes** can set only `--color-accent`, `--color-on-accent`, `--color-link` and
+  `--color-link-hover`, and only to `#rrggbb` values.
 
 ## Permission prompts
 

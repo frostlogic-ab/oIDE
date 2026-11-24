@@ -4,6 +4,7 @@ import { Icon, Toggle, cn } from '@oide/ui';
 import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
 import { H1, Rd, Row, inp, inpSm } from './ui';
+import { ExtensionTechniques } from '../../extensions/ExtensionTechniques';
 
 const EDIT_FIELDS = ['name', 'description', 'text', 'placement', 'enabledByDefault'] as const;
 
@@ -16,6 +17,7 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
   const [scope, setScope] = useState<string>('all');
   const projectId = scope === 'all' ? undefined : scope;
   const [list, setList] = useState<Technique[] | null>(null);
+  const [fromExtensions, setFromExtensions] = useState<Technique[]>([]);
   const [open, setOpen] = useState<string>('');
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const pending = useRef(new Map<string, Technique>());
@@ -26,7 +28,10 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
     void invokeOr('settings.techniques', { projectId }, []).then((all) => {
       if (!live) return;
       // "All projects" edits the global list; a project shows the techniques stored in its .oide/techniques.json.
-      const next = projectId ? all.filter((t) => t.scope === 'project') : all.filter((t) => t.scope !== 'project');
+      // Techniques extensions contribute are listed apart, read-only.
+      setFromExtensions(all.filter((t) => t.extension));
+      const own = all.filter((t) => !t.extension);
+      const next = projectId ? own.filter((t) => t.scope === 'project') : own.filter((t) => t.scope !== 'project');
       setList(next);
       // As on the canvas, the first technique opens expanded so its editor is visible.
       setOpen(next[0]?.id ?? '');
@@ -243,6 +248,8 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
           );
         })}
       </div>
+
+      <ExtensionTechniques list={fromExtensions} />
 
       <h2 className="m-0 mt-[22px] text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3">What a new agent receives</h2>
       <Rd className="mt-1.5">With the techniques that are on by default. Your goal comes first, then each technique in the order above.</Rd>

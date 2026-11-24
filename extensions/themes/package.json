@@ -18,16 +18,13 @@
     "publisher": "oide",
     "categories": ["themes"],
     "activation": [],
-    "main": "dist/host.js",
     "contributes": {
       "themes": [
         { "id": "blue", "label": "Blue", "tokens": { "accent": "#7AA2F7", "accent-contrast": "#0B0D10" } },
         { "id": "green", "label": "Green", "tokens": { "accent": "#7FC8A9", "accent-contrast": "#0B0D10" } },
         { "id": "violet", "label": "Violet", "tokens": { "accent": "#C4A7E7", "accent-contrast": "#0B0D10" } },
         { "id": "amber", "label": "Amber", "tokens": { "accent": "#F2C078", "accent-contrast": "#0B0D10" } }
-      ],
-      "commands": [{ "id": "themes.nextAccent", "title": "Next accent colour" }],
-      "settings": { "themes.accent": { "type": "string", "default": "blue", "description": "Accent theme id" } }
+      ]
     }
   }
 }

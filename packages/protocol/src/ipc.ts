@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AgentSpec, AgentSummary, GitRef, Id, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
 import { ArtifactKind, ArtifactMeta, ArtifactUse, ArtifactVersion } from './artifacts.js';
 import { AgentEvent } from './events.js';
-import { CustomServer, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
+import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
 import { CommitInfo, FileDiff, FileNode, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
 import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settings.js';
 import { UpdateStatus } from './updates.js';
@@ -132,6 +132,16 @@ export const Commands = {
   'extensions.setToolEnabled': cmd(z.object({ id: Id, tool: z.string().min(1), server: z.string().optional(), enabled: z.boolean() }), InstalledExtension),
   'extensions.addFromFolder': cmd(z.object({ path: z.string().optional(), devMode: z.boolean().default(false) }), InstalledExtension.nullable()),
   'extensions.runCommand': cmd(z.object({ commandId: z.string(), args: z.array(z.unknown()).default([]) }), z.unknown()),
+  /** URL of a panel or artifact viewer (`oide-ext://<origin>/<entry>`); main serves only files inside that extension's folder. */
+  'extensions.uiUrl': cmd(z.object({ extension: z.string(), kind: z.enum(['panel', 'artifactType']), id: z.string() }), z.object({ url: z.string() })),
+  /** Data a panel iframe posted to its host code. Main checks the extension and panel id, and the size. */
+  'extensions.panelMessage': cmd(z.object({ extension: z.string(), panelId: z.string(), data: z.unknown() }), Ok),
+  /** Settings › Extensions: an extension's `contributes.settings` with their values (secret ones never). */
+  'extensions.settings': cmd(z.object({ id: Id }), z.array(ExtensionSettingField)),
+  /** Secret values go to the keychain; `null` clears. */
+  'extensions.setSetting': cmd(z.object({ id: Id, key: z.string(), value: ExtensionSettingValue }), Ok),
+  /** Review: run a `contributes.deployTargets` action in the extension's host code for this agent's worktree. */
+  'extensions.runDeployTarget': cmd(z.object({ extension: z.string(), targetId: z.string(), agentId: Id }), z.unknown()),
   'custom.list': cmd(Void, z.array(CustomServer)),
   'extensions.updates': cmd(Void, z.array(ExtensionUpdate)),
   'extensions.update': cmd(z.object({ id: Id, consent: z.boolean().default(false) }), InstalledExtension),
@@ -196,6 +206,12 @@ export const Events = {
   'extensions.changed': z.array(InstalledExtension),
   /** The extension host crashed (panels show "reloading") or came back. */
   'extensions.hostState': z.object({ name: z.string(), state: z.enum(['starting', 'running', 'reloading', 'failed', 'stopped']), panelIds: z.array(z.string()).default([]), error: z.string().optional() }),
+  /** Host code asked to open one of its panels (`ctx.panels.open`). */
+  'extensions.panelOpen': z.object({ extension: z.string(), panelId: z.string(), agentId: Id.optional(), projectId: Id.optional() }),
+  /** Host code sent data to a panel (`ctx.panels.postMessage`); the renderer posts it into that panel's iframes. */
+  'extensions.panelMessage': z.object({ extension: z.string(), panelId: z.string(), data: z.unknown() }),
+  /** An extension setting changed (Settings › Extensions or host code). Secret values are never sent. */
+  'extensions.settingChanged': z.object({ id: Id, key: z.string() }),
   'artifacts.changed': z.object({ id: Id.optional() }),
   'notify': z.object({
     level: z.enum(['info', 'warning', 'error']),

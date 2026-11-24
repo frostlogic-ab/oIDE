@@ -17,8 +17,11 @@ export interface CspOptions {
   frameSrc?: string[];
 }
 
-/** Frames the app window may embed: artifact previews (`oide-artifact://<id>/…`, sandboxed iframes). */
-export const APP_FRAME_SRC = ['oide-artifact:'];
+/**
+ * Frames the app window may embed, all sandboxed iframes: artifact previews
+ * (`oide-artifact://<id>/…`) and extension panels and artifact viewers (`oide-ext://<origin>/…`).
+ */
+export const APP_FRAME_SRC = ['oide-artifact:', 'oide-ext:'];
 
 export function buildCsp({ dev = false, frameSrc = APP_FRAME_SRC }: CspOptions = {}): string {
   const directives: Record<string, string[]> = {

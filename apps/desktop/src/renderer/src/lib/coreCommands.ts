@@ -6,6 +6,8 @@ import { useUi, toast } from '../stores/ui';
 import { invokeOr, ipcErrorMessage, oide } from './bridge';
 import { commands, type Command } from './commands';
 import { keymap } from './keymap';
+import { extensionUiCommands } from '../extensions/commands';
+import { isOnSomewhere } from '../extensions/model';
 
 /** Core commands. Registered once at boot; returns an unregister. */
 export function registerCoreCommands(): () => void {
@@ -73,11 +75,16 @@ export function registerCoreCommands(): () => void {
   return commands.register(core);
 }
 
-/** Commands contributed by installed extensions run in the extension host. */
+/**
+ * Commands contributed by installed extensions run in the extension host. In Focus they get the
+ * agent as their argument (`{ agentId }`), so "Open browser preview" opens in that agent's inspector.
+ * Panels and themes add their own entries (extensions/commands.ts).
+ */
 export function registerExtensionCommands(installed: InstalledExtension[]): void {
   commands.clearSource('extension');
   const list: Command[] = [];
   for (const ext of installed) {
+    if (!isOnSomewhere(ext)) continue;
     for (const c of ext.manifest.oide.contributes.commands) {
       if (c.keybinding) keymap.define(`ext:${c.id}`, [c.keybinding]);
       list.push({
@@ -86,8 +93,10 @@ export function registerExtensionCommands(installed: InstalledExtension[]): void
         group: ext.displayName,
         source: 'extension',
         run: async () => {
+          const route = useRouter.getState().route;
+          const args = route.screen === 'focus' ? [{ agentId: route.params.agentId }] : [];
           try {
-            await oide.invoke('extensions.runCommand', { commandId: c.id, args: [] });
+            await oide.invoke('extensions.runCommand', { commandId: c.id, args });
           } catch (err) {
             toast(ipcErrorMessage(err), 'error');
           }
@@ -95,6 +104,8 @@ export function registerExtensionCommands(installed: InstalledExtension[]): void
       });
     }
   }
+  list.push(...extensionUiCommands(installed));
+  for (const c of list) c.source = 'extension';
   if (list.length) commands.register(list);
 }
 

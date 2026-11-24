@@ -38,6 +38,18 @@ export function registerExtensionHandlers(router: IpcRouter, s: Services, _ctx: 
   router.register('extensions.runCommand', ({ commandId, args }) => x.runCommand(commandId, args));
   router.register('extensions.updates', () => x.updates());
   router.register('extensions.update', ({ id, consent }) => x.update(id, consent));
+  // Extension UI: panels and artifact viewers (sandboxed oide-ext:// iframes), settings fields, deploy targets.
+  router.register('extensions.uiUrl', ({ extension, kind, id }) => x.uiUrl(extension, kind, id));
+  router.register('extensions.panelMessage', async ({ extension, panelId, data }) => {
+    await x.panelMessage(extension, panelId, data);
+    return OK;
+  });
+  router.register('extensions.settings', ({ id }) => x.settingsFor(id));
+  router.register('extensions.setSetting', async ({ id, key, value }) => {
+    await x.setSetting(id, key, value);
+    return OK;
+  });
+  router.register('extensions.runDeployTarget', ({ extension, targetId, agentId }) => x.runDeployTarget(extension, targetId, agentId));
 
   const c = x.custom;
   router.register('custom.list', () => c.list());

@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { deniedModelEnvKeys } from '@oide/agent-core';
 import { pathKey, samePath } from '@oide/git';
-import type { CustomModel, Settings } from '@oide/protocol';
+import type { CustomModel, Settings, Technique } from '@oide/protocol';
 import { BUILTIN_PRESETS, BUILTIN_TECHNIQUES, readOideFile } from '@oide/store';
 import { ZodError } from 'zod';
 import type { MainContext } from '../context.js';
@@ -73,14 +73,22 @@ export function registerSettingsHandlers(router: IpcRouter, s: Services, ctx: Ma
       throw err;
     }
   });
+  // Extension techniques (`contributes.techniques`) come last and are read-only.
   router.register('settings.techniques', async ({ projectId }) => {
-    if (!projectId) return svc.get().techniques;
+    const ext = await s.extensions.techniques(projectId);
+    // Only main marks a technique as an extension's; a settings file cannot claim to be one.
+    const own = (list: Technique[]) => list.map(({ extension: _x, ...t }) => t);
+    if (!projectId) return [...own(svc.get().techniques), ...ext];
     const p = project(projectId);
-    return (await svc.forProject(p.path, { trusted: p.trusted })).techniques;
+    return [...own((await svc.forProject(p.path, { trusted: p.trusted })).techniques), ...ext];
   });
-  router.register('settings.saveTechnique', ({ technique, projectId }) => svc.saveTechnique(technique, projectId ? project(projectId).path : undefined));
+  router.register('settings.saveTechnique', ({ technique, projectId }) => {
+    if (technique.extension || technique.id.startsWith('ext:')) throw new IpcError('Techniques from extensions cannot be edited', 'forbidden');
+    return svc.saveTechnique(technique, projectId ? project(projectId).path : undefined);
+  });
   router.register('settings.deleteTechnique', async ({ id, projectId }) => {
     try {
+      if (id.startsWith('ext:')) throw new Error('Techniques from extensions cannot be deleted; turn the extension off instead');
       await svc.deleteTechnique(id, projectId ? project(projectId).path : undefined);
     } catch (err) {
       throw new IpcError((err as Error).message, 'forbidden');

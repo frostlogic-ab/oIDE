@@ -1,0 +1,28 @@
+{
+  "name": "@oide-test/ui",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Test fixture: one of every v1 UI contribution point.",
+  "oide": {
+    "engine": "^1.0.0",
+    "displayName": "UI sample",
+    "activation": [],
+    "main": "dist/host.js",
+    "contributes": {
+      "panels": [
+        { "id": "uiSample.board", "title": "Sample board", "entry": "dist/board.html", "location": "screen" },
+        { "id": "uiSample.notes", "title": "Notes", "entry": "dist/board.html", "location": "inspector" }
+      ],
+      "commands": [{ "id": "uiSample.open", "title": "Open sample board" }],
+      "settings": {
+        "uiSample.token": { "type": "string", "secret": true, "description": "API token" },
+        "uiSample.limit": { "type": "number", "default": 5, "description": "Rows to show" },
+        "uiSample.verbose": { "type": "boolean", "default": false }
+      },
+      "themes": [{ "id": "rose", "label": "Rose", "tokens": { "accent": "#E8A0B4", "accent-contrast": "#0B0D10", "ground": "#FF0000" } }],
+      "techniques": [{ "id": "tidy", "name": "Tidy imports", "text": "Sort and dedupe imports before you finish.", "placement": "first-message" }],
+      "artifactTypes": [{ "id": "diagram", "label": "Diagram", "entry": "dist/diagram.html" }],
+      "deployTargets": [{ "id": "uiSample.deployPreview", "title": "Create preview deploy" }]
+    }
+  }
+}

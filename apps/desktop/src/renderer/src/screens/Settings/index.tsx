@@ -18,8 +18,9 @@ import { AppearanceSection, ArtifactsSection, PrivacySection, ProjectsSection } 
 import { PermissionsSection } from './PermissionsSection';
 import { TechniquesSection } from './TechniquesSection';
 import { UpdatesSection } from './UpdatesSection';
+import { ExtensionSettingsSection } from '../../extensions/ExtensionSettingsSection';
 
-export type SectionId = 'cli' | 'models' | 'agents' | 'tech' | 'perms' | 'projects' | 'artifacts' | 'keys' | 'look' | 'privacy' | 'updates';
+export type SectionId = 'cli' | 'models' | 'agents' | 'tech' | 'perms' | 'projects' | 'artifacts' | 'ext' | 'keys' | 'look' | 'privacy' | 'updates';
 export interface LoadError {
   projectId?: string;
   file: string;
@@ -35,6 +36,7 @@ export const SECTIONS: Array<{ id: SectionId; label: string; keywords: string }>
   { id: 'perms', label: 'Permissions', keywords: 'permissions edit files shell commands network allowed denied rules' },
   { id: 'projects', label: 'Projects', keywords: 'projects trust trusted .oide folder' },
   { id: 'artifacts', label: 'Artifacts & claude.ai', keywords: 'artifacts claude.ai import sync designs docs whiteboards' },
+  { id: 'ext', label: 'Extensions', keywords: 'extensions extension settings secret token keychain browser preview default url' },
   { id: 'keys', label: 'Keyboard shortcuts', keywords: 'keyboard shortcuts keys bindings' },
   { id: 'look', label: 'Appearance', keywords: 'appearance accent colour color theme' },
   { id: 'privacy', label: 'Privacy', keywords: 'privacy telemetry crash reports usage statistics' },
@@ -131,6 +133,8 @@ export default function SettingsScreen() {
             <ProjectsSection projects={projects} errors={loadErrors} />
           ) : section === 'artifacts' ? (
             <ArtifactsSection />
+          ) : section === 'ext' ? (
+            <ExtensionSettingsSection />
           ) : section === 'keys' ? (
             <KeysSection />
           ) : section === 'look' ? (

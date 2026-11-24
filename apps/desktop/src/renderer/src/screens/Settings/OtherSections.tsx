@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { Project, Settings } from '@oide/protocol';
 import { ACCENT_OPTIONS, cn } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
@@ -6,6 +6,8 @@ import { useProjects } from '../../stores/projects';
 import { navigate } from '../../stores/router';
 import { toast } from '../../stores/ui';
 import type { LoadError } from './index';
+import { themeOptions } from '../../extensions/model';
+import { useExtensions } from '../../extensions/store';
 import { H1, Rd, Row, Sec, outlineBtn, savePatch } from './ui';
 
 /* ---------------------------------------------------------------- Projects */
@@ -95,17 +97,22 @@ export function ArtifactsSection() {
 export function AppearanceSection({ settings }: { settings: Settings }) {
   const current = settings.ui.accent.toUpperCase();
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
+  // Accents come from the themes extensions contribute (built in: Accent themes); the canvas's
+  // four colours are the fallback when no theme extension is on.
+  const installed = useExtensions((s) => s.installed);
+  const themes = useMemo(() => themeOptions(installed), [installed]);
+  const accents: ReadonlyArray<{ id: string; label: string; value: string }> = themes.length ? themes.map((t) => ({ id: t.key, label: t.label, value: t.value })) : ACCENT_OPTIONS;
   const pick = (i: number) => {
-    const o = ACCENT_OPTIONS[(i + ACCENT_OPTIONS.length) % ACCENT_OPTIONS.length]!;
+    const o = accents[(i + accents.length) % accents.length]!;
     void savePatch({ ui: { accent: o.value } });
-    refs.current[ACCENT_OPTIONS.indexOf(o)]?.focus();
+    refs.current[accents.indexOf(o)]?.focus();
   };
-  const idx = Math.max(0, ACCENT_OPTIONS.findIndex((o) => o.value.toUpperCase() === current));
+  const idx = Math.max(0, accents.findIndex((o) => o.value.toUpperCase() === current));
   return (
     <>
       <H1>Appearance</H1>
       <Rd>oIDE uses one dark theme. Pick the accent for buttons, focus rings and the selected rail item.</Rd>
-      <Row title="Accent colour" desc={`${ACCENT_OPTIONS[idx]!.label} · ${ACCENT_OPTIONS[idx]!.value}`}>
+      <Row title="Accent colour" desc={`${accents[idx]!.label} · ${accents[idx]!.value}${themes[idx] ? ` · from ${themes[idx].extension}` : ''}`}>
         {({ titleId, descId }) => (
           <div
             role="radiogroup"
@@ -122,7 +129,7 @@ export function AppearanceSection({ settings }: { settings: Settings }) {
               }
             }}
           >
-            {ACCENT_OPTIONS.map((o, i) => {
+            {accents.map((o, i) => {
               const on = i === idx;
               return (
                 <button

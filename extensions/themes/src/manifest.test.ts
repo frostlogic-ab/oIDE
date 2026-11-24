@@ -1,9 +1,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { CommandHandler, ExtensionContext } from '@oide/extension-api';
 import { loadManifest, requireBundled } from '@oide/extension-host';
 import { describe, expect, it } from 'vitest';
-import { activate, nextAccent } from '../dist/host.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -19,19 +17,10 @@ describe('themes extension', () => {
     ]);
   });
 
-  it('cycles the accent setting', async () => {
-    expect(nextAccent('blue')).toBe('green');
-    expect(nextAccent('amber')).toBe('blue');
-    expect(nextAccent(undefined)).toBe('blue');
-    const settings = new Map<string, unknown>([['themes.accent', 'violet']]);
-    const commands = new Map<string, CommandHandler>();
-    const ctx = {
-      subscriptions: [],
-      commands: { register: (id: string, fn: CommandHandler) => (commands.set(id, fn), { dispose() {} }) },
-      settings: { get: async (k: string) => settings.get(k), set: async (k: string, v: unknown) => void settings.set(k, v) },
-    } as unknown as ExtensionContext;
-    activate(ctx);
-    expect(await commands.get('themes.nextAccent')?.()).toEqual({ accent: 'amber' });
-    expect(settings.get('themes.accent')).toBe('amber');
+  it('is pure manifest: themes are applied by the renderer (Settings › Appearance), no host code runs', () => {
+    const l = loadManifest(root);
+    expect(l.main).toBeUndefined();
+    expect(l.manifest.oide.contributes.commands).toEqual([]);
+    for (const t of l.manifest.oide.contributes.themes) for (const v of Object.values(t.tokens)) expect(v).toMatch(/^#[0-9A-F]{6}$/i);
   });
 });
