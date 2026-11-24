@@ -61,6 +61,22 @@ function pathPattern(p: string): RegExp | null {
   return new RegExp(body, 'gi');
 }
 
+/**
+ * Every value read from `store` is registered with `redactor`, so keychain secrets (custom model
+ * keys, extension secrets, MCP OAuth tokens, custom server env secrets) never reach a log line.
+ */
+export function redactSecretReads<T extends { get(key: string): string | undefined }>(store: T, redactor: Redactor): T {
+  const read = store.get.bind(store);
+  store.get = (key: string) => {
+    const v = read(key);
+    redactor.addStoredSecret(v);
+    return v;
+  };
+  return store;
+}
+
+const NOT_A_SECRET_FIELD = /(?:type|endpoint|url|uri|expires(?:_?(?:in|at))?|scope)$/i;
+
 export class Redactor {
   private readonly secrets = new Set<string>();
   private pathRules: Array<{ re: RegExp; to: string }> = [];
@@ -94,6 +110,29 @@ export class Redactor {
   /** Register the values of secret-looking variables in an env map. */
   addEnvSecrets(env: Record<string, string | undefined>): void {
     for (const [k, v] of Object.entries(env)) if (SECRET_KEY.test(k)) this.addSecret(v);
+  }
+
+  /**
+   * Register a value read from the keychain. A JSON object (stored OAuth tokens, client info) also
+   * registers its string leaves under secret-looking keys (`access_token`, `client_secret`, …).
+   */
+  addStoredSecret(value: string | undefined | null): void {
+    if (typeof value !== 'string') return;
+    this.addSecret(value);
+    if (!value.startsWith('{')) return;
+    try {
+      const walk = (v: unknown, depth: number): void => {
+        if (depth > 4 || !v || typeof v !== 'object') return;
+        for (const [k, x] of Object.entries(v as Record<string, unknown>)) {
+          // `token_type: "Bearer"`, `token_endpoint`, … describe a token; they are not one.
+          if (typeof x === 'string' && SECRET_KEY.test(k) && !NOT_A_SECRET_FIELD.test(k)) this.addSecret(x);
+          else walk(x, depth + 1);
+        }
+      };
+      walk(JSON.parse(value), 0);
+    } catch {
+      // Not JSON: the whole value is registered already.
+    }
   }
 
   /** Add a path prefix rule after construction (e.g. a project folder). */

@@ -223,6 +223,47 @@ describe('main services (plain Node, fake-claude)', () => {
     expect((await h2.call('agents.events', { agentId: a!.id, limit: 50 })).length).toBeGreaterThan(0);
   });
 
+  it('does not resume or spawn agents while the MCP server is down; they resume on the next good start', async () => {
+    const repo = makeRepo();
+    dirs.push(repo);
+    const record = join(tempDir('oide-int-rec-'), 'argv.jsonl');
+    dirs.push(join(record, '..'));
+    const h1 = await harness();
+    await h1.call('settings.update', { patch: { claude: { extraFlags: `--fake-scenario slow --fake-record ${JSON.stringify(record)}` } } });
+    h1.allowOpen(repo);
+    const project = (await h1.call('projects.open', { path: repo }))!;
+    const [a] = await h1.call('agents.spawn', { projectId: project.id, title: 'Long job', goal: 'Count', mode: 'acceptEdits', strategy });
+    await status(h1, a!.id, 'running');
+    await waitFor(() => existsSync(record) && true, 'first launch recorded');
+    open.splice(open.indexOf(h1), 1);
+    await h1.close();
+    const launches = () =>
+      readFileSync(record, 'utf8')
+        .trim()
+        .split(/\r?\n/)
+        .filter((l) => (JSON.parse(l) as { argv?: unknown }).argv).length;
+    expect(launches()).toBe(1);
+
+    // MCP bind fails: no permission-prompt server, so nothing launches (no resume, no spawn).
+    const h2 = await harness({ userData: h1.userData, mcpFails: true });
+    expect(h2.services.mcpPort()).toBeUndefined();
+    await new Promise((r) => setTimeout(r, 500));
+    expect(launches()).toBe(1);
+    expect(['running', 'starting', 'needs-permission']).not.toContain((await agent(h2, a!.id))?.status);
+    expect(await h2.fails('agents.spawn', { projectId: project.id, title: 'Another', goal: 'x', mode: 'acceptEdits', strategy })).toBe('unavailable');
+    // A relaunch through the supervisor (here: resume) is refused at the launch path too.
+    await h2.services.agents.supervisor.resume(a!.id).catch(() => undefined);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(launches()).toBe(1);
+    open.splice(open.indexOf(h2), 1);
+    await h2.close();
+
+    // Next start with a working MCP server: the agent that was working resumes.
+    const h3 = await harness({ userData: h1.userData });
+    await waitFor(() => launches() >= 2 && true, 'resumed on the next good start');
+    expect(h3.services.mcpPort()).toBeGreaterThan(0);
+  });
+
   it('artifacts: create, preview URL, custom model keys never cross IPC', async () => {
     const h = await harness({ confirm: 'accept' }); // a new custom model endpoint asks first (SEC-28)
     const art = await h.call('artifacts.create', { title: 'Landing', kind: 'design', content: '<h1>Hi</h1>' });

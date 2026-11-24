@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { REDACTED, Redactor } from './redact.js';
+import { REDACTED, Redactor, redactSecretReads } from './redact.js';
 
 const HOME = 'C:\\Users\\Jane Doe';
 const USERDATA = 'C:\\Users\\Jane Doe\\AppData\\Roaming\\oIDE';
@@ -56,5 +56,24 @@ describe('Redactor', () => {
     const x = new Redactor({ home: '/h', maxString: 20 });
     expect(x.format(['a', { b: 1 }])).toBe('a {"b":1}');
     expect(x.string('x'.repeat(50))).toMatch(/^x{20}… \[30 more chars]$/);
+  });
+});
+
+describe('secrets read from the keychain', () => {
+  it('redactSecretReads registers every value read, and JSON token leaves under secret-looking keys', () => {
+    const x = new Redactor({ home: '/home/me' });
+    const values: Record<string, string> = {
+      'model:m1': 'plainlocalkey42',
+      'ext:@acme/x/token': 'acme-opaque-value-9',
+      'oauth:srv:tokens': JSON.stringify({ access_token: 'at-opaque-123456', refresh_token: 'rt-opaque-654321', token_type: 'Bearer', expires_in: 3600 }),
+    };
+    const store = redactSecretReads({ get: (k: string) => values[k] }, x);
+    expect(x.string('using plainlocalkey42')).toContain('plainlocalkey42'); // not read yet
+    for (const k of Object.keys(values)) store.get(k);
+    expect(store.get('missing')).toBeUndefined();
+    const line = x.string('key plainlocalkey42 ext acme-opaque-value-9 at at-opaque-123456 rt rt-opaque-654321 type Bearer');
+    expect(line).not.toMatch(/plainlocalkey42|acme-opaque-value-9|at-opaque-123456|rt-opaque-654321/);
+    // Non-secret JSON fields are not registered (the word "Bearer" stays readable elsewhere).
+    expect(x.string('type Bearer')).toBe('type Bearer');
   });
 });

@@ -1,5 +1,5 @@
 import { isAbsolute, relative, resolve } from 'node:path';
-import { LaunchError, Supervisor, type AgentDriver, type EventSink, type SecretProvider, type SettingsProvider, type WorktreeProvider } from '@oide/agent-core';
+import { LaunchError, Supervisor, type AgentDriver, type EventSink, type PermissionBroker, type SecretProvider, type SettingsProvider, type WorktreeProvider } from '@oide/agent-core';
 import { Git, isInside, pathKey, samePath, type WorktreeManager } from '@oide/git';
 import type { OideMcpServer } from '@oide/mcp-server';
 import { ENTRY_FILES, readOideFile, type SecretStore, type SettingsService, type Store } from '@oide/store';
@@ -8,6 +8,7 @@ import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
 import { boundModelKey } from '../security/model-keys.js';
 import { isLockedFileError, lockedFolderMessage, type CleanupQueue } from '../reliability/cleanup-queue.js';
+import type { Redactor } from '../reliability/redact.js';
 import { BufferedWriter, StorageErrorReporter } from '../reliability/storage-errors.js';
 import type { CliService } from './cli.js';
 import type { ExtensionsService } from './extensions.js';
@@ -18,6 +19,26 @@ import type { ProjectsService } from './projects.js';
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 const ACTIVE: ReadonlySet<AgentStatus> = new Set(['starting', 'running', 'needs-permission']);
 const RESUME_KEY = 'agents:resume-on-start';
+const MCP_DOWN = "oIDE's MCP server is not running, so agents cannot ask for permission. Restart oIDE.";
+
+/**
+ * The broker every launch goes through (spawn, resume after restart, relaunch on a mode change):
+ * it refuses to launch while oIDE's MCP server is down (no permission-prompt server), and
+ * registers each agent's MCP secret and secret env with the log redactor.
+ */
+export function guardedBroker(mcp: PermissionBroker, opts: { mcpReady?: () => boolean; redactor?: Redactor }): PermissionBroker {
+  return {
+    async registerAgent(agentId, handlers, extraServers, options) {
+      if (opts.mcpReady && !opts.mcpReady()) throw new LaunchError(MCP_DOWN);
+      for (const v of Object.values(options?.secretEnv ?? {})) opts.redactor?.addSecret(v);
+      const reg = await mcp.registerAgent(agentId, handlers, extraServers, options);
+      for (const v of Object.values(reg.env ?? {})) opts.redactor?.addSecret(v);
+      return reg;
+    },
+    unregisterAgent: (agentId) => mcp.unregisterAgent(agentId),
+    answer: (requestId, answer) => mcp.answer(requestId, answer),
+  };
+}
 
 function safeJson(raw: string | undefined): unknown {
   if (raw === undefined) return undefined;
@@ -86,6 +107,8 @@ export class AgentsService {
   readonly editing = new EditTracker();
   private readonly rows = new Set<string>();
   private readonly lastStatus = new Map<string, AgentStatus>();
+  /** Agents restore() did not resume because the MCP server was down: still resumed on the next start. */
+  private deferredResume: string[] = [];
   extensions: ExtensionsService | undefined;
   git: GitService | undefined;
   /** Event appends: a full disk or a locked database queues events (bounded) and tells the user once. */
@@ -101,7 +124,7 @@ export class AgentsService {
       sink: this.eventSink(),
       settings: this.settingsProvider(),
       secrets: this.secretProvider(),
-      broker: o.mcp,
+      broker: guardedBroker(o.mcp, { ...(o.mcpReady ? { mcpReady: o.mcpReady } : {}), ...(o.ctx.reliability ? { redactor: o.ctx.reliability.logs.redactor } : {}) }),
       ...(o.driver ? { driver: o.driver } : {}),
       log: (m, d) => o.ctx.log.debug('[supervisor]', m, d ?? ''),
     });
@@ -365,7 +388,7 @@ export class AgentsService {
 
   async spawn(input: AgentSpecInput): Promise<AgentSummary[]> {
     const p = this.o.projects.require(input.projectId);
-    if (this.o.mcpReady && !this.o.mcpReady()) throw new IpcError("oIDE's MCP server is not running, so agents cannot ask for permission. Restart oIDE.", 'unavailable');
+    if (this.o.mcpReady && !this.o.mcpReady()) throw new IpcError(MCP_DOWN, 'unavailable');
     let spec = input;
     // Presets store a "Your models" slot as `custom:<id>`: that is AgentSpec.customModel.
     const lead = spec.strategy.lead.model;
@@ -439,13 +462,20 @@ export class AgentsService {
     }
     const restored = this.supervisor.restore(entries);
     for (const s of restored) this.lastStatus.set(s.id, s.status);
+    if (wasActive.length && this.o.mcpReady && !this.o.mcpReady()) {
+      // No permission-prompt server: leave them stopped and resumable, and resume on the next start.
+      this.o.store.ui.kv.set(RESUME_KEY, wasActive);
+      this.deferredResume = wasActive;
+      this.o.ctx.log.warn('MCP server down: not resuming agents', { count: wasActive.length });
+      return this.list();
+    }
     for (const id of wasActive) await this.supervisor.resume(id).catch((err) => this.o.ctx.log.warn('resume after restart failed', id, err));
     return this.list();
   }
 
   /** Quit: deny pending prompts (broker), stop processes; sessions stay resumable and resume on next start. */
   async shutdown(): Promise<void> {
-    const live = this.list().filter((a) => ACTIVE.has(a.status)).map((a) => a.id);
+    const live = this.list().filter((a) => ACTIVE.has(a.status) || this.deferredResume.includes(a.id)).map((a) => a.id);
     this.o.store.ui.kv.set(RESUME_KEY, live);
     await this.o.mcp.close().catch(() => undefined);
     await this.supervisor.shutdown();

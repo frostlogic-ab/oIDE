@@ -7,6 +7,7 @@ import type { ArtifactMeta } from '@oide/protocol';
 import { ArtifactStore, SqliteSecretStore, openStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { CleanupQueue } from '../reliability/cleanup-queue.js';
+import { redactSecretReads } from '../reliability/redact.js';
 import { AgentsService } from './agents.js';
 import { CliService } from './cli.js';
 import { ExtensionsService } from './extensions.js';
@@ -57,6 +58,8 @@ export interface CoreOptions {
   driver?: AgentDriver;
   watch?: WatchFn;
   gh?: GhCli;
+  /** Test seam: how the MCP server starts (default `mcp.start()`), e.g. to simulate a failed bind. */
+  startMcp?: (mcp: OideMcpServer) => Promise<{ port: number }>;
 }
 
 /**
@@ -101,6 +104,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   const settings = store.settings;
   for (const e of settings.loadErrors) notices.push({ level: 'warning', message: e });
   const secrets = new SqliteSecretStore(store.database, platform.cipher);
+  // Keychain values are registered with the log redactor as they are read.
+  if (ctx.reliability) redactSecretReads(secrets, ctx.reliability.logs.redactor);
   if (platform.cipher.available && !platform.cipher.available()) {
     notices.push({ level: 'warning', message: 'Secure storage (the OS keychain) is not available, so oIDE will not save API keys or tokens. Custom model keys and MCP secrets cannot be stored until it is.' });
   }
@@ -128,7 +133,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   let mcpPort: number | undefined;
   for (let attempt = 1; attempt <= 3 && mcpPort === undefined; attempt++) {
     try {
-      mcpPort = (await mcp.start()).port;
+      mcpPort = (await (opts.startMcp ? opts.startMcp(mcp) : mcp.start())).port;
     } catch (err) {
       ctx.log.warn('MCP server failed to start', { attempt, error: err });
       if (attempt < 3) await new Promise((r) => setTimeout(r, 200 * attempt));

@@ -388,3 +388,11 @@ reloading, toasts). Found: Node 24.11 `fs.rmSync` silently skips non-ASCII paths
 (`fs-safe.ts` `removeSync` falls back). Extension host test fixture `dist/` was git-ignored and is
 now committed. New IPC: `app.diagnostics`, `app.openLogsFolder`, `app.reportError`; setting
 `ui.crashReports`. E2E `reliability.spec.ts` kills the renderer and checks the agent keeps running.
+
+## [2026-11-25] build | Integration: robust merged; MCP launch guard and secret redaction
+Merged `wave4/robust`. Two scanner findings fixed: the MCP-down guard now sits on the launch path
+(`guardedBroker` in `services/agents.ts`, used by spawn, resume and relaunch), and `restore()` leaves
+working agents stopped and resumable when the MCP server is down; and secrets are registered with the
+log redactor (agent MCP secret and secret env at registration, keychain reads via `redactSecretReads`).
+Tests: `services/agents-broker.test.ts`, `reliability/redact.test.ts`, an MCP-down restart test in
+`test/integration/main-services.test.ts`. Page: [reliability](pages/reliability.md).

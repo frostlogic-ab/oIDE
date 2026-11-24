@@ -62,8 +62,9 @@ const quiet = { debug: () => {}, warn: () => {}, error: (...a: unknown[]) => con
  * `confirm`: how native confirmations in main (security/confirm.ts) are answered. Default: no
  * override, which in plain Node means Cancel, so PoCs see the secure default.
  * `platform` overrides parts of the plain-Node platform (built-in extension folders, a host-process fork).
+ * `mcpFails`: oIDE's MCP server fails to bind (every attempt), as when a security tool blocks loopback.
  */
-export async function startHarness(opts: { userData?: string; trust?: boolean; confirm?: 'accept' | 'deny'; platform?: Partial<Platform> } = {}): Promise<Harness> {
+export async function startHarness(opts: { userData?: string; trust?: boolean; confirm?: 'accept' | 'deny'; platform?: Partial<Platform>; mcpFails?: boolean } = {}): Promise<Harness> {
   if (opts.confirm) setConfirmOverride(() => opts.confirm === 'accept');
   const userData = opts.userData ?? tempDir('oide-int-data-');
   const events: Harness['events'] = [];
@@ -99,7 +100,7 @@ export async function startHarness(opts: { userData?: string; trust?: boolean; c
     background: false,
     ...opts.platform,
   };
-  const services = await createCoreServices({ ctx, platform, terminals });
+  const services = await createCoreServices({ ctx, platform, terminals, ...(opts.mcpFails ? { startMcp: () => Promise.reject(new Error('listen EACCES 127.0.0.1')) } : {}) });
   const router = new IpcRouter({ validateOutput: true, log: quiet });
   registerDomainHandlers(router, services, ctx);
   const dispatch = (command: string, input: unknown) => router.dispatch({ command, input }, { senderId: 1, frameUrl: 'file:///app/index.html' });

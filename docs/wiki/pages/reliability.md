@@ -21,7 +21,7 @@ The main process owns agents, worktrees, the database and the extension host (bu
 | Extension host crash | `ExtensionHostClient` restarts with backoff (0.5 s doubling, max 5 in 2 min, then `failed`); main emits `extensions.hostState`; the renderer store marks that extension's panels reloading (`usePanelReloading(panelId)`), toasts once, and again when it is back or failed; `extension-host.log` records it | `packages/extension-host/src/host-client.ts`, `stores/extensionHosts.ts` |
 | CLI process exits | Tile shows "The claude process exited with code N" and Resume (`--resume <session>`); per-agent log records the status change with the exit code | `screens/Wall/components/TileBody.tsx`, `services/agents.ts` |
 | Main-process exception / unhandled rejection | Logged and (opt-in) summarized; the process keeps running so agents are not killed | `index.ts` |
-| MCP server cannot bind | 3 tries; then the app starts without it, a notice explains, `agents.spawn` refuses with `unavailable` (permission prompts need it), Diagnostics shows "Not listening" | `services/core.ts` |
+| MCP server cannot bind | 3 tries; then the app starts without it, a notice explains, `agents.spawn` refuses with `unavailable` (permission prompts need it); every launch (spawn, resume, relaunch) goes through `guardedBroker`, which refuses too, and `restore()` leaves working agents stopped and resumes them on the next good start; Diagnostics shows "Not listening" | `services/core.ts`, `services/agents.ts` |
 | Database cannot open | See "Database failures" below; never silently replaced | `db-recovery.ts` |
 | Event append fails (disk full, database locked) | Agents keep running and live events still reach the window. Failed events wait in a bounded queue (5000, oldest dropped and counted) and are written in order once writes work; other row errors are dropped and reported, never retried in a loop. One notice per failure kind (again after 10 min), and "saved again" when it recovers | `storage-errors.ts` (`StorageErrorReporter`, `BufferedWriter`) |
 
@@ -59,6 +59,10 @@ agents/<agentId>.log     per-agent supervisor log: status changes, exit codes, e
 - Buffered writes (250 ms, errors flushed at once) that never throw: a failed write (disk full)
   pauses file logging for a minute and falls back to the console. Diagnostics shows it.
 - Every line goes through the `Redactor` (see [security](security.md#logs-and-redaction)).
+  Known secret values are registered with it as they appear: each agent's MCP secret and secret env
+  when it is registered with the MCP server (`guardedBroker`), and every keychain value read in main
+  (`redactSecretReads` over the secret store: custom model keys, extension secrets, MCP OAuth tokens,
+  custom server env secrets; token JSON registers its secret-looking fields).
 - Settings › Diagnostics › **Open logs folder** (`app.openLogsFolder`).
 
 ## Crash reports (opt-in, local only)
