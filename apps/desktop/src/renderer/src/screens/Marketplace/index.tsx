@@ -181,7 +181,7 @@ export default function MarketplaceScreen() {
       </ResizableAside>
 
       {/* List */}
-      <main className="flex-[999_1_460px] min-w-[360px] flex flex-col gap-3.5 px-5 py-[18px] box-border overflow-auto">
+      <main className="flex-1 min-w-[360px] flex flex-col gap-3.5 px-5 py-[18px] box-border overflow-auto">
         <div className="flex items-center gap-2.5 flex-wrap">
           <label htmlFor="msearch" className="sr-only">
             Search extensions

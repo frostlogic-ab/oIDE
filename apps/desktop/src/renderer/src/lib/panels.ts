@@ -37,8 +37,9 @@ export const PANELS = {
 
 /**
  * Room a screen's main area keeps however wide its sidebars are dragged. The mains of screens with
- * resizable sidebars carry the same `min-w-[360px]`, so a narrow window shrinks the sidebars (to
- * their `min`) before the main area.
+ * resizable sidebars are `flex-1 min-w-[360px]` (zero basis, so they take the slack and a sidebar
+ * renders at its own width until main is at 360px; then a narrow window shrinks the sidebars to
+ * their `min`).
  */
 export const MAIN_MIN_WIDTH = 360;
 

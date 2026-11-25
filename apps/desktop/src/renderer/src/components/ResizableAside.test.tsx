@@ -165,9 +165,15 @@ describe('ResizableAside', () => {
     const h = handle('projects sidebar');
     fireEvent.pointerDown(h, { button: 0, pointerId: 1, clientX: 248 });
     fireEvent.pointerMove(h, { pointerId: 1, clientX: 300 });
+    // Focus going into an iframe of this window blurs it too, but the drag goes on.
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    fireEvent.blur(window);
+    expect(document.documentElement.classList.contains(RESIZING_CLASS)).toBe(true);
+    hasFocus.mockReturnValue(false);
     await act(async () => {
       fireEvent.blur(window);
     });
+    hasFocus.mockRestore();
     expect(document.documentElement.classList.contains(RESIZING_CLASS)).toBe(false);
     expect(current.ui.panelWidths).toEqual({ 'wall.projects': 300 });
     fireEvent.pointerDown(h, { button: 0, pointerId: 2, clientX: 300 });

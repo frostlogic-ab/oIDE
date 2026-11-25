@@ -211,7 +211,7 @@ export default function ReviewScreen() {
         </div>
       </ResizableAside>
 
-      <main className="flex-[999_1_560px] min-w-[360px] min-h-0 flex flex-col">
+      <main className="flex-1 min-w-[360px] min-h-0 flex flex-col">
         {file ? (
           <>
             <div className="flex items-center gap-2.5 px-5 py-3 border-b border-line flex-wrap">

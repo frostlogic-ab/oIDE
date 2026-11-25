@@ -183,7 +183,7 @@ export default function FilesScreen() {
         <TreePanel trees={trees} scoped={scope !== 'all'} onSearch={() => showSearch()} searchHint={searchKey} />
       )}
 
-      <main className="flex-[999_1_560px] min-w-[360px] min-h-0 flex flex-col">
+      <main className="flex-1 min-w-[360px] min-h-0 flex flex-col">
         <div className="flex items-stretch bg-chrome border-b border-line min-h-9">
           <div role="tablist" aria-label="Open files" className="flex min-w-0 overflow-x-auto">
             {files.tabs.map((t) => {

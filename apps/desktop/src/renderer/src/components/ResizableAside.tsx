@@ -111,6 +111,8 @@ export function usePanelWidth(spec: PanelSpec, asideId: string): PanelWidth {
       if (d) setLive(d.before);
     };
     const onBlur = () => {
+      // Focus moving into an iframe of this window (a preview, an extension panel) is not leaving it.
+      if (document.hasFocus()) return;
       finish(true);
       setDragging(false);
     };

@@ -69,8 +69,8 @@ Buttons on accent use text `#0B0D10`, weight 600.
   Artifacts details, Marketplace categories and details, Settings sections) render through
   `ResizableAside` (`apps/desktop/src/renderer/src/components/ResizableAside.tsx`). The canvas widths
   are the defaults; each panel's min (where its content still fits) and max live in
-  `src/lib/panels.ts`. The screen's main area always keeps 360px (`MAIN_MIN_WIDTH`, `min-w-[360px]` on
-  each main): drags stop there, and a narrow window shrinks sidebars to their min first. The grab edge
+  `src/lib/panels.ts`. The screen's main area always keeps 360px (`MAIN_MIN_WIDTH`; mains are `flex-1 min-w-[360px]`):
+  drags stop there, and a narrow window shrinks sidebars to their min first. The grab edge
   is a focusable `role="separator"` on the inner border: 6px hit area on the side without a scrollbar, a 2px accent line on hover / focus / drag,
   arrows (Shift = 64px) and Home / End from the keyboard, double-click resets, Escape cancels a drag.
   Widths persist in `settings.ui.panelWidths` (bad entries are dropped on read, never resetting `ui`); Settings › Appearance › Reset sidebar widths clears them.

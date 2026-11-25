@@ -35,7 +35,7 @@ export default function SourceControlScreen() {
 
   return (
     <>
-      <main className="flex-[999_1_640px] min-w-[360px] px-6 py-5 box-border flex flex-col gap-3.5 overflow-auto">
+      <main className="flex-1 min-w-[360px] px-6 py-5 box-border flex flex-col gap-3.5 overflow-auto">
         <div className="flex items-baseline gap-3 flex-wrap">
           <h1 className="m-0 text-[18px] font-semibold">{title}</h1>
           <span className="text-[12.5px] text-ink-3">
