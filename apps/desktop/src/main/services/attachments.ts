@@ -211,9 +211,11 @@ export async function excludeAttachments(cwd: string): Promise<void> {
 
 /**
  * Copy file attachments into `<cwd>/.oide/attachments/` and return them with paths relative to `cwd`
- * (forward slashes). Images pass through untouched. Files already inside that folder are not copied again.
+ * (forward slashes). Images pass through untouched. Files already inside `cwd` are referenced where
+ * they are. Only files the user picked or dropped (`picked`, `pathKey`ed) are ever read and copied:
+ * anything else outside `cwd` is refused, whatever folder it was validated against.
  */
-export async function copyAttachments(cwd: string, attachments: readonly MessageAttachment[], now = Date.now()): Promise<MessageAttachment[]> {
+export async function copyAttachments(cwd: string, attachments: readonly MessageAttachment[], picked: ReadonlySet<string>, now = Date.now()): Promise<MessageAttachment[]> {
   const files = attachments.filter((a): a is FileAttachment => a.kind === 'file');
   if (!files.length) return [...attachments];
   const dir = await ensureAttachmentsDir(cwd);
@@ -231,6 +233,7 @@ export async function copyAttachments(cwd: string, attachments: readonly Message
       out.push({ ...a, path: relative(cwd, src).split('\\').join('/') });
       continue;
     }
+    if (!picked.has(pathKey(src))) refuse(`${a.name}: only files you attach with Attach file or by dropping them can be copied to the agent.`);
     const base = `${stamp(now)}-${safeFileName(a.name)}`;
     let target = base;
     for (let i = 2; used.has(target.toLowerCase()) || (await exists(join(dir, target))); i++) {
