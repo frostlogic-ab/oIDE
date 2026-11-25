@@ -751,3 +751,15 @@ be read, by an agent through its own claude.ai connectors.
   `artifact_fetch_with_agent_started`; the IPC router gained `observeFailure` (codes and Zod issue paths only).
 Pages: [artifacts](pages/artifacts.md), [screen-artifacts](pages/screen-artifacts.md),
 [mcp-server](pages/mcp-server.md), [security](pages/security.md), [telemetry](pages/telemetry.md).
+
+## [2026-11-25] decision | Multi-file artifacts, retrieved by agents (ADR 0014)
+A claude.ai Design link (a project of pages, CSS, a canvas file and screenshots) could not be imported:
+oIDE never downloads claude.ai content and stored one file per artifact. Checked: CLI 2.1.332 has no
+Artifact tool (only `DesignSync` for claude.ai/design projects and the Claude Docs connector for docs).
+Decided and built: artifacts are folders of files with full-snapshot versions; New artifact › A link
+creates the artifact at v0 and starts an ordinary agent that reads the link with the CLI's claude.ai
+tools and hands files back through `artifact_retrieval_add_files` / `artifact_retrieval_finish`
+(staged, committed as one version, or failed with a reason); Update re-runs it. One New artifact
+dialog (A link / Files / Blank) replaces the import dialog and "Fetch with an agent". Pages:
+[artifacts.md](pages/artifacts.md), [screen-artifacts.md](pages/screen-artifacts.md),
+[mcp-server.md](pages/mcp-server.md), [telemetry.md](pages/telemetry.md), open question 5 answered.
