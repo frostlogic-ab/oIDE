@@ -222,7 +222,7 @@ describe('OideMcpServer', () => {
     expect(none.isError).toBe(true);
     const titles: string[] = [];
     rec.handlers.onTitle = (t) => (titles.push(t), titles.length === 1 ? { ok: true, title: 'Fix login' } : { ok: false, message: 'This agent already has its title; keep it.' });
-    expect(textOf(await client.callTool({ name: 'set_title', arguments: { title: ' Fix login. ' } }))).toMatch(/Title set to "Fix login"/);
+    expect(textOf(await client.callTool({ name: 'set_title', arguments: { title: ' Fix login. ' } }))).toMatch(/Title set to "Fix login".*Oide-Agent: Fix login/);
     const again = await client.callTool({ name: 'set_title', arguments: { title: 'Other' } });
     expect(again.isError).toBe(true);
     expect(textOf(again)).toMatch(/already has its title/);

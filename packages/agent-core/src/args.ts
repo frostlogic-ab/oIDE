@@ -459,7 +459,7 @@ export function oideContract(opts: { agentName: string; agentId: string; cwd: st
   ];
   if (opts.autoTitle) {
     lines.push(
-      '- Your oIDE title above is only the start of the user message. Before anything else, call mcp__oide__set_title once with a short title (3 to 8 words, under 60 characters) that names the task, in the language the user wrote in. Do not mention it to the user; then carry on. Keep using the Oide-Agent trailer above for this session.',
+      '- Your oIDE title above is only the start of the user message. Before anything else, call mcp__oide__set_title once with a short title (3 to 8 words, under 60 characters) that names the task, in the language the user wrote in. Do not mention it to the user; then carry on. After that, use the new title in the Oide-Agent trailer.',
     );
   }
   if (opts.routed) {

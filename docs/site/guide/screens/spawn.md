@@ -8,7 +8,7 @@ Review > Hand conflicts to a new agent), which pre-fills the context.
 
 | Field | What it does |
 | --- | --- |
-| Goal | What the agent should do. The tile's title is the goal's first sentence. |
+| Goal | What the agent should do. The tile's title starts as the goal's first sentence; once the agent starts, it gives the task a short name of its own, which replaces it. |
 | Context | Chips for artifacts, files (relative to the project) and https URLs. |
 | Project | Which open project. Defaults to the scoped project. |
 | Work in | **New worktree from main** (default), **new worktree from the current branch**, or **the project folder directly**. |

@@ -214,7 +214,7 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     // The worktree branch keeps the name it was created with.
     expect(named.branch).toMatch(/^oide\/can-we-make-the-tests-pass/);
 
-    const kept = await waitFor(() => h.get(given!.id).lastMessage && h.get(given!.id), 10_000, 'given replied');
+    const kept = await waitFor(() => (h.get(given!.id).lastMessage ? h.get(given!.id) : undefined), 10_000, 'given replied');
     expect(kept.lastMessage).toBe('No title was asked for.');
     expect(kept.title).toBe('Reconcile a + b');
 

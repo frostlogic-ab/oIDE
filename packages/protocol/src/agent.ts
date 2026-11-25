@@ -152,7 +152,9 @@ export const AGENT_TITLE_MAX = 80;
  */
 export function cleanAgentTitle(raw: string): string | undefined {
   let t = raw
+    // eslint-disable-next-line no-control-regex -- stripping control and bidi characters is the point
     .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/g, ' ')
+    .replace(/[\u00ad\u061c\u180e\u2060-\u2064\ufeff]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/^title:\s*/i, '');

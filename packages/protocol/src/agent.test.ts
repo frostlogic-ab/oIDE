@@ -55,6 +55,8 @@ describe('cleanAgentTitle', () => {
     expect(cleanAgentTitle('“Ajouter le mode sombre”')).toBe('Ajouter le mode sombre');
     expect(cleanAgentTitle('Use v2.1 API')).toBe('Use v2.1 API');
     expect(cleanAgentTitle('Bad‮ltr\u0007')).toBe('Bad ltr');
+    expect(cleanAgentTitle('Fix⁠ed﻿ lo­gin؜')).toBe('Fixed login');
+    expect(cleanAgentTitle('⁠﻿')).toBeUndefined();
     expect(cleanAgentTitle(`"it's fine'`)).toBe(`"it's fine'`);
   });
 

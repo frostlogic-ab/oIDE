@@ -346,6 +346,13 @@ export class AgentsService {
       case 'result':
         this.git?.scheduleDiff(e.agentId);
         break;
+      case 'title-changed': {
+        // The supervisor updated the spec (new title, no autoTitle) before emitting: store it so a
+        // restart neither shows the stand-in nor asks the agent again.
+        const spec = this.supervisor.spec(e.agentId);
+        if (spec) o.store.agents.saveSpec(e.agentId, spec);
+        break;
+      }
       default:
         break;
     }
