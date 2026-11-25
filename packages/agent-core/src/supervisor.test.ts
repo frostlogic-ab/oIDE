@@ -200,6 +200,39 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     await waitFor(() => h.get(a!.id).status !== 'ready-for-review', 5000, 'leaves review');
   });
 
+  it('names its task: set_title replaces a stand-in title once; a given title is kept; restore keeps the new name', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario name-task' });
+    const [auto] = await h.sup.spawn(spec({ title: 'Can we make the tests pass because they fail at mi…', autoTitle: true }));
+    const [given] = await h.sup.spawn(spec({ title: 'Reconcile a + b' }));
+    const named = await waitFor(() => h.get(auto!.id).lastMessage?.startsWith('first:') && h.get(auto!.id), 10_000, 'auto named');
+    expect(named.title).toBe('Name the task');
+    expect(named.lastMessage).toMatch(/first: ok .*\| again: refused \(This agent already has its title/);
+    expect(h.sup.spec(auto!.id)).toMatchObject({ title: 'Name the task' });
+    expect(h.sup.spec(auto!.id)!.autoTitle).toBeUndefined();
+    expect(h.saved.get(auto!.id)!.title).toBe('Name the task');
+    expect(h.events.some((e) => e.agentId === auto!.id && e.type === 'title-changed' && e.title === 'Name the task')).toBe(true);
+    // The worktree branch keeps the name it was created with.
+    expect(named.branch).toMatch(/^oide\/can-we-make-the-tests-pass/);
+
+    const kept = await waitFor(() => (h.get(given!.id).lastMessage ? h.get(given!.id) : undefined), 10_000, 'given replied');
+    expect(kept.lastMessage).toBe('No title was asked for.');
+    expect(kept.title).toBe('Reconcile a + b');
+
+    // Saved before the spec was updated (older build or crash): the summary's title wins and is not asked again.
+    const h2 = await harness({ extraFlags: '--fake-scenario name-task' });
+    const [restored] = h2.sup.restore([{ spec: { ...h.sup.spec(auto!.id)!, title: 'Old stand-in', autoTitle: true }, summary: { ...named, status: 'stopped' } }]);
+    expect(restored!.title).toBe('Name the task');
+    expect(h2.sup.spec(auto!.id)).toMatchObject({ title: 'Name the task' });
+    expect(h2.sup.spec(auto!.id)!.autoTitle).toBeUndefined();
+  });
+
+  it('parallel attempts each name their task and keep their #n suffix', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario name-task' });
+    const out = await h.sup.spawn(spec({ title: 'Stand-in', autoTitle: true, attempts: 2 }));
+    for (const a of out) await waitFor(() => h.get(a.id).lastMessage?.startsWith('first:'), 10_000, 'named');
+    expect(out.map((a) => h.get(a.id).title).sort()).toEqual(['Name the task #1', 'Name the task #2']);
+  });
+
   it('stop then resume respawns with --resume and the same session id; restore after restart', async () => {
     const h = await harness({ extraFlags: '--fake-scenario basic' });
     const [a] = await h.sup.spawn(spec());

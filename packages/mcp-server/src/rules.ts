@@ -36,6 +36,8 @@ export function summarizeTool(toolName: string, input: unknown): string {
       return oneLine(`Search the web for ${str(input, 'query') ?? ''}`);
     case 'mcp__oide__submit_for_review':
       return 'Submit for review';
+    case 'mcp__oide__set_title':
+      return 'Set title';
     default: {
       const m = /^mcp__(.+?)__(.+)$/.exec(toolName);
       return m ? `Use ${m[2]} (${m[1]})` : `Use ${toolName}`;

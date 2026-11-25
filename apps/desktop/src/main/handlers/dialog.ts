@@ -1,4 +1,5 @@
-import { resolve } from 'node:path';
+import { stat } from 'node:fs/promises';
+import { isAbsolute, resolve } from 'node:path';
 import { z } from 'zod';
 import { pathKey } from '@oide/git';
 import { IPC_DROP_CHANNEL, type PickedAttachments } from '@oide/protocol';
@@ -26,6 +27,18 @@ export function registerDialogHandlers(router: IpcRouter, services: Services, _c
     const paths = platform.pickFiles ? await platform.pickFiles(title) : [await platform.pickFile(title, [])].filter((p): p is string => !!p);
     return readPickedFiles(paths, services.picked);
   });
+  // New artifact › From files: any type (images too), several files, or one folder. Each pick is
+  // registered so artifacts.importFiles accepts exactly these paths.
+  router.register('dialog.pickArtifactFiles', async ({ folder }) => {
+    const { platform } = services;
+    if (folder) {
+      const dir = await platform.pickFolder('Choose the artifact folder');
+      return dir ? [remember(dir)!] : [];
+    }
+    const paths = platform.pickFiles ? await platform.pickFiles('Choose the artifact files') : [await platform.pickFile('Choose the artifact file', [])].filter((p): p is string => !!p);
+    for (const p of paths) remember(p);
+    return paths;
+  });
   router.register('dialog.pickCli', async () => {
     const p = await services.platform.pickFile('Choose the Claude Code CLI', []);
     if (p) services.pickedCli.add(pathKey(resolve(p)));
@@ -45,7 +58,15 @@ export function attachDropChannel(ipcMain: IpcMainLike, services: Pick<Services,
     if (!isTrustedSender(event.senderFrame?.url ?? '')) throw new Error('Untrusted sender');
     const parsed = DroppedPaths.safeParse(input);
     if (!parsed.success) return { attachments: [], rejected: [{ name: 'Dropped files', reason: 'Drop at most 50 files at a time.' }] };
-    return readPickedFiles(parsed.data, services.picked);
+    const out = await readPickedFiles(parsed.data, services.picked);
+    // A dropped folder, or a file too big to attach, can still become an artifact (artifacts.importFiles
+    // accepts only picked or dropped paths): register every dropped local file or folder.
+    for (const raw of parsed.data) {
+      if (!isAbsolute(raw) || raw.includes('\0') || /^[\\/]{2}/.test(raw)) continue; // never touch a network share
+      const st = await stat(raw).catch(() => undefined);
+      if (st?.isFile() || st?.isDirectory()) services.picked.add(pathKey(resolve(raw)));
+    }
+    return out;
   });
   return () => ipcMain.removeHandler(IPC_DROP_CHANNEL);
 }

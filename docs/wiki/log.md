@@ -776,5 +776,46 @@ Telemetry: `agent_merged` gains `local_changes`. Tests in `packages/git/test/mer
 and `test/integration/merge-conflicts.test.ts`. Pages: [git-worktrees](pages/git-worktrees.md),
 [screen-review](pages/screen-review.md), [telemetry](pages/telemetry.md).
 
+## [2026-11-25] decision | Multi-file artifacts, retrieved by agents (ADR 0014)
+A claude.ai Design link (a project of pages, CSS, a canvas file and screenshots) could not be imported:
+oIDE never downloads claude.ai content and stored one file per artifact. Checked: CLI 2.1.332 has no
+Artifact tool (only `DesignSync` for claude.ai/design projects and the Claude Docs connector for docs).
+Decided and built: artifacts are folders of files with full-snapshot versions; New artifact › A link
+creates the artifact at v0 and starts an ordinary agent that reads the link with the CLI's claude.ai
+tools and hands files back through `artifact_retrieval_add_files` / `artifact_retrieval_finish`
+(staged, committed as one version, or failed with a reason); Update re-runs it. One New artifact
+dialog (A link / Files / Blank) replaces the import dialog and "Fetch with an agent". Pages:
+[artifacts.md](pages/artifacts.md), [screen-artifacts.md](pages/screen-artifacts.md),
+[mcp-server.md](pages/mcp-server.md), [telemetry.md](pages/telemetry.md), open question 5 answered.
+
+## [2026-11-25] build | Artifacts: whole-version Restore, user guide rewrite
+`artifacts.restore { id, version, baseVersion? }` commits the full snapshot of a version (every file and
+the entry it had) as a new version noted "Restored v<n>", through the store's `commit` path; History >
+Restore uses it, which closes the "restores only the entry" gap. The Viewer's Keep mine / Use theirs only
+load a version into the editor and save through `save` / `writeFiles`, so they needed no change. The
+docs site Artifacts guide, FAQ and Settings text now describe the link flow (an agent retrieves it with the
+user's CLI), Update, the Files panel and history. Pages: [artifacts.md](pages/artifacts.md),
+[screen-artifacts.md](pages/screen-artifacts.md).
+
+## [2026-11-25] build | Agents name their own task (set_title)
+- Spawn's title was the start of the user's prompt. Spawn now marks it `autoTitle`; the oIDE contract asks the
+  agent to call the new MCP tool `mcp__oide__set_title` once, first thing, with a short title. The supervisor
+  cleans it (`cleanAgentTitle` in protocol), keeps attempt `#n` suffixes, updates the spec and emits
+  `title-changed` (reducer → `summary.title`; store mirrors the `title` column). Titles the caller gave
+  (reconcile, extensions) are kept: `set_title` is refused for them and after the first call.
+- The CLI emits no title of its own in stream-json, so nothing is taken from it.
+- fake-claude gained a `name-task` scenario. Focus shows "Named the task …" as a notice.
+- Telemetry: `agent_spawned.auto_title`, new `agent_titled { after }` (duration bucket only, never the title).
+Pages: [agent-supervisor](pages/agent-supervisor.md#agent-named-titles), [mcp-server](pages/mcp-server.md),
+[screen-spawn](pages/screen-spawn.md), [telemetry](pages/telemetry.md).
+
+## [2026-11-25] build | Agents keep their branch up to date with the base
+The oIDE contract (`packages/agent-core/src/args.ts`, `syncContract`) now tells every worktree agent with a
+named base (`main`, `origin/main`, a branch; not a bare sha) to `git merge <base>` before starting a new task
+and again right before `submit_for_review`, resolving conflicts, re-running checks and reporting an
+"Up to date with <base>" check. The supervisor passes the worktree's `baseRef` into `buildLaunch`. No telemetry
+change: this is prompt text, and the existing review/merge events already cover the outcome.
+See [agent-supervisor](pages/agent-supervisor.md).
+
 ## [2026-11-25] build | Collapsed defaults; Spawn remembers extension tools
 Source control: "Recent commits on <branch>" starts collapsed on every project card. Spawn: "Advanced model settings" starts closed (opens when Custom is picked); "Tools from extensions" starts from the last spawn's picks, saved as `settings.spawn.lastExtensions` (new protocol field, defaulted so older settings parse). No telemetry change.

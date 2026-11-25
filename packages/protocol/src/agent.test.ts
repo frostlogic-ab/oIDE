@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AgentSummary, repairAgentSummary } from './agent.js';
+import { AGENT_TITLE_MAX, AgentSummary, cleanAgentTitle, repairAgentSummary } from './agent.js';
 import { Commands, Events } from './ipc.js';
 
 const base = { id: 'a1', projectId: 'p1', title: 'T', status: 'running', mode: 'auto', model: 'opus', createdAt: 1, updatedAt: 2 };
@@ -45,5 +45,30 @@ describe('archive contract', () => {
     expect(() => Commands['agents.listArchived'].input.parse({ limit: 1000 })).toThrow();
     expect(Commands['agents.deletePermanently'].output.parse({ deleted: true })).toEqual({ deleted: true });
     expect(Events['agents.archived'].parse(s).archived?.reason).toBe('merged');
+  });
+});
+
+describe('cleanAgentTitle', () => {
+  it('keeps one tidy line: no wrapping quotes, label, trailing full stop or control characters', () => {
+    expect(cleanAgentTitle('  "Fix the  flaky\ninvoice test."  ')).toBe('Fix the flaky invoice test');
+    expect(cleanAgentTitle('Title: **Add dark mode**')).toBe('Add dark mode');
+    expect(cleanAgentTitle('“Ajouter le mode sombre”')).toBe('Ajouter le mode sombre');
+    expect(cleanAgentTitle('Use v2.1 API')).toBe('Use v2.1 API');
+    expect(cleanAgentTitle('Bad‮ltr\u0007')).toBe('Bad ltr');
+    expect(cleanAgentTitle('Fix⁠ed﻿ lo­gin؜')).toBe('Fixed login');
+    expect(cleanAgentTitle('⁠﻿')).toBeUndefined();
+    expect(cleanAgentTitle('Hidden\u{e0041}\u{e0042} textㅤ')).toBe('Hidden text');
+    expect(cleanAgentTitle('`foo` and `bar`')).toBe('`foo` and `bar`');
+    expect(cleanAgentTitle('**Fix** the *bug*')).toBe('**Fix** the *bug*');
+    expect(cleanAgentTitle('"Title: Foo"')).toBe('Foo');
+    expect(cleanAgentTitle(`"it's fine'`)).toBe(`"it's fine'`);
+  });
+
+  it('returns undefined when nothing is left, and caps the length', () => {
+    expect(cleanAgentTitle(' . \n ')).toBeUndefined();
+    expect(cleanAgentTitle('')).toBeUndefined();
+    const long = cleanAgentTitle('word '.repeat(40))!;
+    expect([...long]).toHaveLength(AGENT_TITLE_MAX);
+    expect(long.endsWith('…')).toBe(true);
   });
 });

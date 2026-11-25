@@ -63,6 +63,19 @@ describe('agents and subagents', () => {
     expect(s.agents.remove('a1')).toBe(true);
     expect(s.subagents.list('a1')).toEqual([]);
   });
+
+  it('a renamed agent (set_title): saveSpec stores the new spec and title; saveSummary mirrors the title', () => {
+    const { s, p } = setup();
+    s.agents.insert({ id: 'a1', projectId: p.id, spec: { ...spec(p.id), title: 'Can we fix the fl…', autoTitle: true }, status: 'running' });
+    const named = s.agents.saveSpec('a1', { ...spec(p.id), title: 'Fix flaky invoice test' });
+    expect(named.title).toBe('Fix flaky invoice test');
+    expect(named.spec.title).toBe('Fix flaky invoice test');
+    expect(named.spec.autoTitle).toBeUndefined();
+    expect(s.agents.get('a1')!.spec.attachments).toBeUndefined();
+    expect(() => s.agents.saveSpec('nope', spec(p.id))).toThrow();
+    const saved = s.agents.saveSummary({ id: 'a1', projectId: p.id, title: 'Another', status: 'running', mode: 'auto', model: 'opus', createdAt: 1, updatedAt: 2 });
+    expect(saved.title).toBe('Another');
+  });
 });
 
 describe('events', () => {

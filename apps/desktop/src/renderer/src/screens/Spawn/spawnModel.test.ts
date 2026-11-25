@@ -60,6 +60,8 @@ describe('buildSpec', () => {
     expect(res.spec).toMatchObject({
       projectId: 'oide',
       title: 'Add a usage panel',
+      // The title is a stand-in from the goal: the agent is asked to name the task.
+      autoTitle: true,
       goal: 'Add a usage panel. It opens from the status bar.',
       workIn: 'worktree-from-main',
       mode: 'auto',

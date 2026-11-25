@@ -127,6 +127,8 @@ export function toolLabel(name: string, input: unknown): string {
       return clip(`Delegate ${str(input, 'description', 'subagent_type') ?? 'a task'}`);
     case 'mcp__oide__submit_for_review':
       return 'Submit for review';
+    case 'mcp__oide__set_title':
+      return clip(`Set title: ${str(input, 'title') ?? ''}`);
     default: {
       const m = /^mcp__(.+?)__(.+)$/.exec(name);
       return m ? clip(`${m[1]}: ${m[2]!.replace(/_/g, ' ')}`) : clip(name);
@@ -357,6 +359,9 @@ export function buildRows(events: readonly AgentEvent[]): TranscriptRow[] {
         break;
       case 'review-submitted':
         push({ ...base, kind: 'review', summary: e.review.summary, checks: e.review.checks });
+        break;
+      case 'title-changed':
+        push({ ...base, kind: 'notice', tone: 'info', text: `Named the task “${e.title}”` });
         break;
       case 'exit':
         if (e.code !== 0 || e.signal) push({ ...base, kind: 'notice', tone: 'bad', text: `The CLI process exited${e.code !== null ? ` with code ${e.code}` : ''}${e.signal ? ` (${e.signal})` : ''}` });

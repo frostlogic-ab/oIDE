@@ -240,12 +240,21 @@ export class AgentsRepo {
     return this.get(id)!;
   }
 
+  /** Replace the stored spec (it changed while the agent ran, e.g. it named its task); mirrors the title column. */
+  saveSpec(id: string, spec: AgentSpecInput): AgentRecord {
+    const { attachments: _, ...s } = AgentSpec.parse(spec);
+    const r = this.d.db.prepare('UPDATE agents SET spec = ?, title = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(s), s.title, Date.now(), id);
+    if (!r.changes) throw new Error(`Unknown agent ${id}`);
+    return this.get(id)!;
+  }
+
   /** Persist the reduced tile state; also mirrors status, session, branch and worktree into columns. */
   saveSummary(summary: z.input<typeof AgentSummary>): AgentRecord {
     const s = AgentSummary.parse(summary);
     // The archive columns follow the summary: set while archived, cleared (NULL) once it is back on the Wall.
     const patch: AgentPatch = { summary: s, status: s.status, updatedAt: s.updatedAt, archivedAt: s.archived?.at, archiveReason: s.archived?.reason, mergeCommit: s.archived?.mergeCommit };
     // Only overwrite columns the summary knows about.
+    if (s.title) patch.title = s.title;
     if (s.sessionId !== undefined) patch.sessionId = s.sessionId;
     if (s.branch !== undefined) patch.branch = s.branch;
     if (s.worktreePath !== undefined) patch.worktreePath = s.worktreePath;

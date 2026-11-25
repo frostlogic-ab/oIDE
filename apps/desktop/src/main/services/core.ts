@@ -3,13 +3,14 @@ import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { AgentDriver } from '@oide/agent-core';
 import { WorktreeManager, isInside, resolveTool, setRepoTrustResolver, type GhCli } from '@oide/git';
 import { OideMcpServer, type ArtifactsBackend as McpArtifactsBackend } from '@oide/mcp-server';
-import { countBucket, type ArtifactMeta } from '@oide/protocol';
+import { countBucket, resolveModel, type AgentArtifactFileInput, type ArtifactMeta, type ModelStrategy } from '@oide/protocol';
 import { ArtifactStore, SqliteSecretStore, openStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { CleanupQueue, CleanupScheduler, folderName } from '../reliability/cleanup-queue.js';
 import { findFolderHolders, type FindHoldersOptions, type HolderResult } from '../reliability/folder-holders.js';
 import { redactSecretReads } from '../reliability/redact.js';
 import { AgentsService } from './agents.js';
+import { agentFileBytes, ArtifactRetrievalService } from './artifact-retrieval.js';
 import { CliService } from './cli.js';
 import { ExtensionsService } from './extensions.js';
 import { GitService, parcelWatch, type WatchFn } from './git.js';
@@ -31,6 +32,8 @@ export interface Services {
   agents: AgentsService;
   git: GitService;
   extensions: ExtensionsService;
+  /** Agent retrieval of linked claude.ai artifacts (ADR 0014). */
+  retrieval: ArtifactRetrievalService;
   /** Worktree folders waiting to be removed, retried in the background (reliability/cleanup-queue.ts). */
   cleanup: CleanupScheduler;
   /** Which programs hold a folder open; unset in plain-Node runs. */
@@ -75,11 +78,51 @@ export interface CoreOptions {
  * channel, so agents neither list nor read them until the project is trusted; and an agent only
  * reaches its own project's artifacts (plus project-less ones).
  */
-export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) => boolean): McpArtifactsBackend {
+export interface McpArtifactsExtras {
+  /** The calling agent's own working folder: `fromFile` is resolved inside it and nowhere else. */
+  worktreeOf?: (agentId: string) => string | undefined;
+  /** The retrieval service (created after the MCP server, hence a getter). */
+  retrieval?: () => ArtifactRetrievalService | undefined;
+}
+
+export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) => boolean, extras: McpArtifactsExtras = {}): McpArtifactsBackend {
   const hidden = (id: string) => `Artifact ${id} is not available to this agent (another project, or a repo artifact of an untrusted project).`;
   const visible = (ctx: { projectId?: string }, m: ArtifactMeta) =>
     (!m.projectId || !ctx.projectId || m.projectId === ctx.projectId) && !(m.location === 'repo' && m.projectId && !trusted(m.projectId));
+  const requireVisible = (ctx: { projectId?: string }, id: string): ArtifactMeta => {
+    const m = store.metaOf(id);
+    if (!visible(ctx, m)) throw new Error(hidden(id));
+    return m;
+  };
+  /** Agent file inputs as bytes (base64 for the store); `fromFile` only inside the caller's own folder. */
+  const decode = async (agentId: string, files: AgentArtifactFileInput[] = []) => {
+    const out: Array<{ path: string; encoding: 'base64'; data: string }> = [];
+    for (const f of files) out.push({ path: f.path, encoding: 'base64', data: (await agentFileBytes(f, extras.worktreeOf?.(agentId))).toString('base64') });
+    return out;
+  };
+  const retrieval = () => {
+    const r = extras.retrieval?.();
+    if (!r) throw new Error('Artifact retrieval is not available.');
+    return r;
+  };
   return {
+    files: async (ctx, id) => {
+      requireVisible(ctx, id);
+      return store.files(id);
+    },
+    readFile: async (ctx, id, path) => {
+      requireVisible(ctx, id);
+      return store.readFile(id, path);
+    },
+    writeFiles: async (ctx, id, change) => {
+      const m = requireVisible(ctx, id);
+      const files = await decode(ctx.agentId, change.files);
+      if (change.content !== undefined) files.push({ path: change.entry ?? m.entry, encoding: 'base64', data: Buffer.from(change.content, 'utf8').toString('base64') });
+      return store.writeFilesForAgent(id, { files, ...(change.deletes ? { deletes: change.deletes } : {}), ...(change.entry ? { entry: change.entry } : {}), ...(change.note ? { note: change.note } : {}) }, ctx.agentId);
+    },
+    isRetrievalAgent: (agentId) => extras.retrieval?.()?.isRetrievalAgent(agentId) ?? false,
+    retrievalAddFiles: (ctx, id, files) => retrieval().addFiles(ctx.agentId, id, files),
+    retrievalFinish: (ctx, id, result) => retrieval().finish(ctx.agentId, id, result),
     list: async (ctx, f) => {
       const all = await store.list({ ...(f.kind ? { kind: f.kind } : {}) }, ctx.agentId);
       const q = f.query?.toLowerCase();
@@ -95,7 +138,18 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
       if (!visible(ctx, (await store.read(id)).meta)) throw new Error(hidden(id));
       return store.write(id, content, ctx.agentId);
     },
-    create: (ctx, input) => store.createForAgent({ title: input.title, kind: input.kind, content: input.content, ...(ctx.projectId ? { projectId: ctx.projectId } : {}) }, ctx.agentId),
+    create: async (ctx, input) =>
+      store.createForAgent(
+        {
+          title: input.title,
+          kind: input.kind,
+          ...(input.content !== undefined ? { content: input.content } : {}),
+          ...(input.files?.length ? { files: await decode(ctx.agentId, input.files) } : {}),
+          ...(input.entry ? { entry: input.entry } : {}),
+          ...(ctx.projectId ? { projectId: ctx.projectId } : {}),
+        },
+        ctx.agentId,
+      ),
   };
 }
 
@@ -127,9 +181,14 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   });
   ctx.roots.add(artifacts.root('app-data'), 'artifact');
 
+  // Set below: the MCP server is created before the agents and the retrieval service it calls into.
+  const late: { agents?: AgentsService; retrieval?: ArtifactRetrievalService } = {};
   const mcp = new OideMcpServer({
     appDataDir: ctx.userDataDir,
-    artifacts: mcpArtifacts(artifacts, (id) => store.projects.get(id)?.trusted === true),
+    artifacts: mcpArtifacts(artifacts, (id) => store.projects.get(id)?.trusted === true, {
+      worktreeOf: (agentId) => late.agents?.supervisor.get(agentId)?.worktreePath,
+      retrieval: () => late.retrieval,
+    }),
     onArtifactUse: (u) => ctx.emit('artifacts.changed', u.artifactId && u.artifactId !== '*' ? { id: u.artifactId, change: 'used' } : {}),
     log: (m, d) => ctx.log.debug('[mcp]', m, d ?? ''),
     // SEC-11: secret-bearing custom stdio servers start through the launcher (needs an absolute node).
@@ -212,6 +271,45 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     },
   });
   agents.extensions = extensions;
+  late.agents = agents;
+  const retrieval = new ArtifactRetrievalService({
+    artifacts,
+    stagingRoot: join(ctx.userDataDir, 'artifact-staging'),
+    agents: {
+      spawn: (spec) => agents.spawn(spec),
+      get: (id) => agents.supervisor.get(id),
+      stop: (id) => agents.supervisor.stop(id),
+      cleanup: async (id) => {
+        if (agents.supervisor.get(id)) await agents.archiveAgent(id, { reason: 'completed', deleteWorktree: true });
+        else await agents.removeWorktreeOf(id);
+      },
+      onSummary: (fn) => agents.supervisor.on('summary', fn),
+      onGone: (fn) => {
+        const offArchived = agents.supervisor.on('archived', (s) => fn(s.id));
+        const offRemoved = agents.supervisor.on('removed', fn);
+        return () => {
+          offArchived();
+          offRemoved();
+        };
+      },
+      // What Spawn starts with for this project: its default mode (no bypass unless allowed) and preset.
+      defaults: async (projectId) => {
+        const p = projects.require(projectId);
+        const eff = await settings.forProject(p.path, { trusted: p.trusted });
+        const mode = eff.settings.claude.defaultMode === 'bypassPermissions' && !eff.settings.claude.allowBypass ? 'auto' : eff.settings.claude.defaultMode;
+        // Bare family aliases follow Settings › Models › Model versions, as Spawn's applyVersions does.
+        const versions = eff.settings.models.versions;
+        const strategy = settings.strategyFor(eff.settings.models.defaultPresetId);
+        const pinned = Object.fromEntries(
+          Object.entries(strategy).map(([k, v]) => [k, typeof v === 'object' && v && 'model' in v ? { ...v, model: resolveModel(v.model, versions) } : v]),
+        ) as ModelStrategy;
+        return { mode, strategy: pinned };
+      },
+    },
+    track: (name, props) => void ctx.telemetry?.service.track(name, props),
+    log: ctx.log,
+  });
+  late.retrieval = retrieval;
   const hostLog = ctx.reliability?.logs.channel('extension-host');
   extensions.host?.onState((s) => {
     const line = { extension: s.name, state: s.state, ...(s.error ? { error: s.error } : {}) };
@@ -279,6 +377,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   await artifacts.rescan(list.map((p) => ({ id: p.id, path: p.path }))).catch((err) => ctx.log.warn('artifact rescan failed', err));
   await extensions.start().catch((err) => ctx.log.error('extensions failed to start', err));
   await agents.restore();
+  // After restore: retrievals whose agent is gone or ended fail; the rest keep going.
+  await retrieval.recover().catch((err) => ctx.log.warn('artifact retrieval recovery failed', err));
   await git.sweepMerged().catch(() => undefined);
   void cli.ensure().catch((err) => ctx.log.warn('CLI detection failed', err));
 
@@ -296,6 +396,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     agents,
     git,
     extensions,
+    retrieval,
     cleanup: cleanupScheduler,
     ...(findHolders ? { findHolders } : {}),
     mcpPort: () => mcpPort,
@@ -309,6 +410,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
       if (disposed) return;
       disposed = true;
       cleanupScheduler.stop();
+      // Before agents stop: a running retrieval must not fail on the stop at quit (it resumes next start).
+      retrieval.dispose();
       await agents.shutdown().catch((err) => ctx.log.warn('agent shutdown failed', err));
       // After agents: closes watchers and waits for in-flight git work, so nothing holds files
       // in a worktree when the process exits or the caller deletes it.
@@ -358,8 +461,10 @@ const MIME: Record<string, string> = {
 export const ARTIFACT_CSP = "default-src 'none'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline' 'self'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'";
 
 /**
- * Resolve `oide-artifact://<id>/<path>` to a file inside that artifact's folder, or null. Refuses
- * `..`, symlinks out of the folder, the `.versions` folder and `artifact.json`.
+ * Resolve `oide-artifact://<id>/<path>` to a file of the artifact's current version (any file: a
+ * multi-file design's pages, styles and images, ADR 0014), or null. Refuses `..`, symlinks out of the
+ * folder, the `.versions` folder, `artifact.json`, oIDE's other reserved names (`.staging`,
+ * `__oide`), and every file of an artifact still at version 0 (nothing retrieved yet).
  */
 export function resolveArtifactUrl(artifacts: ArtifactStore, url: string): { file: string; mime: string } | null {
   let u: URL;
@@ -372,7 +477,9 @@ export function resolveArtifactUrl(artifacts: ArtifactStore, url: string): { fil
   const id = decodeURIComponent(u.hostname || u.host);
   let dir: string;
   try {
-    dir = realpathSync(artifacts.dirOf(id));
+    // `.native`: the OS's own answer, which expands Windows 8.3 short names (the JS one keeps them).
+    dir = realpathSync.native(artifacts.dirOf(id));
+    if (typeof artifacts.metaOf === 'function' && artifacts.metaOf(id).version === 0) return null;
   } catch {
     return null;
   }
@@ -387,7 +494,13 @@ export function resolveArtifactUrl(artifacts: ArtifactStore, url: string): { fil
   const fold = (s: string) => s.toLowerCase().replace(/[. ]+$/, '');
   const denied = (p: string) => {
     const segs = p.split(/[\\/]/).filter(Boolean).map(fold);
-    return segs.some((seg) => seg === '..' || seg === '.versions') || (segs.length === 1 && segs[0] === 'artifact.json');
+    return (
+      // `~<digit>` is a Windows 8.3 short name (`VERSIO~1` is `.versions`): never needed by a page.
+      segs.some((seg) => seg === '..' || seg === '.versions' || /~\d/.test(seg)) ||
+      (segs.length === 1 && segs[0] === 'artifact.json') ||
+      segs[0] === '.staging' ||
+      segs[0] === '__oide'
+    );
   };
   // SEC-32: `%5C` decodes to a backslash, so `/%5C%5Chost%5Cshare` would be a UNC path. Refuse
   // backslashes and anything not lexically inside the folder before the file system is touched
@@ -398,7 +511,7 @@ export function resolveArtifactUrl(artifacts: ArtifactStore, url: string): { fil
   if (!lexical || lexical.startsWith('..') || isAbsolute(lexical)) return null;
   let real: string;
   try {
-    real = realpathSync(candidate);
+    real = realpathSync.native(candidate);
   } catch {
     return null;
   }
