@@ -116,7 +116,7 @@ export default function SettingsScreen() {
         </span>
       </ResizableAside>
 
-      <main className="flex-1 min-w-0 overflow-y-auto px-8 py-[22px] box-border">
+      <main className="flex-1 min-w-[360px] overflow-y-auto px-8 py-[22px] box-border">
         <div className="max-w-[760px] flex flex-col">
           {loadErrors.length > 0 && <LoadErrorsBanner errors={loadErrors} projects={projects.map((p) => ({ id: p.id, name: p.name }))} />}
           {!settings ? (

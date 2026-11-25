@@ -35,6 +35,13 @@ export const PANELS = {
   settingsSections: panel('settings.sections', 'left', 'settings sections', 230, 190, 420),
 } as const satisfies Record<string, PanelSpec>;
 
+/**
+ * Room a screen's main area keeps however wide its sidebars are dragged. The mains of screens with
+ * resizable sidebars carry the same `min-w-[360px]`, so a narrow window shrinks the sidebars (to
+ * their `min`) before the main area.
+ */
+export const MAIN_MIN_WIDTH = 360;
+
 /** Keyboard steps on a focused resize handle (Shift takes the big step). */
 export const PANEL_KEY_STEP = 16;
 export const PANEL_KEY_STEP_BIG = 64;

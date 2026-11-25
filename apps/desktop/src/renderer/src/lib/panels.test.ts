@@ -12,9 +12,9 @@ describe('panel registry', () => {
     for (const p of specs) {
       expect(p.min).toBeLessThanOrEqual(p.defaultWidth);
       expect(p.defaultWidth).toBeLessThanOrEqual(p.max);
-      expect(PanelWidths.safeParse({ [p.id]: p.defaultWidth }).success).toBe(true);
-      expect(PanelWidths.safeParse({ [p.id]: p.min }).success).toBe(true);
-      expect(PanelWidths.safeParse({ [p.id]: p.max }).success).toBe(true);
+      expect(PanelWidths.parse({ [p.id]: p.defaultWidth })).toEqual({ [p.id]: p.defaultWidth });
+      expect(PanelWidths.parse({ [p.id]: p.min })).toEqual({ [p.id]: p.min });
+      expect(PanelWidths.parse({ [p.id]: p.max })).toEqual({ [p.id]: p.max });
     }
   });
 
@@ -71,15 +71,14 @@ describe('settings.ui.panelWidths', () => {
   it('defaults to no stored widths, so settings saved before it still parse', () => {
     expect(Settings.parse({ ...base, ui: {} }).ui.panelWidths).toEqual({});
   });
-  it('refuses bad ids, out-of-range and fractional widths, and too many entries', () => {
-    expect(PanelWidths.safeParse({ 'wall.projects': 300 }).success).toBe(true);
-    expect(PanelWidths.safeParse({ __proto__x: 300 }).success).toBe(false);
-    expect(PanelWidths.safeParse({ 'Wall Projects': 300 }).success).toBe(false);
-    expect(PanelWidths.safeParse({ 'wall.projects': 50 }).success).toBe(false);
-    expect(PanelWidths.safeParse({ 'wall.projects': 5000 }).success).toBe(false);
-    expect(PanelWidths.safeParse({ 'wall.projects': 300.5 }).success).toBe(false);
-    expect(PanelWidths.safeParse({ 'wall.projects': '300' }).success).toBe(false);
+  it('drops bad ids, out-of-range and fractional widths, and entries past the limit', () => {
+    const parse = (v: unknown) => PanelWidths.parse(v);
+    expect(parse({ 'wall.projects': 300 })).toEqual({ 'wall.projects': 300 });
+    expect(parse({ __proto__x: 300, 'Wall Projects': 300, 'files.tree': 280 })).toEqual({ 'files.tree': 280 });
+    expect(parse({ 'wall.projects': 50, 'a.b': 5000, 'c.d': 300.5, 'e.f': '300' })).toEqual({});
+    expect(parse('wide')).toEqual({});
+    expect(parse(null)).toEqual({});
     const many = Object.fromEntries(Array.from({ length: 65 }, (_, i) => [`p${i}`, 300]));
-    expect(PanelWidths.safeParse(many).success).toBe(false);
+    expect(Object.keys(parse(many))).toHaveLength(64);
   });
 });

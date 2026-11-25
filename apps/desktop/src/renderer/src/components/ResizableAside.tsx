@@ -1,32 +1,63 @@
 import { useEffect, useId, useRef, useState, type ComponentPropsWithoutRef, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { cn } from '@oide/ui';
-import { clampPanelWidth, dragPanelWidth, keyPanelWidth, type PanelSpec } from '../lib/panels';
+import { MAIN_MIN_WIDTH, clampPanelWidth, dragPanelWidth, keyPanelWidth, type PanelSpec } from '../lib/panels';
 import { useSettings } from '../stores/settings';
 
-/** A sidebar never takes more than this share of the window, whatever its own max. */
-const VIEWPORT_SHARE = 0.5;
 /** Keyboard resizing saves once the keys stop for this long. */
 const KEY_SAVE_DELAY = 400;
 /** Class on <html> while a handle is dragged: col-resize cursor everywhere, no text selection. */
 export const RESIZING_CLASS = 'oide-resizing';
 
-function viewportLimit(spec: PanelSpec, width: number): number {
-  if (typeof window === 'undefined' || !window.innerWidth) return width;
-  return clampPanelWidth(spec, Math.min(width, Math.max(spec.min, Math.floor(window.innerWidth * VIEWPORT_SHARE))));
-}
-
-/** Save one panel's width (null = back to the default). Failures keep the width for this session. */
-async function savePanelWidth(id: string, width: number | null): Promise<boolean> {
+/** Save one panel's width (null = back to the default). A failure keeps the width for this session. */
+async function savePanelWidth(id: string, width: number | null): Promise<void> {
   try {
     await useSettings.getState().update({ ui: { panelWidths: { [id]: width } } });
-    return true;
   } catch {
-    return false;
+    // Settings unavailable (no settings service yet) or refused: the live width stays on screen.
   }
+}
+
+/**
+ * What a resize starts from: the width the sidebar really renders at (a narrow window may have
+ * shrunk it below the saved width) and the widest it may go so the screen's main area keeps
+ * `MAIN_MIN_WIDTH` next to the other sidebars. Without layout (tests) it falls back to the panel's
+ * own width and max.
+ */
+function measure(spec: PanelSpec, asideId: string, width: number): { start: number; max: number } {
+  const el = typeof document === 'undefined' ? null : document.getElementById(asideId);
+  const rendered = el ? Math.round(el.getBoundingClientRect().width) : 0;
+  const start = rendered > 0 ? clampPanelWidth(spec, rendered) : width;
+  let max = spec.max;
+  const parent = el?.parentElement;
+  if (el && parent && parent.clientWidth > 0) {
+    let others = 0;
+    for (const c of Array.from(parent.children)) {
+      if (c !== el && c.tagName !== 'MAIN') others += c.getBoundingClientRect().width;
+    }
+    max = Math.min(spec.max, Math.max(spec.min, Math.floor(parent.clientWidth - others - MAIN_MIN_WIDTH)));
+  }
+  return { start: Math.min(start, Math.max(max, spec.min)), max };
+}
+
+/** A width set by dragging or keys, tied to the saved width it overrode: a new saved width wins. */
+interface LiveWidth {
+  width: number;
+  over: number | undefined;
+}
+
+interface Drag {
+  pointerId: number;
+  startX: number;
+  startWidth: number;
+  max: number;
+  last: number;
+  /** The live width before the drag, put back by Escape. */
+  before: LiveWidth | null;
 }
 
 export interface PanelWidth {
   spec: PanelSpec;
+  asideId: string;
   /** The width to render, already clamped. */
   width: number;
   dragging: boolean;
@@ -34,6 +65,7 @@ export interface PanelWidth {
   onPointerMove(e: PointerEvent<HTMLElement>): void;
   onPointerUp(e: PointerEvent<HTMLElement>): void;
   onPointerCancel(e: PointerEvent<HTMLElement>): void;
+  onLostPointerCapture(e: PointerEvent<HTMLElement>): void;
   onKeyDown(e: KeyboardEvent<HTMLElement>): void;
   /** Back to the panel's default width (double-click on the handle). */
   reset(): void;
@@ -41,48 +73,57 @@ export interface PanelWidth {
 
 /**
  * The width of a resizable sidebar: the user's saved width (`settings.ui.panelWidths[id]`), or the
- * live width while the handle is dragged or keyed. Saved when the drag ends.
+ * live width while it is dragged or keyed and until that is saved. Saved when the drag ends; any
+ * new saved width (this save, or Settings › Reset sidebar widths) replaces the live one.
  */
-export function usePanelWidth(spec: PanelSpec): PanelWidth {
+export function usePanelWidth(spec: PanelSpec, asideId: string): PanelWidth {
   const stored = useSettings((st) => {
     const v = st.settings?.ui.panelWidths?.[spec.id];
     return typeof v === 'number' ? v : undefined;
   });
-  const [live, setLive] = useState<number | null>(null);
+  const [live, setLive] = useState<LiveWidth | null>(null);
   const [dragging, setDragging] = useState(false);
-  const width = clampPanelWidth(spec, live ?? stored);
-  const drag = useRef<{ pointerId: number; startX: number; startWidth: number; last: number } | null>(null);
-  const saveGen = useRef(0);
+  const current = live && live.over === stored ? live : null;
+  const width = clampPanelWidth(spec, current ? current.width : stored);
+  const drag = useRef<Drag | null>(null);
   const keyTimer = useRef<{ timer: ReturnType<typeof setTimeout>; width: number } | null>(null);
+  const id = spec.id;
 
-  const save = (w: number | null) => {
-    const gen = ++saveGen.current;
-    void savePanelWidth(spec.id, w).then((ok) => {
-      // Once saved, the setting is the source of truth again (unless a newer change is under way).
-      if (ok && gen === saveGen.current && !drag.current && !keyTimer.current) setLive(null);
-    });
-  };
-
-  // A drag shows the resize cursor everywhere and stops text selection; Escape puts the width back.
+  // While dragging: the resize cursor shows everywhere and text is not selected. Escape puts the
+  // width back; losing the window (Alt+Tab, a dialog) or the screen ends the drag and keeps it.
   useEffect(() => {
     if (!dragging) return;
     const root = document.documentElement;
     root.classList.add(RESIZING_CLASS);
-    const onKey = (e: globalThis.KeyboardEvent) => {
+    const finish = (keep: boolean) => {
       const d = drag.current;
-      if (e.key !== 'Escape' || !d) return;
+      if (!d) return;
+      drag.current = null;
+      if (keep && d.last !== d.startWidth) void savePanelWidth(id, d.last);
+      return d;
+    };
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== 'Escape' || !drag.current) return;
       e.preventDefault();
       e.stopPropagation();
-      drag.current = null;
+      const d = finish(false);
       setDragging(false);
-      setLive(d.startWidth);
+      if (d) setLive(d.before);
+    };
+    const onBlur = () => {
+      finish(true);
+      setDragging(false);
     };
     window.addEventListener('keydown', onKey, true);
+    window.addEventListener('blur', onBlur);
     return () => {
       root.classList.remove(RESIZING_CLASS);
       window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('blur', onBlur);
+      // Unmounted mid-drag (the screen changed): keep what the user dragged to.
+      finish(true);
     };
-  }, [dragging]);
+  }, [dragging, id]);
 
   // Leaving the screen mid-keyboard-resize still saves the width.
   useEffect(
@@ -91,75 +132,84 @@ export function usePanelWidth(spec: PanelSpec): PanelWidth {
       if (!k) return;
       clearTimeout(k.timer);
       keyTimer.current = null;
-      void savePanelWidth(spec.id, k.width);
+      void savePanelWidth(id, k.width);
     },
-    [spec.id],
+    [id],
   );
 
-  const endDrag = (e: PointerEvent<HTMLElement>, commit: boolean) => {
+  const endDrag = (e: PointerEvent<HTMLElement>, keep: boolean) => {
     const d = drag.current;
     if (!d || e.pointerId !== d.pointerId) return;
     drag.current = null;
     setDragging(false);
     if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-    if (!commit) setLive(d.startWidth);
-    else if (d.last !== d.startWidth) save(d.last);
+    if (!keep) setLive(d.before);
+    else if (d.last !== d.startWidth) void savePanelWidth(id, d.last);
+  };
+
+  const cancelKeySave = () => {
+    if (keyTimer.current) clearTimeout(keyTimer.current.timer);
+    keyTimer.current = null;
   };
 
   return {
     spec,
+    asideId,
     width,
     dragging,
     onPointerDown: (e) => {
-      if (e.button !== 0 || drag.current) return;
+      if (e.button !== 0) return;
       e.preventDefault();
       e.currentTarget.focus({ preventScroll: true });
       e.currentTarget.setPointerCapture?.(e.pointerId);
-      drag.current = { pointerId: e.pointerId, startX: e.clientX, startWidth: width, last: width };
+      const { start, max } = measure(spec, asideId, width);
+      drag.current = { pointerId: e.pointerId, startX: e.clientX, startWidth: start, max, last: start, before: current };
       setDragging(true);
     },
     onPointerMove: (e) => {
       const d = drag.current;
       if (!d || e.pointerId !== d.pointerId) return;
-      const next = viewportLimit(spec, dragPanelWidth(spec, d.startWidth, e.clientX - d.startX));
+      const next = Math.min(d.max, dragPanelWidth(spec, d.startWidth, e.clientX - d.startX));
       if (next === d.last) return;
       d.last = next;
-      setLive(next);
+      setLive({ width: next, over: stored });
     },
     onPointerUp: (e) => endDrag(e, true),
     onPointerCancel: (e) => endDrag(e, false),
+    // Capture can go without a pointerup (the handle hidden mid-drag, the window losing focus).
+    onLostPointerCapture: (e) => endDrag(e, true),
     onKeyDown: (e) => {
       if (drag.current || e.altKey || e.ctrlKey || e.metaKey) return;
-      const next = keyPanelWidth(spec, width, e.key, e.shiftKey);
+      const { start, max } = measure(spec, asideId, width);
+      const next = keyPanelWidth(spec, start, e.key, e.shiftKey);
       if (next === null) return;
       e.preventDefault();
       e.stopPropagation();
-      const w = viewportLimit(spec, next);
-      setLive(w);
-      if (keyTimer.current) clearTimeout(keyTimer.current.timer);
+      const w = Math.min(max, next);
+      setLive({ width: w, over: stored });
+      cancelKeySave();
       keyTimer.current = {
         width: w,
         timer: setTimeout(() => {
           keyTimer.current = null;
-          save(w);
+          void savePanelWidth(id, w);
         }, KEY_SAVE_DELAY),
       };
     },
     reset: () => {
-      if (keyTimer.current) clearTimeout(keyTimer.current.timer);
-      keyTimer.current = null;
-      setLive(spec.defaultWidth);
-      save(null);
+      cancelKeySave();
+      setLive({ width: spec.defaultWidth, over: stored });
+      void savePanelWidth(id, null);
     },
   };
 }
 
 /**
- * The grab edge of a resizable sidebar: a focusable vertical separator sitting on the sidebar's
- * border (zero layout width, a 7px hit area). Drag to resize, arrows / Home / End from the keyboard,
- * double-click to restore the default width.
+ * The grab edge of a resizable sidebar: a focusable vertical separator on the sidebar's inner
+ * border (zero layout width). Its 6px hit area leans to the side that has no scrollbar. Drag to
+ * resize, arrows / Home / End from the keyboard, double-click to restore the default width.
  */
-export function ResizeHandle({ panel, controls, className }: { panel: PanelWidth; controls?: string; className?: string }) {
+export function ResizeHandle({ panel, className }: { panel: PanelWidth; className?: string }) {
   const { spec, width, dragging } = panel;
   const grows = spec.side === 'left' ? 'right' : 'left';
   return (
@@ -168,22 +218,24 @@ export function ResizeHandle({ panel, controls, className }: { panel: PanelWidth
       tabIndex={0}
       aria-orientation="vertical"
       aria-label={`Resize the ${spec.label}`}
-      aria-controls={controls}
+      aria-controls={panel.asideId}
       aria-valuenow={width}
       aria-valuemin={spec.min}
       aria-valuemax={spec.max}
       aria-valuetext={`${width} pixels wide`}
       title={`Drag to resize the ${spec.label} (arrow ${grows} widens it). Double-click to reset.`}
-      data-panel={spec.id}
+      data-panel-handle={spec.id}
       onPointerDown={panel.onPointerDown}
       onPointerMove={panel.onPointerMove}
       onPointerUp={panel.onPointerUp}
       onPointerCancel={panel.onPointerCancel}
+      onLostPointerCapture={panel.onLostPointerCapture}
       onKeyDown={panel.onKeyDown}
       onDoubleClick={panel.reset}
       className={cn('group relative z-20 w-0 shrink-0 self-stretch outline-none touch-none', className)}
     >
-      <span aria-hidden className="absolute inset-y-0 -left-[3px] w-[7px] cursor-col-resize" />
+      {/* Left sidebars: their own scrollbar is on the left of the edge. Right sidebars: main's is. */}
+      <span aria-hidden className="absolute inset-y-0 -left-px w-[6px] cursor-col-resize" />
       <span
         aria-hidden
         className={cn(
@@ -204,24 +256,19 @@ type AsideProps = Omit<ComponentPropsWithoutRef<'aside'>, 'style'> & {
 
 /**
  * An `<aside>` sidebar the user can resize by dragging its inner edge. The width is saved to
- * `settings.ui.panelWidths` and comes back after a restart. It may shrink to `min` when the window
- * is too narrow for everything, and never takes more than half the window.
+ * `settings.ui.panelWidths` and comes back after a restart. When the window is too narrow for
+ * everything it shrinks (down to `min`) once the main area is at its own minimum.
  */
 export function ResizableAside({ panel: spec, style, handleClassName, id, children, ...rest }: AsideProps) {
-  const panel = usePanelWidth(spec);
   const autoId = useId();
   const asideId = id ?? `panel-${autoId}`;
+  const panel = usePanelWidth(spec, asideId);
   const aside = (
-    <aside
-      {...rest}
-      id={asideId}
-      data-panel={spec.id}
-      style={{ ...style, flex: `0 1 ${panel.width}px`, width: panel.width, minWidth: spec.min, maxWidth: `${VIEWPORT_SHARE * 100}vw` }}
-    >
+    <aside {...rest} id={asideId} data-panel={spec.id} style={{ ...style, flex: `0 1 ${panel.width}px`, width: panel.width, minWidth: spec.min }}>
       {children}
     </aside>
   );
-  const handle = <ResizeHandle panel={panel} controls={asideId} className={handleClassName} />;
+  const handle = <ResizeHandle panel={panel} className={handleClassName} />;
   return spec.side === 'left' ? (
     <>
       {aside}

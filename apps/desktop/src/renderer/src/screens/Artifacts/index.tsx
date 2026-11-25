@@ -163,7 +163,7 @@ export default function ArtifactsScreen() {
             <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search artifacts" className="w-[180px] bg-transparent border-0 outline-none text-ink text-[12.5px] placeholder:text-ink-3" />
           </label>
       </HeaderSlot>
-      <main className="flex-[999_1_560px] min-w-0 overflow-auto flex flex-col gap-4 px-5 py-[18px] box-border">
+      <main className="flex-[999_1_560px] min-w-[360px] overflow-auto flex flex-col gap-4 px-5 py-[18px] box-border">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="m-0 text-[18px] font-semibold">Artifacts</h1>
           <KindTabs value={kind} onChange={setKind} />

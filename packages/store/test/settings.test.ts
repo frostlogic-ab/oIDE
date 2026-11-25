@@ -6,6 +6,7 @@ import { resolveModel } from '@oide/protocol';
 import {
   BUILTIN_PRESETS,
   BUILTIN_TECHNIQUES,
+  KvRepo,
   SettingsService,
   deepMerge,
   defaultSettings,
@@ -115,10 +116,21 @@ describe('SettingsService', () => {
     expect(reopened.panelWidths).toEqual({ 'wall.projects': 320, 'focus.inspector': 420 });
     expect(reopened.accent).toBe('#7AA2F7');
     expect(svc.update({ ui: { panelWidths: { 'wall.projects': null } } }).ui.panelWidths).toEqual({ 'focus.inspector': 420 });
-    expect(() => svc.update({ ui: { panelWidths: { 'wall.projects': 10 } } })).toThrow();
-    expect(() => svc.update({ ui: { panelWidths: { 'wall.projects': 'wide' } } })).toThrow();
+    // Bad widths never get stored (they are dropped, not saved).
+    expect(svc.update({ ui: { panelWidths: { 'wall.projects': 10, 'files.tree': 'wide', 'Bad Id': 300 } } }).ui.panelWidths).toEqual({ 'focus.inspector': 420 });
     expect(svc.update({ ui: { panelWidths: null } }).ui.panelWidths).toEqual({});
     expect(new SettingsService({ db }).get().ui.panelWidths).toEqual({});
+  });
+
+  it('a stale stored sidebar width is dropped on load without resetting the rest of ui', () => {
+    const db = openDatabase(':memory:');
+    new KvRepo(db, 'settings').set('global', { ui: { accent: '#7FC8A9', crashReports: true, panelWidths: { 'wall.projects': 5, 'focus.inspector': 400, ['__proto__']: 300 } } });
+    const svc = new SettingsService({ db });
+    const ui = svc.get().ui;
+    expect(svc.loadErrors).toEqual([]);
+    expect(ui.accent).toBe('#7FC8A9');
+    expect(ui.crashReports).toBe(true);
+    expect(ui.panelWidths).toEqual({ 'focus.inspector': 400 });
   });
 
   it('keeps built-ins when presets/techniques arrays are replaced, and supports reset', async () => {
