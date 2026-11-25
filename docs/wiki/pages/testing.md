@@ -85,7 +85,10 @@ exercised end to end.
 - Accepts the real flags (`--session-id`, `--resume`, `--model`, `--permission-mode` with the real choices,
   `--mcp-config`, `--permission-prompt-tool`, `--allowedTools`, `--agents`, `--include-partial-messages`,
   `--forward-subagent-text`, …), `--version` and `--help` (prints `fixtures/help-2.1.325.txt`).
-- Reads stream-json user messages; answers `interrupt` and `set_permission_mode` control requests.
+- Reads stream-json user messages; answers `interrupt` and `set_permission_mode` control requests. Like the
+  real CLI, a live switch to `bypassPermissions` fails (`bypass_not_launched`) unless it was launched in bypass
+  or with `--allow-dangerously-skip-permissions`. Scenario `exit-plan` leaves plan mode on its own (as after an
+  approved plan) and reports it with `system/status {permissionMode}`.
 - **Permission prompts are real:** tools that need permission are sent to the MCP tool named by
   `--permission-prompt-tool`, over the HTTP server in `--mcp-config` (with its headers), so tests run the full
   CLI → MCP server → supervisor → answer loop. `mcp__oide__*` tool calls also go to that server.

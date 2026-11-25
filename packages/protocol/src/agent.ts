@@ -317,6 +317,8 @@ export const AgentSummary = z.object({
   branch: z.string().optional(),
   worktreePath: z.string().optional(),
   baseRef: z.string().optional(),
+  /** Where it works (from its spec), so the UI offers Bypass only where main accepts it. */
+  workIn: WorkIn.optional(),
   attemptGroup: Id.optional(),
   /** Last few activity lines ("Read src/x.ts", "Thinking…"). */
   activity: z.array(z.string()).default([]),

@@ -30,7 +30,7 @@ import type { RowContext, ViewRow } from './components/rows';
 import { LeadHeader, SubagentHeader } from './components/SessionHeader';
 import { Streaming } from './components/Streaming';
 import { Transcript } from './components/Transcript';
-import { DEFAULT_SLASH_COMMANDS, nextMode, sortAgentList } from './model/focus';
+import { DEFAULT_SLASH_COMMANDS, modeChoices, nextMode, sortAgentList, type ModeChoice } from './model/focus';
 import { loadOlder, useFocusHistory, useTranscriptHistory } from './model/history';
 import { buildRows, eventsFor, groupByParent, reportedSlashCommands } from './model/transcript';
 
@@ -97,11 +97,22 @@ export default function FocusScreen() {
   const go = useCallback((a: AgentSummary | undefined) => a && replace('focus', { agentId: a.id }), [replace]);
   const selectSub = useCallback((id: string | undefined) => agentId && replace('focus', id ? { agentId, subagentId: id } : { agentId }), [agentId, replace]);
 
+  // Bypass only where main accepts it: never in the project folder (older summaries lack workIn).
+  const inWorktree = agent ? (agent.workIn ? agent.workIn !== 'project-folder' : !!agent.worktreePath) : false;
+  const autoOk = hasAuto !== false;
+  const modes = useMemo(() => modeChoices({ allowBypass, inWorktree, hasAuto: autoOk }), [allowBypass, inWorktree, autoOk]);
+  const agentKey = agent?.id;
+  const currentMode = agent?.mode;
+  const setMode = useCallback(
+    (mode: PermissionMode) => {
+      if (!agentKey) return;
+      oide.invoke('agents.setMode', { agentId: agentKey, mode }).catch((err: unknown) => toast(ipcErrorMessage(err), 'error'));
+    },
+    [agentKey],
+  );
   const cycleMode = useCallback(() => {
-    if (!agent) return;
-    const mode: PermissionMode = nextMode(agent.mode, { allowBypass, inWorktree: !!agent.worktreePath, hasAuto: hasAuto !== false });
-    oide.invoke('agents.setMode', { agentId: agent.id, mode }).catch((err: unknown) => toast(ipcErrorMessage(err), 'error'));
-  }, [agent, allowBypass, hasAuto]);
+    if (currentMode) setMode(nextMode(currentMode, { allowBypass, inWorktree, hasAuto: autoOk }));
+  }, [currentMode, setMode, allowBypass, inWorktree, autoOk]);
 
   useKeymapScope('focus', {
     'agent.next': () => go(stepAgent(list, agentId, 1)),
@@ -148,6 +159,8 @@ export default function FocusScreen() {
       onSelectSub={selectSub}
       onBack={() => navigate('wall')}
       onCycleMode={cycleMode}
+      modes={modes}
+      onSetMode={setMode}
     />
   );
 }
@@ -164,9 +177,11 @@ interface BodyProps {
   onSelectSub(id: string | undefined): void;
   onBack(): void;
   onCycleMode(): void;
+  modes: readonly ModeChoice[];
+  onSetMode(mode: PermissionMode): void;
 }
 
-function FocusBody({ agent, subagentId, list, projectName, warnAt, dangerAt, labels, onSelectAgent, onSelectSub, onBack, onCycleMode }: BodyProps) {
+function FocusBody({ agent, subagentId, list, projectName, warnAt, dangerAt, labels, onSelectAgent, onSelectSub, onBack, onCycleMode, modes, onSetMode }: BodyProps) {
   useTranscriptHistory(agent.id);
   const events = useFocusHistory((s) => s.events);
   const hasMore = useFocusHistory((s) => s.hasMore);
@@ -275,7 +290,8 @@ function FocusBody({ agent, subagentId, list, projectName, warnAt, dangerAt, lab
             warnAt={warnAt}
             dangerAt={dangerAt}
             modeShortcut={labels.mode}
-            onCycleMode={onCycleMode}
+            modes={modes}
+            onSetMode={onSetMode}
             onCompact={() => setCompactOpen(true)}
             onRawTerminal={() => setTab('term')}
             onPause={() => act('agents.pause')}

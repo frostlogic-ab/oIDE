@@ -82,6 +82,14 @@ Features are detected at startup from `claude --help` (`detectCli` → `CliInfo.
   then user "[Request interrupted by user]" and result {subtype:"error_during_execution", is_error:true, terminal_reason:"aborted_streaming"}
 ```
 
+Switching to bypass live needs a session launched in bypass or with `--allow-dangerously-skip-permissions`
+(verified on 2.1.332; without it `set_permission_mode {mode:"bypassPermissions"}` answers
+`{"subtype":"error","error":"Cannot set permission mode to bypassPermissions because the session was not launched with --dangerously-skip-permissions","error_code":"bypass_not_launched"}`).
+With the flag, plan → bypass → manual → auto all switch live, and `manual` is answered as `default`.
+oIDE adds the flag only where bypass is allowed anyway (Settings › Allow Bypass on, agent in a worktree;
+`bypassAllowed` in `args.ts`), so the Focus mode menu reaches Bypass without restarting the turn. An agent
+launched before Allow Bypass was turned on still gets there through the `--resume` fallback.
+
 The init `capabilities` list (`interrupt_receipt_v1`, `msg_lifecycle_v1`, …) hints at more control
 messages; oIDE uses only the two above. If the CLI sends a `control_request` to us (for example
 `can_use_tool` without a prompt tool), the driver answers with an error response.
@@ -193,7 +201,7 @@ with Node directly (`node` from PATH inside Electron). Other shims get newlines 
 
 | Feature | Primary | Fallback |
 | --- | --- | --- |
-| Mode change (Shift+Tab) | `set_permission_mode` control request | interrupt + dispose, respawn with `--resume` and the new mode |
+| Mode change (Focus mode menu, Shift+Tab) | `set_permission_mode` control request | interrupt + dispose, respawn with `--resume` and the new mode |
 | Stop / Pause | `interrupt` control request | SIGINT (on Windows this terminates the process); `dispose` then kills the tree (`taskkill /T /F`) |
 | Auto mode | `--permission-mode auto` | `default` plus oIDE allow rules, when help lacks `auto` |
 | Effort | `--effort` | hidden when help lacks it |

@@ -687,6 +687,33 @@ for toast notifications, and Windows draws windows with that AUMID with the shor
 Windows runs now set `build/icon.ico` on that shortcut (`brandAppShortcuts` in `apps/desktop/src/main/app-icon.ts`).
 See [packaging](pages/packaging.md).
 
+## [2026-11-25] build | Change an agent's permission mode at any time
+
+Focus › header: the mode in the meta line is now a menu of every mode (`modeChoices` in
+`screens/Focus/model/focus.ts`; Bypass listed but disabled with its reason unless Settings › Allow
+Bypass is on and the agent is in a worktree), so an agent started in Plan that moved to Manual can go
+straight to Auto or Bypass; Shift+Tab still cycles. Real CLI 2.1.332 refuses a live switch to bypass
+(`bypass_not_launched`) unless launched with `--allow-dangerously-skip-permissions`; `buildLaunch` adds
+that flag only where bypass is allowed. The supervisor's spec now follows the CLI's own mode changes
+(plan → manual after an approved plan), so a resume relaunches in the real mode; restore and unarchive
+take the summary's mode. `Menu` (`@oide/ui`) gained `checked` (menuitemradio) and `portal`. New
+telemetry event `agent_mode_changed {from, to}`. fake-claude enforces `bypass_not_launched` and has an
+`exit-plan` scenario. Pages: [screen-focus](pages/screen-focus.md), [cli-integration](pages/cli-integration.md),
+[agent-supervisor](pages/agent-supervisor.md), [testing](pages/testing.md),
+[design-system](pages/design-system.md), [telemetry](pages/telemetry.md).
+
+## [2026-11-25] review | Mode menu review fixes
+
+Reviewer findings fixed: the portalled `Menu` closed whenever any box scrolled (a streaming
+transcript closed the mode menu); it now closes only when a box holding the trigger scrolls or the
+window resizes. Tab in a menu returns focus to the trigger (it dropped to `<body>`, which let the
+next Shift+Tab cycle the mode). Pick-one menus open on the checked item; `triggerTitle` gives a
+native hint (`Change mode (Shift+Tab cycles)`). `Supervisor.setMode` calls run one at a time per
+agent, so a slow `--resume` fallback cannot overtake a later pick. `AgentSummary.workIn` (from the
+spec, set on spawn, restore and unarchive) lets the Focus menu disable Bypass for project-folder
+agents instead of offering what main refuses. Pages: [screen-focus](pages/screen-focus.md),
+[design-system](pages/design-system.md), [agent-supervisor](pages/agent-supervisor.md).
+
 ## [2026-11-25] build | "Always in <project>" now applies to running agents
 
 "Always" saved the rule to `.oide/permissions.json`, but running CLIs only read `--allowedTools` at
