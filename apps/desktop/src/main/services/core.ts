@@ -153,7 +153,24 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     settings,
     worktrees,
     projects,
-    agents: { list: () => agents.list(), get: (id) => agents.supervisor.get(id), setDiff: (id, d) => agents.supervisor.setDiff(id, d), setPr: (id, pr) => agents.supervisor.setPr(id, pr) },
+    agents: {
+      list: () => agents.list(),
+      get: (id) => agents.supervisor.get(id),
+      setDiff: (id, d) => agents.supervisor.setDiff(id, d),
+      setPr: (id, pr) => agents.supervisor.setPr(id, pr),
+      // Merge conflicts handed back to the agent (git.askToResolve).
+      setMergeConflict: (id, m) => agents.supervisor.setMergeConflict(id, m),
+      archived: (id) => {
+        try {
+          return agents.getArchived(id);
+        } catch {
+          return undefined;
+        }
+      },
+      unarchive: (id) => agents.unarchive(id),
+      send: (id, msg) => agents.send(id, msg),
+      resume: (id) => agents.resume(id),
+    },
     ...(platform.isOnline ? { isOnline: platform.isOnline } : {}),
     archiveMerged: async (id, o) => void (await agents.archiveAgent(id, { reason: 'merged', ...o })),
     removeWorktreeOf: (id) => agents.removeWorktreeOf(id),

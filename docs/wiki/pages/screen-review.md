@@ -51,8 +51,59 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
 - The file-list header sums the parsed patches; the Wall, Source control and Ready to review read
   `AgentSummary.diff` / `WorktreeInfo.diff`. Both come from the same git diff in main; the mock keeps
   them equal (`lib/mock/mock.test.ts`).
-- Merge locally: confirm dialog → `git.mergeLocal`. Conflicts show in the dialog (main is left
-  untouched); "Hand them to a new agent" opens Spawn with a goal and the files as context chips.
+- Merge locally: confirm dialog → `git.mergeLocal`. The dialog predicts first (see
+  [Merge conflicts](#merge-conflicts)); main is never left mid-merge.
+
+## Merge conflicts
+
+"If there's a conflict, send it back to the agent to solve, then I click Merge again" (2026-11-25).
+
+- **Predict before merging.** Opening "Merge into main?" calls `git.predictMerge { agentId, refresh:
+  true, withMainStatus: true }` (main: `git merge-tree --write-tree` between the main checkout's HEAD
+  and the agent branch, no checkout touched; see [git-worktrees](git-worktrees.md#merge-overlaps-remote-prs-commit)).
+  - Clean: "It merges cleanly into main @ abc1234." Primary: Merge.
+  - Conflicts: "Merging will conflict in 3 files: a.ts, b.ts, c.ts and 1 more.", the file list (binary
+    and submodule files badged), primary **Ask <agent> to resolve**, secondary **Merge anyway** (which
+    still stops and aborts as before).
+  - Unknown (git older than 2.38): the reason, and Merge stays the action.
+  - Uncommitted files in the main checkout are listed up front; git refuses to merge over the ones
+    the merge touches, and `git.mergeLocal` then fails with code `conflict` and "The main checkout
+    has uncommitted changes that the merge would overwrite (…). Commit or stash them, then merge
+    again. Nothing was changed."
+- **A merge that stops anyway** (prediction missed it, or could not run) shows "The merge stopped on
+  conflicts" with the same **Ask <agent> to resolve** (`source: 'merge'`; main remembers the files
+  the merge reported). When the agent cannot be asked, the old "Hand them to a new agent" (Spawn with
+  the files as context) is offered instead.
+- **Ask <agent> to resolve** → `git.askToResolve { agentId, source }`. Main re-predicts, then sends a
+  `merge-conflicts` message (built in main only; `agents.send` refuses that kind) that the transcript
+  shows in full under "Sent by oIDE": target branch and commit (`main` @ abc1234, or the commit on a
+  detached HEAD), the conflicted files (binary / submodule notes), run `git merge <target>` in its own
+  worktree (local refs are shared, no fetch; a remote-tracking target says fetch first), resolve
+  keeping both sides' intent, run the project's checks, commit the merge, `submit_for_review` again;
+  never rebase or force-push, never touch the main checkout, never `git merge --abort` without saying
+  why. A stopped, interrupted or done agent is resumed with `--resume` (queued under Max running); a
+  paused one is resumed; an archived one is unarchived first. Not offered (`canAsk: false`, reason
+  shown) when its worktree is gone or the session cannot resume; an agent in the project folder has
+  no branch, so nothing is predicted. Bypass agents are allowed (always in a worktree); untrusted
+  projects keep their git restrictions (the prediction runs with the repo's exec config neutralised).
+- **While it resolves**: `AgentSummary.mergeConflict { target, targetSha, files, sentAt }` puts a
+  "Resolving merge conflicts" badge on the Wall tile and in Review ("Sent 2 conflicted files with main
+  3m ago"); the activity line reads "Resolving merge conflicts". The reducer clears it when the lead
+  submits for review again (back in Ready for review). Nothing merges on its own: the user clicks
+  Merge again.
+- **Freshness.** `stores/mergePrediction.ts` keeps one prediction per agent, loaded on mount and
+  refreshed (debounced 400 ms) on `git.changed` for its project; main caches each answer per (HEAD,
+  branch) commit pair, so renders never run git. Review shows "Up to date with main" / "Behind main by
+  2 commits, would conflict in 1 file"; Ready-for-review tiles and Source control › Ready to review
+  show the short form ("Behind main by 2 · would conflict"). If main moved while the agent worked,
+  the next dialog predicts the new conflict and offers the same action.
+- Telemetry: `merge_conflict_predicted`, `merge_conflict_sent_to_agent`, `merge_conflict_resolved`
+  ([telemetry](telemetry.md)); never file names.
+- Tests: `packages/git/test/predict.test.ts` (conflicts, clean, after resolving, binary and
+  modify/delete, detached HEAD, old-git fallback, dirty main), `test/integration/merge-conflicts.test.ts`
+  (live, stopped, archived, queued at Max running, worktree gone, project folder, message content),
+  `MergeDialog.test.tsx` (dialog states), `e2e/merge-conflicts.spec.ts` (fake agent resolves, dialog
+  then predicts clean).
 
 ## Keys
 

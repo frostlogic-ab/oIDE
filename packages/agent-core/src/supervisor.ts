@@ -18,7 +18,7 @@ import { buildLaunch, cliPermissionMode, subagentTiers, LaunchError } from './ar
 import { ClaudeCliDriver, rawJsonOf, type AgentDriver, type AgentHandle } from './driver.js';
 import { ContextWindowBook } from './context-window.js';
 import { AgentReducer, createSummary } from './reducer.js';
-import { messageText } from './messages.js';
+import { mergeConflictsText, messageText } from './messages.js';
 import type { AttachmentProvider, EventSink, PermissionBroker, SecretProvider, SettingsProvider, WorktreeProvider, WorktreeResult } from './ports.js';
 
 /**
@@ -482,9 +482,19 @@ export class Supervisor {
   private deliver(rec: AgentRecord, msg: UserMessage): void {
     const isCompact = msg.kind === 'command' && msg.command.trim() === '/compact';
     rec.handle!.send(msg);
-    const text = msg.kind === 'text' ? msg.text : msg.kind === 'command' ? msg.command : msg.kind === 'review-feedback' ? `Review feedback (${msg.comments.length} comments)` : `Artifact ${msg.artifactId}`;
+    const text =
+      msg.kind === 'text'
+        ? msg.text
+        : msg.kind === 'command'
+          ? msg.command
+          : msg.kind === 'review-feedback'
+            ? `Review feedback (${msg.comments.length} comments)`
+            : msg.kind === 'merge-conflicts'
+              ? mergeConflictsText(msg)
+              : `Artifact ${msg.artifactId}`;
     const attachments = msg.kind === 'text' || msg.kind === 'artifact' ? msg.attachments : undefined;
-    this.emitDraft(rec, { type: 'user-text', text, ...(attachments?.length ? { attachments } : {}) });
+    // Merge conflicts are written by oIDE: the transcript shows the whole message, marked "Sent by oIDE".
+    this.emitDraft(rec, { type: 'user-text', text, ...(attachments?.length ? { attachments } : {}), ...(msg.kind === 'merge-conflicts' ? { origin: 'oide' as const } : {}) });
     this.emitDraft(rec, { type: 'status', status: 'running', ...(isCompact ? { detail: 'compact' } : {}) });
   }
 
@@ -607,6 +617,16 @@ export class Supervisor {
     if (cur?.number === pr?.number && cur?.state === pr?.state && cur?.url === pr?.url && cur?.mergeCommit === pr?.mergeCommit) return;
     if (pr) rec.reducer.summary.pr = pr;
     else delete rec.reducer.summary.pr;
+    this.publishSummary(rec);
+  }
+
+  /** "Resolving merge conflicts" (main sets it after sending the conflicts; the reducer clears it on submit_for_review). */
+  setMergeConflict(agentId: string, info: AgentSummary['mergeConflict']): void {
+    const rec = this.agents.get(agentId);
+    if (!rec) return;
+    if (!info && !rec.reducer.summary.mergeConflict) return;
+    if (info) rec.reducer.summary.mergeConflict = info;
+    else delete rec.reducer.summary.mergeConflict;
     this.publishSummary(rec);
   }
 

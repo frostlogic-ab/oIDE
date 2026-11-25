@@ -290,6 +290,21 @@ export const AgentPrInfo = z.object({
 });
 export type AgentPrInfo = z.infer<typeof AgentPrInfo>;
 
+/**
+ * Set while the agent is resolving merge conflicts that oIDE sent it ("Ask <agent> to resolve" in
+ * Review's merge dialog). Cleared when it submits for review again; the user then merges by hand.
+ */
+export const AgentMergeConflict = z.object({
+  /** The branch it merges in (the main checkout's branch), or the commit on a detached HEAD. */
+  target: z.string().min(1).max(255),
+  /** The target's commit when the conflicts were sent. */
+  targetSha: z.string().regex(/^[0-9a-f]{7,64}$/),
+  /** Conflicted paths (as predicted, or as the merge reported them). */
+  files: z.array(z.string()).max(1000).default([]),
+  sentAt: z.number(),
+});
+export type AgentMergeConflict = z.infer<typeof AgentMergeConflict>;
+
 /** Compact per-agent state the Wall renders. Reduced from the event stream in main. */
 export const AgentSummary = z.object({
   id: Id,
@@ -339,6 +354,8 @@ export const AgentSummary = z.object({
   resumeBlocked: z.string().optional(),
   /** The branch's pull request, when there is one (tile "View PR #12", Focus, Review). */
   pr: AgentPrInfo.optional(),
+  /** Resolving merge conflicts oIDE sent it (tile badge "Resolving merge conflicts"). */
+  mergeConflict: AgentMergeConflict.optional(),
   /** Cost the CLI reported (`total_cost_usd`), summed over the agent's processes. */
   costUsd: z.number().nonnegative().optional(),
   /** Latest plan usage window from the CLI's `rate_limit_event` (utilization is 0..1 when reported). */
@@ -414,6 +431,26 @@ export function repairAgentSummary(value: unknown): SummaryRepair {
   return { dropped, issues };
 }
 
+/**
+ * Merge conflicts oIDE hands back to the agent (Review › Merge › "Ask <agent> to resolve"). Built in
+ * main only: `agents.send` refuses this kind, so the transcript's "Sent by oIDE" is always true.
+ */
+export const MergeConflictsMessage = z.object({
+  kind: z.literal('merge-conflicts'),
+  /** The main checkout's branch (e.g. `main`), or the commit on a detached HEAD. */
+  target: z.string().min(1).max(255),
+  targetSha: z.string().regex(/^[0-9a-f]{7,64}$/),
+  /** What the agent passes to `git merge` (the branch name, or the commit). */
+  mergeRef: z.string().min(1).max(255),
+  /** The target is a remote-tracking ref: fetch before merging. */
+  fetchFirst: z.boolean().default(false),
+  /** Conflicted paths; empty when they could not be predicted. */
+  files: z.array(z.string()).max(1000).default([]),
+  binary: z.array(z.string()).max(1000).default([]),
+  submodules: z.array(z.string()).max(1000).default([]),
+});
+export type MergeConflictsMessage = z.infer<typeof MergeConflictsMessage>;
+
 /** User → agent messages, delivered as stream-json user messages. */
 export const UserMessage = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('text'), text: z.string().min(1), attachments: MessageAttachments.optional() }),
@@ -424,5 +461,6 @@ export const UserMessage = z.discriminatedUnion('kind', [
     note: z.string().optional(),
   }),
   z.object({ kind: z.literal('artifact'), artifactId: Id, note: z.string().optional(), attachments: MessageAttachments.optional() }),
+  MergeConflictsMessage,
 ]);
 export type UserMessage = z.infer<typeof UserMessage>;

@@ -602,3 +602,24 @@ consent. Live check: one batch (identify, pageview, event, performance) and one 
 [telemetry](pages/telemetry.md), [security](pages/security.md), [screen-settings](pages/screen-settings.md),
 [review-publication](pages/review-publication.md), [reliability](pages/reliability.md); README Privacy,
 PRIVACY.md, docs site [privacy](../site/guide/privacy.md), CLAUDE.md "Analytics and telemetry (every task)".
+
+## [2026-11-25] build | Merge conflicts go back to the agent
+
+User request: "If there's a conflict, it blocks me from merging it. I would like if there's conflict, to be sent
+back to the agent to solve it and then users manually clicks merge again." Built: `predictMerge` in
+`packages/git` (`git merge-tree --write-tree -z` between the main checkout's HEAD and the agent branch, binary
+and submodule conflicts called out, behind/ahead counts, `supported: false` on git older than 2.38) and a clear
+"commit or stash" refusal when uncommitted main files would be overwritten. IPC `git.predictMerge` (cached in
+main per commit pair) and `git.askToResolve`, which re-predicts and sends a `merge-conflicts` message (built in
+main only; `agents.send` refuses it) shown in the transcript as "Sent by oIDE": target branch and commit, files,
+`git merge <target>` in its own worktree, resolve keeping both sides, checks, commit, `submit_for_review`; never
+rebase, force-push, touch the main checkout or abort silently. Stopped agents are resumed (queued under Max
+running), archived ones unarchived; no action when the worktree is gone or the agent works in the project folder.
+`AgentSummary.mergeConflict` drives a "Resolving merge conflicts" badge until the next submit_for_review; nothing
+merges on its own. The merge dialog leads with "Ask <agent> to resolve" and keeps "Merge anyway"; a merge that
+stops anyway offers the same action. Freshness lines ("Behind main by 2 commits, would conflict in 1 file") on
+Review, Ready-for-review tiles and Source control from a renderer store refreshed on `git.changed`. Telemetry:
+`merge_conflict_predicted`, `merge_conflict_sent_to_agent`, `merge_conflict_resolved`. fake-claude gained
+`resolve-conflicts`. Pages: [screen-review](pages/screen-review.md#merge-conflicts),
+[git-worktrees](pages/git-worktrees.md), [screen-wall](pages/screen-wall.md), [protocol](pages/protocol.md),
+[telemetry](pages/telemetry.md), [testing](pages/testing.md).

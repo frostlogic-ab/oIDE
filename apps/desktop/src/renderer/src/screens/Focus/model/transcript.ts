@@ -35,7 +35,8 @@ interface RowBase {
 }
 
 export type TranscriptRow =
-  | (RowBase & { kind: 'user'; text: string; attachments?: MessageAttachment[] })
+  /** `origin: 'oide'`: written by oIDE (merge conflicts sent back to the agent), shown as "Sent by oIDE". */
+  | (RowBase & { kind: 'user'; text: string; attachments?: MessageAttachment[]; origin?: 'oide' })
   | (RowBase & { kind: 'assistant'; text: string })
   | (RowBase & { kind: 'thinking'; text: string })
   | (RowBase & { kind: 'tools'; lines: ToolLine[] })
@@ -304,7 +305,7 @@ export function buildRows(events: readonly AgentEvent[]): TranscriptRow[] {
       case 'user-text': {
         const c = classifyUserText(e.text);
         if (c === 'hide') break;
-        if (c === 'user') push({ ...base, kind: 'user', text: e.text, ...(e.attachments?.length ? { attachments: e.attachments } : {}) });
+        if (c === 'user') push({ ...base, kind: 'user', text: e.text, ...(e.attachments?.length ? { attachments: e.attachments } : {}), ...(e.origin ? { origin: e.origin } : {}) });
         else push({ ...base, kind: 'notice', tone: 'info', text: c.notice });
         break;
       }

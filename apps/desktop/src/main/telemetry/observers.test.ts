@@ -134,6 +134,24 @@ describe('commands', () => {
     ]);
   });
 
+  it('merge conflicts: predicted once per pair of commits, sent to the agent, resolved with a duration; never file names', () => {
+    const { o, events } = make();
+    const prediction = { agentId: 'a1', status: 'conflicts', files: ['src/acme-secret.ts', 'logo.png', 'c.ts'], binary: ['logo.png'], submodules: [], target: { branch: 'acme-main', sha: 'aaa' }, branchSha: 'bbb' };
+    o.command('git.predictMerge', { agentId: 'a1' }, prediction);
+    o.command('git.predictMerge', { agentId: 'a1' }, prediction); // the dialog opened again
+    o.command('git.predictMerge', { agentId: 'a1' }, { ...prediction, status: 'clean', files: [] });
+    o.command('git.askToResolve', { agentId: 'a1', source: 'merge' }, { status: 'queued', files: 3, unarchived: false, resumed: true });
+    now += 4 * 60_000;
+    o.agentEvent(ev({ type: 'review-submitted', review: { agentId: 'a1', summary: 'Merged acme-main', checks: [], submittedAt: now } }));
+    o.agentEvent(ev({ type: 'review-submitted', review: { agentId: 'a1', summary: 'again', checks: [], submittedAt: now } }));
+    expect(events).toEqual([
+      { name: 'merge_conflict_predicted', props: { files: '2-5', binary: true, submodules: false } },
+      { name: 'merge_conflict_sent_to_agent', props: { source: 'merge', files: '2-5', agent: 'resumed' } },
+      { name: 'merge_conflict_resolved', props: { duration: '1-5m' } },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/acme|logo|src/);
+  });
+
   it('merge, discard, PR and compact', () => {
     const { o, events } = make();
     o.command('git.mergeLocal', { agentId: 'a1' }, { ok: false, conflicts: ['src/x.ts'] });

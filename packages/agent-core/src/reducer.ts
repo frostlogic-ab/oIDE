@@ -345,6 +345,8 @@ export class AgentReducer {
         s.review = e.review;
         this.reviewSinceSend = true;
         if (s.status !== 'needs-permission') s.status = 'ready-for-review';
+        // Merge conflicts oIDE sent are resolved once the agent submits again (the user merges by hand).
+        if (lead) delete s.mergeConflict;
         pushActivity('Submitted for review');
         break;
       case 'rate-limit':
@@ -391,6 +393,7 @@ export class AgentReducer {
       case 'user-text':
         // The user answered the agent after a prompt was cut off by quitting: the note has done its job.
         if (lead) delete s.interruptedPermission;
+        if (lead && e.origin === 'oide') pushActivity('Resolving merge conflicts');
         break;
       case 'subagent':
       case 'tool-result':

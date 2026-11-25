@@ -108,6 +108,11 @@ function TileView({ agent, projectName, focused, highlighted }: TileViewProps) {
             {badge.label}
           </Badge>
         )}
+        {agent.mergeConflict && (
+          <Badge tone="warn" icon="branch" title={`Resolving the merge conflicts with ${agent.mergeConflict.target} that oIDE sent it`} className="mt-px">
+            Resolving merge conflicts
+          </Badge>
+        )}
       </div>
       <TileBody agent={agent} />
       <SubagentChips agent={agent} now={now} />

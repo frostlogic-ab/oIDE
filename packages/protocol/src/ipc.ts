@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { AgentSpec, AgentSummary, GitRef, Id, MessageAttachments, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
+import { AgentSpec, AgentStatus, AgentSummary, GitRef, Id, MessageAttachments, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
 import { ArtifactKind, ArtifactMeta, ArtifactUse, ArtifactVersion } from './artifacts.js';
 import { AgentEvent } from './events.js';
 import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
-import { CommitInfo, FileDiff, FileNode, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
+import { CommitInfo, FileDiff, FileNode, MergePrediction, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
 import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settings.js';
 import { UpdateStatus } from './updates.js';
 import { FindByNameInput, FindByNameOutput, ReplaceInput, ReplaceOutput, SearchContentInput, SearchResultsEvent } from './search.js';
@@ -77,7 +77,8 @@ export const Commands = {
   // Agents
   'agents.list': cmd(Void, z.array(AgentSummary)),
   'agents.spawn': cmd(AgentSpec, z.array(AgentSummary)),
-  'agents.send': cmd(z.object({ agentId: Id, message: UserMessage }), Ok),
+  /** `merge-conflicts` messages come from main only (`git.askToResolve`): the renderer cannot send one. */
+  'agents.send': cmd(z.object({ agentId: Id, message: UserMessage.refine((m) => m.kind !== 'merge-conflicts', { message: 'merge-conflicts messages are sent by oIDE only' }) }), Ok),
   'agents.answerPermission': cmd(z.object({ agentId: Id, answer: PermissionAnswer }), Ok),
   'agents.setMode': cmd(z.object({ agentId: Id, mode: PermissionMode }), Ok),
   'agents.stop': cmd(z.object({ agentId: Id }), Ok),
@@ -121,6 +122,19 @@ export const Commands = {
   'git.overlaps': cmd(z.object({ projectId: Id }), z.array(OverlapWarning)),
   'git.diff': cmd(z.object({ agentId: Id }), z.array(FileDiff)),
   'git.mergeLocal': cmd(z.object({ agentId: Id }), z.object({ ok: z.boolean(), conflicts: z.array(z.string()).default([]) })),
+  /**
+   * Would merging the agent branch into the main checkout conflict? `git merge-tree`, no checkout touched;
+   * cached per (HEAD, branch) commits unless `refresh`. `withMainStatus` adds the main checkout's uncommitted files.
+   */
+  'git.predictMerge': cmd(z.object({ agentId: Id, refresh: z.boolean().default(false), withMainStatus: z.boolean().default(false) }), MergePrediction),
+  /**
+   * "Ask <agent> to resolve": sends the agent its merge conflicts (target branch and commit, files, what
+   * to do) as a message from oIDE, unarchiving or resuming it first (queued under Max running). Never merges.
+   */
+  'git.askToResolve': cmd(
+    z.object({ agentId: Id, source: z.enum(['prediction', 'merge']).default('prediction') }),
+    z.object({ status: AgentStatus, files: z.number().int().nonnegative(), unarchived: z.boolean(), resumed: z.boolean() }),
+  ),
   /** Idempotent: when the branch already has a pull request, it is returned instead of opening another one (`existing: true`). */
   'git.openPr': cmd(
     z.object({ agentId: Id, title: z.string(), body: z.string().default('') }),

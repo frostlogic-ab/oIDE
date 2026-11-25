@@ -11,14 +11,29 @@ import {
   gitPush,
   log as gitLog,
   mergeLocal as gitMergeLocal,
+  predictMerge as gitPredictMerge,
   isInside,
   samePath,
   syncState,
   type LiveWorktree,
+  type MergeForecast,
   type PrInfo,
   type WorktreeManager,
 } from '@oide/git';
-import { sensitivePathReason, type AgentSummary, type CommitInfo, type FileDiff, type OverlapWarning, type Project, type SyncState, type WorktreeInfo } from '@oide/protocol';
+import {
+  sensitivePathReason,
+  type AgentStatus,
+  type AgentSummary,
+  type CommitInfo,
+  type FileDiff,
+  type MergeConflictsMessage,
+  type MergePrediction,
+  type OverlapWarning,
+  type Project,
+  type SyncState,
+  type UserMessage,
+  type WorktreeInfo,
+} from '@oide/protocol';
 import type { SettingsService, Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
@@ -32,7 +47,21 @@ export interface AgentLookup {
   setDiff(agentId: string, diff: AgentSummary['diff']): void;
   /** The branch's pull request (tile "View PR", PR-merged archive). */
   setPr?(agentId: string, pr: AgentSummary['pr']): void;
+  /** "Resolving merge conflicts" on the tile (set after the conflicts were sent). */
+  setMergeConflict?(agentId: string, info: AgentSummary['mergeConflict']): void;
+  /** An archived agent's summary (Archived view), or undefined. */
+  archived?(agentId: string): AgentSummary | undefined;
+  /** Back to the Wall (resumable when its session and worktree exist). */
+  unarchive?(agentId: string): Promise<AgentSummary>;
+  /** Deliver a message; a stopped agent is resumed with `--resume` (queued under Max running). */
+  send?(agentId: string, msg: UserMessage): void | Promise<void>;
+  /** Resume a paused agent so a held message is delivered. */
+  resume?(agentId: string): Promise<void>;
 }
+
+const LIVE: ReadonlySet<AgentStatus> = new Set(['starting', 'running', 'needs-permission']);
+const PROJECT_FOLDER = 'This agent works in the project folder; there is no branch to merge.';
+const WORKTREE_DELETED = "Its worktree was deleted, so the agent can't resolve conflicts there. Resolve them by hand, or hand them to a new agent.";
 
 interface Subscription {
   unsubscribe(): Promise<void>;
@@ -75,6 +104,10 @@ export class GitService {
   private closed = false;
   /** Background git work (diff refreshes, periodic fetch) that dispose() waits for. */
   private readonly inflight = new Set<Promise<unknown>>();
+  /** Merge predictions per agent, valid while the main checkout's HEAD and the branch stay on the same commits. */
+  private readonly predictions = new Map<string, { key: string; forecast: MergeForecast }>();
+  /** Files the last real merge of each agent stopped on (prediction missed it, or git is too old to predict). */
+  private readonly mergeConflicts = new Map<string, string[]>();
 
   constructor(
     private readonly o: {
@@ -278,7 +311,10 @@ export class GitService {
       }
     }
     const r = await gitMergeLocal(p.path, a.branch, { message: `Merge ${a.branch} (${a.title})` });
-    if (r.error && !r.conflicts.length) throw new IpcError(r.error, 'git_failed');
+    if (r.error && !r.conflicts.length) throw new IpcError(r.error, r.blockedBy ? 'conflict' : 'git_failed');
+    // Remembered for "Ask <agent> to resolve" when the prediction could not see these conflicts.
+    if (r.conflicts.length) this.mergeConflicts.set(agentId, r.conflicts);
+    else this.mergeConflicts.delete(agentId);
     this.changed(p.id);
     if (r.ok && (await this.fullyMerged(p.path, a.worktreePath, a.branch))) {
       // Merged agents move to the Archived view (row, summary and transcript stay); worktree cleanup follows Settings.
@@ -287,6 +323,118 @@ export class GitService {
       await this.o.archiveMerged(agentId, { ...(r.sha ? { mergeCommit: r.sha } : {}), deleteWorktree: cleanup === 'right-away' });
     }
     return { ok: r.ok, conflicts: r.conflicts };
+  }
+
+  // ---------------------------------------------------------------- merge conflicts
+
+  /** A live agent, or an archived one (its record), with its project. */
+  private mergeSubject(agentId: string): { a: AgentSummary; p: Project; archived: boolean } {
+    const live = this.o.agents.get(agentId);
+    const a = live ?? this.o.agents.archived?.(agentId);
+    if (!a) throw new IpcError(`Unknown agent ${agentId}`, 'not_found');
+    return { a, p: this.project(a.projectId), archived: !live };
+  }
+
+  /**
+   * "Merge into main?" before merging: would the agent branch conflict with the main checkout's HEAD?
+   * `git merge-tree --write-tree` (no checkout touched), cached until either commit moves.
+   * Prediction sees commits only; Merge first commits the worktree's pending changes.
+   */
+  async predictMerge(agentId: string, opts: { refresh?: boolean; withMainStatus?: boolean } = {}): Promise<MergePrediction> {
+    const { a, p, archived } = this.mergeSubject(agentId);
+    const computedAt = Date.now();
+    const none = (reason: string): MergePrediction => ({ agentId, status: 'unavailable', reason, files: [], binary: [], submodules: [], behind: 0, ahead: 0, canAsk: false, askBlocked: reason, computedAt });
+    if (!a.branch || !a.worktreePath || samePath(a.worktreePath, p.path)) return none(PROJECT_FOLDER);
+    const git = new Git({ cwd: p.path });
+    const [head, branchSha] = await Promise.all([git.revParse('HEAD'), git.revParse(a.branch)]);
+    if (!head) return none('The main checkout has no commits yet.');
+    if (!branchSha) return none(`Its branch ${a.branch} no longer exists.`);
+    const key = `${head}:${branchSha}`;
+    let forecast = opts.refresh ? undefined : this.predictions.get(agentId);
+    if (forecast?.key !== key) {
+      try {
+        forecast = { key, forecast: await gitPredictMerge(git, a.branch) };
+      } catch (err) {
+        return none((err as Error).message);
+      }
+      this.predictions.set(agentId, forecast);
+      if (this.predictions.size > 500) this.predictions.delete(this.predictions.keys().next().value!);
+    }
+    const f = forecast.forecast;
+    const gone = Boolean(a.archived?.worktreeRemoved) || !existsSync(a.worktreePath);
+    const askBlocked = gone ? WORKTREE_DELETED : a.resumeBlocked && !(LIVE.has(a.status) && !archived) ? a.resumeBlocked : undefined;
+    let mainDirty: string[] | undefined;
+    if (opts.withMainStatus) {
+      const out = await git.out(['status', '--porcelain', '-z', '--untracked-files=no'], { env: { GIT_OPTIONAL_LOCKS: '0' } }).catch(() => '');
+      mainDirty = out
+        .split('\0')
+        .filter((e) => e.length > 3)
+        .map((e) => e.slice(3))
+        .slice(0, 200);
+    }
+    return {
+      agentId,
+      status: !f.supported ? 'unknown' : f.conflicts ? 'conflicts' : 'clean',
+      ...(f.supported ? {} : { reason: `oIDE could not predict conflicts: ${f.error ?? 'git merge-tree failed'} (git 2.38 or newer is needed).` }),
+      target: { ...(f.target.branch ? { branch: f.target.branch } : {}), sha: f.target.sha },
+      branchSha: f.branchSha,
+      files: f.files,
+      binary: f.binary,
+      submodules: f.submodules,
+      behind: f.behind,
+      ahead: f.ahead,
+      ...(mainDirty ? { mainDirty } : {}),
+      canAsk: !askBlocked,
+      ...(askBlocked ? { askBlocked } : {}),
+      computedAt,
+    };
+  }
+
+  /**
+   * "Ask <agent> to resolve": send the agent the merge conflicts as a message from oIDE (target
+   * branch and commit, files, what to do and what never to do). An archived agent is unarchived
+   * first; a stopped one is resumed with `--resume` (queued under Max running). Never merges: the
+   * agent submits for review again and the user clicks Merge.
+   */
+  async askToResolve(agentId: string, source: 'prediction' | 'merge' = 'prediction'): Promise<{ status: AgentStatus; files: number; unarchived: boolean; resumed: boolean }> {
+    const { a, archived } = this.mergeSubject(agentId);
+    const pred = await this.predictMerge(agentId, { refresh: true });
+    if (pred.status === 'unavailable') throw new IpcError(pred.reason ?? PROJECT_FOLDER, 'conflict');
+    if (!pred.canAsk) throw new IpcError(pred.askBlocked ?? WORKTREE_DELETED, 'conflict');
+    const recorded = this.mergeConflicts.get(agentId) ?? [];
+    let files: string[] = [];
+    if (pred.status === 'conflicts') files = pred.files;
+    else if (recorded.length) files = recorded;
+    else if (pred.status === 'clean') throw new IpcError('Merging this branch would not conflict any more, so there is nothing to resolve. Merge it again.', 'conflict');
+    const send = this.o.agents.send;
+    if (!send) throw new IpcError('Agents cannot be messaged right now.', 'unavailable');
+    let unarchived = false;
+    if (archived) {
+      if (!this.o.agents.unarchive) throw new IpcError('Archived agents cannot be brought back right now.', 'unavailable');
+      await this.o.agents.unarchive(agentId);
+      unarchived = true;
+    }
+    const before = this.o.agents.get(agentId) ?? a;
+    const target = pred.target!;
+    const ref = target.branch ?? target.sha;
+    const msg: MergeConflictsMessage = {
+      kind: 'merge-conflicts',
+      target: ref,
+      targetSha: target.sha,
+      mergeRef: ref,
+      fetchFirst: false,
+      files,
+      binary: pred.binary.filter((f) => files.includes(f)),
+      submodules: pred.submodules.filter((f) => files.includes(f)),
+    };
+    await send(agentId, msg);
+    if (before.status === 'paused') await this.o.agents.resume?.(agentId);
+    this.o.agents.setMergeConflict?.(agentId, { target: ref, targetSha: target.sha, files, sentAt: Date.now() });
+    this.mergeConflicts.delete(agentId);
+    const after = this.o.agents.get(agentId) ?? before;
+    this.o.ctx.log.debug('merge conflicts sent to the agent', { agent: agentId, source, files: files.length });
+    // Delivered to a live process: running now. Otherwise it waits in the queue for a --resume launch.
+    return { status: after.status, files: files.length, unarchived, resumed: unarchived || after.status === 'queued' || after.status === 'starting' };
   }
 
   private async hasLocalChanges(worktree: string): Promise<boolean> {

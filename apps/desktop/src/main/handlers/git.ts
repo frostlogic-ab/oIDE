@@ -17,6 +17,8 @@ export function registerGitHandlers(router: IpcRouter, s: Services, _ctx: MainCo
   router.register('git.overlaps', ({ projectId }) => g.overlaps(projectId));
   router.register('git.diff', ({ agentId }) => g.diff(agentId));
   router.register('git.mergeLocal', ({ agentId }) => g.mergeLocal(agentId));
+  router.register('git.predictMerge', ({ agentId, refresh, withMainStatus }) => g.predictMerge(agentId, { refresh, withMainStatus }));
+  router.register('git.askToResolve', ({ agentId, source }) => g.askToResolve(agentId, source));
   router.register('git.openPr', ({ agentId, title, body }) => g.openPr(agentId, title, body));
   router.register('git.prAvailable', ({ projectId }) => {
     const p = s.projects.require(projectId);

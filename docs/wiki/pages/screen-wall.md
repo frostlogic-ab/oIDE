@@ -44,6 +44,11 @@ Context ring: `contextUsed / contextWindow`, amber from Settings `contextWarnAt`
 "/compact suggested" from `contextSuggestCompactAt`. Clicking opens the confirm; only Compact calls
 `agents.compact` and then toasts "Sent /compact to … Compacting…". oIDE never compacts without it.
 
+Merge conflicts ([screen-review](screen-review.md#merge-conflicts)): a tile whose agent is resolving conflicts oIDE sent it
+(`summary.mergeConflict`) carries a "Resolving merge conflicts" badge next to the mode badge. A Ready-for-review tile
+shows, next to its diff stat, how its branch stands against the main checkout ("Up to date with main",
+"Behind main by 2 · would conflict"), from the cached `git.predictMerge` answer (`stores/mergePrediction.ts`).
+
 Each tile has a visually hidden `aria-live="polite"` region with "<title>: <status>", so status
 changes are announced.
 
