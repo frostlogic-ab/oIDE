@@ -23,7 +23,7 @@ afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();
 });
 
-async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup?: WorktreeProvider['runSetup']; attachments?: AttachmentProvider }): Promise<Harness> {
+async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup?: WorktreeProvider['runSetup']; attachments?: AttachmentProvider; ask?: string[] }): Promise<Harness> {
   const settings = testSettings({ extraFlags: opts.extraFlags, maxRunning: opts.maxRunning ?? 3 });
   const mcp = new OideMcpServer({ appDataDir: tempDir('oide-app-') });
   await mcp.start();
@@ -49,7 +49,7 @@ async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup
   const provider: SettingsProvider = {
     get: () => settings,
     cli: () => fakeCli,
-    project: () => ({ path: '/repo', trusted: true, rules: { allow: [], deny: [] } }),
+    project: () => ({ path: '/repo', trusted: true, rules: { allow: [], deny: [], ...(opts.ask ? { ask: opts.ask } : {}) } }),
     addAllowRule: (p, r) => void rules.push([p, r]),
   };
   const sup = new Supervisor({ worktrees, sink, settings: provider, broker: mcp, ...(opts.attachments ? { attachments: opts.attachments } : {}) });
@@ -90,12 +90,55 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     const done1 = await status(h, a!.id, 'has-question');
     expect(done1.lastMessage).toMatch(/Tests ran/);
 
-    const s2 = await status(h, b!.id, 'needs-permission');
-    await h.sup.answerPermission(b!.id, { requestId: s2.pendingPermission!.requestId, behavior: 'deny', message: 'Not now' });
-    expect((await status(h, b!.id, 'has-question')).lastMessage).toMatch(/could not run the tests: Not now/);
+    // Same project: the "Always" rule covers b's `npm test` too, so it runs without a prompt.
+    expect((await status(h, b!.id, 'has-question')).lastMessage).toMatch(/Tests ran/);
+    expect(h.events.some((e) => e.agentId === b!.id && e.type === 'permission-request')).toBe(false);
+
+    // Another project still asks; deny reaches the agent.
+    const [c] = await h.sup.spawn(spec({ projectId: 'p2' }));
+    const s2 = await status(h, c!.id, 'needs-permission');
+    await h.sup.answerPermission(c!.id, { requestId: s2.pendingPermission!.requestId, behavior: 'deny', message: 'Not now' });
+    expect((await status(h, c!.id, 'has-question')).lastMessage).toMatch(/could not run the tests: Not now/);
     expect(h.events.some((e) => e.type === 'permission-resolved' && e.behavior === 'deny')).toBe(true);
     expect(h.raw.some((r) => r.includes('"subtype":"init"'))).toBe(true);
     expect(h.saved.get(a!.id)?.status).toBe('has-question');
+  });
+
+  it('"Always" covers the rest of the session: the next matching request runs without a prompt', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario permission' });
+    const [a] = await h.sup.spawn(spec());
+    const p = await status(h, a!.id, 'needs-permission');
+    await h.sup.answerPermission(a!.id, { requestId: p.pendingPermission!.requestId, behavior: 'allow', always: true });
+    await status(h, a!.id, 'has-question');
+    const asked = () => h.events.filter((e) => e.agentId === a!.id && e.type === 'permission-request').length;
+    expect(asked()).toBe(1);
+    // Second turn runs `npm test` again in the same process.
+    h.sup.send(a!.id, { kind: 'text', text: 'Run them again.' });
+    await waitFor(() => h.events.filter((e) => e.agentId === a!.id && e.type === 'result').length >= 2, 10_000, 'second result');
+    expect(asked()).toBe(1);
+    expect(h.get(a!.id).lastMessage).toMatch(/Tests ran/);
+  });
+
+  it('"Always" also allows prompts already waiting in the same project', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario permission', maxRunning: 2 });
+    const [a, b] = await h.sup.spawn(spec({ attempts: 2 }));
+    const pa = await status(h, a!.id, 'needs-permission');
+    await status(h, b!.id, 'needs-permission');
+    await h.sup.answerPermission(a!.id, { requestId: pa.pendingPermission!.requestId, behavior: 'allow', always: true });
+    expect((await status(h, b!.id, 'has-question')).lastMessage).toMatch(/Tests ran/);
+    expect(h.events.some((e) => e.agentId === b!.id && e.type === 'permission-resolved' && e.behavior === 'allow')).toBe(true);
+  });
+
+  it('a project ask rule wins over "Always": no rule is offered and every call still asks', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario permission', ask: ['Bash(npm:*)'] });
+    const [a] = await h.sup.spawn(spec());
+    const p = await status(h, a!.id, 'needs-permission');
+    expect(p.pendingPermission!.suggestedRule).toBeUndefined();
+    await h.sup.answerPermission(a!.id, { requestId: p.pendingPermission!.requestId, behavior: 'allow', always: true });
+    await status(h, a!.id, 'has-question');
+    expect(h.rules).toEqual([]);
+    h.sup.send(a!.id, { kind: 'text', text: 'Again.' });
+    await status(h, a!.id, 'needs-permission');
   });
 
   it('a queued spawn publishes its summary before it starts (m1)', async () => {

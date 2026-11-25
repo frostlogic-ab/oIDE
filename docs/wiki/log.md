@@ -713,3 +713,18 @@ agent, so a slow `--resume` fallback cannot overtake a later pick. `AgentSummary
 spec, set on spawn, restore and unarchive) lets the Focus menu disable Bypass for project-folder
 agents instead of offering what main refuses. Pages: [screen-focus](pages/screen-focus.md),
 [design-system](pages/design-system.md), [agent-supervisor](pages/agent-supervisor.md).
+
+## [2026-11-25] build | "Always in <project>" now applies to running agents
+
+"Always" saved the rule to `.oide/permissions.json`, but running CLIs only read `--allowedTools` at
+launch, so the same agent asked again for the rest of its session. The supervisor now keeps the
+session's "Always" rules per project and allows matching requests (and waiting prompts) without a
+prompt, except protected-path edits and always-ask rules; the button is greyed out when no rule can
+be saved. Pages: [agent-supervisor](pages/agent-supervisor.md), [screen-wall](pages/screen-wall.md).
+
+## [2026-11-25] review | "Always" session rules: security hardening
+
+Security review of the session "Always" rules: the protected-path check now fails closed on Windows
+name folding (case, trailing dots/spaces, `:` streams, `~` short names), and edits are auto-allowed
+only inside the agent's worktree with no symlink, junction (dangling included) or hard-linked file on
+the way. Page: [agent-supervisor](pages/agent-supervisor.md).

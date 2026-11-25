@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { AgentSpec, CliInfo, Technique } from '@oide/protocol';
-import { allowListEnv, buildLaunch, customModelEnv, disallowedModelEnvKeys, filterExtraFlags, isAllowedModelEnvEntry, isAllowedModelEnvKey, LaunchError, shellSplit, type LaunchContext } from './args.js';
-import { testSettings } from '../test/helpers.js';
+import { allowListEnv, askRuleCovers, buildLaunch, editStaysInside, requestTargetsProtectedPath, customModelEnv, disallowedModelEnvKeys, filterExtraFlags, isAllowedModelEnvEntry, isAllowedModelEnvKey, LaunchError, shellSplit, type LaunchContext } from './args.js';
+import { linkSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tempDir, testSettings } from '../test/helpers.js';
 
 const cli = CliInfo.parse({ found: true, path: 'C:\\bin\\claude.exe', version: '2.1.325', inTestedRange: true, features: { effort: true, 'mode:auto': true, agents: true, 'permission-prompt-tool': true, 'include-partial-messages': true, 'forward-subagent-text': true } });
 
@@ -300,5 +302,100 @@ describe('helpers', () => {
   });
   it('allowListEnv never copies unknown keys', () => {
     expect(allowListEnv({ PATH: 'p', SECRET: 's', lc_ctype: 'x', https_proxy: 'h' })).toEqual({ PATH: 'p', lc_ctype: 'x', https_proxy: 'h' });
+  });
+});
+
+describe('"Always" guards', () => {
+  it('requestTargetsProtectedPath: edits of .oide/, .claude/ and .mcp.json (or with no path) are protected', () => {
+    expect(requestTargetsProtectedPath('Edit', { file_path: 'C:\\repo\\.oide\\permissions.json' })).toBe(true);
+    expect(requestTargetsProtectedPath('Write', { file_path: '/repo/.claude/settings.json' })).toBe(true);
+    expect(requestTargetsProtectedPath('Edit', { file_path: '/repo/.mcp.json' })).toBe(true);
+    expect(requestTargetsProtectedPath('NotebookEdit', { notebook_path: '/repo/.oide/x.ipynb' })).toBe(true);
+    expect(requestTargetsProtectedPath('Edit', {})).toBe(true);
+    expect(requestTargetsProtectedPath('Edit', { file_path: '/repo/src/oide.ts' })).toBe(false);
+    expect(requestTargetsProtectedPath('Bash', { command: 'cat .oide/setup' })).toBe(false);
+  });
+
+  it('requestTargetsProtectedPath fails closed on names Windows folds onto .oide, .claude or .mcp.json', () => {
+    const r = String.raw;
+    for (const file_path of [r`C:\repo\.OIDE\setup`, r`C:\repo\.oide.\setup`, r`C:\repo\.oide \setup`, r`C:\repo\.oide::$INDEX_ALLOCATION\setup`, r`C:\repo\OIDE~1\setup`, '/repo/.mcp.json.', r`C:\repo\.mcp.json:x`]) {
+      expect(requestTargetsProtectedPath('Write', { file_path }), file_path).toBe(true);
+    }
+    expect(requestTargetsProtectedPath('Write', { file_path: r`C:\repo\src\a.ts` })).toBe(false);
+  });
+
+  it('editStaysInside: edits must resolve inside the worktree (.., absolute, UNC and symlinks out are refused)', () => {
+    const root = tempDir('oide-root-');
+    const outside = tempDir('oide-out-');
+    mkdirSync(join(root, 'src'));
+    expect(editStaysInside('Edit', { file_path: join(root, 'src', 'a.ts') }, root)).toBe(true);
+    expect(editStaysInside('Write', { file_path: 'src/new/b.ts' }, root)).toBe(true);
+    expect(editStaysInside('Edit', { file_path: '../x.ts' }, root)).toBe(false);
+    expect(editStaysInside('Edit', { file_path: join(outside, 'x.ts') }, root)).toBe(false);
+    expect(editStaysInside('Edit', { file_path: String.raw`\\server\share\x.ts` }, root)).toBe(false);
+    expect(editStaysInside('Edit', {}, root)).toBe(false);
+    expect(editStaysInside('Edit', { file_path: 'a.ts' }, undefined)).toBe(false);
+    expect(editStaysInside('Bash', { command: 'rm x' }, root)).toBe(true);
+    let linked = false;
+    try {
+      symlinkSync(outside, join(root, 'link'), 'junction');
+      linked = true;
+    } catch {
+      /* no symlink rights */
+    }
+    if (linked) expect(editStaysInside('Write', { file_path: join(root, 'link', 'x.ts') }, root)).toBe(false);
+  });
+
+  it('editStaysInside: a link inside the worktree that points at .oide/ is refused', () => {
+    const root = tempDir('oide-root-');
+    mkdirSync(join(root, '.oide'));
+    mkdirSync(join(root, 'src'));
+    try {
+      symlinkSync(join(root, '.oide'), join(root, 'src', 'cfg'), 'junction');
+    } catch {
+      return; // no symlink rights on this machine
+    }
+    // The literal path looks harmless; its real path is .oide/permissions.json.
+    expect(requestTargetsProtectedPath('Write', { file_path: join(root, 'src', 'cfg', 'permissions.json') })).toBe(false);
+    expect(editStaysInside('Write', { file_path: join(root, 'src', 'cfg', 'permissions.json') }, root)).toBe(false);
+    expect(editStaysInside('Write', { file_path: join(root, '.claude', 'settings.json') }, root)).toBe(false);
+    expect(editStaysInside('Write', { file_path: join(root, 'src', 'a.ts') }, root)).toBe(true);
+    expect(editStaysInside('Write', { file_path: root }, root)).toBe(false);
+  });
+
+  it('editStaysInside: dangling links and hard-linked files fail closed', () => {
+    const root = tempDir('oide-root-');
+    mkdirSync(join(root, '.oide'));
+    mkdirSync(join(root, 'src'));
+    writeFileSync(join(root, '.oide', 'permissions.json'), '{}');
+    // Hard links need no special rights.
+    linkSync(join(root, '.oide', 'permissions.json'), join(root, 'src', 'h.json'));
+    expect(editStaysInside('Write', { file_path: join(root, 'src', 'h.json') }, root)).toBe(false);
+    let dangling = false;
+    try {
+      symlinkSync(join(root, '.oide', 'missing'), join(root, 'src', 'd'), 'junction');
+      dangling = true;
+    } catch {
+      /* no symlink rights on this machine */
+    }
+    if (dangling) expect(editStaysInside('Write', { file_path: join(root, 'src', 'd', 'setup') }, root)).toBe(false);
+    expect(editStaysInside('Write', { file_path: join(root, 'src', 'new', 'deep', 'x.ts') }, root)).toBe(true);
+  });
+
+  it('askRuleCovers: whole tools, MCP servers, Bash prefixes, and any other specifier on the same tool', () => {
+    expect(askRuleCovers('Bash', 'Bash', { command: 'ls' })).toBe(true);
+    expect(askRuleCovers('Bash(git push:*)', 'Bash', { command: 'git push origin main' })).toBe(true);
+    expect(askRuleCovers('Bash(git push:*)', 'Bash', { command: 'npm test' })).toBe(false);
+    expect(askRuleCovers('Bash(git push:*)', 'Edit', { file_path: 'a' })).toBe(false);
+    expect(askRuleCovers('Edit(src/**)', 'Edit', { file_path: 'docs/a.md' })).toBe(true);
+    expect(askRuleCovers('mcp__db', 'mcp__db__query', {})).toBe(true);
+    expect(askRuleCovers('mcp__db__query', 'mcp__db__query', {})).toBe(true);
+    expect(askRuleCovers('mcp__db__query', 'mcp__db__schema', {})).toBe(false);
+    expect(askRuleCovers('mcp__db', 'mcp__dbx__query', {})).toBe(false);
+  });
+
+  it('buildLaunch reports the always-ask rules', () => {
+    const plan = buildLaunch(spec(), ctx({ projectRules: { allow: [], ask: ['Bash(git push:*)'], deny: [] } }));
+    expect(plan.askRules).toEqual(['Bash(git push:*)']);
   });
 });
