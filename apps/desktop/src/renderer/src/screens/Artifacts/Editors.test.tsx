@@ -2,7 +2,8 @@
 /**
  * Artifact editors (Viewer.tsx): doc editing with live preview and save as a new version, agent
  * updates while open ("Updated by …" vs the conflict banner), whiteboard dirty tracking, version
- * compare, rename and delete. Monaco, Excalidraw and the diff editor are replaced with light stubs
+ * compare, rename and delete; artifacts of several files (Files panel, editing another file with
+ * `artifacts.writeFiles`, images, "Open on this page") and a first retrieval landing while open. Monaco, Excalidraw and the diff editor are replaced with light stubs
  * (jsdom has no canvas or layout); the Viewer's own logic runs for real.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -11,6 +12,7 @@ import {
   AgentSummary,
   ArtifactMeta,
   Project,
+  type ArtifactFileContent,
   type ArtifactVersion,
   type EventName,
   type OideBridge,
@@ -72,7 +74,7 @@ function normalised(content: string): string {
 }
 
 const now = Date.now();
-const meta = (id: string, title: string, kind: ArtifactMeta['kind'], version = 1) =>
+const meta = (id: string, title: string, kind: ArtifactMeta['kind'], version = 1, extra: Partial<ArtifactMeta> = {}) =>
   ArtifactMeta.parse({
     id,
     slug: id,
@@ -84,13 +86,25 @@ const meta = (id: string, title: string, kind: ArtifactMeta['kind'], version = 1
     entry: 'x',
     createdAt: now,
     updatedAt: now,
+    ...extra,
   });
+
+type FileSet = Record<string, ArtifactFileContent>;
 
 interface Art {
   meta: ArtifactMeta;
   versions: ArtifactVersion[];
   snapshots: Record<number, string>;
+  /** Artifacts of several files: every file per version (the entry's text is also in `snapshots`). */
+  files?: Record<number, FileSet>;
 }
+
+const SITE: FileSet = {
+  'index.html': { encoding: 'utf8', data: '<link rel="stylesheet" href="site.css"><h1>Home</h1>' },
+  'about.html': { encoding: 'utf8', data: '<h1>About</h1>' },
+  'site.css': { encoding: 'utf8', data: 'h1{color:red}' },
+  'shots/home.png': { encoding: 'base64', data: 'iVBORw0KGgo=' },
+};
 
 let arts: Record<string, Art>;
 let listeners: Map<string, Set<(p: unknown) => void>>;
@@ -109,7 +123,32 @@ function seed() {
       versions: [{ version: 1, ts: now, author: 'user' }],
       snapshots: { 1: board },
     },
+    'a-site': {
+      meta: meta('a-site', 'Docs site', 'design', 1, { entry: 'index.html', fileCount: 4, importedFrom: 'https://claude.ai/design/p/docs-site' }),
+      versions: [{ version: 1, ts: now, author: 'agent:ag-fix' }],
+      snapshots: { 1: SITE['index.html']!.data },
+      files: { 1: SITE },
+    },
   };
+}
+
+/** A new version of a multi-file artifact holding `set` (what main does for writeFiles). */
+function writeSet(a: Art, set: FileSet, entry: string, author: string, note?: string) {
+  const v = a.meta.version + 1;
+  a.files![v] = set;
+  a.snapshots[v] = set[entry]!.data;
+  a.versions = [{ version: v, ts: now, author, note }, ...a.versions];
+  a.meta = { ...a.meta, version: v, entry, fileCount: Object.keys(set).length };
+  return v;
+}
+
+/** An agent writes some files of a multi-file artifact, then main emits. */
+function agentWritesFiles(id: string, changes: Record<string, string>, agentId = 'ag-fix') {
+  const a = arts[id]!;
+  const set = { ...a.files![a.meta.version]! };
+  for (const [path, data] of Object.entries(changes)) set[path] = { encoding: 'utf8', data };
+  const v = writeSet(a, set, a.meta.entry, `agent:${agentId}`);
+  emit('artifacts.changed', { id, change: 'saved', version: v, author: `agent:${agentId}` });
 }
 
 function content(a: Art): string {
@@ -140,6 +179,10 @@ const invoke = vi.fn(async (command: string, input: unknown): Promise<unknown> =
     version?: number;
     baseVersion?: number;
     note?: string;
+    path?: string;
+    files?: Array<{ path: string } & ArtifactFileContent>;
+    deletes?: string[];
+    entry?: string;
   };
   switch (command) {
     case 'artifacts.list':
@@ -175,6 +218,26 @@ const invoke = vi.fn(async (command: string, input: unknown): Promise<unknown> =
     case 'artifacts.delete':
       delete arts[i.id];
       return { ok: true };
+    case 'artifacts.files': {
+      const a = arts[i.id]!;
+      return Object.entries(a.files?.[i.version ?? a.meta.version] ?? {}).map(([path, c]) => ({ path, size: c.data.length, text: c.encoding === 'utf8' }));
+    }
+    case 'artifacts.readFile': {
+      const a = arts[i.id]!;
+      const c = a.files?.[i.version ?? a.meta.version]?.[i.path!];
+      if (!c) throw new Error(`[not_found] ${i.path}`);
+      return c;
+    }
+    case 'artifacts.writeFiles': {
+      const a = arts[i.id]!;
+      if (i.baseVersion !== undefined && i.baseVersion !== a.meta.version) throw new Error(`[conflict] changed (now v${a.meta.version})`);
+      const set = { ...a.files![a.meta.version]! };
+      for (const d of i.deletes ?? []) delete set[d];
+      for (const f of i.files ?? []) set[f.path] = { encoding: f.encoding, data: f.data };
+      const v = writeSet(a, set, i.entry ?? a.meta.entry, 'user', i.note);
+      queueMicrotask(() => emit('artifacts.changed', { id: i.id, change: 'saved', version: v, author: 'user' }));
+      return a.meta;
+    }
     default:
       throw new Error(`[not_implemented] ${command}`);
   }
@@ -439,5 +502,130 @@ describe('Rename, delete and compare', () => {
     fireEvent.change(within(viewer).getByLabelText('From'), { target: { value: '2' } });
     fireEvent.change(within(viewer).getByLabelText('To'), { target: { value: '1' } });
     expect(within(viewer).getByTestId('diff-original').textContent).toBe('# Retry\n\nv2 text');
+  });
+});
+
+describe('Artifacts of several files', () => {
+  const files = () => screen.getByRole('navigation', { name: 'Files' });
+  const fileButton = (name: string) => within(files()).getByRole('button', { name: new RegExp(`^${name.replace('.', '\\.')}`) });
+
+  it('lists the files with the entry marked, and saves another text file with writeFiles from its version', async () => {
+    const viewer = await openArtifact(/Docs site/);
+    expect(within(viewer).getByText(/Design · oide · v1 · 4 files/)).toBeTruthy();
+    await waitFor(() => expect(within(files()).getAllByRole('button').map((b) => b.textContent)).toEqual(['home.png', 'about.html', 'index.htmlOpens on', 'site.css']));
+    expect(within(files()).getByText('shots')).toBeTruthy();
+    expect(fileButton('index.html').getAttribute('aria-current')).toBe('true');
+
+    fireEvent.click(fileButton('site.css'));
+    const editor = (await within(viewer).findByLabelText('Source of site.css')) as HTMLTextAreaElement;
+    expect(editor.value).toBe('h1{color:red}');
+    expect(fileButton('site.css').getAttribute('aria-current')).toBe('true');
+    // The entry's tabs give way to the file; the design preview stays beside it.
+    expect(within(viewer).queryByRole('tab', { name: 'Edit' })).toBeNull();
+    expect(within(viewer).getByTitle('Preview of Docs site')).toBeTruthy();
+
+    fireEvent.change(editor, { target: { value: 'h1{color:blue}' } });
+    expect(within(viewer).getByText('Unsaved changes')).toBeTruthy();
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls('artifacts.writeFiles')).toHaveLength(1));
+    expect(calls('artifacts.writeFiles')[0]).toEqual({ id: 'a-site', files: [{ path: 'site.css', encoding: 'utf8', data: 'h1{color:blue}' }], note: 'Edited site.css', baseVersion: 1 });
+    await waitFor(() => expect(within(viewer).queryByText('Unsaved changes')).toBeNull());
+    await waitFor(() => expect(within(viewer).getByText(/v2 · 4 files/)).toBeTruthy());
+    // Our own save coming back is not announced as someone else's.
+    expect(within(viewer).queryByText(/Updated by/)).toBeNull();
+    expect(calls('artifacts.save')).toEqual([]);
+  });
+
+  it('asks before leaving unsaved edits to a file, and saves entry edits with writeFiles', async () => {
+    const viewer = await openArtifact(/Docs site/);
+    fireEvent.click(await waitFor(() => fileButton('site.css')));
+    fireEvent.change(await within(viewer).findByLabelText('Source of site.css'), { target: { value: 'mine' } });
+    fireEvent.click(fileButton('index.html'));
+    const confirm = await screen.findByRole('dialog', { name: 'Discard your changes?' });
+    expect(confirm.textContent).toMatch(/site\.css/);
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Discard' }));
+
+    const entry = (await within(viewer).findByLabelText('Source of Docs site')) as HTMLTextAreaElement;
+    fireEvent.change(entry, { target: { value: '<h1>Home 2</h1>' } });
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls('artifacts.writeFiles')).toEqual([{ id: 'a-site', files: [{ path: 'index.html', encoding: 'utf8', data: '<h1>Home 2</h1>' }], note: 'Edited by you', baseVersion: 1 }]));
+    expect(arts['a-site']!.files![2]!['site.css']!.data).toBe('h1{color:red}');
+  });
+
+  it('an agent changing another file is taken quietly; changing the open file with edits is a conflict', async () => {
+    const viewer = await openArtifact(/Docs site/);
+    fireEvent.click(await waitFor(() => fileButton('site.css')));
+    fireEvent.change(await within(viewer).findByLabelText('Source of site.css'), { target: { value: 'mine' } });
+
+    agentWritesFiles('a-site', { 'about.html': '<h1>About us</h1>' });
+    await waitFor(() => expect(within(viewer).getByText(/v2 · 4 files/)).toBeTruthy());
+    expect(within(viewer).queryByRole('alert')).toBeNull();
+
+    agentWritesFiles('a-site', { 'site.css': 'theirs' });
+    const banner = await within(viewer).findByRole('alert');
+    expect(banner.textContent).toMatch(/Retry policy agent saved v3 with changes to site\.css while you were editing it/);
+    expect((within(viewer).getByLabelText('Source of site.css') as HTMLTextAreaElement).value).toBe('mine');
+    fireEvent.click(within(banner).getByRole('button', { name: 'Keep mine' }));
+    await waitFor(() => expect(calls('artifacts.writeFiles')).toHaveLength(1));
+    expect(calls('artifacts.writeFiles')[0]).toMatchObject({ files: [{ path: 'site.css', data: 'mine' }], baseVersion: 3, note: 'Edited site.css over v3' });
+    await waitFor(() => expect(within(viewer).queryByRole('alert')).toBeNull());
+  });
+
+  it('loads an agent write to the open file when there are no edits, and Use theirs drops edits', async () => {
+    const viewer = await openArtifact(/Docs site/);
+    fireEvent.click(await waitFor(() => fileButton('site.css')));
+    await within(viewer).findByLabelText('Source of site.css');
+    agentWritesFiles('a-site', { 'site.css': 'from the agent' });
+    await waitFor(() => expect((within(viewer).getByLabelText('Source of site.css') as HTMLTextAreaElement).value).toBe('from the agent'));
+    expect(within(viewer).getByRole('status').textContent).toMatch(/Updated by Retry policy agent · v2/);
+
+    fireEvent.change(within(viewer).getByLabelText('Source of site.css'), { target: { value: 'mine' } });
+    agentWritesFiles('a-site', { 'site.css': 'again' });
+    fireEvent.click(await within(viewer).findByRole('button', { name: 'Use theirs' }));
+    expect((within(viewer).getByLabelText('Source of site.css') as HTMLTextAreaElement).value).toBe('again');
+    expect(within(viewer).queryByText('Unsaved changes')).toBeNull();
+  });
+
+  it('shows an image inline as a data URL', async () => {
+    const viewer = await openArtifact(/Docs site/);
+    fireEvent.click(await waitFor(() => fileButton('home.png')));
+    const img = (await within(viewer).findByRole('img', { name: 'shots/home.png' })) as HTMLImageElement;
+    expect(img.getAttribute('src')).toBe('data:image/png;base64,iVBORw0KGgo=');
+    expect(within(viewer).queryByLabelText('Source of shots/home.png')).toBeNull();
+    expect(calls('artifacts.readFile')).toContainEqual({ id: 'a-site', path: 'shots/home.png' });
+  });
+
+  it('Open on this page makes another page the entry, with no file changes', async () => {
+    const viewer = await openArtifact(/Docs site/);
+    fireEvent.click(await waitFor(() => fileButton('about.html')));
+    await within(viewer).findByLabelText('Source of about.html');
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Open on this page' }));
+    await waitFor(() => expect(calls('artifacts.writeFiles')).toEqual([{ id: 'a-site', entry: 'about.html', note: 'Opens on about.html', baseVersion: 1 }]));
+    // The entry editor now holds the new entry, marked in the panel.
+    await waitFor(() => expect((within(viewer).getByLabelText('Source of Docs site') as HTMLTextAreaElement).value).toBe('<h1>About</h1>'));
+    await waitFor(() => expect(fileButton('about.html').textContent).toBe('about.htmlOpens on'));
+    expect(within(viewer).getByRole('tab', { name: 'Edit' })).toBeTruthy();
+  });
+});
+
+describe('A first retrieval landing while open', () => {
+  it('replaces the retrieval status with the editors and the retrieved content', async () => {
+    arts['a-pending'] = {
+      meta: meta('a-pending', 'Pricing calculator', 'doc', 0, { importedFrom: 'https://claude.ai/artifact/NFaggV4JC9X6prTgKhobKm', retrieval: { status: 'retrieving', agentId: 'ag-fix', trigger: 'import', startedAt: now } }),
+      versions: [],
+      snapshots: { 0: '' },
+    };
+    const viewer = await openArtifact(/Pricing calculator/);
+    expect(within(viewer).getByRole('heading', { name: 'Retrieving from claude.ai' })).toBeTruthy();
+    expect(within(viewer).getByRole('status').textContent).toMatch(/Retry policy\s*· Running/);
+    const a = arts['a-pending']!;
+    a.snapshots[1] = '# Pricing\n\nTiers';
+    a.versions = [{ version: 1, ts: now, author: 'agent:ag-fix', note: 'Retrieved from claude.ai' }];
+    a.meta = { ...a.meta, version: 1, retrieval: { ...a.meta.retrieval!, status: 'ready', retrievedAt: now } };
+    emit('artifacts.changed', { id: 'a-pending', change: 'saved', version: 1, author: 'agent:ag-fix' });
+    const editor = (await within(viewer).findByLabelText('Source of Pricing calculator')) as HTMLTextAreaElement;
+    expect(editor.value).toBe('# Pricing\n\nTiers');
+    expect(within(viewer).queryByRole('heading', { name: 'Retrieving from claude.ai' })).toBeNull();
+    expect(within(viewer).getByText(/Doc · oide · v1/)).toBeTruthy();
   });
 });

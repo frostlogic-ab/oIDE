@@ -379,7 +379,7 @@ export function classifyClaudeLink(raw: string): ClaudeLinkInfo {
   if (parts[0] === 'public' && parts[1] === 'artifacts' && idAt(2)) return { ok: true, url, type: 'public-artifact' };
   if (parts[0] === 'design' && parts.length >= 2) return { ok: true, url, type: 'design' };
   if (parts[0] === 'chat') {
-    return { ok: false, reason: 'This is a chat link, not an artifact link. Open the artifact in the chat and copy its own link, or paste its code.' };
+    return { ok: false, reason: 'This is a chat link, not an artifact link. Open the artifact in the chat and copy its own link, or download its files and use New artifact › Files.' };
   }
   return { ok: false, reason: "This isn't a claude.ai artifact link." };
 }

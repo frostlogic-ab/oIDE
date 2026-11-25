@@ -8,6 +8,7 @@
  * Every value is parsed through the protocol schemas, so fixtures cannot drift from the contract.
  */
 import {
+  AgentSummary,
   ArtifactMeta,
   ArtifactUse,
   ArtifactVersion,
@@ -25,7 +26,9 @@ import {
   isDesignContent,
   isImportStubContent,
   titleFromContent,
+  type ArtifactFileContent,
   type ArtifactKind,
+  type ArtifactRetrieval,
   type Commands,
   type CommandInput,
   type CommandName,
@@ -47,6 +50,8 @@ export interface LibraryMockContext {
   emit: <K extends EventName>(event: K, payload: EventPayload<K>) => void;
   getSettings: () => Settings;
   setSettings: (s: Settings) => void;
+  /** Adds or updates an agent on the Wall (the retrieval agents of linked artifacts). */
+  putAgent?: (a: AgentSummary) => void;
 }
 
 const MIN = 60_000;
@@ -154,7 +159,19 @@ interface MockArtifact {
   content: string;
   versions: ArtifactVersion[];
   snapshots: Record<number, string>;
+  /** Multi-file artifacts (ADR 0014): every file of each version. Single-file ones derive it. */
+  fileSets?: Record<number, Record<string, ArtifactFileContent>>;
 }
+
+/** Every file of version `v` (a single-file artifact is its entry alone). */
+function filesAt(a: MockArtifact, v: number): Record<string, ArtifactFileContent> {
+  if (v === 0) return {};
+  if (a.fileSets?.[v]) return a.fileSets[v]!;
+  const text = a.snapshots[v];
+  return text === undefined ? {} : { [a.meta.entry]: { encoding: 'utf8', data: text } };
+}
+
+const fileSize = (c: ArtifactFileContent) => (c.encoding === 'utf8' ? new TextEncoder().encode(c.data).length : Math.floor((c.data.length * 3) / 4));
 
 /** The entry file for `content`: a design is index.html or, for React, App.jsx (as main stores it). */
 const entryFor = (kind: ArtifactKind, content: string) => (kind === 'design' ? designEntryFor(content) : kind === 'doc' ? 'doc.md' : 'board.excalidraw');
@@ -184,6 +201,67 @@ function art(
 const LEGACY_IMPORT_STUB = `Imported from https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T. oIDE cannot fetch claude.ai artifacts: open the link, copy the artifact's code and paste it here to keep a local copy.
 `;
 
+/* A multi-file claude.ai design (pages, shared CSS, a canvas file and screenshots), as an agent retrieved it. */
+const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN88P/BfwAJhAPk4SwzdwAAAABJRU5ErkJggg==';
+const sitePage = (title: string, body: string) => `<!doctype html>
+<html><head><meta charset="utf-8"><title>${title}</title><link rel="stylesheet" href="site.css"></head>
+<body><header><b>oIDE</b><nav><a href="index.html">Home</a><a href="pricing.html">Pricing</a><a href="docs.html">Docs</a><a href="about.html">About</a></nav></header>
+<main>${body}</main></body></html>
+`;
+const SITE_CSS = `body{margin:0;background:#0E1013;color:#E6E8EB;font:14px Inter,system-ui,sans-serif}
+header{display:flex;gap:24px;align-items:center;height:52px;padding:0 24px;border-bottom:1px solid #232830;background:#0B0D10}
+nav a{color:#9DBBFA;margin-right:16px;text-decoration:none}
+main{max-width:880px;margin:40px auto;padding:0 24px}
+h1{font-size:32px;margin:0 0 12px}.card{border:1px solid #262B33;background:#15181D;border-radius:12px;padding:16px;margin:12px 0}
+`;
+const SITE_FILES: Record<string, ArtifactFileContent> = {
+  'index.html': { encoding: 'utf8', data: sitePage('oIDE: many agents, one window', '<h1>Many agents, one window</h1><p>Run your own Claude Code CLI in parallel, each in its own worktree.</p><img src="shots/home.png" alt="The Wall" width="640">') },
+  'pricing.html': { encoding: 'utf8', data: sitePage('Pricing', '<h1>Pricing</h1><div class="card">Free and open source (MIT).</div>') },
+  'docs.html': { encoding: 'utf8', data: sitePage('Docs', '<h1>Docs</h1><div class="card">Getting started, the Wall, Review.</div>') },
+  'about.html': { encoding: 'utf8', data: sitePage('About', '<h1>About</h1><p>Built in the open.</p>') },
+  'site.css': { encoding: 'utf8', data: SITE_CSS },
+  'canvas.json': { encoding: 'utf8', data: JSON.stringify({ pages: ['index.html', 'pricing.html', 'docs.html', 'about.html'], width: 1440 }, null, 2) },
+  'shots/home.png': { encoding: 'base64', data: PNG_1PX },
+  'shots/pricing.png': { encoding: 'base64', data: PNG_1PX },
+  'shots/docs.png': { encoding: 'base64', data: PNG_1PX },
+};
+
+/** A multi-file artifact: `files` at every version of `history` (the entry gets the snapshot text). */
+function multiArt(meta: Omit<ArtifactMeta, 'entry' | 'slug' | 'createdAt'> & { createdAt?: number }, files: Record<string, ArtifactFileContent>, entry: string, history: Array<[author: string, minutesAgo: number, note?: string]>): MockArtifact {
+  const a = art(meta, files[entry]!.data, history);
+  a.meta = { ...a.meta, entry, fileCount: Object.keys(files).length };
+  a.fileSets = {};
+  for (const v of a.versions) a.fileSets[v.version] = { ...files, [entry]: { encoding: 'utf8', data: a.snapshots[v.version]! } };
+  return a;
+}
+
+/** A linked artifact with no files yet (version 0), waiting for or after its first retrieval. */
+function pendingArt(meta: Pick<ArtifactMeta, 'id' | 'title' | 'kind' | 'projectId' | 'location' | 'importedFrom'>, retrieval: ArtifactRetrieval): MockArtifact {
+  const slug = meta.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'artifact';
+  const entry = meta.kind === 'design' ? 'index.html' : meta.kind === 'doc' ? 'doc.md' : 'board.excalidraw';
+  return {
+    meta: ArtifactMeta.parse({ ...meta, slug, entry, version: 0, fileCount: 0, retrieval, createdAt: retrieval.startedAt, updatedAt: retrieval.finishedAt ?? retrieval.startedAt }),
+    content: '',
+    versions: [],
+    snapshots: {},
+    fileSets: {},
+  };
+}
+
+/** Sample content for a picked file (the mock reads no disk), by its type. */
+function sampleFile(name: string): ArtifactFileContent {
+  if (/\.(png|jpe?g|gif|webp)$/i.test(name)) return { encoding: 'base64', data: PNG_1PX };
+  if (/\.html?$/i.test(name)) return { encoding: 'utf8', data: sitePage(name.replace(/\.[^.]+$/, ''), `<h1>${name}</h1><p>Picked from your computer.</p>`) };
+  if (/\.css$/i.test(name)) return { encoding: 'utf8', data: SITE_CSS };
+  if (/\.(jsx|tsx)$/i.test(name)) return { encoding: 'utf8', data: REACT_DESIGN };
+  if (/\.excalidraw$/i.test(name)) return { encoding: 'utf8', data: LIFECYCLE_BOARD };
+  return { encoding: 'utf8', data: `# ${name}\n\nPicked from your computer.\n` };
+}
+
+/** What a retrieval agent says today for a claude.ai /artifact/ link (no CLI tool reads those yet). */
+const NO_TOOL_REASON =
+  "This Claude Code CLI has no tool that can read claude.ai artifact links. It can read Claude Docs (the Claude Docs connector) and claude.ai/design projects (DesignSync), but not artifacts from a chat. Download the artifact's files on claude.ai and use New artifact › Files, or ask Claude on claude.ai to save it as a Doc.";
+
 const artifactSeed: MockArtifact[] = [
   art({ id: 'art-main-v2', title: 'Main window v2', kind: 'design', projectId: 'oide', location: 'repo', importedFrom: 'https://claude.ai/public/artifacts/0b6c-main-window-v2', version: 4, updatedAt: 0 }, DESIGN_HTML, [
     ['user', 900, 'Imported from claude.ai'],
@@ -207,6 +285,20 @@ const artifactSeed: MockArtifact[] = [
   // A link-only import made before oIDE refused to create one without content: shows the fix panel.
   art({ id: 'art-legacy-import', title: 'Pricing page (imported)', kind: 'doc', projectId: 'oide', location: 'app-data', importedFrom: 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T', version: 1, updatedAt: 0 }, LEGACY_IMPORT_STUB, [['user', 4000, 'Imported from claude.ai']]),
   art({ id: 'art-docs-ia', title: 'Docs IA sketch', kind: 'whiteboard', projectId: 'docs-site', location: 'repo', version: 1, updatedAt: 0 }, IA_BOARD, [['user', 3000]]),
+  // A multi-file design an agent retrieved from a claude.ai/design link: the Files panel, Update.
+  (() => {
+    const a = multiArt({ id: 'art-site', title: 'oIDE site', kind: 'design', projectId: 'docs-site', location: 'repo', importedFrom: 'https://claude.ai/design/p/oide-site', version: 2, updatedAt: 0 }, SITE_FILES, 'index.html', [
+      ['agent:a-docs', 300, 'Retrieved from claude.ai'],
+      ['agent:a-docs', 90, 'Retrieved from claude.ai'],
+    ]);
+    a.meta = { ...a.meta, retrieval: { status: 'ready', agentId: 'a-docs', trigger: 'update', startedAt: ago(92), finishedAt: ago(90), retrievedAt: ago(90) } };
+    return a;
+  })(),
+  // A link whose first retrieval failed (what an /artifact/ link does with today's CLI).
+  pendingArt(
+    { id: 'art-failed-link', title: 'Pricing calculator', kind: 'design', projectId: 'oide', location: 'app-data', importedFrom: 'https://claude.ai/artifact/NFaggV4JC9X6prTgKhobKm' },
+    { status: 'failed', agentId: 'a-retrieve-old', trigger: 'import', startedAt: ago(30), finishedAt: ago(29), error: NO_TOOL_REASON },
+  ),
 ];
 
 const useSeed: ArtifactUse[] = [
@@ -510,6 +602,83 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
   const changedExt = () => ctx.emit('extensions.changed', installed);
   const getArt = (id: string) => artifacts.get(id) ?? fail('not_found', `No artifact ${id}`);
 
+  /** A new version holding `set` (every file), with `entry` as its entry. */
+  const writeVersion = (a: MockArtifact, set: Record<string, ArtifactFileContent>, entry: string, author: string, note: string) => {
+    const next = a.meta.version + 1;
+    a.fileSets = { ...(a.fileSets ?? Object.fromEntries(a.versions.map((v) => [v.version, filesAt(a, v.version)]))), [next]: set };
+    const e = set[entry]!;
+    a.content = e.encoding === 'utf8' ? e.data : '';
+    a.snapshots[next] = a.content;
+    a.versions = [ArtifactVersion.parse({ version: next, ts: Date.now(), author, note }), ...a.versions];
+    a.meta = { ...a.meta, version: next, entry, fileCount: Object.keys(set).length, updatedAt: Date.now(), brokenImport: undefined };
+    ctx.emit('artifacts.changed', { id: a.meta.id, change: 'saved', version: next, author });
+  };
+
+  /*
+   * Retrieval agents (ADR 0014), simulated: an agent shows on the Wall, works for a few seconds, then
+   * hands back the sample site for a claude.ai/design link, or fails with today's reason for an
+   * /artifact/ or published link (no CLI tool reads those yet).
+   */
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  const agentFor = new Map<string, AgentSummary>();
+  const putAgent = (a: AgentSummary) => {
+    agentFor.set(a.id, a);
+    ctx.putAgent?.(a);
+  };
+
+  const startRetrieval = (a: MockArtifact, projectId: string, trigger: ArtifactRetrieval['trigger'], renameOnSuccess: boolean) => {
+    const agentId = newId('a-retrieve');
+    const startedAt = Date.now();
+    a.meta = { ...a.meta, retrieval: { status: 'retrieving', agentId, trigger, startedAt, retrievedAt: a.meta.retrieval?.retrievedAt } };
+    putAgent(
+      AgentSummary.parse({
+        id: agentId,
+        projectId,
+        title: `Retrieve ${a.meta.title} from claude.ai`,
+        status: 'running',
+        mode: 'default',
+        model: 'sonnet',
+        branch: `oide/retrieve-${a.meta.slug}`.slice(0, 60),
+        activity: ['Reading the link with the claude.ai tools…'],
+        createdAt: startedAt,
+        updatedAt: startedAt,
+      }),
+    );
+    const design = classifyClaudeLink(a.meta.importedFrom ?? '');
+    const works = design.ok && design.type === 'design';
+    timers.set(
+      a.meta.id,
+      setTimeout(() => {
+        const step = agentFor.get(agentId);
+        if (step) putAgent({ ...step, activity: [...step.activity, works ? 'DesignSync: 9 files' : 'No tool can read this link'], updatedAt: Date.now() });
+      }, 1800),
+    );
+    setTimeout(() => {
+      if (artifacts.get(a.meta.id) !== a || a.meta.retrieval?.agentId !== agentId || a.meta.retrieval.status !== 'retrieving') return;
+      if (works) {
+        if (renameOnSuccess) a.meta = { ...a.meta, title: 'oIDE site' };
+        finishRetrieval(a, { ok: true, set: SITE_FILES, entry: 'index.html' });
+      } else finishRetrieval(a, { ok: false, error: NO_TOOL_REASON });
+    }, 4500);
+  };
+
+  const finishRetrieval = (a: MockArtifact, result: { ok: true; set: Record<string, ArtifactFileContent>; entry: string } | { ok: false; error: string }) => {
+    const r = a.meta.retrieval!;
+    clearTimeout(timers.get(a.meta.id));
+    timers.delete(a.meta.id);
+    const finishedAt = Date.now();
+    const agent = r.agentId ? agentFor.get(r.agentId) : undefined;
+    if (agent) putAgent({ ...agent, status: result.ok ? 'done' : result.error === 'Cancelled.' ? 'stopped' : 'error', ...(result.ok ? {} : { error: result.error }), updatedAt: finishedAt });
+    if (result.ok) {
+      a.meta = { ...a.meta, retrieval: { ...r, status: 'ready', finishedAt, retrievedAt: finishedAt, error: undefined } };
+      if (r.agentId) uses = [...uses, ArtifactUse.parse({ artifactId: a.meta.id, agentId: r.agentId, op: 'write', ts: finishedAt })];
+      writeVersion(a, { ...result.set }, result.entry, `agent:${r.agentId ?? 'retrieval'}`, 'Retrieved from claude.ai');
+    } else {
+      a.meta = { ...a.meta, retrieval: { ...r, status: 'failed', finishedAt, error: result.error }, updatedAt: finishedAt };
+      ctx.emit('artifacts.changed', { id: a.meta.id, change: 'retrieval', version: a.meta.version });
+    }
+  };
+
   return {
     /* ---- artifacts */
     'artifacts.list': ({ projectId, kind }) =>
@@ -538,8 +707,14 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
       a.content = content;
       a.snapshots[next] = content;
       a.versions = [ArtifactVersion.parse({ version: next, ts: Date.now(), author: 'user', note }), ...a.versions];
-      // The entry file follows the content (index.html or App.jsx); real content clears brokenImport.
-      a.meta = { ...a.meta, version: next, updatedAt: Date.now(), entry: entryFor(a.meta.kind, content), brokenImport: isBroken(a.meta.importedFrom, content) || undefined };
+      if (a.fileSets) {
+        // Several files: only the entry changes.
+        a.fileSets[next] = { ...filesAt(a, a.meta.version), [a.meta.entry]: { encoding: 'utf8', data: content } };
+        a.meta = { ...a.meta, version: next, updatedAt: Date.now(), brokenImport: undefined };
+      } else {
+        // The entry file follows the content (index.html or App.jsx); real content clears brokenImport.
+        a.meta = { ...a.meta, version: next, updatedAt: Date.now(), entry: entryFor(a.meta.kind, content), brokenImport: isBroken(a.meta.importedFrom, content) || undefined };
+      }
       ctx.emit('artifacts.changed', { id, change: 'saved', version: next, author: 'user' });
       return a.meta;
     },
@@ -598,6 +773,80 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
       ctx.emit('artifacts.changed', { id, change: 'deleted' });
       return { ok: true as const };
     },
+    'artifacts.files': ({ id, version: v }) => {
+      const a = getArt(id);
+      const set = filesAt(a, v ?? a.meta.version);
+      return Object.entries(set).map(([path, c]) => ({ path, size: fileSize(c), text: c.encoding === 'utf8' }));
+    },
+    'artifacts.readFile': ({ id, path, version: v }) => {
+      const a = getArt(id);
+      return filesAt(a, v ?? a.meta.version)[path] ?? fail('not_found', `No file ${path} in v${v ?? a.meta.version}`);
+    },
+    'artifacts.writeFiles': ({ id, files, deletes, entry, note, baseVersion }) => {
+      const a = getArt(id);
+      if (baseVersion !== undefined && baseVersion !== a.meta.version) fail('conflict', `${a.meta.title} changed since you opened it (now v${a.meta.version}).`);
+      const set = { ...filesAt(a, a.meta.version) };
+      for (const d of deletes) delete set[d];
+      for (const f of files) set[f.path] = { encoding: f.encoding, data: f.data };
+      const nextEntry = entry ?? a.meta.entry;
+      if (!set[nextEntry]) fail('invalid_input', `${nextEntry} is not a file of this artifact.`);
+      writeVersion(a, set, nextEntry, 'user', note ?? 'Edited by you');
+      return a.meta;
+    },
+    'artifacts.importFiles': ({ filePaths, folderPath, entry, url, title, kind, projectId, location }) => {
+      if (url) {
+        const info = classifyClaudeLink(url);
+        if (!info.ok) fail('invalid_input', info.reason);
+      }
+      if (location === 'repo' && !projectId) fail('invalid_input', 'A repo artifact needs a project');
+      // The mock has no disk: a folder is the sample site, files get sample content by their type.
+      const set: Record<string, ArtifactFileContent> = folderPath ? { ...SITE_FILES } : {};
+      for (const fp of filePaths) {
+        const name = fp.split(/[\\/]/).pop() ?? 'file';
+        set[name] = sampleFile(name);
+      }
+      const names = Object.keys(set);
+      const k: ArtifactKind = kind ?? (names.some((n) => /\.(html?|jsx|tsx|svg|css)$/i.test(n)) ? 'design' : names.some((n) => /\.excalidraw$/i.test(n)) ? 'whiteboard' : names.every((n) => /\.(png|jpe?g|gif|webp)$/i.test(n)) ? 'design' : 'doc');
+      const pick = entry ?? names.find((n) => /^index\.html?$/i.test(n)) ?? names.find((n) => (k === 'design' ? /\.(html?|jsx|tsx)$/i : k === 'doc' ? /\.md$/i : /\.excalidraw$/i).test(n)) ?? names[0]!;
+      if (!set[pick]) fail('invalid_input', `${pick} is not one of the files.`);
+      const t = title ?? (folderPath ? (folderPath.split(/[\\/]/).pop() ?? 'Imported files') : pick.replace(/\.[^.]+$/, ''));
+      const a = multiArt({ id: newId('art'), title: t, kind: k, projectId, location: location ?? 'app-data', importedFrom: url, version: 1, updatedAt: 0 }, set, pick, [['user', 0, 'Imported from files']]);
+      artifacts.set(a.meta.id, a);
+      ctx.emit('artifacts.changed', { id: a.meta.id, change: 'created' });
+      return a.meta;
+    },
+    'artifacts.importLink': ({ url, title, kind, projectId, location }) => {
+      const info = classifyClaudeLink(url);
+      if (!info.ok) fail('invalid_input', info.reason);
+      if (!projects.some((p) => p.id === projectId)) fail('not_found', `No project ${projectId}`);
+      const a = pendingArt(
+        { id: newId('art'), title: title ?? (info.ok && info.type === 'design' ? 'Claude Design project' : 'claude.ai artifact'), kind: kind ?? 'design', projectId, location, importedFrom: url },
+        { status: 'retrieving', trigger: 'import', startedAt: Date.now() },
+      );
+      artifacts.set(a.meta.id, a);
+      startRetrieval(a, projectId, 'import', !title);
+      ctx.emit('artifacts.changed', { id: a.meta.id, change: 'created' });
+      return a.meta;
+    },
+    'artifacts.refresh': ({ id, projectId }) => {
+      const a = getArt(id);
+      if (a.meta.retrieval?.status === 'retrieving') fail('busy', 'An agent is already retrieving it.');
+      if (!a.meta.importedFrom || !classifyClaudeLink(a.meta.importedFrom).ok) fail('invalid_input', 'This artifact has no claude.ai link to retrieve.');
+      const runIn = a.meta.projectId ?? projectId;
+      if (!runIn) fail('needs_project', 'Pick a project for the retrieval agent to run in.');
+      startRetrieval(a, runIn!, a.meta.retrieval?.status === 'failed' ? 'retry' : a.meta.version === 0 || a.meta.brokenImport ? 'import' : 'update', false);
+      ctx.emit('artifacts.changed', { id, change: 'retrieval', version: a.meta.version });
+      return a.meta;
+    },
+    'artifacts.cancelRetrieval': ({ id }) => {
+      const a = getArt(id);
+      const r = a.meta.retrieval;
+      if (r?.status !== 'retrieving') fail('invalid_input', 'No retrieval is running.');
+      finishRetrieval(a, { ok: false, error: 'Cancelled.' });
+      return a.meta;
+    },
+    'dialog.pickArtifactFiles': ({ folder }) =>
+      folder ? ['/Users/you/Downloads/oide-site'] : ['/Users/you/Downloads/oide-site/index.html', '/Users/you/Downloads/oide-site/pricing.html', '/Users/you/Downloads/oide-site/site.css', '/Users/you/Downloads/oide-site/hero.png'],
     'dialog.pickFile': () => '/Users/you/Downloads/pricing-page.html',
     'dialog.pickCli': () => '/usr/local/bin/claude',
 

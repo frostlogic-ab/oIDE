@@ -1,28 +1,58 @@
 /**
- * Dropping one file on the Artifacts screen or the Import dialog. The page cannot read a dropped
- * file's path, so the file goes through preload's `attachDropped` (the bridge Attachments uses):
- * preload reads the real path, main registers it as picked, and a non-image file comes back as
- * `{ kind: 'file', path }`. That path is what `artifacts.import({ filePath })` accepts. No new IPC.
+ * Dropping files on the Artifacts grid or the New artifact dialog. The page cannot read a dropped
+ * file's path, so the files go through preload's `attachDropped` (the bridge prompt inputs use):
+ * preload reads the real paths (at most 50), main registers them as picked, and each non-image file
+ * comes back as `{ kind: 'file', path }`, which `artifacts.importFiles({ filePaths })` accepts.
+ * Images come back inline (base64, no path), so the dialog adds them to the new artifact with
+ * `artifacts.writeFiles` after it is created. Folders are refused by the bridge: "Choose a folder…"
+ * takes a whole folder. No new IPC.
  */
 import { useRef, useState, type DragEvent } from 'react';
-import { rejectedMessages } from '../../lib/attachments';
+import { isSafeArtifactPath, type ImageMediaType } from '@oide/protocol';
 import { ipcErrorMessage } from '../../lib/bridge';
 
-export type DroppedFile = { path: string; name: string } | { error: string };
+/** The most files preload passes on from one drop. */
+export const MAX_DROPPED = 50;
 
-/** Resolves a drop to a picked file path, or a short message for the user. */
-export async function resolveDroppedFiles(files: readonly File[]): Promise<DroppedFile> {
-  if (files.length !== 1) return { error: 'Drop one file at a time.' };
+export interface DroppedImage {
+  name: string;
+  mediaType: ImageMediaType;
+  dataBase64: string;
+}
+
+export interface DroppedFiles {
+  /** Files main registered as picked (by path). */
+  files: Array<{ path: string; name: string }>;
+  /** Images, inline (the bridge returns no path for them). */
+  images: DroppedImage[];
+  /** What could not be taken, one line each. */
+  problems: string[];
+}
+
+export type DropResult = DroppedFiles | { error: string };
+
+/** Resolves a drop to picked file paths and inline images, with a line for anything refused. */
+export async function resolveDroppedFiles(files: readonly File[]): Promise<DropResult> {
+  if (!files.length) return { error: 'Nothing to add: drop files from your computer.' };
   const bridge = typeof window !== 'undefined' ? window.oide : undefined;
-  if (!bridge?.attachDropped) return { error: 'Dropping a file needs the desktop app. Use Choose a file instead.' };
+  if (!bridge?.attachDropped) return { error: 'Dropping files needs the desktop app. Use Choose files… instead.' };
   try {
     const r = await bridge.attachDropped(files);
-    const file = r.attachments.find((a) => a.kind === 'file');
-    if (file && file.kind === 'file') return { path: file.path, name: file.name };
-    if (r.rejected.length) return { error: rejectedMessages(r.rejected).join(' ') };
-    // Images come back inline (no path), and a file the page made itself has no path at all.
-    if (r.attachments.length) return { error: "Images can't be imported as artifacts. Drop an .html, .jsx, .svg, .md or .excalidraw file." };
-    return { error: "That file couldn't be read from disk. Use Choose a file instead." };
+    const out: DroppedFiles = { files: [], images: [], problems: [] };
+    for (const a of r.attachments) {
+      if (a.kind === 'file') out.files.push({ path: a.path, name: a.name });
+      else {
+        const name = a.name ?? 'image.png';
+        if (isSafeArtifactPath(name)) out.images.push({ name, mediaType: a.mediaType, dataBase64: a.dataBase64 });
+        else out.problems.push(`${name}: not a name a file can have in an artifact.`);
+      }
+    }
+    for (const x of r.rejected) {
+      out.problems.push(/^Folders cannot be attached/.test(x.reason) ? `${x.name}: folders can't be dropped. Use Choose a folder… instead.` : `${x.name}: ${x.reason}`);
+    }
+    if (files.length > MAX_DROPPED) out.problems.push(`Only the first ${MAX_DROPPED} files were added. Choose a folder… takes more.`);
+    if (!out.files.length && !out.images.length && !out.problems.length) return { error: "Those files couldn't be read from disk. Use Choose files… instead." };
+    return out;
   } catch (err) {
     return { error: ipcErrorMessage(err) };
   }
@@ -30,8 +60,8 @@ export async function resolveDroppedFiles(files: readonly File[]): Promise<Dropp
 
 const hasFiles = (e: DragEvent<HTMLElement>) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
 
-/** Drag-over state and handlers for a drop target that takes one file. */
-export function useFileDrop(onFile: (file: DroppedFile) => void, disabled = false) {
+/** Drag-over state and handlers for a drop target that takes files. */
+export function useFileDrop(onDrop: (result: DropResult) => void, disabled = false) {
   const [dragging, setDragging] = useState(false);
   const depth = useRef(0);
   return {
@@ -57,7 +87,9 @@ export function useFileDrop(onFile: (file: DroppedFile) => void, disabled = fals
         setDragging(false);
         if (disabled || !hasFiles(e)) return;
         e.preventDefault();
-        void resolveDroppedFiles(Array.from(e.dataTransfer.files)).then(onFile);
+        // The page's own drop handlers (the grid, the dialog) are nested: handle it once.
+        e.stopPropagation();
+        void resolveDroppedFiles(Array.from(e.dataTransfer.files)).then(onDrop);
       },
     },
   };
