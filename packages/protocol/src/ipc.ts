@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AgentSpec, AgentStatus, AgentSummary, GitRef, Id, MessageAttachments, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
-import { ArtifactKind, ArtifactMeta, ArtifactUse, ArtifactVersion, IMPORT_NEEDS_CONTENT } from './artifacts.js';
+import { ArtifactFile, ArtifactFileContent, ArtifactKind, ArtifactMeta, ArtifactPath, ArtifactUse, ArtifactVersion, ARTIFACT_LIMITS, IMPORT_NEEDS_CONTENT } from './artifacts.js';
 import { AgentEvent } from './events.js';
 import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
 import { CommitInfo, FileDiff, FileNode, MergePrediction, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
@@ -321,7 +321,76 @@ export const Commands = {
   'artifacts.uses': cmd(z.object({ ids: z.array(Id).max(500) }), z.record(z.string(), z.array(ArtifactUse))),
   /** Content of one numbered snapshot (History › view version). */
   'artifacts.readVersion': cmd(z.object({ id: Id, version: z.number().int().positive() }), z.object({ content: z.string() })),
+  /**
+   * History > Restore: commits the full snapshot of `version` (every file, and the entry it had) as a
+   * new version with the note `Restored v<n>`. `baseVersion` (the version the user was looking at)
+   * refuses with code `conflict` when the artifact has moved on, like `artifacts.save`.
+   */
+  'artifacts.restore': cmd(z.object({ id: Id, version: z.number().int().positive(), baseVersion: z.number().int().nonnegative().optional() }), ArtifactMeta),
   'artifacts.previewUrl': cmd(z.object({ id: Id }), z.object({ url: z.string() })),
+  /**
+   * New artifact from a link (ADR 0014). Main never downloads it: it creates the artifact at version 0
+   * with `retrieval.status: 'retrieving'` and starts an agent in `projectId` (queued behind Max running)
+   * that reads the link with the user's `claude` CLI and hands the files back over MCP. The link is
+   * checked with `classifyClaudeLink` first (`invalid_input`, reason `bad_link`).
+   */
+  'artifacts.importLink': cmd(
+    z.object({
+      url: z.string().url().max(2048),
+      title: z.string().max(200).optional(),
+      kind: ArtifactKind.optional(),
+      projectId: Id,
+      location: z.enum(['repo', 'app-data']).default('app-data'),
+    }),
+    ArtifactMeta,
+  ),
+  /**
+   * Update (or retry) a linked artifact: starts a new retrieval agent for `importedFrom`. The current
+   * version stays until the agent finishes; the result is the next version. `projectId` is where the
+   * agent runs when the artifact has no project. Refused with `busy` while a retrieval is running.
+   */
+  'artifacts.refresh': cmd(z.object({ id: Id, projectId: Id.optional() }), ArtifactMeta),
+  /** Stops a running retrieval: the agent is stopped, nothing is written, the status becomes `failed`. */
+  'artifacts.cancelRetrieval': cmd(z.object({ id: Id }), ArtifactMeta),
+  /** Files of the current version, or of `version`. */
+  'artifacts.files': cmd(z.object({ id: Id, version: z.number().int().positive().optional() }), z.array(ArtifactFile)),
+  /** One file of the current version, or of `version`. */
+  'artifacts.readFile': cmd(z.object({ id: Id, path: ArtifactPath, version: z.number().int().positive().optional() }), ArtifactFileContent),
+  /**
+   * Writes and deletes files as one new version (the viewer's Files panel). `entry` moves the entry
+   * to another file of the new version. `baseVersion` refuses with `conflict` like `artifacts.save`.
+   */
+  'artifacts.writeFiles': cmd(
+    z.object({
+      id: Id,
+      files: z.array(z.object({ path: ArtifactPath }).merge(ArtifactFileContent)).max(ARTIFACT_LIMITS.files).default([]),
+      deletes: z.array(ArtifactPath).max(ARTIFACT_LIMITS.files).default([]),
+      entry: ArtifactPath.optional(),
+      note: z.string().max(500).optional(),
+      baseVersion: z.number().int().nonnegative().optional(),
+    }),
+    ArtifactMeta,
+  ),
+  /**
+   * New artifact from files the user picked (`dialog.pickArtifactFiles`), dropped, or a folder picked
+   * there with `folder: true` (its files, recursively, keeping relative paths). Main accepts only paths
+   * picked or dropped in this session. The kind and entry follow the files unless given.
+   */
+  'artifacts.importFiles': cmd(
+    z
+      .object({
+        filePaths: z.array(z.string().min(1).max(4096)).max(ARTIFACT_LIMITS.files).default([]),
+        folderPath: z.string().min(1).max(4096).optional(),
+        entry: ArtifactPath.optional(),
+        url: z.string().url().max(2048).optional(),
+        title: z.string().max(200).optional(),
+        kind: ArtifactKind.optional(),
+        projectId: Id.optional(),
+        location: z.enum(['repo', 'app-data']).default('app-data'),
+      })
+      .refine((i) => i.filePaths.length > 0 || !!i.folderPath, { message: 'Pick files or a folder.' }),
+    ArtifactMeta,
+  ),
 
   // Auto-update (Settings › Updates). Download and install are separate, explicit user actions.
   'updates.status': cmd(Void, UpdateStatus),
@@ -342,6 +411,12 @@ export const Commands = {
    * files (≤ 25 MB) by path. Files over the limits come back in `rejected` with the reason.
    */
   'dialog.pickFiles': cmd(z.object({ title: z.string().optional() }), PickedAttachments),
+  /**
+   * Native multi-select open dialog for artifact files (New artifact › From files). Returns the picked
+   * paths, any type (images too), and registers each as picked so `artifacts.importFiles` accepts it.
+   * `folder: true` picks one folder instead (registered the same way).
+   */
+  'dialog.pickArtifactFiles': cmd(z.object({ folder: z.boolean().default(false) }), z.array(z.string())),
   /** Native open-file dialog for Settings › Claude Code › CLI path. Only a path picked here skips the CLI path confirmation (SEC-29). */
   'dialog.pickCli': cmd(Void, z.string().nullable()),
 } as const;
@@ -377,7 +452,7 @@ export const Events = {
    * An artifact (or the list) changed. `change` says what happened; for `saved`, `version` and
    * `author` (`user` or `agent:<id>`) let an open editor say "updated by <agent>" without a refetch.
    */
-  'artifacts.changed': z.object({ id: Id.optional(), change: z.enum(['created', 'saved', 'renamed', 'deleted', 'used']).optional(), version: z.number().int().positive().optional(), author: z.string().optional() }),
+  'artifacts.changed': z.object({ id: Id.optional(), change: z.enum(['created', 'saved', 'renamed', 'deleted', 'used', 'retrieval']).optional(), version: z.number().int().nonnegative().optional(), author: z.string().optional() }),
   'notify': z.object({
     level: z.enum(['info', 'warning', 'error']),
     message: z.string(),

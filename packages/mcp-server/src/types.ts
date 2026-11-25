@@ -1,4 +1,4 @@
-import type { ArtifactKind, ArtifactMeta, ArtifactUse, CheckResult, PermissionRequest } from '@oide/protocol';
+import type { AgentArtifactFileInput, ArtifactFile, ArtifactFileContent, ArtifactKind, ArtifactMeta, ArtifactUse, CheckResult, PermissionRequest } from '@oide/protocol';
 
 /**
  * Types shared with @oide/agent-core. They are declared here structurally (no dependency on
@@ -21,12 +21,44 @@ export interface ArtifactContext {
   projectId?: string;
 }
 
-/** Implemented by packages/store's artifacts store. Every call is logged as an ArtifactUse. */
+/** What an agent hands over when it finishes retrieving a linked artifact (ADR 0014). */
+export interface RetrievalResult {
+  ok: boolean;
+  /** Why it failed, in one sentence the user can act on (`ok: false`). */
+  reason?: string;
+  entry?: string;
+  title?: string;
+  kind?: ArtifactKind;
+}
+
+/**
+ * Implemented in main over packages/store's artifacts store (visibility, `fromFile` resolution against
+ * the calling agent's own folder, the retrieval service). Every call is logged as an ArtifactUse.
+ */
 export interface ArtifactsBackend {
   list(ctx: ArtifactContext, filter: { kind?: ArtifactKind; query?: string }): Promise<ArtifactMeta[]>;
   read(ctx: ArtifactContext, id: string): Promise<{ meta: ArtifactMeta; content: string }>;
   write(ctx: ArtifactContext, id: string, content: string, note?: string): Promise<ArtifactMeta>;
-  create(ctx: ArtifactContext, input: { title: string; kind: ArtifactKind; content: string; location?: 'repo' | 'app-data' }): Promise<ArtifactMeta>;
+  create(
+    ctx: ArtifactContext,
+    input: { title: string; kind: ArtifactKind; content?: string; location?: 'repo' | 'app-data'; files?: AgentArtifactFileInput[]; entry?: string },
+  ): Promise<ArtifactMeta>;
+  /** Files of the current version (multi-file artifacts). */
+  files?(ctx: ArtifactContext, id: string): Promise<ArtifactFile[]>;
+  /** One file of the current version: UTF-8 text or base64. */
+  readFile?(ctx: ArtifactContext, id: string, path: string): Promise<ArtifactFileContent>;
+  /** Write and delete files as one new version; `content` replaces the entry file. */
+  writeFiles?(
+    ctx: ArtifactContext,
+    id: string,
+    change: { content?: string; files?: AgentArtifactFileInput[]; deletes?: string[]; entry?: string; note?: string },
+  ): Promise<ArtifactMeta>;
+  /** True when this agent was started by oIDE to retrieve an artifact (it then sees the retrieval tools). */
+  isRetrievalAgent?(agentId: string): boolean;
+  /** Stage files of a running retrieval. Refused unless `ctx.agentId` is that retrieval's agent. */
+  retrievalAddFiles?(ctx: ArtifactContext, id: string, files: AgentArtifactFileInput[]): Promise<{ files: number; bytes: number }>;
+  /** Finish a running retrieval: commit the staged files as one new version, or record why it failed. */
+  retrievalFinish?(ctx: ArtifactContext, id: string, result: RetrievalResult): Promise<{ status: 'ready' | 'failed'; version: number; entry?: string; error?: string }>;
 }
 
 export interface OideMcpServerOptions {

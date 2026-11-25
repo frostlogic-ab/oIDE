@@ -775,3 +775,24 @@ strategy ort failed." for a file name (staged files are indented with two spaces
 Telemetry: `agent_merged` gains `local_changes`. Tests in `packages/git/test/merge-autostash.test.ts`
 and `test/integration/merge-conflicts.test.ts`. Pages: [git-worktrees](pages/git-worktrees.md),
 [screen-review](pages/screen-review.md), [telemetry](pages/telemetry.md).
+
+## [2026-11-25] decision | Multi-file artifacts, retrieved by agents (ADR 0014)
+A claude.ai Design link (a project of pages, CSS, a canvas file and screenshots) could not be imported:
+oIDE never downloads claude.ai content and stored one file per artifact. Checked: CLI 2.1.332 has no
+Artifact tool (only `DesignSync` for claude.ai/design projects and the Claude Docs connector for docs).
+Decided and built: artifacts are folders of files with full-snapshot versions; New artifact › A link
+creates the artifact at v0 and starts an ordinary agent that reads the link with the CLI's claude.ai
+tools and hands files back through `artifact_retrieval_add_files` / `artifact_retrieval_finish`
+(staged, committed as one version, or failed with a reason); Update re-runs it. One New artifact
+dialog (A link / Files / Blank) replaces the import dialog and "Fetch with an agent". Pages:
+[artifacts.md](pages/artifacts.md), [screen-artifacts.md](pages/screen-artifacts.md),
+[mcp-server.md](pages/mcp-server.md), [telemetry.md](pages/telemetry.md), open question 5 answered.
+
+## [2026-11-25] build | Artifacts: whole-version Restore, user guide rewrite
+`artifacts.restore { id, version, baseVersion? }` commits the full snapshot of a version (every file and
+the entry it had) as a new version noted "Restored v<n>", through the store's `commit` path; History >
+Restore uses it, which closes the "restores only the entry" gap. The Viewer's Keep mine / Use theirs only
+load a version into the editor and save through `save` / `writeFiles`, so they needed no change. The
+docs site Artifacts guide, FAQ and Settings text now describe the link flow (an agent retrieves it with the
+user's CLI), Update, the Files panel and history. Pages: [artifacts.md](pages/artifacts.md),
+[screen-artifacts.md](pages/screen-artifacts.md).

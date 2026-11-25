@@ -76,7 +76,8 @@ How each kind of build updates:
 
 ## Artifacts & claude.ai
 
-Where artifacts live, and a reminder that imports from claude.ai are copies, not synced.
+Where artifacts live, and a reminder that a claude.ai link is retrieved by an agent with your Claude Code
+CLI and kept as a copy: **Update** gets the latest version, and nothing syncs on its own.
 
 ## Extensions
 

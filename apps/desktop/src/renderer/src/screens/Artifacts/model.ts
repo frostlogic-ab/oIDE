@@ -1,15 +1,14 @@
 /**
  * Pure helpers for the Artifacts screen: filtering, "used by agents" lines, history labels,
- * claude.ai link checks and front-matter handling. No React, no bridge (unit-testable).
+ * claude.ai link checks, retrieval states, the New artifact dialog's file rules, the Files panel's
+ * tree and front-matter handling. No React, no bridge (unit-testable).
  */
 import {
   REACT_DESIGN_ENTRY,
   classifyClaudeLink,
-  inferKindFromContent,
-  isDesignContent,
-  isImportStubContent,
   type AgentStatus,
   type AgentSummary,
+  type ArtifactFile,
   type ArtifactKind,
   type ArtifactMeta,
   type ArtifactUse,
@@ -132,56 +131,16 @@ export function canOpenClaudeLink(url: string | undefined): url is string {
   return host === 'claude.ai' || host.endsWith('.claude.ai');
 }
 
-/** Why a link can't be imported (a chat link, another host, not a link), or undefined when it can. */
+/** Why a link can't be retrieved (a chat link, another host, not a link), or undefined when it can. */
 export function importLinkError(raw: string): string | undefined {
   const r = classifyClaudeLink(raw);
   return r.ok ? undefined : r.reason;
-}
-
-/** The reason an import has to wait: shown under the Import button while it is disabled. */
-export const IMPORT_NEEDS_CODE_REASON = "Paste the artifact's code first. oIDE can't download claude.ai artifacts, even public ones.";
-
-/** Pasted content above this size is refused before it is sent (main checks again). */
-export const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
-
-/**
- * Why `content` can't be stored as `kind` (import or fix): too large, the placeholder older versions
- * stored, not HTML or React as a design, not JSON as a whiteboard. Main applies the same rules.
- */
-export function importContentError(kind: ArtifactKind, content: string): string | undefined {
-  // UTF-8 is at most 3 bytes per UTF-16 unit: only encode when the paste could be over the limit.
-  if (content.length * 3 > MAX_IMPORT_BYTES && new TextEncoder().encode(content).length > MAX_IMPORT_BYTES) return 'The content is larger than 10 MB.';
-  if (isImportStubContent(content)) return "That's the placeholder older versions of oIDE stored, not the artifact. Paste the artifact's real code.";
-  if (kind === 'design' && !isDesignContent(content)) {
-    return "This isn't an HTML page or a React component, so it can't be a design. Pick Doc to keep it as text.";
-  }
-  if (kind === 'whiteboard') return validateContent('whiteboard', content.charCodeAt(0) === 0xfeff ? content.slice(1) : content) ?? undefined;
-  return undefined;
-}
-
-/**
- * Fixing a broken import: the pasted content replaces its notice in place when it fits the artifact's
- * kind; otherwise (a doc whose paste is a design, say) a new artifact of the content's kind replaces it.
- */
-export function fixImportPlan(kind: ArtifactKind, content: string): { mode: 'save' } | { mode: 'replace'; kind: ArtifactKind } {
-  const inferred = inferKindFromContent(content);
-  if (inferred === kind || (kind === 'design' && isDesignContent(content))) return { mode: 'save' };
-  return { mode: 'replace', kind: inferred };
 }
 
 /** Removes a leading `---` front-matter block from Markdown. */
 export function stripFrontMatter(md: string): string {
   const BOM = String.fromCharCode(0xfeff);
   return (md.startsWith(BOM) ? md.slice(1) : md).replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
-}
-
-/** Files an import takes, for the picker filter and the drop check. */
-export const IMPORT_EXTENSIONS = ['html', 'htm', 'jsx', 'tsx', 'svg', 'md', 'markdown', 'txt', 'excalidraw', 'json'] as const;
-
-export function kindFromFileName(name: string): ArtifactKind {
-  if (/\.(html?|jsx|tsx|svg)$/i.test(name)) return 'design';
-  if (/\.(excalidraw|json)$/i.test(name)) return 'whiteboard';
-  return 'doc';
 }
 
 /** Whiteboards must be a JSON object; returns an error message or null. */
@@ -221,11 +180,45 @@ export function liveDecision(opts: { baseVersion: number; incomingVersion: numbe
   return opts.dirty ? 'conflict' : 'reload';
 }
 
-export type SourceLanguage = 'markdown' | 'html' | 'javascript' | 'json';
+/** A Monaco language id ('markdown', 'html', 'javascript', 'css', 'plaintext' …). */
+export type SourceLanguage = string;
 
-/** Monaco language for an artifact's source: a React design (entry App.jsx) is JavaScript. */
+const LANGUAGE_BY_EXT: Record<string, string> = {
+  md: 'markdown',
+  markdown: 'markdown',
+  html: 'html',
+  htm: 'html',
+  css: 'css',
+  scss: 'scss',
+  less: 'less',
+  js: 'javascript',
+  jsx: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
+  ts: 'typescript',
+  tsx: 'typescript',
+  json: 'json',
+  excalidraw: 'json',
+  svg: 'xml',
+  xml: 'xml',
+  yaml: 'yaml',
+  yml: 'yaml',
+  txt: 'plaintext',
+};
+
+/** Monaco language for a file of a multi-file artifact, by extension. */
+export function languageForPath(path: string): SourceLanguage {
+  const ext = /\.([a-z0-9]+)$/i.exec(path)?.[1]?.toLowerCase();
+  return (ext && LANGUAGE_BY_EXT[ext]) || 'plaintext';
+}
+
+/** Monaco language for an artifact's entry: a React design (App.jsx) is JavaScript, a page HTML. */
 export function sourceLanguage(kind: ArtifactKind, entry?: string): SourceLanguage {
-  if (kind === 'design') return entry === REACT_DESIGN_ENTRY ? 'javascript' : 'html';
+  if (kind === 'design') {
+    if (entry === REACT_DESIGN_ENTRY) return 'javascript';
+    const lang = entry ? languageForPath(entry) : 'html';
+    return lang === 'plaintext' ? 'html' : lang;
+  }
   return kind === 'doc' ? 'markdown' : 'json';
 }
 
@@ -245,4 +238,131 @@ export function validateTitle(title: string): { title: string } | { error: strin
   if (!t) return { error: 'Give it a title.' };
   if (t.length > 200) return { error: 'Use at most 200 characters.' };
   return { title: t };
+}
+
+/* ------------------------------------------------------------------ retrieval by an agent (ADR 0014) */
+
+/** The retrieval the UI shows: running, or the last one failed. A finished one shows nothing. */
+export function activeRetrieval(meta: ArtifactMeta): 'retrieving' | 'failed' | null {
+  const s = meta.retrieval?.status;
+  return s === 'retrieving' || s === 'failed' ? s : null;
+}
+
+/**
+ * The grid card's retrieval line, in place of the use line: "Retrieving with an agent" while it runs,
+ * "Retrieval failed" when the first one failed (no files), "Update failed" when an update did.
+ */
+export function retrievalLine(meta: ArtifactMeta): { text: string; tone: 'live' | 'bad' } | null {
+  const r = activeRetrieval(meta);
+  if (r === 'retrieving') return { text: 'Retrieving with an agent', tone: 'live' };
+  if (r === 'failed') return { text: meta.version === 0 ? 'Retrieval failed' : 'Update failed', tone: 'bad' };
+  return null;
+}
+
+/** A linked artifact the Update button can retrieve again (a claude.ai link, not claude.site). */
+export function canUpdateFromLink(meta: ArtifactMeta): boolean {
+  return canOpenClaudeLink(meta.importedFrom);
+}
+
+/** Shown when a failed retrieval has no reason of its own. */
+export const RETRIEVAL_NO_REASON = 'The agent stopped without handing over the files.';
+
+/* ------------------------------------------------------------------ New artifact › Files */
+
+const DESIGN_FILE = /\.(html?|jsx|tsx|svg|css)$/i;
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i;
+const PAGE_FILE = /\.html?$/i;
+
+/** The last segment of a path (either separator), for the chosen-files list. */
+export function baseName(path: string): string {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+/**
+ * The kind the files make, like main detects it: any page, component or stylesheet (or only images)
+ * is a design, an .excalidraw board a whiteboard, otherwise a doc.
+ */
+export function kindFromFiles(names: readonly string[]): ArtifactKind {
+  if (names.some((n) => DESIGN_FILE.test(n))) return 'design';
+  if (names.some((n) => /\.excalidraw$/i.test(n))) return 'whiteboard';
+  if (names.length && names.every((n) => IMAGE_FILE.test(n))) return 'design';
+  return 'doc';
+}
+
+/** Pages a design made of these files could open on (for "Opens on"); index.html first. */
+export function entryCandidates(names: readonly string[]): string[] {
+  const pages = [...new Set(names.filter((n) => PAGE_FILE.test(n)))];
+  return pages.sort((a, b) => Number(/^index\.html?$/i.test(b)) - Number(/^index\.html?$/i.test(a)) || a.localeCompare(b));
+}
+
+/** True for a file the Files panel shows as an image. */
+export function isImagePath(path: string): boolean {
+  return IMAGE_FILE.test(path);
+}
+
+const IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+};
+
+/** A data: URL for an image read with `artifacts.readFile` (the renderer CSP allows data: images). */
+export function imageDataUrl(path: string, base64: string): string {
+  const ext = /\.([a-z0-9]+)$/i.exec(path)?.[1]?.toLowerCase() ?? '';
+  return `data:${IMAGE_MIME[ext] ?? 'application/octet-stream'};base64,${base64}`;
+}
+
+/** A page of a design the preview can open on (Files panel › Open on this page). */
+export function isPagePath(path: string): boolean {
+  return PAGE_FILE.test(path);
+}
+
+/* ------------------------------------------------------------------ Files panel */
+
+export interface FileRow {
+  /** Full path for a file, the folder's path for a folder row. */
+  path: string;
+  name: string;
+  depth: number;
+  dir: boolean;
+  size?: number;
+  text?: boolean;
+}
+
+interface Node {
+  dirs: Map<string, Node>;
+  files: ArtifactFile[];
+}
+
+/** A compact tree of the files (folders first, then files, each sorted by name), flattened to rows. */
+export function fileTree(files: readonly ArtifactFile[]): FileRow[] {
+  const root: Node = { dirs: new Map(), files: [] };
+  for (const f of files) {
+    const parts = f.path.split('/');
+    let node = root;
+    for (const part of parts.slice(0, -1)) {
+      let next = node.dirs.get(part);
+      if (!next) node.dirs.set(part, (next = { dirs: new Map(), files: [] }));
+      node = next;
+    }
+    node.files.push(f);
+  }
+  const rows: FileRow[] = [];
+  const walk = (node: Node, prefix: string, depth: number) => {
+    for (const [name, child] of [...node.dirs].sort(([a], [b]) => a.localeCompare(b))) {
+      const path = prefix ? `${prefix}/${name}` : name;
+      rows.push({ path, name, depth, dir: true });
+      walk(child, path, depth + 1);
+    }
+    for (const f of [...node.files].sort((a, b) => a.path.localeCompare(b.path))) {
+      rows.push({ path: f.path, name: f.path.split('/').pop()!, depth, dir: false, size: f.size, text: f.text });
+    }
+  };
+  walk(root, '', 0);
+  return rows;
 }

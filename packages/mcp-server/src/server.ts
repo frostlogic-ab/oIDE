@@ -6,7 +6,7 @@ import { isAbsolute, join } from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { ArtifactKind, PermissionAnswer, type ArtifactUse, type CheckResult, type PermissionRequest } from '@oide/protocol';
+import { AgentArtifactFileInput, ARTIFACT_LIMITS, ArtifactKind, ArtifactPath, PermissionAnswer, type ArtifactMeta, type ArtifactUse, type CheckResult, type PermissionRequest } from '@oide/protocol';
 import { z } from 'zod';
 import { AGENT_SECRET_ENV, LAUNCHER_FILE, LAUNCHER_SOURCE, expandPlaceholders, placeholders } from './launcher.js';
 import { suggestRule, summarizeTool } from './rules.js';
@@ -23,7 +23,10 @@ import type { AgentToolHandlers, McpServerEntry, OideMcpServerOptions, Registere
 
 export const SECRET_HEADER = 'x-oide-secret';
 const AGENT_ID = /^[A-Za-z0-9._-]{1,128}$/;
-const MAX_BODY = 8 * 1024 * 1024;
+/** Largest MCP request body: a batch of files is base64 in JSON (the SDK's own default is 4 MB). */
+const MAX_BODY = 16 * 1024 * 1024;
+/** Largest file `artifacts_read` returns (bigger ones would only flood the agent's context). */
+const MAX_READ_FILE = 4 * 1024 * 1024;
 
 const PermissionPromptInput = z.looseObject({
   tool_name: z.string().min(1),
@@ -59,9 +62,42 @@ const SubmitInput = z.object({
     .default([]),
 });
 const ListInput = z.object({ kind: ArtifactKind.optional(), query: z.string().optional() });
-const ReadInput = z.object({ id: z.string().min(1) });
-const WriteInput = z.object({ id: z.string().min(1), content: z.string(), note: z.string().optional() });
-const CreateInput = z.object({ title: z.string().min(1), kind: ArtifactKind, content: z.string(), shared: z.boolean().optional() });
+const ReadInput = z.object({ id: z.string().min(1), path: ArtifactPath.optional() });
+const FileInputs = z.array(AgentArtifactFileInput).max(ARTIFACT_LIMITS.files);
+const WriteInput = z
+  .object({
+    id: z.string().min(1),
+    content: z.string().optional(),
+    files: FileInputs.optional(),
+    deletes: z.array(ArtifactPath).max(ARTIFACT_LIMITS.files).optional(),
+    entry: ArtifactPath.optional(),
+    note: z.string().max(500).optional(),
+  })
+  .refine((w) => w.content !== undefined || !!w.files?.length || !!w.deletes?.length || w.entry !== undefined, 'Give content, files, deletes or entry');
+const CreateInput = z
+  .object({ title: z.string().min(1), kind: ArtifactKind, content: z.string().optional(), files: FileInputs.optional(), entry: ArtifactPath.optional(), shared: z.boolean().optional() })
+  .refine((c) => c.content !== undefined || !!c.files?.length, 'Give content or files');
+const AddFilesInput = z.object({ id: z.string().min(1), files: FileInputs.min(1) });
+const FinishInput = z.object({
+  id: z.string().min(1),
+  ok: z.boolean(),
+  reason: z.string().max(2000).optional(),
+  entry: ArtifactPath.optional(),
+  title: z.string().max(200).optional(),
+  kind: ArtifactKind.optional(),
+});
+
+/** JSON schema of one file handed to oIDE (AgentArtifactFileInput). */
+const FILE_SCHEMA = {
+  type: 'object',
+  properties: {
+    path: { type: 'string', description: 'Relative path inside the artifact, forward slashes (e.g. "shots/home.png").' },
+    content: { type: 'string', description: 'UTF-8 text content.' },
+    base64: { type: 'string', description: 'Binary content, base64.' },
+    fromFile: { type: 'string', description: 'A file you saved inside your working folder (relative to it, or absolute inside it).' },
+  },
+  required: ['path'],
+} as const;
 
 const TOOLS = {
   permission_prompt: {
@@ -107,23 +143,66 @@ const TOOLS = {
   artifacts_read: {
     name: 'artifacts_read',
     description:
-      "Read an oIDE artifact by id. Returns its metadata and content. status 'import-has-no-content' means a claude.ai import whose content never arrived: content is null, do not build from it.",
-    inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+      "Read an oIDE artifact by id. Returns its metadata and the entry file's content; an artifact with several files also lists them in `files` (read one with `path`; binary files come back as base64). " +
+      "content is null when status is 'retrieving' (an oIDE agent is still retrieving it from claude.ai), 'retrieval-failed', or 'import-has-no-content' (an old claude.ai import whose content never arrived): do not build from it.",
+    inputSchema: { type: 'object', properties: { id: { type: 'string' }, path: { type: 'string', description: 'Read this file of the artifact instead of the entry.' } }, required: ['id'] },
     annotations: { readOnlyHint: true },
   },
   artifacts_write: {
     name: 'artifacts_write',
-    description: 'Write a new version of an oIDE artifact (full content). A design is HTML or React component source (JSX, export default).',
-    inputSchema: { type: 'object', properties: { id: { type: 'string' }, content: { type: 'string' }, note: { type: 'string' } }, required: ['id', 'content'] },
+    description:
+      'Write a new version of an oIDE artifact. `content` replaces the entry file; `files` add or replace files (text as content, binary as base64, or fromFile for a file in your working folder); `deletes` removes files; `entry` moves the entry. A design opens on HTML or React component source (JSX, export default).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        content: { type: 'string' },
+        files: { type: 'array', items: FILE_SCHEMA },
+        deletes: { type: 'array', items: { type: 'string' } },
+        entry: { type: 'string' },
+        note: { type: 'string' },
+      },
+      required: ['id'],
+    },
   },
   artifacts_create: {
     name: 'artifacts_create',
     description:
-      'Create a new oIDE artifact. kind: design (HTML, or React component source with export default), doc (Markdown) or whiteboard (Excalidraw JSON). shared=true stores it in the repo.',
+      'Create a new oIDE artifact. kind: design (HTML, or React component source with export default), doc (Markdown) or whiteboard (Excalidraw JSON). Give `content` for one file, or `files` (and `entry`, the file it opens on) for several. shared=true stores it in the repo.',
     inputSchema: {
       type: 'object',
-      properties: { title: { type: 'string' }, kind: { type: 'string', enum: ['design', 'doc', 'whiteboard'] }, content: { type: 'string' }, shared: { type: 'boolean' } },
-      required: ['title', 'kind', 'content'],
+      properties: {
+        title: { type: 'string' },
+        kind: { type: 'string', enum: ['design', 'doc', 'whiteboard'] },
+        content: { type: 'string' },
+        files: { type: 'array', items: FILE_SCHEMA },
+        entry: { type: 'string' },
+        shared: { type: 'boolean' },
+      },
+      required: ['title', 'kind'],
+    },
+  },
+  artifact_retrieval_add_files: {
+    name: 'artifact_retrieval_add_files',
+    description:
+      'Only for the agent oIDE started to retrieve a claude.ai artifact: hand oIDE a batch of its files (keep each call under about 8 MB; use fromFile for big files). Text as content, binary as base64, or fromFile for a file you saved in your working folder. A path given again replaces that file. Nothing reaches the user until artifact_retrieval_finish.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string', description: 'The oIDE artifact id from your task.' }, files: { type: 'array', items: FILE_SCHEMA } }, required: ['id', 'files'] },
+  },
+  artifact_retrieval_finish: {
+    name: 'artifact_retrieval_finish',
+    description:
+      'Only for the agent oIDE started to retrieve a claude.ai artifact: finish it. ok=true with entry (the file to open first, e.g. index.html), title and kind (design, doc or whiteboard) makes the files handed over the next version. ok=false with reason (one sentence the user can act on) records why it could not be retrieved.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string' },
+        ok: { type: 'boolean' },
+        reason: { type: 'string' },
+        entry: { type: 'string' },
+        title: { type: 'string' },
+        kind: { type: 'string', enum: ['design', 'doc', 'whiteboard'] },
+      },
+      required: ['id', 'ok'],
     },
   },
 } as const;
@@ -132,10 +211,21 @@ const TOOLS = {
 export function brokenImportMessage(link: string | undefined): string {
   return (
     `This artifact was imported from ${link ?? 'claude.ai'} without its content: it holds only a placeholder notice, so do not build from it. ` +
-    "Ask the user to open it in oIDE (Artifacts) and paste the artifact's code or drop the file they downloaded from claude.ai. " +
-    'If the link is a Claude Doc or a Claude Design project, you may instead read it with your claude.ai connectors and save it with artifacts_write. ' +
-    'Chat artifacts cannot be fetched, even public ones.'
+    "Tell the user to open it in oIDE (Artifacts) and press Update: oIDE then starts an agent that retrieves the files with the Claude Code CLI's claude.ai tools. " +
+    "They can also drop the files they downloaded from claude.ai, or paste the artifact's code."
   );
+}
+
+/** What an agent is told when it reads a linked artifact that has no files yet (version 0). */
+export function noFilesYetMessage(meta: ArtifactMeta): string {
+  const link = meta.importedFrom ?? 'claude.ai';
+  if (meta.retrieval?.status === 'failed') {
+    return (
+      `This artifact has no files: retrieving it from ${link} failed${meta.retrieval.error ? ` (${meta.retrieval.error})` : ''}. ` +
+      'Do not build from it. Tell the user; they can retry the retrieval in oIDE (Artifacts), or drop the files they downloaded.'
+    );
+  }
+  return `An oIDE agent is still retrieving this artifact from ${link}; it has no files yet. Do not build from it: wait, or tell the user it is still being retrieved.`;
 }
 
 interface AgentEntry extends RegisteredAgent {
@@ -368,7 +458,7 @@ export class OideMcpServer {
       const len = Number(req.headers['content-length'] ?? 0);
       if (len > MAX_BODY) return this.reject(res, 413, 'Request too large');
 
-      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+      const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true, maxRequestBodySize: MAX_BODY });
       const server = this.mcpFor(agent);
       res.on('close', () => {
         void transport.close();
@@ -411,7 +501,12 @@ export class OideMcpServer {
     const backend = this.opts.artifacts;
     const server = new Server({ name: 'oide', version: '0.1.0' }, { capabilities: { tools: {}, ...(backend ? { resources: {} } : {}) } });
     server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: [TOOLS.permission_prompt, TOOLS.submit_for_review, ...(backend ? [TOOLS.artifacts_list, TOOLS.artifacts_read, TOOLS.artifacts_write, TOOLS.artifacts_create] : [])],
+      tools: [
+        TOOLS.permission_prompt,
+        TOOLS.submit_for_review,
+        ...(backend ? [TOOLS.artifacts_list, TOOLS.artifacts_read, TOOLS.artifacts_write, TOOLS.artifacts_create] : []),
+        ...(backend?.retrievalAddFiles && backend.isRetrievalAgent?.(agent.agentId) ? [TOOLS.artifact_retrieval_add_files, TOOLS.artifact_retrieval_finish] : []),
+      ],
     }));
     server.setRequestHandler(CallToolRequestSchema, async (req) => {
       const args = req.params.arguments ?? {};
@@ -432,6 +527,10 @@ export class OideMcpServer {
           case 'artifacts_create':
             if (!backend) return text('Artifacts are not available', true);
             return await this.artifactTool(agent, req.params.name, args);
+          case 'artifact_retrieval_add_files':
+          case 'artifact_retrieval_finish':
+            if (!backend?.retrievalAddFiles || !backend.retrievalFinish) return text('Artifact retrieval is not available', true);
+            return await this.retrievalTool(agent, req.params.name, args);
           default:
             return text(`Unknown tool ${req.params.name}`, true);
         }
@@ -494,8 +593,19 @@ export class OideMcpServer {
       case 'artifacts_read': {
         const r = ReadInput.safeParse(args);
         if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
+        if (r.data.path !== undefined) {
+          if (!backend.readFile) return text('Reading one file is not available', true);
+          const f = await backend.readFile(ctx, r.data.id, r.data.path);
+          this.logUse(agent, r.data.id, 'read');
+          if (f.data.length > MAX_READ_FILE) return text(`${r.data.path} is too large to read here (${Math.round(f.data.length / 1024)} KB).`, true);
+          return text(JSON.stringify({ id: r.data.id, path: r.data.path, encoding: f.encoding, [f.encoding === 'utf8' ? 'content' : 'base64']: f.data }));
+        }
         const out = await backend.read(ctx, r.data.id);
         this.logUse(agent, r.data.id, 'read');
+        if (out.meta.version === 0) {
+          const status = out.meta.retrieval?.status === 'failed' ? 'retrieval-failed' : 'retrieving';
+          return text(JSON.stringify({ meta: out.meta, content: null, status, message: noFilesYetMessage(out.meta) }));
+        }
         if (out.meta.brokenImport) {
           // A link-only import from an older oIDE: its only version is a placeholder notice, not the artifact.
           return text(
@@ -507,23 +617,50 @@ export class OideMcpServer {
             }),
           );
         }
-        return text(JSON.stringify({ meta: out.meta, content: out.content }));
+        const files = (out.meta.fileCount ?? 1) > 1 && backend.files ? await backend.files(ctx, r.data.id) : undefined;
+        return text(JSON.stringify({ meta: out.meta, content: out.content, ...(files ? { files } : {}) }));
       }
       case 'artifacts_write': {
         const r = WriteInput.safeParse(args);
         if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
-        const meta = await backend.write(ctx, r.data.id, r.data.content, r.data.note);
-        this.logUse(agent, r.data.id, 'write');
-        return text(JSON.stringify({ ok: true, id: meta.id, version: meta.version }));
+        const { id, content, files, deletes, entry, note } = r.data;
+        let meta: ArtifactMeta;
+        if (files?.length || deletes?.length || entry !== undefined) {
+          if (!backend.writeFiles) return text('Writing files is not available', true);
+          meta = await backend.writeFiles(ctx, id, { ...(content !== undefined ? { content } : {}), ...(files ? { files } : {}), ...(deletes ? { deletes } : {}), ...(entry ? { entry } : {}), ...(note ? { note } : {}) });
+        } else meta = await backend.write(ctx, id, content!, note);
+        this.logUse(agent, id, 'write');
+        return text(JSON.stringify({ ok: true, id: meta.id, version: meta.version, entry: meta.entry, ...(meta.fileCount !== undefined ? { files: meta.fileCount } : {}) }));
       }
       default: {
         const r = CreateInput.safeParse(args);
         if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
-        const meta = await backend.create(ctx, { title: r.data.title, kind: r.data.kind, content: r.data.content, location: r.data.shared ? 'repo' : 'app-data' });
+        const { title, kind, content, files, entry, shared } = r.data;
+        const meta = await backend.create(ctx, { title, kind, ...(content !== undefined ? { content } : {}), ...(files?.length ? { files } : {}), ...(entry ? { entry } : {}), location: shared ? 'repo' : 'app-data' });
         this.logUse(agent, meta.id, 'create');
-        return text(JSON.stringify({ ok: true, id: meta.id, version: meta.version }));
+        return text(JSON.stringify({ ok: true, id: meta.id, version: meta.version, entry: meta.entry }));
       }
     }
+  }
+
+  /** The two tools of an artifact retrieval (ADR 0014); main refuses any agent but the retrieval's own. */
+  private async retrievalTool(agent: AgentEntry, name: string, args: unknown): Promise<ToolResult> {
+    const backend = this.opts.artifacts!;
+    const ctx = this.ctx(agent);
+    if (name === 'artifact_retrieval_add_files') {
+      const r = AddFilesInput.safeParse(args);
+      if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
+      const out = await backend.retrievalAddFiles!(ctx, r.data.id, r.data.files);
+      this.logUse(agent, r.data.id, 'write');
+      return text(JSON.stringify({ ok: true, staged: r.data.files.length, files: out.files, bytes: out.bytes }));
+    }
+    const r = FinishInput.safeParse(args);
+    if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
+    const { id, ...result } = r.data;
+    const out = await backend.retrievalFinish!(ctx, id, result);
+    this.logUse(agent, id, 'write');
+    if (out.status === 'failed' && result.ok) return text(`oIDE could not use the files: ${out.error ?? 'unknown error'}. The retrieval is marked as failed. End your turn.`, true);
+    return text(JSON.stringify({ ok: true, ...out, next: 'The retrieval is finished. End your turn now; do not change the repository.' }));
   }
 
   private permissionPrompt(agent: AgentEntry, args: unknown, metaToolUseId: string | undefined): Promise<ToolResult> {
