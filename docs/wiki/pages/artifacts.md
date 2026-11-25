@@ -200,8 +200,8 @@ retrieval first), `import` (pasted content or one picked file), `uses`, `readVer
   'import')`. When the agent can't start (the MCP server is down, …) the artifact is returned with
   `retrieval.status: 'failed'` and the reason, so Retry and Delete are there.
 - `refresh { id, projectId? }`: Update or Retry (trigger `retry` after a failure or at version 0, else
-  `update`). The agent runs in the artifact's own project, else `projectId`, else `invalid_input`
-  (reason `needs_project`); `busy` while retrieving; `invalid_input` (`needs_link`) without a claude.ai
+  `update`). The agent runs in the artifact's own project, else `projectId`, else error code
+  `needs_project`; `busy` while retrieving; `invalid_input` (`needs_link`) without a claude.ai
   link. Also fixes old `brokenImport` artifacts.
 - `cancelRetrieval { id }` (`conflict` when none runs), `files { id, version? }`, `readFile { id, path,
   version? }`, `writeFiles { id, files, deletes, entry?, note?, baseVersion? }`.

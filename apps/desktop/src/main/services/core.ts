@@ -3,7 +3,7 @@ import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { AgentDriver } from '@oide/agent-core';
 import { WorktreeManager, isInside, resolveTool, setRepoTrustResolver, type GhCli } from '@oide/git';
 import { OideMcpServer, type ArtifactsBackend as McpArtifactsBackend } from '@oide/mcp-server';
-import { countBucket, type AgentArtifactFileInput, type ArtifactMeta } from '@oide/protocol';
+import { countBucket, resolveModel, type AgentArtifactFileInput, type ArtifactMeta, type ModelStrategy } from '@oide/protocol';
 import { ArtifactStore, SqliteSecretStore, openStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { CleanupQueue, CleanupScheduler, folderName } from '../reliability/cleanup-queue.js';
@@ -297,7 +297,13 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
         const p = projects.require(projectId);
         const eff = await settings.forProject(p.path, { trusted: p.trusted });
         const mode = eff.settings.claude.defaultMode === 'bypassPermissions' && !eff.settings.claude.allowBypass ? 'auto' : eff.settings.claude.defaultMode;
-        return { mode, strategy: settings.strategyFor(eff.settings.models.defaultPresetId) };
+        // Bare family aliases follow Settings › Models › Model versions, as Spawn's applyVersions does.
+        const versions = eff.settings.models.versions;
+        const strategy = settings.strategyFor(eff.settings.models.defaultPresetId);
+        const pinned = Object.fromEntries(
+          Object.entries(strategy).map(([k, v]) => [k, typeof v === 'object' && v && 'model' in v ? { ...v, model: resolveModel(v.model, versions) } : v]),
+        ) as ModelStrategy;
+        return { mode, strategy: pinned };
       },
     },
     track: (name, props) => void ctx.telemetry?.service.track(name, props),

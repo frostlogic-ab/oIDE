@@ -109,7 +109,7 @@ export function registerArtifactHandlers(router: IpcRouter, s: Services, ctx: Ma
     if (!meta.importedFrom || !classifyClaudeLink(meta.importedFrom).ok) throw new IpcError('This artifact has no claude.ai link to retrieve it from.', 'invalid_input', 'needs_link');
     if (meta.retrieval?.status === 'retrieving') throw new IpcError(`${meta.title} is already being retrieved.`, 'busy');
     const where = (meta.projectId && s.projects.get(meta.projectId) ? meta.projectId : undefined) ?? projectId;
-    if (!where) throw new IpcError('Choose the project the retrieval agent works in.', 'invalid_input', 'needs_project');
+    if (!where) throw new IpcError('Choose the project the retrieval agent works in.', 'needs_project');
     s.projects.require(where);
     const trigger = meta.retrieval?.status === 'failed' || meta.version === 0 ? 'retry' : 'update';
     return wrap(s.retrieval.start(id, trigger, where));
