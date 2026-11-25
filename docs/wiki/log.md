@@ -752,6 +752,15 @@ be read, by an agent through its own claude.ai connectors.
 Pages: [artifacts](pages/artifacts.md), [screen-artifacts](pages/screen-artifacts.md),
 [mcp-server](pages/mcp-server.md), [security](pages/security.md), [telemetry](pages/telemetry.md).
 
+## [2026-11-25] build | Fable context window
+User report: with Fable the context ring assumed 200k instead of 1M. oIDE's event log showed a live
+`claude-fable-5-2` session at 223,905 tokens on its first turn against the 200k fallback (no `result` yet,
+so the real window was never learned). Fixes: the `contextWindowFor()` table now lists `claude-fable-5-2`
+and the `fable` alias as 1M; and when a lead request is larger than a window that was only guessed (not
+reported by the CLI), the reducer lifts the window to 1M until the CLI reports one. Tests in
+`packages/agent-core/src/context.test.ts`. Pages: [cli-integration](pages/cli-integration.md),
+[agent-supervisor](pages/agent-supervisor.md).
+
 ## [2026-11-25] build | Agents name their own task (set_title)
 - Spawn's title was the start of the user's prompt. Spawn now marks it `autoTitle`; the oIDE contract asks the
   agent to call the new MCP tool `mcp__oide__set_title` once, first thing, with a short title. The supervisor
