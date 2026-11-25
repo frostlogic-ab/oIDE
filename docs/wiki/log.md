@@ -808,3 +808,11 @@ user's CLI), Update, the Files panel and history. Pages: [artifacts.md](pages/ar
 - Telemetry: `agent_spawned.auto_title`, new `agent_titled { after }` (duration bucket only, never the title).
 Pages: [agent-supervisor](pages/agent-supervisor.md#agent-named-titles), [mcp-server](pages/mcp-server.md),
 [screen-spawn](pages/screen-spawn.md), [telemetry](pages/telemetry.md).
+
+## [2026-11-25] build | Agents keep their branch up to date with the base
+The oIDE contract (`packages/agent-core/src/args.ts`, `syncContract`) now tells every worktree agent with a
+named base (`main`, `origin/main`, a branch; not a bare sha) to `git merge <base>` before starting a new task
+and again right before `submit_for_review`, resolving conflicts, re-running checks and reporting an
+"Up to date with <base>" check. The supervisor passes the worktree's `baseRef` into `buildLaunch`. No telemetry
+change: this is prompt text, and the existing review/merge events already cover the outcome.
+See [agent-supervisor](pages/agent-supervisor.md).
