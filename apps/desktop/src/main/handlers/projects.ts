@@ -14,6 +14,15 @@ export function registerProjectHandlers(router: IpcRouter, s: Services, ctx: Mai
     return OK;
   });
   router.register('projects.trust', ({ projectId, trusted }) => s.projects.trust(projectId, trusted));
+  // New project: picked folders only (SEC-08); clones ask for trust, new repositories are trusted.
+  router.register('projects.initFolder', ({ path, commitFiles }) => s.projects.initFolder(path, commitFiles));
+  router.register('projects.create', ({ parent, name, readme }) => s.projects.create(parent, name, readme));
+  router.register('projects.clone', ({ url, parent, name }) => s.projects.clone(url, parent, name));
+  router.register('projects.cancelClone', () => {
+    s.projects.cancelClone();
+    return OK;
+  });
+  router.register('projects.githubRepos', () => s.projects.githubRepos());
 
   router.register('scope.get', () => s.store.ui.scope());
   router.register('scope.set', ({ scope }) => {

@@ -144,6 +144,8 @@ export const BUILTIN_COMMAND_IDS = [
   'oide.go.settings',
   'oide.scope.all',
   'oide.openProject',
+  'oide.cloneProject',
+  'oide.newRepository',
   'oide.theme.next',
 ] as const;
 
@@ -504,6 +506,24 @@ export const TELEMETRY_EVENTS = {
       outcome: z.enum(['ready', 'failed', 'cancelled', 'agent_stopped']),
       kind: ArtifactKind,
       files: CountBucket,
+    }),
+  }),
+  project_added: def({
+    from: 'main',
+    question:
+      'How do people start projects (open a repo, initialise git in a folder, clone from a URL or their GitHub list, create a new repository)?',
+    props: z.object({
+      method: z.enum(['open', 'init', 'clone', 'create']),
+      /** Clones only: typed or pasted URL, or picked from the GitHub list. */
+      source: z.enum(['url', 'github']).optional(),
+    }),
+  }),
+  project_add_failed: def({
+    from: 'main',
+    question: 'Why do new projects fail (not a repo, sign-in, not found, network, folder exists, no git identity), so the dialog can explain it?',
+    props: z.object({
+      method: z.enum(['open', 'init', 'clone', 'create']),
+      reason: z.enum(['not_a_repo', 'auth', 'not_found', 'network', 'exists', 'no_identity', 'forbidden_path', 'other']),
     }),
   }),
   extension_installed: def({

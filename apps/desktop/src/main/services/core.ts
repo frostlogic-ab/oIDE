@@ -210,7 +210,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   const cli = new CliService({ settings, emit: ctx.emit, override: platform.cliPathOverride });
   const picked = new Set<string>();
   const pickedCli = new Set<string>();
-  const projects = new ProjectsService({ ctx, store, platform, picked });
+  // gh: GitService (below) owns the GitHub CLI; read lazily.
+  const projects = new ProjectsService({ ctx, store, platform, picked, gh: (): GhCli | undefined => git.gh });
   const cleanup = new CleanupQueue(ctx.userDataDir);
   // The holder scan spawns PowerShell / lsof: only in the app (not in plain-Node tests), unless injected.
   const findHolders = opts.findHolders ?? (platform.background ? findFolderHolders : undefined);

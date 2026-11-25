@@ -78,6 +78,18 @@ export class GhCli {
     this.availableCache = undefined;
   }
 
+  /**
+   * The signed-in user's repositories (most recently pushed first), with the clone URL their gh
+   * `git_protocol` asks for (https by default, ssh when set). Undefined when gh is unavailable.
+   */
+  async listRepos(limit = 200): Promise<GhRepo[] | undefined> {
+    if (!(await this.available())) return undefined;
+    const r = await this.run(['repo', 'list', '--limit', String(Math.max(1, Math.min(1000, limit))), '--json', 'nameWithOwner,description,isPrivate,url,sshUrl,pushedAt']);
+    if (r.code !== 0) throw new Error(`gh repo list failed: ${(r.stderr || r.stdout).trim().slice(0, 300)}`);
+    const proto = await this.run(['config', 'get', 'git_protocol']);
+    return parseRepoList(r.stdout, proto.code === 0 && proto.stdout.trim() === 'ssh' ? 'ssh' : 'https');
+  }
+
   /** PR for a branch, or undefined when there is none or gh is unavailable. */
   async prView(cwd: string, branch: string): Promise<PrInfo | undefined> {
     return (await this.prLookup(cwd, branch)).pr;
@@ -119,4 +131,37 @@ export function parsePrView(json: string): PrInfo | undefined {
   } catch {
     return undefined;
   }
+}
+
+export interface GhRepo {
+  nameWithOwner: string;
+  description?: string;
+  isPrivate: boolean;
+  cloneUrl: string;
+  updatedAt?: string;
+}
+
+/** `gh repo list --json nameWithOwner,description,isPrivate,url,sshUrl,pushedAt` → repos, newest push first. */
+export function parseRepoList(json: string, protocol: 'https' | 'ssh' = 'https'): GhRepo[] {
+  let rows: unknown;
+  try {
+    rows = JSON.parse(json);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(rows)) return [];
+  const out: GhRepo[] = [];
+  for (const v of rows as Array<Record<string, unknown>>) {
+    if (!v || typeof v.nameWithOwner !== 'string' || typeof v.url !== 'string') continue;
+    const https = `${v.url.replace(/\/+$/, '')}.git`;
+    const cloneUrl = protocol === 'ssh' && typeof v.sshUrl === 'string' && v.sshUrl ? v.sshUrl : https;
+    out.push({
+      nameWithOwner: v.nameWithOwner,
+      ...(typeof v.description === 'string' && v.description ? { description: v.description } : {}),
+      isPrivate: v.isPrivate === true,
+      cloneUrl,
+      ...(typeof v.pushedAt === 'string' ? { updatedAt: v.pushedAt } : {}),
+    });
+  }
+  return out.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? ''));
 }
