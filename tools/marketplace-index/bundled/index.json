@@ -17,7 +17,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "tarball": "https://registry.npmjs.org/@oide/ext-browser-preview/-/ext-browser-preview-1.0.0.tgz",
+          "tarball": "oide-builtin:@oide/ext-browser-preview@1.0.0",
           "integrity": "sha512-iiSgPokSMrv9z/XLLX+xSrjffurqSzJtal3L5BWyid3GtmcM9kmn6Inc8l6756IGy2YA/bYEEF0PjJPt7aCOIQ==",
           "engine": "^1.0.0",
           "tools": [
@@ -51,7 +51,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "tarball": "https://registry.npmjs.org/@oide/ext-git/-/ext-git-1.0.0.tgz",
+          "tarball": "oide-builtin:@oide/ext-git@1.0.0",
           "integrity": "sha512-ZVPPL+JsQJmERuf/dWvN6cS82O8j+90B740MSvMOacA1mr0sapZR28K7V207QH9hqja7VX8szymyefabzpgRHg==",
           "engine": "^1.0.0",
           "tools": [],
@@ -79,7 +79,7 @@
       "versions": [
         {
           "version": "1.0.0",
-          "tarball": "https://registry.npmjs.org/@oide/ext-themes/-/ext-themes-1.0.0.tgz",
+          "tarball": "oide-builtin:@oide/ext-themes@1.0.0",
           "integrity": "sha512-pnV/j90ruJ7PEOJDpf/ZwAKqLeCG3KacaxpN9whJPuDUnUXOb4iKkiWRIhw4o5qhXsOmO3U0D6gEvL3J8tbt3A==",
           "engine": "^1.0.0",
           "tools": [],

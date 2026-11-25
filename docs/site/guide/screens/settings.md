@@ -80,6 +80,10 @@ Where artifacts live, and a reminder that imports from claude.ai are copies, not
 
 ## Extensions
 
+**Marketplace index URL**, empty by default: the Marketplace then lists only the extensions built into
+oIDE and downloads no list. Set an https address to also list the extensions an index offers; oIDE
+asks you to confirm it, because whoever controls that address decides what you are offered.
+
 The settings that extensions you turned on contribute (for example Browser preview's default URL).
 Secret fields are password inputs: the value goes to the OS keychain and is never shown again.
 
@@ -96,8 +100,8 @@ you turned on.
 
 ## Privacy
 
-**Share anonymous usage statistics** and **Crash reports**, both off by default. oIDE does not
-collect usage statistics yet, so the first switch only records your choice. Crash reports stay
+oIDE has no telemetry: it collects no usage statistics and sends nothing about how you use it.
+**Crash reports** are off by default. Crash reports stay
 on your computer with paths, prompts and code removed; nothing is uploaded, and you can copy one into
 a bug report yourself. oIDE never reads, stores or sends your Claude credentials; prompts, code and
 paths stay on your computer.

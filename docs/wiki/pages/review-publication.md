@@ -3,7 +3,7 @@
 An adversarial pass over the tree and the full git history (43 commits, one branch, no remote yet)
 before oIDE is published as open source under MIT. Scope: secrets and personal data, licensing,
 trademark and affiliation, accuracy of the public docs, and repo hygiene. Code findings are reported,
-not fixed; doc and data findings were fixed in the same commit as this page. Related reviews:
+not fixed; doc and data findings were fixed in the same commit as this page. The code issues were fixed on 2026-11-25 ("Publication fixes" in [the log](../log.md)); each is marked **Fixed (2026-11-25)** below. Related reviews:
 [security](review-security.md), [conformance](review-conformance.md), [design](review-design.md).
 
 ## Verdict
@@ -28,7 +28,7 @@ embedded text chunks (none: they are rendered from `icon.svg` by `tools/icons/bu
 | Owner's full name and personal Gmail address are the author and committer of all 43 commits | commit metadata only (not in any file) | owner decision | See checklist item 3. Cheap to change now: nothing has been pushed. |
 | Absolute local path with the Windows user name and the session scratchpad id | `pages/review-design.md` (evidence folder), `pages/review-conformance.md` (`claude.exe` path) | low | **Fixed** in the tree (`<scratchpad>\…`, `%USERPROFILE%\…`). The old text stays in history (commits b57046e and later): a user name and a temp folder name, not a secret; no rewrite recommended. |
 | Owner's first name in the build brief (`@Georges`, "(open) marks a question for Georges", "Georges should ask Anthropic…") | `docs/wiki/raw/build-brief.md` (immutable source) | low | Owner decision (item 8). In wiki pages it now reads "the maintainer". |
-| Recorded CLI fixtures | `tools/fake-claude/fixtures/*.jsonl` | low | Mostly sanitised: `cwd`/`original_cwd` are `C:\work\repo`, `apiKeySource: "none"`, session ids are synthetic (`2222…`, `3333…`), no account, org, e-mail or plan fields, no MCP servers or plugins of the owner. **But** the compaction message in `real-basic-multiturn.jsonl` (line 55) kept the CLI's transcript path in its slug form, `C--Users-dev-AppData-Local-Temp-claude-<session id>-<session uuid>-scratchpad-repo`: the user name was replaced, the temp folder ids were not. **Fixed** in the tree (`C--work-repo`; all tests pass). The old string stays in history (e147b82): temp folder ids only, no rewrite needed. **Code issue:** the sanitizer in `tools/fake-claude/record.mjs` replaces the cwd literally (`\`, `\\`, `/` forms) but not the CLI's slugified project-folder form (`[:\\/.]` → `-`), so the weekly compat job could record this again. The same message quotes the CLI's commit-attribution reminder; harmless. |
+| Recorded CLI fixtures | `tools/fake-claude/fixtures/*.jsonl` | low | Mostly sanitised: `cwd`/`original_cwd` are `C:\work\repo`, `apiKeySource: "none"`, session ids are synthetic (`2222…`, `3333…`), no account, org, e-mail or plan fields, no MCP servers or plugins of the owner. **But** the compaction message in `real-basic-multiturn.jsonl` (line 55) kept the CLI's transcript path in its slug form, `C--Users-dev-AppData-Local-Temp-claude-<session id>-<session uuid>-scratchpad-repo`: the user name was replaced, the temp folder ids were not. **Fixed** in the tree (`C--work-repo`; all tests pass). The old string stays in history (e147b82): temp folder ids only, no rewrite needed. **Code issue:** the sanitizer in `tools/fake-claude/record.mjs` replaces the cwd literally (`\`, `\\`, `/` forms) but not the CLI's slugified project-folder form (`[:\\/.]` → `-`), so the weekly compat job could record this again. **Fixed (2026-11-25):** the recorder now scrubs every spelling of the home, cwd and temp folders (native, forward-slash, JSON-escaped, `\/`-escaped, lowercase drive, `/c/Users/…`, `/mnt/c/…`, `/private` temp, the slugified project-folder form), any other `Users`/`home` and temp folder, the user name as a word, e-mails (also `%40`), account/org/user ids (prefixed ids and `account`/`organization`/`user` `*Uuid`/`*Id`/`*Name`/`*Email` fields) and uuids; crafted-input tests in `tools/fake-claude/test/record.test.ts`. The same message quotes the CLI's commit-attribution reminder; harmless. |
 | CLI help output (Anthropic's text), committed twice, byte-identical | `docs/wiki/raw/claude-cli-help-2.1.325.txt`, `tools/fake-claude/fixtures/help-2.1.325.txt` | low (copyright) | Kept for flag detection tests. Short functional text; the owner may prefer to keep only the fixture copy. |
 | Build-brief embed markers carry claude.ai Docs node refs (`node/c972f4d3-da11`, `node/51ea9aa4-5f35`) | `docs/wiki/raw/build-brief.md` lines 53, 312 | very low | Truncated internal ids of the owner's private doc; not resolvable by anyone else and not a link. The two diagrams they stood for are missing from the public copy. |
 | No claude.ai artifact or share links from the owner's account anywhere | n/a | none | `https://claude.ai/public/artifacts/abc…` and `x.claude.site` appear only as test inputs. |
@@ -63,7 +63,16 @@ add a one-line README in `raw/design/` that says they are design-canvas exports,
   package has no LICENSE file, so its MIT copyright line is missing too ("No licence file is
   included"). Fix in the generator: add a fixed "Fonts bundled by Excalidraw" section with each
   family's licence and copyright, and embed Excalidraw's upstream MIT text. Do not hand-edit the file:
-  `--check` compares it byte for byte.
+  `--check` compares it byte for byte. **Fixed (2026-11-25):** `tools/licenses/fonts.mjs` records all 12
+  shipped font families (the 9 Excalidraw folders, Inter, JetBrains Mono, Monaco's Codicons), verified
+  against the shipped files' WOFF2 name tables and upstream licence files; the notices have a "Bundled
+  fonts" section with copyrights and the OFL / GPL texts, and Excalidraw's section carries its upstream
+  MIT text. `licenses:check` fails for an unrecorded font folder, a disagreeing embedded licence, and
+  (after a build) any font in `out/renderer` without a record. **Owner note:** Liberation Sans 1.05
+  (Excalidraw's "Helvetica" fallback) is GPL-2.0 with the font exception, not MIT-compatible in the
+  strict sense; it ships as a separate unmodified file with its licence and source pointer, recorded as
+  an explicit exception. Removing the file instead means Excalidraw falls back to a CSP-blocked CDN
+  request for that family.
 - Inter and JetBrains Mono ship through `@fontsource/*` (OFL-1.1, full text in the notices). The app
   icon is original (`apps/desktop/build/icon.svg`, generated rasters). No Anthropic logo or asset is in
   the repo.
@@ -87,12 +96,22 @@ add a one-line README in `raw/design/` that says they are design-canvas exports,
 - **Code issue.** `tools/marketplace-index/bundled/index.json` lists the built-ins with tarball URLs
   under `registry.npmjs.org/@oide/ext-*`. Installs are pinned by `integrity` (sha512, checked in
   `packages/extension-host/src/installer.ts`), so a foreign package cannot be substituted. But the URLs
-  can never resolve to the project's packages. Regenerate them once the scope is chosen.
+  can never resolve to the project's packages. Regenerate them once the scope is chosen. **Fixed
+  (2026-11-25):** built-ins are `source: builtin` with `oide-builtin:<name>@<version>` pseudo URLs (no npm
+  URL); the installer refuses them, skips them in update checks, and a remote index cannot override a
+  built-in name ([marketplace](marketplace.md#distribution-defaults)).
 - **Code issue, highest priority.** `DEFAULT_INDEX_URL` (`packages/extension-host/src/installer.ts`)
   points at `raw.githubusercontent.com/oide-dev/oide-marketplace/main/index.json`, and the README,
   issue templates, docs base URL, `electron-builder.yml publish.owner` and the updater all assume the
   GitHub org `oide-dev`. Nobody has claimed it. Anyone who registers it after the repo goes public
   controls the index the app fetches and the update feed. The owner must claim it first (checklist item 2).
+  **Fixed (2026-11-25), defaults made safe:** names live in `packages/protocol/src/distribution.ts`. The
+  app fetches no remote index unless Settings › Extensions › Marketplace index URL is set (empty by
+  default; a remote URL needs a native confirmation in main). `electron-builder.yml` has `publish: null`;
+  the updater runs only when the build was given `OIDE_PUBLISH_OWNER` / `OIDE_PUBLISH_REPO` (repository
+  variables read by `release.yml`), otherwise it is off and no release is uploaded
+  ([packaging](packaging.md#auto-update-m7)). Remaining `oide-dev` links (README, issue templates,
+  docs base URL, the Marketplace "Publish" link) are links, not fetches.
   The external-link allow-list also includes `oide.dev` (`apps/desktop/src/main/security/external.ts`);
   register the domain or drop it.
 
@@ -127,7 +146,9 @@ packaging and constraints pages.
 
 **Code issue.** Settings › Privacy shows "Share anonymous usage statistics". It is off by default, but no
 code reads it and nothing is collected. Remove it, or label it "not implemented", so it does not
-suggest telemetry that does not exist.
+suggest telemetry that does not exist. **Fixed (2026-11-25):** the switch is gone; Privacy says "oIDE
+has no telemetry". `ui.telemetry` stays in the schema, marked deprecated and unread, so old settings
+parse; a test checks nothing reads it.
 
 ## 5. Repo hygiene
 
@@ -170,6 +191,8 @@ suggest telemetry that does not exist.
 8. **Raw sources**: decide whether to publish `docs/wiki/raw/build-brief.md` and `raw/design/` as they
    are (recommended: yes). If yes, consider replacing "@Georges" with "the maintainer" in the brief.
    This is the one edit to an immutable source; record it in the log.
-9. **Have the code issues above fixed** before 1.0: Excalidraw font notices in the generator, the
+9. **Done (2026-11-25).** ~~Have the code issues above fixed~~ before 1.0: Excalidraw font notices in the generator, the
    recorder's slugified-cwd sanitising, `bundled/index.json` tarball URLs after the scope decision,
-   and the dead usage-statistics switch.
+   and the dead usage-statistics switch. After claiming the names, set the repository variables
+   `OIDE_PUBLISH_OWNER` / `OIDE_PUBLISH_REPO` and, if wanted, the marketplace index default
+   (see [packaging](packaging.md) and [marketplace](marketplace.md#distribution-defaults)).

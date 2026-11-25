@@ -107,6 +107,8 @@ export class ExtensionsService {
     this.installer = new MarketplaceInstaller({
       extensionsDir: join(ctx.userDataDir, 'extensions'),
       cacheDir: join(ctx.userDataDir, 'marketplace'),
+      // Empty by default: the bundled index only, nothing fetched (packages/protocol/src/distribution.ts).
+      indexUrl: () => store.settings.get().marketplace.indexUrl,
       ...(platform.bundledIndexPath ? { bundledIndexPath: platform.bundledIndexPath } : {}),
       ...(platform.fetch ? { fetch: platform.fetch } : {}),
     });

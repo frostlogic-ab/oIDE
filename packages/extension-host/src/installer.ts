@@ -4,7 +4,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { MarketplaceIndex, type ExtensionUpdate, type InstalledExtension, type MarketplaceEntry } from '@oide/protocol';
+import { DEFAULT_MARKETPLACE_INDEX_URL, isBuiltinTarballUrl, MarketplaceIndex, marketplaceIndexUrlProblem, type ExtensionUpdate, type InstalledExtension, type MarketplaceEntry } from '@oide/protocol';
 import type { FetchFn } from './interfaces.js';
 import { assertIntegrity } from './integrity.js';
 import { capabilityList, ENGINE_VERSION, loadManifest, type LoadedExtension } from './manifest.js';
@@ -12,7 +12,11 @@ import { recordFromLoaded } from './registry.js';
 import { compareVersions, satisfies } from './semver.js';
 import { extractTarball } from './tarball.js';
 
-export const DEFAULT_INDEX_URL = 'https://raw.githubusercontent.com/oide-dev/oide-marketplace/main/index.json';
+/**
+ * Empty: no remote index is fetched unless one is configured (Settings › Extensions › Marketplace
+ * index URL). See packages/protocol/src/distribution.ts for why there is no remote default.
+ */
+export const DEFAULT_INDEX_URL = DEFAULT_MARKETPLACE_INDEX_URL;
 const DAY = 24 * 60 * 60 * 1000;
 const MAX_TARBALL_BYTES = 64 * 1024 * 1024;
 
@@ -21,7 +25,11 @@ export interface InstallerOptions {
   extensionsDir: string;
   /** Where the fetched index is cached, e.g. `<app-data>/marketplace`. */
   cacheDir: string;
-  indexUrl?: string;
+  /**
+   * Remote index (https only), or a getter so a Settings change applies without a restart. Empty or
+   * missing: the bundled index is the only source and nothing is fetched.
+   */
+  indexUrl?: string | (() => string);
   /** The offline fallback shipped with the app (tools/marketplace-index/bundled/index.json). */
   bundledIndexPath?: string;
   fetch?: FetchFn;
@@ -56,7 +64,7 @@ export class MarketplaceInstaller {
   private readonly fetch: FetchFn;
   private readonly now: () => number;
   private readonly engine: string;
-  private memo: IndexResult | null = null;
+  private memo: { url: string; result: IndexResult } | null = null;
 
   constructor(private readonly opts: InstallerOptions) {
     this.fetch = opts.fetch ?? globalThis.fetch.bind(globalThis);
@@ -64,43 +72,76 @@ export class MarketplaceInstaller {
     this.engine = opts.engineVersion ?? ENGINE_VERSION;
   }
 
+  /** The configured remote index URL, or '' when only the bundled index is used. */
   get indexUrl(): string {
-    return this.opts.indexUrl ?? DEFAULT_INDEX_URL;
+    const v = typeof this.opts.indexUrl === 'function' ? this.opts.indexUrl() : this.opts.indexUrl;
+    return (v ?? DEFAULT_INDEX_URL).trim();
   }
 
   private get cacheFile(): string {
     return path.join(this.opts.cacheDir, 'index.json');
   }
 
-  /** Cached index (refreshed daily), the network, then the bundled index as offline fallback. */
+  /**
+   * With no remote URL configured: the bundled index, nothing fetched. Otherwise the cached index
+   * (refreshed daily), the network, then the bundled index as offline fallback. In every case,
+   * names the bundled index lists as built-in stay built-in (a remote index cannot turn them into
+   * npm downloads).
+   */
   async getIndex(opts: { refresh?: boolean } = {}): Promise<IndexResult> {
+    const url = this.indexUrl;
+    const remember = (r: IndexResult): IndexResult => {
+      this.memo = { url, result: r };
+      return r;
+    };
+    const bundledOr = (why: string): IndexResult => {
+      const bundled = this.readBundled();
+      if (bundled) return remember({ index: bundled, from: 'bundled' });
+      throw new InstallError(why);
+    };
+    if (!url) return this.memo?.url === url ? this.memo.result : bundledOr('No marketplace index: none is bundled and no index URL is set (Settings › Extensions)');
+    const problem = marketplaceIndexUrlProblem(url);
+    if (problem) return bundledOr(problem);
     const maxAge = this.opts.maxAgeMs ?? DAY;
-    const cached = this.memo ?? (await this.readCache());
-    if (!opts.refresh && cached?.fetchedAt !== undefined && this.now() - cached.fetchedAt < maxAge) return (this.memo = cached);
+    const memo = this.memo?.url === url && this.memo.result.from !== 'bundled' ? this.memo.result : null;
+    const cached = memo ?? (await this.readCache(url));
+    if (!opts.refresh && cached?.fetchedAt !== undefined && this.now() - cached.fetchedAt < maxAge) return remember(cached);
     try {
-      const res = await this.fetch(this.indexUrl, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+      const res = await this.fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const index = MarketplaceIndex.parse(await res.json());
+      const index = this.withBuiltins(MarketplaceIndex.parse(await res.json()));
       const fetchedAt = this.now();
       await mkdir(this.opts.cacheDir, { recursive: true });
-      await writeFile(this.cacheFile, JSON.stringify({ fetchedAt, url: this.indexUrl, index }), 'utf8');
-      return (this.memo = { index, from: 'network', fetchedAt });
+      await writeFile(this.cacheFile, JSON.stringify({ fetchedAt, url, index }), 'utf8');
+      return remember({ index, from: 'network', fetchedAt });
     } catch {
-      if (cached) return (this.memo = cached);
-      const bundled = this.readBundled();
-      if (bundled) return (this.memo = { index: bundled, from: 'bundled' });
-      throw new InstallError('The marketplace index is unavailable (offline and no cached or bundled copy)');
+      if (cached) return remember(cached);
+      return bundledOr('The marketplace index is unavailable (offline and no cached or bundled copy)');
     }
   }
 
-  private async readCache(): Promise<IndexResult | null> {
+  private async readCache(url: string): Promise<IndexResult | null> {
     try {
       const raw = JSON.parse(await readFile(this.cacheFile, 'utf8')) as { fetchedAt?: unknown; url?: unknown; index?: unknown };
-      if (raw.url !== this.indexUrl || typeof raw.fetchedAt !== 'number') return null;
-      return { index: MarketplaceIndex.parse(raw.index), from: 'cache', fetchedAt: raw.fetchedAt };
+      if (raw.url !== url || typeof raw.fetchedAt !== 'number') return null;
+      return { index: this.withBuiltins(MarketplaceIndex.parse(raw.index)), from: 'cache', fetchedAt: raw.fetchedAt };
     } catch {
       return null;
     }
+  }
+
+  /** Names the bundled index lists as built-in. */
+  private builtinNames(): Set<string> {
+    return new Set((this.readBundled()?.extensions ?? []).filter((e) => e.source === 'builtin').map((e) => e.name));
+  }
+
+  /** A remote index's entry for a built-in name is replaced by the bundled entry (never an npm download). */
+  private withBuiltins(index: MarketplaceIndex): MarketplaceIndex {
+    const bundled = new Map((this.readBundled()?.extensions ?? []).filter((e) => e.source === 'builtin').map((e) => [e.name, e]));
+    if (!bundled.size) return index;
+    const extensions = index.extensions.map((e) => bundled.get(e.name) ?? e);
+    for (const [name, e] of bundled) if (!extensions.some((x) => x.name === name)) extensions.push(e);
+    return { ...index, extensions };
   }
 
   private readBundled(): MarketplaceIndex | null {
@@ -141,8 +182,9 @@ export class MarketplaceInstaller {
    */
   async install(name: string, version?: string): Promise<InstallResult> {
     const entry = await this.findEntry(name);
-    if (entry.source === 'builtin') throw new InstallError(`${name} ships with oIDE`);
+    if (entry.source === 'builtin' || this.builtinNames().has(name)) throw new InstallError(`${name} ships with oIDE`);
     const v = this.pickVersion(entry, version);
+    if (isBuiltinTarballUrl(v.tarball) || !v.tarball.startsWith('https://')) throw new InstallError(`${name}@${v.version} has no https download URL`);
     const res = await this.fetch(v.tarball, { signal: AbortSignal.timeout(120_000) });
     if (!res.ok) throw new InstallError(`Download failed for ${name}@${v.version}: HTTP ${res.status}`);
     const data = new Uint8Array(await res.arrayBuffer());
@@ -198,7 +240,7 @@ export class MarketplaceInstaller {
     for (const ext of installed) {
       if (ext.source !== 'marketplace') continue;
       const entry = index.extensions.find((e) => e.name === ext.name);
-      if (!entry) continue;
+      if (!entry || entry.source === 'builtin') continue;
       let next;
       try {
         next = this.pickVersion(entry);

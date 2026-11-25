@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { makeRepo, tempDir, waitFor } from '../integration/harness.js';
 import { driveTo, gateHarness, single, track, useGateCleanup } from './helpers.js';
-import { localMarketplace, TEXTKIT } from './marketplace.js';
+import { localMarketplace, TEXTKIT, useLocalMarketplace } from './marketplace.js';
 
 /**
  * M5 gate: "A third-party extension installed from the index gives an agent a tool it uses."
@@ -50,6 +50,7 @@ describe('M5 gate: marketplace extension → agent tool', { timeout: 60_000 }, (
     track(recDir);
     const record = join(recDir, 'launch.jsonl');
     const h = await gateHarness({ platform: { fetch: market.fetch } });
+    useLocalMarketplace(h);
     await h.call('settings.update', {
       patch: { claude: { extraFlags: `--fake-scenario mcp-tool --fake-record ${JSON.stringify(record)}` } },
     });
@@ -149,6 +150,7 @@ describe('M5 gate: marketplace extension → agent tool', { timeout: 60_000 }, (
   it('refuses a tarball whose bytes do not match the index integrity', async () => {
     const market = localMarketplace({ tamper: true });
     const h = await gateHarness({ platform: { fetch: market.fetch } });
+    useLocalMarketplace(h);
     expect(await h.fails('extensions.install', { name: TEXTKIT.name })).toBe('install_failed');
     expect(existsSync(join(h.userData, 'extensions', 'acme__oide-textkit@1.0.0'))).toBe(false);
     expect(await h.call('extensions.installed', undefined)).not.toContainEqual(

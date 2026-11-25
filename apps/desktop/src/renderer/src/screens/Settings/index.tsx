@@ -37,10 +37,10 @@ export const SECTIONS: Array<{ id: SectionId; label: string; keywords: string }>
   { id: 'perms', label: 'Permissions', keywords: 'permissions edit files shell commands network allowed denied rules' },
   { id: 'projects', label: 'Projects', keywords: 'projects trust trusted .oide folder' },
   { id: 'artifacts', label: 'Artifacts & claude.ai', keywords: 'artifacts claude.ai import sync designs docs whiteboards' },
-  { id: 'ext', label: 'Extensions', keywords: 'extensions extension settings secret token keychain browser preview default url' },
+  { id: 'ext', label: 'Extensions', keywords: 'extensions extension settings secret token keychain browser preview default url marketplace index url' },
   { id: 'keys', label: 'Keyboard shortcuts', keywords: 'keyboard shortcuts keys bindings' },
   { id: 'look', label: 'Appearance', keywords: 'appearance accent colour color theme' },
-  { id: 'privacy', label: 'Privacy', keywords: 'privacy telemetry crash reports usage statistics' },
+  { id: 'privacy', label: 'Privacy', keywords: 'privacy telemetry crash reports' },
   { id: 'updates', label: 'Updates', keywords: 'updates version upgrade channel stable beta check now release download install' },
   { id: 'diag', label: 'Diagnostics', keywords: 'diagnostics logs log folder git version gh node keychain database mcp port report troubleshooting' },
 ];

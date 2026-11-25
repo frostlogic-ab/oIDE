@@ -201,15 +201,16 @@ export function UpdatesSection({ settings }: { settings: Settings }) {
         </section>
       )}
 
-      {status?.state === 'disabled' && (
+      {/* Only a build with a release feed knows where its releases are (packages/protocol/src/distribution.ts). */}
+      {status?.state === 'disabled' && status.releaseUrl && (
         <Rd className="mt-3 block">
           New versions are listed on the{' '}
           <a
-            href={status.releaseUrl ?? 'https://github.com/oide-dev/oide/releases'}
+            href={status.releaseUrl}
             className="text-link"
             onClick={(e) => {
               e.preventDefault();
-              void oide.invoke('shell.openExternal', { url: status.releaseUrl ?? 'https://github.com/oide-dev/oide/releases' }).catch(() => undefined);
+              if (status.releaseUrl) void oide.invoke('shell.openExternal', { url: status.releaseUrl }).catch(() => undefined);
             }}
           >
             releases page

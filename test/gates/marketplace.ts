@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { computeIntegrity } from '../../packages/extension-host/src/integrity.js';
-import { DEFAULT_INDEX_URL } from '../../packages/extension-host/src/installer.js';
 import { extensionTarball } from '../../packages/extension-host/test/helpers.js';
 import type { MarketplaceIndex } from '../../packages/protocol/src/index.js';
 
@@ -10,7 +9,19 @@ import type { MarketplaceIndex } from '../../packages/protocol/src/index.js';
  * `@acme/oide-textkit` (one stdio MCP server `textkit` with the tool `text.reverse`, risk `read`)
  * and an index whose entry carries the tarball's real sha512 integrity. `fetch` serves both, so the
  * real MarketplaceInstaller downloads, verifies and unpacks it (Platform.fetch).
+ *
+ * oIDE fetches no remote index by default (packages/protocol/src/distribution.ts), so a test points
+ * Settings › Extensions › Marketplace index URL at `LOCAL_INDEX_URL` with `useLocalMarketplace(h)`,
+ * as a user who confirmed the native dialog would.
  */
+
+/** The local index's URL (`.invalid` never resolves; only the fake `fetch` answers it). */
+export const LOCAL_INDEX_URL = 'https://marketplace.invalid/index.json';
+
+/** Configure the harness's settings to use the local index (the store directly: the IPC path asks first). */
+export function useLocalMarketplace(h: { services: { store: { settings: { update(patch: Record<string, unknown>): unknown } } } }): void {
+  h.services.store.settings.update({ marketplace: { indexUrl: LOCAL_INDEX_URL } });
+}
 
 export const TEXTKIT = {
   name: '@acme/oide-textkit',
@@ -94,7 +105,7 @@ export function localMarketplace(opts: { tamper?: boolean } = {}): LocalMarketpl
   const fetchFn = (async (input: string | URL | Request) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
     requests.push(url);
-    if (url === DEFAULT_INDEX_URL)
+    if (url === LOCAL_INDEX_URL)
       return new Response(JSON.stringify(index), {
         status: 200,
         headers: { 'content-type': 'application/json' },

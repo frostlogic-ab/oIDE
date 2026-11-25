@@ -72,7 +72,19 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   (`v0.2.0-beta.1`) produces `beta*.yml`; `generateUpdatesFilesForAllChannels: true` makes stable tags
   publish `beta*.yml` too, so beta users also get stable releases. Changing the channel forgets an
   update that was found but not downloaded.
-- **Off when:** development builds (`!app.isPackaged`), `OIDE_DISABLE_UPDATES=1`, builds without
+- **Release feed (build time).** There is no default feed: the GitHub org `oide-dev` is not claimed
+  yet, so `electron-builder.yml` has `publish: null` and a default build writes no `app-update.yml`.
+  The release workflow reads two repository variables, `OIDE_PUBLISH_OWNER` and `OIDE_PUBLISH_REPO`:
+  when both are set it builds main with them (`define` in `electron.vite.config.ts` →
+  `buildPublishTarget()` in `updater.ts`) and passes `-c.publish.provider=github -c.publish.owner=…
+  -c.publish.repo=… -c.publish.releaseType=draft` to electron-builder; when either is missing it
+  builds with `--publish never` and a warning, uploads nothing, and the app's updater is off
+  ("This build has no release feed"). Settings › Updates then shows no releases link.
+- **What the owner sets after claiming the org:** in the repo's Settings › Variables, set
+  `OIDE_PUBLISH_OWNER` (e.g. `oide-dev`) and `OIDE_PUBLISH_REPO` (`oide`). Nothing else changes; the
+  names are validated (`publishTarget()` in `packages/protocol/src/distribution.ts`), and the
+  marketplace index default is separate ([marketplace](marketplace.md#distribution-defaults)).
+- **Off when:** no release feed was compiled in (above), development builds (`!app.isPackaged`), `OIDE_DISABLE_UPDATES=1`, builds without
   `resources/app-update.yml` (portable zip), Linux installs that are not an AppImage (`APPIMAGE` unset:
   deb/rpm users update through their package manager). The state is `disabled` with a reason.
 - **Unsigned builds.**
@@ -137,8 +149,19 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   everything a packaged build ships (desktop `dependencies`, libraries bundled into `out/`, Electron);
   `pnpm licenses:check` fails on a licence outside the MIT-compatible allow-list or a stale file.
   `LICENSE` and `THIRD_PARTY_NOTICES.md` are copied to `resources/` (`extraResources`). As of
-  2026-11-24: 140 shipped packages, all MIT-compatible (dompurify is dual MPL-2.0 OR Apache-2.0, used
+  2026-11-25: 368 shipped packages, all MIT-compatible (dompurify is dual MPL-2.0 OR Apache-2.0, used
   under Apache-2.0). Build-only MPL tools (@resvg/resvg-js, lightningcss) do not ship.
+- Fonts (`tools/licenses/fonts.mjs`, section "Bundled fonts" of the notices): 12 families. Excalidraw's
+  folders (Assistant, Cascadia Code, Excalifont, Lilita One, Nunito, Virgil, Xiaolai SC: OFL-1.1; Comic
+  Shanns: MIT; Liberation Sans 1.05: GPL-2.0 with the font exception, shipped unmodified as a separate
+  file, with the Red Hat licence and GPL text reproduced), Inter and JetBrains Mono (`@fontsource`,
+  OFL-1.1) and Monaco's Codicons (CC-BY-4.0). Licences are verified against the shipped files' name
+  tables (a small WOFF2 reader) and upstream licence files; texts the packages lack are kept in
+  `tools/licenses/texts/` (OFL, GPL-2.0, Liberation, Excalidraw's MIT, whose npm package has no
+  LICENSE). The check fails for an Excalidraw font folder without a record, an embedded licence that
+  disagrees, a non-MIT-compatible licence without a recorded reason, and, when `out/renderer` exists,
+  any built font file that matches no record. `release.yml` runs it again after `Build app` for that
+  reason. Test: `tools/licenses/test/fonts.test.ts`.
 - Docs site: VitePress 2 (alpha, matches the repo's vite 8) in `docs/site/`, `pnpm docs:dev` /
   `pnpm docs:build`, base `/oide/` for `oide-dev.github.io/oide`. Holds the user guide, the extension
   author guide, the security model and the FAQ; it links here for internals.

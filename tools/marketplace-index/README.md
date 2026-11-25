@@ -1,11 +1,12 @@
 # Marketplace index tools
 
-oIDE's marketplace in v1 is a static `index.json` in the public
-[`oide-dev/oide-marketplace`](https://github.com/oide-dev/oide-marketplace) repo. The app fetches it
-from `https://raw.githubusercontent.com/oide-dev/oide-marketplace/main/index.json`, caches it for a
-day, and falls back to the copy bundled here (`bundled/index.json`) when offline.
-The `oide-dev` GitHub organisation and the `oide-marketplace` repository are not set up yet (pre-1.0);
-until they are, the app can only use the bundled copy.
+oIDE's marketplace in v1 is a static `index.json`, planned for a public `oide-dev/oide-marketplace`
+repo. The `oide-dev` GitHub organisation and that repository are not set up yet (pre-1.0), so **the
+app fetches no remote index by default**: it uses the copy bundled here (`bundled/index.json`). A user
+can set Settings › Extensions › Marketplace index URL to an https index (main asks to confirm it);
+the app then caches it for a day and falls back to the bundled copy when offline. Built-in entries are
+`source: builtin` with `oide-builtin:<name>@<version>` pseudo URLs and are never downloaded. Names and
+defaults: `packages/protocol/src/distribution.ts`.
 
 | File | What it does |
 | --- | --- |

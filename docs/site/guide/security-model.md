@@ -87,7 +87,7 @@ network access. Doc artifacts are sanitized before rendering.
 
 ## Telemetry
 
-oIDE collects no usage statistics (the Privacy switch is off by default and nothing is sent).
+oIDE has no telemetry: it collects no usage statistics and has no code that could send any.
 Crash reports are opt-in, stay on your computer with paths, prompts and code removed, and are never
 uploaded; you can copy one into a bug report yourself.
 

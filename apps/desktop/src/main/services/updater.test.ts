@@ -3,8 +3,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Settings, UpdateStatus } from '@oide/protocol';
-import { loadElectronUpdater, plainNotes, RELEASES_URL, UpdaterService, type AppUpdaterLike, type UpdaterOptions } from './updater.js';
+import { publishTarget, Settings, UpdateStatus } from '@oide/protocol';
+import { buildPublishTarget, loadElectronUpdater, plainNotes, UpdaterService, type AppUpdaterLike, type UpdaterOptions } from './updater.js';
 
 /** Stand-in for electron-updater's autoUpdater: records calls, lets tests fire its events. */
 class FakeUpdater extends EventEmitter implements AppUpdaterLike {
@@ -29,6 +29,10 @@ class FakeUpdater extends EventEmitter implements AppUpdaterLike {
     this.allowDowngrade = true;
   }
 }
+
+/** A configured release feed (as the release workflow would inject); the default build has none. */
+const TARGET = publishTarget('example-owner', 'oide')!;
+const RELEASES_URL = TARGET.releasesUrl;
 
 const fake = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock('electron-updater', () => ({ autoUpdater: fake.current }));
@@ -81,6 +85,7 @@ function make(over: Partial<UpdaterOptions> = {}, settings = settingsStub()) {
     isMacSigned: async () => true,
     background: false,
     now: () => 1_700_000_000_000,
+    publish: TARGET,
     ...over,
   });
   services.push(svc);
@@ -102,6 +107,21 @@ describe('UpdaterService', () => {
     expect((await svc.download()).state).toBe('disabled');
     expect(() => svc.install(true)).toThrow();
     expect(load).not.toHaveBeenCalled();
+  });
+
+it('is off unless the build was given a release feed (no default org), and never loads electron-updater then', async () => {
+    expect(buildPublishTarget()).toBeNull(); // nothing injected outside a configured release build
+    const load = vi.fn(async () => updater);
+    for (const svc of [make({ publish: null, load }).svc, make({ publish: undefined, load }).svc]) {
+      expect(svc.getStatus()).toMatchObject({ state: 'disabled', disabledReason: expect.stringMatching(/no release feed/), canInstall: false });
+      expect(svc.getStatus().releaseUrl).toBeUndefined();
+      expect((await svc.check()).state).toBe('disabled');
+    }
+    expect(load).not.toHaveBeenCalled();
+    expect(publishTarget('', 'oide')).toBeNull();
+    expect(publishTarget('a/b', 'oide')).toBeNull();
+    expect(publishTarget('owner', '..')).toBeNull();
+    expect(publishTarget(' owner ', 'repo')?.releasesUrl).toBe('https://github.com/owner/repo/releases');
   });
 
   it('is off for Linux deb/rpm installs, portable builds and OIDE_DISABLE_UPDATES', () => {

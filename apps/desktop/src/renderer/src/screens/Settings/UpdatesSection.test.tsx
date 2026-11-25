@@ -117,6 +117,14 @@ describe('Settings › Updates', () => {
     expect((screen.getByRole('button', { name: 'Check now' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it('a build without a release feed links to no releases page (there is no default org)', async () => {
+    const { releaseUrl: _unused, ...rest } = status;
+    status = { ...rest, state: 'disabled', canInstall: false, disabledReason: 'This build has no release feed.' };
+    open();
+    await screen.findByText('This build has no release feed.');
+    expect(screen.queryByRole('link', { name: 'releases page' })).toBeNull();
+  });
+
   it('errors are announced', async () => {
     open();
     await screen.findByTestId('current-version');

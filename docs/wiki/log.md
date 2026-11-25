@@ -467,3 +467,22 @@ error, F7 Settings claimed "signed in" before the CLI said so, F8 "0 files ·". 
 `artifact-update` scenario. Remaining: minor and cosmetic items only. Details in
 [review-conformance](pages/review-conformance.md#final-pass-2026-11-25); gate status in
 [milestones](pages/milestones.md).
+
+## [2026-11-25] build | Publication fixes
+
+Fixed the code issues of [review-publication](pages/review-publication.md). Licences:
+`tools/licenses/fonts.mjs` records the 12 shipped font families (Excalidraw's 9 folders, Inter,
+JetBrains Mono, Codicons) with licences verified from the shipped WOFF2 name tables and upstream
+files; THIRD_PARTY_NOTICES.md gains a "Bundled fonts" section and Excalidraw's upstream MIT text;
+`licenses:check` fails on an unrecorded font folder or, after a build, an unrecorded font in
+`out/renderer` (release.yml re-runs it after the build). Owner note: Liberation Sans 1.05 is GPL-2.0
+with the font exception, recorded as an explicit exception. Recorder: `tools/fake-claude/record.mjs`
+scrubs every spelling of home/cwd/temp paths, other user and temp folders, the user name, e-mails,
+account/org/user ids and uuids (crafted-input tests). Privacy: the dead usage-statistics switch is
+removed (`ui.telemetry` deprecated, unread). Distribution: `packages/protocol/src/distribution.ts`
+holds the names; no remote marketplace index by default (Settings › Extensions › Marketplace index
+URL, native confirmation in main), built-ins are `source: builtin` with `oide-builtin:` URLs and never
+resolved from npm, `publish: null` in electron-builder.yml and the updater is off unless the build gets
+`OIDE_PUBLISH_OWNER` / `OIDE_PUBLISH_REPO`. Pages: [packaging](pages/packaging.md),
+[marketplace](pages/marketplace.md), [screen-settings](pages/screen-settings.md),
+[security](pages/security.md).

@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import os from 'node:os';
 import path from 'node:path';
 import { computeIntegrity, ENGINE_VERSION, extractTarball, isValidRange, isValidVersion, loadManifest, requireBundled, verifyIntegrity } from '@oide/extension-host';
-import { MARKETPLACE_CATEGORIES, MarketplaceIndex } from '@oide/protocol';
+import { builtinTarballUrl, isBuiltinTarballUrl, MARKETPLACE_CATEGORIES, MarketplaceIndex } from '@oide/protocol';
 
 /** @type {Set<string>} */
 const CATEGORY_IDS = new Set(MARKETPLACE_CATEGORIES.map((c) => c.id));
@@ -34,6 +34,8 @@ export function validateIndex(json) {
       if (!isValidVersion(v.version)) errors.push(`${where}@${v.version}: not a semver version`);
       if (!isValidRange(v.engine)) errors.push(`${where}@${v.version}: engine is not a semver range`);
       if (e.source === 'npm' && !v.tarball.startsWith('https://')) errors.push(`${where}@${v.version}: tarball must be an https URL`);
+      // Built-ins ship inside the app and are never downloaded, so they carry no npm URL (the scope is undecided).
+      if (e.source === 'builtin' && !isBuiltinTarballUrl(v.tarball)) errors.push(`${where}@${v.version}: a builtin entry's tarball must be oide-builtin:<name>@<version>, not a download URL`);
       const tools = new Set();
       for (const t of v.tools) {
         if (tools.has(t.name)) errors.push(`${where}@${v.version}: tool ${t.name} listed twice`);
@@ -122,7 +124,7 @@ export function buildBundledIndex(o) {
     const loaded = loadManifest(dir);
     requireBundled(loaded);
     const { file, integrity } = npmPack(dir, o.tarballDir);
-    extensions.push({ entry: entryFromLoaded(loaded, { tarball: npmTarballUrl(loaded.manifest.name, loaded.manifest.version), integrity, source: 'builtin', verified: true }), file });
+    extensions.push({ entry: entryFromLoaded(loaded, { tarball: builtinTarballUrl(loaded.manifest.name, loaded.manifest.version), integrity, source: 'builtin', verified: true }), file });
   }
   const index = { version: 1, generatedAt: o.generatedAt ?? new Date().toISOString(), extensions: extensions.map((e) => e.entry) };
   const { errors } = validateIndex(index);

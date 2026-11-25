@@ -84,6 +84,10 @@ export const Settings = z.object({
   }),
   ui: z.object({
     accent: z.string().default('#7AA2F7'),
+    /**
+     * @deprecated Unused. oIDE collects no usage statistics and has no telemetry code; the Settings
+     * switch was removed. Kept only so settings files saved by 0.1.x still parse. Nothing reads it.
+     */
     telemetry: z.boolean().default(false),
     /** Settings › Privacy › Crash reports. Off by default; local only (never uploaded in v1). */
     crashReports: z.boolean().default(false),
@@ -96,6 +100,14 @@ export const Settings = z.object({
       checkAutomatically: z.boolean().default(true),
     })
     .default({ channel: 'stable', checkAutomatically: true }),
+  /**
+   * Settings › Extensions › Marketplace index URL. Empty (the default) means the index bundled with
+   * the app is the only one: oIDE fetches no remote index. Setting an https URL needs a native
+   * confirmation in main (`confirmExecSettings`). See packages/protocol/src/distribution.ts.
+   */
+  marketplace: z
+    .object({ indexUrl: z.string().max(2048).default('') })
+    .default({ indexUrl: '' }),
   /**
    * Settings › Keyboard shortcuts: the user's rebinds, action id → key combos ("Mod+K", "J").
    * Only changed actions are stored; a missing action uses the built-in default, `[]` unbinds it.

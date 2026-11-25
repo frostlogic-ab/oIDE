@@ -165,25 +165,7 @@ export function PrivacySection({ settings }: { settings: Settings }) {
       <H1>Privacy</H1>
       <Rd>oIDE never reads, stores or sends your Claude credentials. Prompts, code and paths stay on this computer.</Rd>
       <Sec>Telemetry</Sec>
-      <Row title="Share anonymous usage statistics" desc="Off by default. Crash reports are opt-in and strip paths, prompts and code.">
-        {({ titleId }) => (
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              className="accent-accent"
-              aria-describedby={titleId}
-              disabled={busy}
-              checked={settings.ui.telemetry}
-              onChange={async (e) => {
-                setBusy(true);
-                await savePatch({ ui: { telemetry: e.target.checked } });
-                setBusy(false);
-              }}
-            />
-            Share
-          </label>
-        )}
-      </Row>
+      <Rd className="mt-2 block">oIDE has no telemetry: it collects no usage statistics and sends nothing about how you use it.</Rd>
       <Row
         title="Crash reports"
         desc="Off by default. When on, oIDE saves crash reports on this computer only, with paths, prompts and code removed. Nothing is uploaded; you can copy one into a bug report yourself. Turning this off deletes them."

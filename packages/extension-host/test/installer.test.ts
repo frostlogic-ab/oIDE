@@ -1,8 +1,9 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import type { InstalledExtension, MarketplaceIndex } from '@oide/protocol';
+import { fileURLToPath } from 'node:url';
+import { builtinTarballUrl, isBuiltinTarballUrl, MarketplaceIndex, type InstalledExtension } from '@oide/protocol';
 import { afterEach, describe, expect, it } from 'vitest';
-import { InstallError, MarketplaceInstaller } from '../src/installer.js';
+import { DEFAULT_INDEX_URL, InstallError, MarketplaceInstaller } from '../src/installer.js';
 import { computeIntegrity, verifyIntegrity } from '../src/integrity.js';
 import { extractTarball, inspectTarball, TarballError } from '../src/tarball.js';
 import { extensionTarball, makeTar, samplePkg, tempDir } from './helpers.js';
@@ -204,10 +205,92 @@ describe('MarketplaceInstaller', () => {
     const v = entry.versions[0]!;
     entry.versions.push({ ...v, version: '1.3.0', tools: [...v.tools, { name: 'db.drop', risk: 'ask' }], capabilities: { network: ['db.example.com'], spawn: false } });
     entry.versions.push({ ...v, version: '1.2.1' });
-    const inst = new MarketplaceInstaller({ extensionsDir: path.join(root, 'ext'), cacheDir: path.join(root, 'cache'), fetch: (async () => Response.json(index)) as typeof fetch });
+    const inst = new MarketplaceInstaller({ extensionsDir: path.join(root, 'ext'), cacheDir: path.join(root, 'cache'), indexUrl: 'https://idx/i.json', fetch: (async () => Response.json(index)) as typeof fetch });
     const installed = await inst.installTarball(tgz, entry, v);
     const ups = await inst.checkUpdates([installed.record as InstalledExtension]);
     expect(ups).toHaveLength(1);
     expect(ups[0]).toMatchObject({ from: '1.2.0', to: '1.3.0', needsConsent: true, addedTools: ['db.drop'], addedCapabilities: ['network:db.example.com'] });
+  });
+});
+
+describe('MarketplaceInstaller distribution defaults (review-publication §3)', () => {
+  const builtinIndex = (): MarketplaceIndex => ({
+    version: 1,
+    generatedAt: '2026-11-25T00:00:00.000Z',
+    extensions: [
+      {
+        name: '@oide/ext-git',
+        displayName: 'Git',
+        publisher: 'oide',
+        description: 'Built in',
+        categories: ['review-testing'],
+        verified: true,
+        source: 'builtin',
+        downloads: 0,
+        versions: [{ version: '1.0.0', tarball: builtinTarballUrl('@oide/ext-git', '1.0.0'), integrity: 'sha512-AAAA', engine: '^1.0.0', tools: [] }],
+      },
+    ],
+  });
+
+  it('has no remote default: with no index URL it uses the bundled index and never fetches', async () => {
+    expect(DEFAULT_INDEX_URL).toBe('');
+    const root = tmp();
+    const bundled = path.join(root, 'bundled.json');
+    writeFileSync(bundled, JSON.stringify(builtinIndex()));
+    const fetch = fakeFetch({});
+    const inst = new MarketplaceInstaller({ extensionsDir: path.join(root, 'ext'), cacheDir: path.join(root, 'cache'), bundledIndexPath: bundled, fetch });
+    expect(inst.indexUrl).toBe('');
+    expect((await inst.getIndex()).from).toBe('bundled');
+    expect((await inst.getIndex({ refresh: true })).from).toBe('bundled');
+    expect(fetch.calls).toEqual([]);
+  });
+
+  it('reads the URL live from a getter and refuses non-https URLs without fetching', async () => {
+    const root = tmp();
+    const bundled = path.join(root, 'bundled.json');
+    writeFileSync(bundled, JSON.stringify(builtinIndex()));
+    let url = '';
+    const remote = indexWith(goodTarball());
+    const fetch = fakeFetch({ 'https://idx/index.json': () => Response.json(remote), 'http://idx/index.json': () => Response.json(remote) });
+    const inst = new MarketplaceInstaller({ extensionsDir: path.join(root, 'ext'), cacheDir: path.join(root, 'cache'), bundledIndexPath: bundled, indexUrl: () => url, fetch });
+    expect((await inst.getIndex()).from).toBe('bundled');
+    url = 'http://idx/index.json';
+    expect((await inst.getIndex()).from).toBe('bundled');
+    expect(fetch.calls).toEqual([]);
+    url = 'https://idx/index.json';
+    const r = await inst.getIndex();
+    expect(r.from).toBe('network');
+    expect(fetch.calls).toEqual(['https://idx/index.json']);
+    // The bundled built-in is kept even though the remote index does not list it.
+    expect(r.index.extensions.map((e) => e.name).sort()).toEqual(['@oide-community/sample', '@oide/ext-git']);
+  });
+
+  it('never resolves a built-in from npm, even when a remote index lists its name as an npm package', async () => {
+    const root = tmp();
+    const bundled = path.join(root, 'bundled.json');
+    writeFileSync(bundled, JSON.stringify(builtinIndex()));
+    const npmUrl = 'https://registry.npmjs.org/@oide/ext-git/-/ext-git-9.0.0.tgz';
+    const remote = indexWith(goodTarball());
+    remote.extensions.push({ ...remote.extensions[0]!, name: '@oide/ext-git', source: 'npm', versions: [{ ...remote.extensions[0]!.versions[0]!, version: '9.0.0', tarball: npmUrl }] });
+    const fetch = fakeFetch({ 'https://idx/index.json': () => Response.json(remote), [npmUrl]: () => new Response(goodTarball()) });
+    const inst = new MarketplaceInstaller({ extensionsDir: path.join(root, 'ext'), cacheDir: path.join(root, 'cache'), bundledIndexPath: bundled, indexUrl: 'https://idx/index.json', fetch });
+    const entry = (await inst.getIndex()).index.extensions.find((e) => e.name === '@oide/ext-git')!;
+    expect(entry.source).toBe('builtin');
+    expect(isBuiltinTarballUrl(entry.versions[0]!.tarball)).toBe(true);
+    await expect(inst.install('@oide/ext-git')).rejects.toThrow(/ships with oIDE/);
+    expect(fetch.calls).not.toContain(npmUrl);
+  });
+
+  it('the shipped bundled index marks every built-in as builtin with a non-download URL', () => {
+    const file = fileURLToPath(new URL('../../../tools/marketplace-index/bundled/index.json', import.meta.url));
+    const index = MarketplaceIndex.parse(JSON.parse(readFileSync(file, 'utf8')));
+    expect(index.extensions.length).toBeGreaterThan(0);
+    for (const e of index.extensions) {
+      expect(e.source).toBe('builtin');
+      for (const v of e.versions) {
+        expect(isBuiltinTarballUrl(v.tarball)).toBe(true);
+        expect(v.tarball).not.toMatch(/npmjs|https?:/);
+      }
+    }
   });
 });

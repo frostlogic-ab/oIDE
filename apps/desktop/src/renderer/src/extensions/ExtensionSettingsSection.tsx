@@ -5,11 +5,12 @@
  */
 import { useEffect, useState } from 'react';
 import type { ExtensionSettingField, InstalledExtension } from '@oide/protocol';
-import { Badge } from '@oide/ui';
+import { Badge, cn } from '@oide/ui';
 import { invokeOr, ipcErrorMessage, oide } from '../lib/bridge';
 import { navigate } from '../stores/router';
+import { useSettings } from '../stores/settings';
 import { toast } from '../stores/ui';
-import { H1, Rd, Row, Sec, inp, outlineBtn } from '../screens/Settings/ui';
+import { H1, Rd, Row, Sec, inp, inpSm, outlineBtn, savePatch } from '../screens/Settings/ui';
 import { isOnSomewhere } from './model';
 import { useExtensions } from './store';
 
@@ -31,10 +32,52 @@ export function ExtensionSettingsSection() {
         </button>
         .
       </Rd>
+      <MarketplaceIndexRow />
       {withSettings.length === 0 && <Rd className="mt-4 block">No installed extension has settings.</Rd>}
       {withSettings.map((e) => (
         <ExtensionFields key={e.id} ext={e} />
       ))}
+    </>
+  );
+}
+
+/**
+ * Settings › Extensions › Marketplace index URL (`marketplace.indexUrl`). Empty, the default, means
+ * the Marketplace lists only what ships with oIDE and nothing is fetched. A remote https URL needs a
+ * native confirmation in main; if it is declined the field goes back to the saved value.
+ */
+function MarketplaceIndexRow() {
+  const value = useSettings((s) => s.settings?.marketplace.indexUrl ?? '');
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  const commit = async () => {
+    const v = draft.trim();
+    if (v === value) return setDraft(v);
+    const saved = await savePatch({ marketplace: { indexUrl: v } });
+    if (!saved) setDraft(value);
+  };
+  return (
+    <>
+      <Sec>Marketplace</Sec>
+      <Row
+        title="Marketplace index URL"
+        desc="Leave empty to use only the extension list built into oIDE (nothing is downloaded). Set an https address to also list the extensions it offers; whoever controls that address decides what you are offered, so oIDE asks you to confirm it."
+      >
+        {({ titleId, descId }) => (
+          <input
+            type="url"
+            aria-labelledby={titleId}
+            aria-describedby={descId}
+            className={cn(inpSm, 'w-[320px]')}
+            placeholder="Built-in list only"
+            spellCheck={false}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => void commit()}
+            onKeyDown={(e) => e.key === 'Enter' && void commit()}
+          />
+        )}
+      </Row>
     </>
   );
 }

@@ -33,8 +33,18 @@ function cspPlugin(): Plugin {
   };
 }
 
+/**
+ * The release feed the updater may use (apps/desktop/src/main/services/updater.ts). Empty unless the
+ * build env sets both (the release workflow passes repository variables); then the updater stays off.
+ */
+const publishDefines = {
+  __OIDE_PUBLISH_OWNER__: JSON.stringify(process.env.OIDE_PUBLISH_OWNER ?? ''),
+  __OIDE_PUBLISH_REPO__: JSON.stringify(process.env.OIDE_PUBLISH_REPO ?? ''),
+};
+
 export default defineConfig({
   main: {
+    define: publishDefines,
     build: {
       outDir: 'out/main',
       externalizeDeps: { include: runtimeDeps, exclude: [] },

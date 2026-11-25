@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { Project } from '../../packages/protocol/src/index.js';
 import { git, makeRepo, tempDir, type Harness } from '../integration/harness.js';
 import { driveTo, gateHarness, track, useGateCleanup } from './helpers.js';
-import { localMarketplace, TEXTKIT } from './marketplace.js';
+import { localMarketplace, TEXTKIT, useLocalMarketplace } from './marketplace.js';
 
 /**
  * M4 gate: "A project's `.oide/` folder reproduces the same agent setup on another machine."
@@ -95,6 +95,7 @@ async function machine(
   const record = join(home, 'launch.jsonl');
   const market = localMarketplace();
   const h = await gateHarness({ trust: opts.trust, platform: { fetch: market.fetch } });
+  useLocalMarketplace(h);
   await h.call('settings.update', {
     patch: {
       ...opts.globals,

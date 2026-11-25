@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { Settings, UpdateChannel, UpdateStatus } from '@oide/protocol';
+import { publishTarget, type PublishTarget, type Settings, type UpdateChannel, type UpdateStatus } from '@oide/protocol';
 
 /**
  * Auto-update on GitHub Releases (M7), wrapping electron-updater. See docs/wiki/pages/packaging.md.
@@ -10,6 +10,8 @@ import type { Settings, UpdateChannel, UpdateStatus } from '@oide/protocol';
  * - `autoDownload` and `autoInstallOnAppQuit` are off. A check only finds out whether a newer
  *   version exists; downloading is a click (`updates.download`) and installing is another click
  *   (`updates.install` with `consent: true`), which quits oIDE and runs the installer.
+ * - Off unless the build was given a release feed (`OIDE_PUBLISH_OWNER` / `OIDE_PUBLISH_REPO` at build
+ *   time, see `buildPublishTarget`): the GitHub org is not claimed yet, so no default feed exists.
  * - Off in development builds, in builds without `app-update.yml` (portable zip), for Linux
  *   deb/rpm installs (the package manager updates those) and when `OIDE_DISABLE_UPDATES=1`.
  * - Unsigned macOS builds can check but cannot install (Squirrel.Mac only installs signed apps), so
@@ -21,8 +23,21 @@ import type { Settings, UpdateChannel, UpdateStatus } from '@oide/protocol';
  * next stable version above the installed beta.
  */
 
-/** Keep in sync with `publish` in apps/desktop/electron-builder.yml. */
-export const RELEASES_URL = 'https://github.com/oide-dev/oide/releases';
+/** Injected by electron-vite (`define` in electron.vite.config.ts) from the build's env; absent in tests. */
+declare const __OIDE_PUBLISH_OWNER__: string | undefined;
+declare const __OIDE_PUBLISH_REPO__: string | undefined;
+
+/**
+ * The GitHub Releases feed this build was configured with, or null. The release workflow sets
+ * `OIDE_PUBLISH_OWNER` / `OIDE_PUBLISH_REPO` (repository variables) for both the bundle and
+ * electron-builder's `-c.publish.*`, so `app-update.yml` and this value name the same repo.
+ * Local and CI builds without them have no feed, and the updater stays off.
+ */
+export function buildPublishTarget(): PublishTarget | null {
+  const owner = typeof __OIDE_PUBLISH_OWNER__ === 'string' ? __OIDE_PUBLISH_OWNER__ : undefined;
+  const repo = typeof __OIDE_PUBLISH_REPO__ === 'string' ? __OIDE_PUBLISH_REPO__ : undefined;
+  return publishTarget(owner, repo);
+}
 
 const FIRST_CHECK_DELAY_MS = 15_000;
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -69,6 +84,8 @@ export interface UpdaterOptions {
   isMacSigned?: () => Promise<boolean>;
   /** Run background checks (startup + every 6 h) when Settings allow. Default true. */
   background?: boolean;
+  /** The release feed; default `buildPublishTarget()`. null: this build has none, updates are off. */
+  publish?: PublishTarget | null;
   now?: () => number;
 }
 
@@ -132,9 +149,13 @@ export class UpdaterService {
   private appliedChannel: UpdateChannel;
   private readonly env: NodeJS.ProcessEnv;
   private readonly now: () => number;
+  private readonly releasesUrl: string | undefined;
+  private readonly target: PublishTarget | null;
 
   constructor(private readonly opts: UpdaterOptions) {
     this.env = opts.env ?? process.env;
+    this.target = opts.publish === undefined ? buildPublishTarget() : opts.publish;
+    this.releasesUrl = this.target?.releasesUrl;
     this.now = opts.now ?? Date.now;
     const channel = opts.settings.get().updates.channel;
     this.appliedChannel = channel;
@@ -145,7 +166,7 @@ export class UpdaterService {
       currentVersion: opts.currentVersion,
       channel,
       canInstall: !disabledReason,
-      releaseUrl: RELEASES_URL,
+      ...(this.releasesUrl ? { releaseUrl: this.releasesUrl } : {}),
       ...(disabledReason ? { disabledReason } : {}),
       ...(lastCheckedAt ? { lastCheckedAt } : {}),
     };
@@ -156,6 +177,7 @@ export class UpdaterService {
     const { opts, env } = this;
     if (env.OIDE_DISABLE_UPDATES === '1') return 'Updates are turned off for this install (OIDE_DISABLE_UPDATES).';
     if (opts.isDev) return 'Updates are off in development builds.';
+    if (!this.target) return 'This build has no release feed (it was built without OIDE_PUBLISH_OWNER and OIDE_PUBLISH_REPO), so it never checks for updates. Download new versions by hand.';
     if (opts.platform === 'linux' && !env.APPIMAGE) return 'Installed from a .deb or .rpm package: update oIDE through your package manager.';
     if (!(opts.hasUpdateConfig ?? defaultHasUpdateConfig)()) return 'This build has no update configuration (for example a portable zip). Download new versions from the releases page.';
     return undefined;
@@ -267,8 +289,8 @@ export class UpdaterService {
     this.applyChannel(u, this.appliedChannel);
 
     u.on('checking-for-update', () => this.set({ state: 'checking' }));
-    u.on('update-available', (info: UpdateInfoLike) => this.set({ state: 'available', available: this.infoOf(info), releaseUrl: `${RELEASES_URL}/tag/v${info.version}` }));
-    u.on('update-not-available', () => this.set({ state: 'not-available', available: undefined, releaseUrl: RELEASES_URL }));
+    u.on('update-available', (info: UpdateInfoLike) => this.set({ state: 'available', available: this.infoOf(info), releaseUrl: this.releasesUrl ? `${this.releasesUrl}/tag/v${info.version}` : undefined }));
+    u.on('update-not-available', () => this.set({ state: 'not-available', available: undefined, releaseUrl: this.releasesUrl }));
     u.on('download-progress', (p: { percent?: number }) => {
       const progress = Math.max(0, Math.min(1, (p.percent ?? 0) / 100));
       this.set({ state: 'downloading', progress });
@@ -291,7 +313,7 @@ export class UpdaterService {
     if (this.updater) this.applyChannel(this.updater, channel);
     // A found (not yet downloaded) update belongs to the old channel; forget it.
     if (this.status.state === 'downloading' || this.status.state === 'downloaded') this.set({ channel });
-    else this.set({ channel, state: 'idle', available: undefined, error: undefined, releaseUrl: RELEASES_URL });
+    else this.set({ channel, state: 'idle', available: undefined, error: undefined, releaseUrl: this.releasesUrl });
   }
 
   private infoOf(info: UpdateInfoLike): NonNullable<UpdateStatus['available']> {

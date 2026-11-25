@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { isAllowedModelEnvKey, isAllowedModelEnvEntry, MODEL_ENV_ALLOW_LIST } from '@oide/agent-core';
 import { pathKey, samePath } from '@oide/git';
-import { CustomModel, type Settings, type Technique } from '@oide/protocol';
+import { CustomModel, marketplaceIndexUrlProblem, type Settings, type Technique } from '@oide/protocol';
 import { BUILTIN_PRESETS, BUILTIN_TECHNIQUES, readOideFile } from '@oide/store';
 import { ZodError } from 'zod';
 import type { MainContext } from '../context.js';
@@ -189,6 +189,7 @@ export function registerSettingsHandlers(router: IpcRouter, s: Services, ctx: Ma
  */
 export async function confirmExecSettings(s: Services, ctx: MainContext, patch: Record<string, unknown>): Promise<void> {
   await confirmCustomModels(s, ctx, patch.models);
+  await confirmMarketplaceIndex(s, ctx, patch.marketplace);
   const claude = patch.claude;
   if (!claude || typeof claude !== 'object') return;
   const cur = s.store.settings.get().claude;
@@ -216,6 +217,29 @@ export async function confirmExecSettings(s: Services, ctx: MainContext, patch: 
     });
     if (!ok) throw new IpcError('The extra CLI flags were not changed.', 'forbidden');
   }
+}
+
+/**
+ * Settings › Extensions › Marketplace index URL. Empty (the default) means the bundled index only.
+ * A remote URL decides which extensions the Marketplace offers, so setting or changing one needs a
+ * native confirmation in main that shows its origin in full; it must be https with no credentials.
+ * Clearing it needs none.
+ */
+async function confirmMarketplaceIndex(s: Services, ctx: MainContext, marketplace: unknown): Promise<void> {
+  if (!isObj(marketplace) || typeof marketplace.indexUrl !== 'string') return;
+  const url = marketplace.indexUrl.trim();
+  if (marketplace.indexUrl !== url) throw new IpcError('The marketplace index URL may not start or end with spaces.', 'invalid_input');
+  if (!url || url === s.store.settings.get().marketplace.indexUrl) return;
+  const problem = marketplaceIndexUrlProblem(url);
+  if (problem) throw new IpcError(problem, 'invalid_input');
+  const ok = await confirmNative(ctx, {
+    title: 'Use this marketplace index?',
+    message: 'oIDE will download the list of extensions offered in the Marketplace from this address, instead of using only the list built into the app.',
+    detail: `Origin: ${dialogOrigin(url) ?? '(not a valid URL)'}\nURL: ${safeDialogText(url)}\n\nWhoever controls this address decides which extensions you are offered. Only continue if you trust it.`,
+    confirmLabel: 'Use this index',
+    danger: true,
+  });
+  if (!ok) throw new IpcError('The marketplace index URL was not changed.', 'forbidden');
 }
 
 /** Env names whose values a confirmation shows as the name only. */

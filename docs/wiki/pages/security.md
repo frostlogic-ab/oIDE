@@ -326,7 +326,7 @@ removed and stacks reduced to function names and file base names. Electron's `cr
 with `uploadToServer: false`; its minidumps (which can contain process memory) stay in
 `crash-reports/native/`, only the newest 5 are kept, and turning the setting off deletes every local
 report. **v1 uploads nothing**: there is no crash endpoint; a user can copy a summary into an issue.
-Usage statistics (`ui.telemetry`) are also off by default, and v1 sends none.
+There is no telemetry: no code collects or sends usage statistics, and the Privacy switch for it was removed (`ui.telemetry` stays in the schema, deprecated and unread, so old settings files parse).
 
 ## Updates and release pipeline
 

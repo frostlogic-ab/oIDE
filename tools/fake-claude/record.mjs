@@ -12,8 +12,10 @@
 // never reads token env vars, and never calls Anthropic's API. It runs the user's own CLI with an
 // allow-listed env (same list as packages/agent-core ENV_ALLOW_LIST, checked by a test), so a
 // session uses whatever sign-in the CLI itself already has. Everything written is sanitized:
-// home folder, user name, host name, cwd, session ids, uuids, tool/message ids, emails and anything
-// that looks like a token are replaced with stable placeholders.
+// home folder, user name, host name, cwd and temp folders (in every spelling: native, forward-slash,
+// JSON-escaped, lowercase drive, /c/Users/…, the CLI's slugified project-folder name), any other
+// user or temp folder, session ids, uuids, tool/message ids, account/org/user ids, emails and
+// anything that looks like a token are replaced with stable placeholders.
 //
 // Output (one folder): meta.json, version.txt, help.txt and, with --session, session-basic.jsonl
 // (replayable with fake-claude `--fake-scenario replay:<file>`) and session-stderr.txt.
@@ -54,36 +56,104 @@ export const PLACEHOLDER = {
   sessionId: '11111111-2222-4333-8444-555555555555',
   email: 'user@example.com',
   secret: 'REDACTED',
+  tmp: '/tmp/scratch',
 };
 
-/** Keys whose values are always secret-like, whatever they contain. */
-const SECRET_KEYS = /^(signature|token|access_?token|refresh_?token|id_?token|api_?key|apikey|authorization|password|secret|cookie|session_?token|oauth.*|account_?uuid|organization_?uuid|org_?id|user_?id|account_?id|email(_?address)?)$/i;
+/**
+ * Keys whose values are always secret-like or identify an account, whatever they contain: tokens,
+ * keys, cookies, and the account / organization / user ids, names and e-mails the CLI can print.
+ */
+const SECRET_KEYS = /^(signature|token|access_?token|refresh_?token|id_?token|api_?key|apikey|authorization|password|secret|cookie|session_?token|oauth.*|(account|organi[sz]ation|org|user|billing|workspace)_?(uuid|id|name|email|role|type)|account|organi[sz]ation|email(_?address)?|display_?name|full_?name|username|login)$/i;
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** The CLI's project-folder form of a path (`C:\Users\ada\repo` → `C--Users-ada-repo`). */
+export const slugPath = (p) => p.replace(/[^A-Za-z0-9]/g, '-');
+
 /**
- * Build a sanitizer for one recording. `ctx`: { home, user, host, cwd, sessionId } (all optional).
- * The returned object has `text(s)` for plain text and `line(l)` for one stdout line (JSON lines
- * are sanitized structurally, other lines as text). Ids map to stable placeholders, so the same
- * uuid or tool id gets the same replacement everywhere in the recording.
+ * Every spelling of an absolute path that can show up in CLI output: native, forward-slash, JSON-
+ * escaped (`\\`), `\/`-escaped, lowercase or uppercase drive (the regex is case-insensitive), MSYS
+ * (`/c/Users/…`), WSL (`/mnt/c/…`), macOS `/private` temp, and the CLI's slugified folder name.
+ * Returns [form, replacement] pairs; `replacement` is the matching form of `placeholder`.
+ */
+function pathForms(p, placeholder) {
+  const out = new Map();
+  const base = p.replace(/[\\/]+$/, '');
+  if (base.length < 3) return [];
+  const fwd = base.replace(/\\/g, '/');
+  const back = base.replace(/\//g, '\\');
+  const add = (form, repl) => {
+    if (form && form.length >= 3 && !out.has(form)) out.set(form, repl);
+  };
+  add(base, placeholder);
+  add(fwd, placeholder);
+  add(back, placeholder);
+  add(back.replace(/\\/g, '\\\\'), placeholder);
+  add(fwd.replace(/\//g, '\\/'), placeholder.replace(/\//g, '\\/'));
+  const drive = /^([A-Za-z]):\/(.*)$/.exec(fwd);
+  if (drive) {
+    add(`/${drive[1]}/${drive[2]}`, placeholder);
+    add(`/mnt/${drive[1]}/${drive[2]}`, placeholder);
+  }
+  if (fwd.startsWith('/var/') || fwd.startsWith('/tmp/')) add(`/private${fwd}`, placeholder);
+  add(slugPath(base), slugPath(placeholder));
+  return [...out];
+}
+
+/** Path separators as they appear raw, JSON-escaped or `\/`-escaped. */
+const SEP = String.raw`(?:\\\\|\\\/|\\|\/)+`;
+/** One path segment (no separator, quote, space or markup). */
+const SEG = String.raw`[^\\/\s"'<>|:*?\`]+`;
+
+/**
+ * Generic rules for paths no ctx value names (other accounts, CI runners, the CLI's own temp and
+ * scratchpad folders): user folders become the home placeholder, temp folders the tmp one.
+ */
+const GENERIC_PATHS = [
+  // C:\Users\<name>, c:/Users/<name>, C:\\Users\\<name>, /c/Users/<name>, /mnt/c/Users/<name>
+  { re: new RegExp(String.raw`(?:\b[A-Za-z]:|(?<![A-Za-z0-9])(?:\/mnt)?\/[A-Za-z](?=${SEP}Users))${SEP}Users${SEP}(?!Public\b)${SEG}`, 'gi'), to: PLACEHOLDER.home },
+  // /Users/<name> (macOS), /home/<name> (Linux)
+  { re: new RegExp(String.raw`(?<![A-Za-z0-9_.-])${SEP}(?:Users|home)${SEP}(?!user\b)${SEG}`, 'g'), to: PLACEHOLDER.home },
+  // Temp folders and everything under them: …\AppData\Local\Temp\…, C:\Windows\Temp\…, /tmp/…, /var/folders/…/T/…
+  { re: new RegExp(String.raw`(?:${SEP}home${SEP}user|\b[A-Za-z]:)?${SEP}(?:AppData${SEP}Local${SEP}Temp|Windows${SEP}Temp)(?:${SEP}${SEG})*`, 'gi'), to: PLACEHOLDER.tmp },
+  { re: new RegExp(String.raw`(?<![A-Za-z0-9_.-])(?:${SEP}private)?${SEP}(?:var${SEP}folders${SEP}${SEG}${SEP}${SEG}${SEP}T|tmp)(?!${SEP}scratch\b)(?:${SEP}${SEG})+`, 'g'), to: PLACEHOLDER.tmp },
+  // Slug forms (the CLI's ~/.claude/projects/<slug> names): C--Users-<name>-…, -Users-<name>-…, -home-<name>-…
+  { re: /\b[A-Za-z]--Users-(?!Public\b)[A-Za-z0-9_]+(?:-AppData-Local-Temp(?:-[A-Za-z0-9_]+)*)?/gi, to: slugPath(PLACEHOLDER.home) },
+  { re: /(?<![A-Za-z0-9-])-(?:Users|home)-(?!user\b)[A-Za-z0-9_]+/g, to: slugPath(PLACEHOLDER.home) },
+  { re: /-home-user-AppData-Local-Temp(?:-[A-Za-z0-9_]+)*/g, to: slugPath(PLACEHOLDER.tmp) },
+];
+
+/**
+ * Build a sanitizer for one recording. `ctx`: { home, user, host, cwd, tmp, sessionId } (all
+ * optional). The returned object has `text(s)` for plain text and `line(l)` for one stdout line
+ * (JSON lines are sanitized structurally, other lines as text). Ids map to stable placeholders, so
+ * the same uuid or tool id gets the same replacement everywhere in the recording.
  */
 export function createSanitizer(ctx = {}) {
-  const maps = { uuid: new Map(), toolu: new Map(), msg: new Map(), req: new Map() };
+  const maps = { uuid: new Map(), toolu: new Map(), msg: new Map(), req: new Map(), acct: new Map() };
   const literals = [];
   const addLiteral = (value, replacement, { word = false } = {}) => {
     if (!value || value.length < 3) return;
     const forms = new Set([value, value.replace(/\\/g, '\\\\'), value.replace(/\\/g, '/')]);
     for (const f of forms) {
       const body = escapeRe(f);
-      literals.push({ re: new RegExp(word ? `(?<![A-Za-z0-9_])${body}(?![A-Za-z0-9_])` : body, 'gi'), replacement });
+      literals.push({ re: new RegExp(word ? `(?<![A-Za-z0-9])${body}(?![A-Za-z0-9])` : body, 'gi'), replacement });
     }
   };
-  // Longest first: cwd usually sits inside home.
+  // Longest first: cwd usually sits inside tmp, and tmp inside home.
+  // Temp folders take everything under them too (random ids of other tools' scratch folders).
   const paths = [
-    [ctx.cwd, PLACEHOLDER.cwd],
-    [ctx.home, PLACEHOLDER.home],
-  ].filter(([v]) => v).sort((a, b) => b[0].length - a[0].length);
-  for (const [v, r] of paths) addLiteral(v, r);
+    [ctx.cwd, PLACEHOLDER.cwd, false],
+    [ctx.tmp, PLACEHOLDER.tmp, true],
+    [ctx.home, PLACEHOLDER.home, false],
+  ]
+    .filter(([v]) => v)
+    .flatMap(([v, r, eat]) => pathForms(v, r).map(([form, repl]) => [form, repl, eat]))
+    .sort((a, b) => b[0].length - a[0].length);
+  for (const [form, r, eat] of paths) {
+    const tail = !eat ? '' : /^[A-Za-z0-9-]+$/.test(form) ? '(?:-[A-Za-z0-9_]+)*' : `(?:${SEP}${SEG})*`;
+    literals.push({ re: new RegExp(escapeRe(form) + tail, 'gi'), replacement: r });
+  }
   if (ctx.sessionId) addLiteral(ctx.sessionId, PLACEHOLDER.sessionId);
   addLiteral(ctx.host, PLACEHOLDER.host, { word: true });
   addLiteral(ctx.user, PLACEHOLDER.user, { word: true });
@@ -98,7 +168,10 @@ export function createSanitizer(ctx = {}) {
   function text(input) {
     let s = String(input);
     for (const { re, replacement } of literals) s = s.replace(re, replacement);
-    s = s.replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, PLACEHOLDER.email);
+    for (const { re, to } of GENERIC_PATHS) s = s.replace(re, to);
+    s = s.replace(/[A-Za-z0-9._%+-]+(?:@|%40)[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, PLACEHOLDER.email);
+    // Account, organization and user ids in prefixed form (org_…, acct_…, user_…, org-…).
+    s = s.replace(/\b(?:org|organization|acct|account|user)[-_](?=[A-Za-z0-9]*\d)[A-Za-z0-9]{12,}\b/gi, (t) => stable('acct', t, (n) => `acct_${pad(n, 4)}`));
     // Token shapes: Anthropic keys, bearer headers, JWTs, long opaque strings with digits and letters.
     s = s.replace(/\bsk-[A-Za-z0-9_-]{8,}/g, PLACEHOLDER.secret);
     s = s.replace(/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{8,}/gi, `$1 ${PLACEHOLDER.secret}`);
@@ -114,7 +187,10 @@ export function createSanitizer(ctx = {}) {
   }
 
   function value(v, key) {
-    if (typeof v === 'string') return key && SECRET_KEYS.test(key) && v ? PLACEHOLDER.secret : text(v);
+    if (typeof v === 'string') {
+      if (!key || !v || !SECRET_KEYS.test(key)) return text(v);
+      return /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(v) ? PLACEHOLDER.email : PLACEHOLDER.secret;
+    }
     if (Array.isArray(v)) return v.map((x) => value(x));
     if (v && typeof v === 'object') {
       const out = {};
@@ -282,7 +358,7 @@ async function main() {
   } catch {
     // no user name available
   }
-  const s = createSanitizer({ home: homedir(), user, host: hostname(), cwd, sessionId });
+  const s = createSanitizer({ home: homedir(), user, host: hostname(), cwd, tmp: tmpdir(), sessionId });
   const meta = { recordedAt: new Date().toISOString(), platform: process.platform, arch: process.arch, session: o.session };
 
   try {
