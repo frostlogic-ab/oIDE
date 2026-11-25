@@ -497,6 +497,23 @@ under Reviews in the index. Final gate on `main`: 700 unit/integration/gate test
 typecheck, lint, wiki lint and licence check all green. What remains needs the maintainer: see
 [pages/review-publication.md](pages/review-publication.md) and [pages/open-questions.md](pages/open-questions.md).
 
+## [2026-11-25] build | Context ring accuracy
+User report: the context ring started near 75% on a simple prompt and read 92% later. Ground truth from
+the real CLI 2.1.325 (`/context` after a one-line prompt, sonnet / opus / haiku with the user's 59 MCP
+servers, and haiku with `--strict-mcp-config`): 36.6k to 37.5k of 1M (4%) every time; MCP tool
+definitions are deferred and add ~1k. oIDE's token count (input + cache read + cache creation of the
+latest lead request) matched `/context` exactly; the window was wrong. `contextWindowFor()` said 200k for
+every model and the real window (1M) only arrived with the first `result`, so a long first turn was drawn
+5x too full: the user's opus session (from oIDE's own event log) started at 84.8k (42% shown, 8% real)
+and reached 150k (75% shown, 15% real) with no result yet. Fixes: the table knows the 5.5 models and
+aliases are 1M; a shared `ContextWindowBook` learns windows from results and `/context` across agents and
+from restored summaries; results pick the lead model's `modelUsage` entry instead of the largest; the
+parser turns `/context`'s structured `context_usage` into a `context-usage` event; subagent rings use
+their own model's window; the ring tooltip shows "N of W tokens (P%) · includes system prompt and tools"
+and explains a large starting context (`contextBaseline`). Fixtures `real-context-*.jsonl` (MCP server,
+tool, agent and skill names replaced), tests `packages/agent-core/src/context.test.ts`. Pages:
+[cli-integration](pages/cli-integration.md), [agent-supervisor](pages/agent-supervisor.md).
+
 ## [2026-11-25] build | Logo and brand
 
 Four logo concepts (Orbit, Facet, Constellation, Signal) drawn and compared at 16-128 px on dark and light

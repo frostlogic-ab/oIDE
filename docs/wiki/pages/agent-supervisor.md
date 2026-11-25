@@ -89,15 +89,30 @@ Injected interfaces (`ports.ts`):
 
 Activity lines (last 6): "Read src/x.ts", "Edit …", "Write …", "Run npm test", "Search …", "Delegate: …",
 "Submit for review", `server: tool` for MCP tools, and the ephemeral "Thinking…" / "Writing…" from partials.
-Context ring: `input + cacheRead + cacheCreation` of the latest lead `usage`, over the window from
-`result.modelUsage[*].contextWindow` when known, else `contextWindowFor(model)`; `/compact` sets it to
-`post_tokens`. Todos come from `TodoWrite` input, plan text from `ExitPlanMode` input.
+Context ring: `input + cacheRead + cacheCreation` of the latest lead `usage` (one API request's whole
+prompt: system prompt, tools, CLAUDE.md and messages; output is not counted until the next request), over
+the lead model's window. Subagent messages (tagged `parent_tool_use_id`) never touch the lead's ring; each
+subagent gets its own `contextUsed` and `contextWindow` from its own tagged messages. This equals the CLI's
+own `/context` total exactly (tests in `packages/agent-core/src/context.test.ts` against real fixtures).
+Window: a `ContextWindowBook` shared by the supervisor learns `result.contextWindows[model]` (the lead
+model's entry, `[1m]` stripped) and `/context`'s `raw_max_tokens`; before any report it falls back to
+`contextWindowFor(model)` (1M for the 5.5 models and aliases, 200k for unverified ones). A restored summary
+seeds the book with a stored window larger than the table's. `/compact` sets `contextUsed` to `post_tokens`;
+a `context-usage` event (from `/context`) sets both values. `contextBaseline` is the first lead request;
+the ring tooltip reads "N of W tokens (P%) · includes system prompt and tools" and, when the baseline is at
+least 50k or 10% of the window, says the session started there before any work.
+
+Bug fixed 2026-11-25 ("75% on a simple prompt", ring at 92%): the table said 200k for every model, and the
+CLI only reports the real window at the end of a turn. A user's first turn on `claude-opus-5-5` ran for many
+minutes: its first request was 84.8k (42% against 200k; the CLI says 8% of 1M) and it grew to 150k (75%,
+really 15%) and 184k (92%, really 18%) before any result arrived. Token counting itself was right. Todos come from `TodoWrite` input, plan text from `ExitPlanMode` input.
 
 ## Protocol additions (additive)
 
 `AgentSummary.planText`, `.backgroundTasks`, `.planUsage`; `PermissionRequest.toolUseId`; `result` event
 `contextWindow`, `localCommand`, `apiErrorStatus`; `error` event `code`; new events `mode-changed`,
-`compact`, `subagent-task`, `background-tasks`, `plan-usage`.
+`compact`, `subagent-task`, `background-tasks`, `plan-usage`; `result.contextWindows`, `context-usage`,
+`AgentSummary.contextBaseline`, `SubagentInfo.contextWindow` (context ring accuracy).
 
 ## Known gaps
 

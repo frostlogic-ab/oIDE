@@ -1,6 +1,7 @@
 import {
   PermissionMode,
   TodoItem,
+  baseModelId,
   contextWindowFor,
   type AgentEvent,
   type AgentStatus,
@@ -10,6 +11,7 @@ import {
 } from '@oide/protocol';
 import { z } from 'zod';
 import type { TierInfo } from './args.js';
+import { ContextWindowBook } from './context-window.js';
 import { SubagentTracker } from './subagents.js';
 
 /**
@@ -22,6 +24,8 @@ import { SubagentTracker } from './subagents.js';
 export interface ReducerOptions {
   tiers?: Record<string, TierInfo>;
   activityLimit?: number;
+  /** Context windows learned from the CLI, shared across agents by the supervisor. */
+  windows?: ContextWindowBook;
 }
 
 const EPHEMERAL = new Set(['Thinking…', 'Writing…']);
@@ -151,15 +155,43 @@ export class AgentReducer {
   private readonly activityLimit: number;
   private readonly seenUsage = new Set<string>();
   private reviewSinceSend = false;
-  private knownWindow: number | undefined;
+  private readonly windows: ContextWindowBook;
   private lastStderr = '';
   private leadUsage: TokenUsage = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
 
   constructor(initial: AgentSummary, opts: ReducerOptions = {}) {
     this.summary = { ...initial };
-    this.tracker = new SubagentTracker(initial.id, { ...(opts.tiers ? { tiers: opts.tiers } : {}) });
+    this.windows = opts.windows ?? new ContextWindowBook();
+    // A restored summary keeps the window the CLI reported last time; the table never reports more
+    // than the CLI, so a larger stored value was learned (a smaller one may be a stale table value).
+    if (initial.model && !this.windows.has(initial.model) && initial.contextWindow > contextWindowFor(initial.model)) {
+      this.windows.learn(initial.model, initial.contextWindow);
+    }
+    this.tracker = new SubagentTracker(initial.id, { ...(opts.tiers ? { tiers: opts.tiers } : {}), windowFor: (m) => this.windows.get(m) });
     this.activityLimit = opts.activityLimit ?? 6;
     if (initial.review) this.reviewSinceSend = initial.status === 'ready-for-review';
+  }
+
+  /**
+   * The lead model's window from a result. `modelUsage` lists every model the turn used (a subagent
+   * on another model, the CLI's own background calls), so the lead's entry is picked by id; the
+   * largest one is only used when the result has no per-model map (events stored by older builds).
+   */
+  private resultWindow(model: string, perModel: Record<string, number> | undefined, largest: number | undefined): number | undefined {
+    if (perModel) {
+      for (const [m, w] of Object.entries(perModel)) this.windows.learn(m, w);
+      const entries = Object.entries(perModel);
+      const lead = baseModelId(model);
+      const hit = entries.find(([m]) => baseModelId(m) === lead);
+      if (hit) return hit[1];
+      if (entries.length === 1) {
+        this.windows.learn(model, entries[0]![1]);
+        return entries[0]![1];
+      }
+      return this.windows.has(model) ? this.windows.get(model) : undefined;
+    }
+    if (largest) this.windows.learn(model, largest);
+    return largest;
   }
 
   /** Tokens of the lead only (subagents excluded), for the token share. */
@@ -198,7 +230,7 @@ export class AgentReducer {
         if (e.sessionId) s.sessionId = e.sessionId;
         if (e.model) {
           s.model = e.model;
-          if (!this.knownWindow) s.contextWindow = contextWindowFor(e.model);
+          s.contextWindow = this.windows.get(e.model);
         }
         {
           const m = toPermissionMode(e.permissionMode);
@@ -247,13 +279,28 @@ export class AgentReducer {
           s.usage = add(s.usage, e.usage);
           if (lead) this.leadUsage = add(this.leadUsage, e.usage);
         }
-        if (lead) s.contextUsed = e.usage.input + e.usage.cacheRead + e.usage.cacheCreation;
+        // Context = what the latest lead request sent: input + cache read + cache creation (output is
+        // not in it yet). Matches the CLI's own /context total (fixtures real-context-*.jsonl).
+        if (lead) {
+          const used = e.usage.input + e.usage.cacheRead + e.usage.cacheCreation;
+          if (used > 0) {
+            s.contextUsed = used;
+            s.contextBaseline ??= used;
+          }
+        }
         break;
       }
+      case 'context-usage':
+        if (lead) {
+          s.contextUsed = e.used;
+          s.contextWindow = e.window;
+          this.windows.learn(e.model ?? s.model, e.window);
+        }
+        break;
       case 'result':
-        if (e.contextWindow) {
-          this.knownWindow = e.contextWindow;
-          s.contextWindow = e.contextWindow;
+        {
+          const w = this.resultWindow(s.model, e.contextWindows, e.contextWindow);
+          if (w) s.contextWindow = w;
         }
         dropEphemeral();
         s.status = this.statusAfterResult(s, e);

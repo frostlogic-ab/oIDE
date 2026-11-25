@@ -28,7 +28,7 @@ Owner: [agent-supervisor](agent-supervisor.md).
 | Tier, model, effort | `subagent_type` matched to the `--agents` definitions (`simple-task` / `standard-task` / `complex-task` → tier and slot) via `subagentTiers(strategy)`; other types get tier `custom` |
 | Status | `queued` at the tool_use; `running` on `task_started` or the first tagged event; `needs-permission` while a prompt for one of its tool calls is pending; `done` / `error` / `stopped` from `task_notification` / `task_updated` status or the lead's tool_result; anything still running is `stopped` on process exit |
 | Transcript | Tagged events (no partials), up to 2000 per subagent: `supervisor.subagentTranscript(agentId, subId)` |
-| Tokens and context ring | Tagged `usage` events, de-duplicated by message id; `contextUsed` = latest input + cache read + cache creation |
+| Tokens and context ring | Tagged `usage` events, de-duplicated by message id; `contextUsed` = latest input + cache read + cache creation; `contextWindow` from the subagent's own model (learned window, else the table) |
 | Report | `task_notification.summary`, or the lead's tool_result content (foreground) |
 | Timeline | `startedAt` / `endedAt` (event timestamps) |
 | "Subagents have used 38% of this agent's tokens" | `tracker.tokenShare(leadUsage)` → `supervisor.subagentTokenShare(agentId)` |

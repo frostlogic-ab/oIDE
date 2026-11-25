@@ -35,6 +35,8 @@ export interface TrackerOptions {
   tiers?: Record<string, TierInfo>;
   /** Cap on events kept per subagent transcript. */
   maxTranscript?: number;
+  /** Context window for a model (learned from the CLI, else the table); sets each subagent's own ring. */
+  windowFor?: (model: string) => number;
 }
 
 export class SubagentTracker {
@@ -44,6 +46,7 @@ export class SubagentTracker {
   private readonly taskToTool = new Map<string, string>();
   private readonly tiers: Record<string, TierInfo>;
   private readonly maxTranscript: number;
+  private readonly windowFor: ((model: string) => number) | undefined;
 
   constructor(
     readonly agentId: string,
@@ -51,6 +54,7 @@ export class SubagentTracker {
   ) {
     this.tiers = opts.tiers ?? {};
     this.maxTranscript = opts.maxTranscript ?? 2000;
+    this.windowFor = opts.windowFor;
   }
 
   /** Feed one event. Returns the subagents whose info changed. */
@@ -100,8 +104,11 @@ export class SubagentTracker {
             entry.seenMessages.add(key);
             entry.info.usage = addUsage(entry.info.usage ?? ZERO, e.usage);
           }
+          // Its own ring: only its own tagged messages, latest request (never the lead's numbers).
           entry.info.contextUsed = e.usage.input + e.usage.cacheRead + e.usage.cacheCreation;
           if (e.model && !entry.info.model) entry.info.model = e.model;
+          const model = e.model ?? entry.info.model;
+          if (model && this.windowFor) entry.info.contextWindow = this.windowFor(model);
           changed.add(entry);
         }
       }

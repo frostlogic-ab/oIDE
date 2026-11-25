@@ -2,7 +2,7 @@
 import { createElement } from 'react';
 import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { ContextRing, ContextRingButton, contextColor, contextFraction, contextLevel, contextPercent } from './ContextRing';
+import { ContextRing, ContextRingButton, contextColor, contextFraction, contextLevel, contextPercent, contextTooltip, formatContextTokens } from './ContextRing';
 import { agentStatusMeta, modelLetter } from './status';
 
 describe('contextLevel thresholds', () => {
@@ -34,6 +34,25 @@ describe('contextLevel thresholds', () => {
     expect(contextColor('ok')).toBe('var(--color-accent)');
     expect(contextColor('warn')).toBe('var(--color-warn)');
     expect(contextColor('danger')).toBe('var(--color-bad)');
+  });
+});
+
+describe('contextTooltip', () => {
+  it('formats token counts', () => {
+    expect([850, 36_652, 84_799, 184_000, 1_000_000, 1_500_000].map(formatContextTokens)).toEqual(['850', '36.7k', '84.8k', '184k', '1M', '1.5M']);
+  });
+
+  it('says what the ring counts, out of which window', () => {
+    expect(contextTooltip({ used: 36_652, window: 1_000_000, baseline: 36_652 })).toBe('36.7k of 1M tokens (4%) · includes system prompt and tools');
+  });
+
+  it('explains a large starting context', () => {
+    const t = contextTooltip({ used: 150_000, window: 1_000_000, baseline: 84_799, suffix: 'click to /compact' });
+    expect(t).toBe(
+      '150k of 1M tokens (15%) · includes system prompt and tools · started at 84.8k before any work: system prompt, CLAUDE.md, tool and MCP server definitions · click to /compact',
+    );
+    // 10% of a small window also counts as large.
+    expect(contextTooltip({ used: 30_000, window: 200_000, baseline: 25_000 })).toContain('started at 25k');
   });
 });
 

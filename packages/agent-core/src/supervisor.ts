@@ -13,6 +13,7 @@ import {
 } from '@oide/protocol';
 import { buildLaunch, cliPermissionMode, subagentTiers, LaunchError } from './args.js';
 import { ClaudeCliDriver, rawJsonOf, type AgentDriver, type AgentHandle } from './driver.js';
+import { ContextWindowBook } from './context-window.js';
 import { AgentReducer, createSummary } from './reducer.js';
 import type { EventSink, PermissionBroker, SecretProvider, SettingsProvider, WorktreeProvider, WorktreeResult } from './ports.js';
 
@@ -90,6 +91,8 @@ export class Supervisor {
   private readonly queue: QueueEntry[] = [];
   private readonly listeners: { [K in keyof SupervisorEvents]: Set<SupervisorEvents[K]> } = { event: new Set(), summary: new Set(), removed: new Set() };
   private readonly driver: AgentDriver;
+  /** Context windows the CLI reported, shared so one agent's result fixes the next agent's first turn. */
+  private readonly contextWindows = new ContextWindowBook();
   private pumping = false;
   private pumpAgain = false;
   private closed = false;
@@ -193,7 +196,7 @@ export class Supervisor {
     return {
       id: summary.id,
       spec,
-      reducer: new AgentReducer(summary, { tiers: subagentTiers(spec.strategy) }),
+      reducer: new AgentReducer(summary, { tiers: subagentTiers(spec.strategy), windows: this.contextWindows }),
       seq,
       launching: false,
       started,

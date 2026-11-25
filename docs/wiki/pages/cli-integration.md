@@ -95,8 +95,22 @@ Details worth knowing:
 - Haiku 5.5 thinking blocks come back with empty `thinking` text and a signature; oIDE only shows "Thinking…".
 - Each `user` tool_result carries `tool_use_result` (structured: file, structuredPatch, stdout…) and
   `tool_result_meta[{permission_decision:{decision,source,reason_type}}]`.
-- `result.modelUsage[*].contextWindow` is the authoritative window (**1,000,000** for `claude-haiku-5-5`
-  and `claude-sonnet-5-5`), so the reducer prefers it over `contextWindowFor()`.
+- `result.modelUsage[model].contextWindow` is the authoritative window: **1,000,000** for `claude-opus-5-5`,
+  `claude-sonnet-5-5` and `claude-haiku-5-5` (also `model_usage_since_last_result`). `modelUsage` lists every
+  model the turn used, so the parser keeps the per-model map (`result.contextWindows`) and the reducer
+  picks the lead model's entry (`[1m]` suffix stripped), never the largest.
+- `/context` in stream-json: a `system/init`, then a **synthetic** assistant message (`model:"<synthetic>"`,
+  all-zero usage, ignored) whose top-level `context_usage` is structured: `{model, total_tokens,
+  raw_max_tokens, percentage, categories[{name,tokens,kind:"used"|"deferred"|"buffer"|"free"}], mcp_tools,
+  memory_files, agents, skills}`, plus `local_command_source` (the markdown) and a `result` with
+  `local_command:"context"`. The parser turns `context_usage` into a `context-usage` event (authoritative refresh).
+- Context ground truth (2026-11-25, CLI 2.1.325, fixtures `real-context-{sonnet,opus,haiku}-mcp.jsonl` with the
+  user's full MCP setup of 59 servers / 439 MCP tools, and `real-context-haiku-strict.jsonl` with
+  `--strict-mcp-config`): a one-line prompt in an empty repo is **36.6k to 37.5k of 1M (4%)** in every case.
+  `total_tokens` equals `input + cache_read + cache_creation` of that turn's assistant usage exactly
+  (sonnet 2 + 36,650 = 36,652; strict haiku 2 + 19,768 + 16,786 = 36,556). MCP tool definitions are
+  **deferred** (572.6k "MCP tools (deferred)" are listed but not sent; tools load through `ToolSearch`), so the
+  MCP setup adds only ~1k (server instructions) to the first request.
 - `result` also has `credential_expires_at`; oIDE ignores it and the fixtures strip it.
 - A bad model gives an `assistant` with `model:"<synthetic>"`, `error:"model_not_found"`, then a `result`
   with `is_error:true, api_error_status:404, terminal_reason:"api_error"`, then exit code 1.

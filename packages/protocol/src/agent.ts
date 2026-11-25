@@ -131,6 +131,8 @@ export const SubagentInfo = z.object({
   endedAt: z.number().optional(),
   usage: TokenUsage.optional(),
   contextUsed: z.number().optional(),
+  /** The subagent model's own context window, when its model is known (else the lead's applies). */
+  contextWindow: z.number().positive().optional(),
   report: z.string().optional(),
 });
 export type SubagentInfo = z.infer<typeof SubagentInfo>;
@@ -210,6 +212,11 @@ export const AgentSummary = z.object({
   activity: z.array(z.string()).default([]),
   contextUsed: z.number().nonnegative().default(0),
   contextWindow: z.number().positive().default(200_000),
+  /**
+   * Context of the session's first lead request: system prompt, CLAUDE.md, tool and MCP definitions
+   * and the first prompt. Shown in the ring tooltip so a high starting value is explained.
+   */
+  contextBaseline: z.number().nonnegative().optional(),
   usage: TokenUsage.default({ input: 0, output: 0, cacheRead: 0, cacheCreation: 0 }),
   diff: DiffStat.optional(),
   pendingPermission: PermissionRequest.optional(),

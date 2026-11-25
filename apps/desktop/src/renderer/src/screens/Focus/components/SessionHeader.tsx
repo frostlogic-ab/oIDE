@@ -1,5 +1,5 @@
 import type { AgentSummary, SubagentInfo } from '@oide/protocol';
-import { Button, ContextRing, ContextRingButton, Icon, Tooltip, contextFraction, contextPercent, modelFamily, subagentStatusMeta } from '@oide/ui';
+import { Button, ContextRing, ContextRingButton, Icon, Tooltip, contextFraction, contextPercent, contextTooltip, modelFamily, subagentStatusMeta } from '@oide/ui';
 import { formatTokens } from '../../../lib/format';
 import { MODE_LABEL, isSubagentActive, modelEffort, routeLabel, runningText, subagentStatusText, tokenCount } from '../model/focus';
 
@@ -83,6 +83,7 @@ export function LeadHeader({ agent, project, now, warnAt, dangerAt, modeShortcut
         used={contextFraction(agent.contextUsed, agent.contextWindow)}
         warnAt={warnAt}
         dangerAt={dangerAt}
+        tooltip={contextTooltip({ used: agent.contextUsed, window: agent.contextWindow, baseline: agent.contextBaseline, suffix: 'click to /compact this session' })}
         onClick={onCompact}
         className="shrink-0"
         labelClassName={NARROW_LABEL}
@@ -117,7 +118,8 @@ export interface SubagentHeaderProps {
 
 export function SubagentHeader({ agent, sub, now, onLead, onStop, stopRequested }: SubagentHeaderProps) {
   const meta = subagentStatusMeta(sub.status);
-  const used = contextFraction(sub.contextUsed ?? 0, agent.contextWindow);
+  const subWindow = sub.contextWindow ?? agent.contextWindow;
+  const used = contextFraction(sub.contextUsed ?? 0, subWindow);
   const active = isSubagentActive(sub);
   return (
     <div className={ROW}>
@@ -147,7 +149,10 @@ export function SubagentHeader({ agent, sub, now, onLead, onStop, stopRequested 
           <span className="shrink-0">{formatTokens(tokenCount(sub.usage))} tokens</span>
         </span>
       </div>
-      <Tooltip content="A subagent has its own context. It is discarded when the subagent reports back." placement="bottom-end">
+      <Tooltip
+        content={contextTooltip({ used: sub.contextUsed ?? 0, window: subWindow, suffix: 'a subagent has its own context, discarded when it reports back' })}
+        placement="bottom-end"
+      >
         <span
           tabIndex={0}
           aria-label={`Subagent context ${contextPercent(used)}% full`}

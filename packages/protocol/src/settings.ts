@@ -162,15 +162,31 @@ export type CliInfo = z.infer<typeof CliInfo>;
 /** Tested CLI range. Updated by the weekly fixture job. */
 export const TESTED_CLI_RANGE = { min: '2.1.0', max: '2.99.99' } as const;
 
-/** Context windows by model family, used for the context ring. */
+/**
+ * Context windows by model, used for the context ring until the CLI reports the real one
+ * (`result.modelUsage[model].contextWindow` or `/context`), which always wins.
+ * 1,000,000 is what CLI 2.1.325 reports for claude-opus-5-5, claude-sonnet-5-5 and claude-haiku-5-5
+ * (fixtures tools/fake-claude/fixtures/real-context-*.jsonl); the bare family aliases resolve to those.
+ * Models not verified fall back to 200,000.
+ */
 export const CONTEXT_WINDOWS: Array<{ match: RegExp; tokens: number }> = [
   { match: /\[1m\]/i, tokens: 1_000_000 },
+  { match: /^claude-(opus|sonnet|haiku)-5-5\b/i, tokens: 1_000_000 },
+  { match: /^(opus|sonnet|haiku)$/i, tokens: 1_000_000 },
   { match: /opus|sonnet|haiku|fable|claude/i, tokens: 200_000 },
 ];
 export function contextWindowFor(model: string | undefined): number {
   if (!model) return 200_000;
-  for (const c of CONTEXT_WINDOWS) if (c.match.test(model)) return c.tokens;
+  for (const c of CONTEXT_WINDOWS) if (c.match.test(model.trim())) return c.tokens;
   return 200_000;
+}
+
+/** The model id as `result.modelUsage` keys it: no `[1m]` suffix, lowercase (`claude-opus-5-5[1m]` → `claude-opus-5-5`). */
+export function baseModelId(model: string): string {
+  return model
+    .replace(/\[[^\]]*\]\s*$/, '')
+    .trim()
+    .toLowerCase();
 }
 
 /**

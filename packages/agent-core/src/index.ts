@@ -5,5 +5,6 @@ export * from './cli.js';
 export * from './driver.js';
 export * from './subagents.js';
 export * from './reducer.js';
+export * from './context-window.js';
 export * from './ports.js';
 export * from './supervisor.js';

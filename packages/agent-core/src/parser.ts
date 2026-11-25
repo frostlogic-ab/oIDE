@@ -52,6 +52,18 @@ const RawAssistant = z.looseObject({
   }),
 });
 
+/** `/context`'s structured count on its synthetic assistant message (CLI 2.1.325). */
+const RawContextUsage = z.looseObject({
+  model: z.string().optional(),
+  total_tokens: z.number().nonnegative(),
+  raw_max_tokens: z.number().positive(),
+  percentage: z.number().optional(),
+  categories: z
+    .array(z.looseObject({ name: z.string(), tokens: z.number(), kind: z.string().optional() }))
+    .optional()
+    .catch(undefined),
+});
+
 const RawUser = z.looseObject({
   type: z.literal('user'),
   parent_tool_use_id: z.string().nullable().optional(),
@@ -371,6 +383,19 @@ function parseObject(json: unknown, log?: ParserLogger): Omit<ParsedLine, 'json'
         }
         log?.('unknown assistant content block', block);
       }
+      const cu = RawContextUsage.safeParse((json as { context_usage?: unknown }).context_usage);
+      if (cu.success) {
+        const c = cu.data;
+        events.push({
+          type: 'context-usage',
+          used: c.total_tokens,
+          window: c.raw_max_tokens,
+          ...(c.percentage !== undefined ? { percentage: c.percentage } : {}),
+          ...(c.model ? { model: c.model } : {}),
+          ...(c.categories ? { categories: c.categories.map((x) => ({ name: x.name, tokens: x.tokens, ...(x.kind ? { kind: x.kind } : {}) })) } : {}),
+          ...base,
+        });
+      }
       const synthetic = m.message.model === '<synthetic>';
       if (m.message.usage && !synthetic) {
         events.push({
@@ -417,7 +442,9 @@ function parseObject(json: unknown, log?: ParserLogger): Omit<ParsedLine, 'json'
       const r = RawResult.safeParse(json);
       if (!r.success) return unknown(r.error.message);
       const m = r.data;
-      const windows = m.modelUsage ? Object.values(m.modelUsage).map((x) => x.contextWindow).filter((x): x is number => typeof x === 'number') : [];
+      const perModel: Record<string, number> = {};
+      for (const [model, x] of Object.entries(m.modelUsage ?? {})) if (typeof x.contextWindow === 'number' && x.contextWindow > 0) perModel[model] = x.contextWindow;
+      const windows = Object.values(perModel);
       const events: AgentEventDraft[] = [
         {
           type: 'result',
@@ -428,7 +455,7 @@ function parseObject(json: unknown, log?: ParserLogger): Omit<ParsedLine, 'json'
           ...(m.total_cost_usd !== undefined ? { totalCostUsd: m.total_cost_usd } : {}),
           ...(m.result !== undefined ? { text: m.result } : {}),
           ...(m.usage ? { usage: toTokenUsage(m.usage) } : {}),
-          ...(windows.length ? { contextWindow: Math.max(...windows) } : {}),
+          ...(windows.length ? { contextWindow: Math.max(...windows), contextWindows: perModel } : {}),
           ...(m.local_command ? { localCommand: m.local_command } : {}),
           ...(m.api_error_status !== undefined ? { apiErrorStatus: m.api_error_status } : {}),
         },

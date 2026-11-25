@@ -203,7 +203,7 @@ function SubagentsPanel({
             <div className="flex items-center gap-2">
               <span aria-hidden="true" className="w-[7px] h-[7px] rounded-full" style={{ background: meta.color }} />
               <span className="flex-1 font-semibold text-[12.5px] truncate">{s.name}</span>
-              <ContextMeter used={contextFraction(s.contextUsed ?? 0, agent.contextWindow)} color="var(--color-accent)" />
+              <ContextMeter used={contextFraction(s.contextUsed ?? 0, s.contextWindow ?? agent.contextWindow)} color="var(--color-accent)" />
             </div>
             <span className="text-[11.5px] text-ink-3">
               {modelEffort(s, ', ')} · routed as {routeLabel(s)}

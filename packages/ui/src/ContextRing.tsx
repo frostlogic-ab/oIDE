@@ -47,6 +47,34 @@ export function contextFraction(contextUsed: number, contextWindow: number): num
   return contextWindow > 0 ? clampFraction(contextUsed / contextWindow) : 0;
 }
 
+/** Token count for the ring tooltip: 850, 36.7k, 184k, 1M, 1.5M. */
+export function formatContextTokens(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return '0';
+  if (n < 1000) return String(Math.round(n));
+  if (n < 100_000) return `${(n / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+}
+
+/** A session that starts at this much context gets the "what is using it" hint. */
+export const CONTEXT_BASELINE_HINT = { tokens: 50_000, fraction: 0.1 } as const;
+
+/**
+ * What the ring means, for its tooltip: "36.7k of 1M tokens (4%) · includes system prompt and tools".
+ * With a large `baseline` (the first request of the session), adds where that comes from, so a ring
+ * that starts high on a simple prompt is explained rather than looking broken.
+ */
+export function contextTooltip(o: { used: number; window: number; baseline?: number | undefined; suffix?: string }): string {
+  const pct = contextPercent(contextFraction(o.used, o.window));
+  const parts = [`${formatContextTokens(o.used)} of ${formatContextTokens(o.window)} tokens (${pct}%) · includes system prompt and tools`];
+  const b = o.baseline ?? 0;
+  if (b > 0 && (b >= CONTEXT_BASELINE_HINT.tokens || (o.window > 0 && b / o.window >= CONTEXT_BASELINE_HINT.fraction))) {
+    parts.push(`started at ${formatContextTokens(b)} before any work: system prompt, CLAUDE.md, tool and MCP server definitions`);
+  }
+  if (o.suffix) parts.push(o.suffix);
+  return parts.join(' · ');
+}
+
 export interface ContextRingProps extends ContextThresholds {
   /** Fraction 0–1. */
   used: number;

@@ -1,6 +1,6 @@
 import { memo, useId, type KeyboardEvent, type MouseEvent } from 'react';
 import type { AgentSummary } from '@oide/protocol';
-import { Badge, Card, ContextRingButton, Icon, ModelLetterChip, StatusLabel, agentStatusMeta, cn, contextFraction } from '@oide/ui';
+import { Badge, Card, ContextRingButton, Icon, ModelLetterChip, StatusLabel, agentStatusMeta, cn, contextFraction, contextTooltip } from '@oide/ui';
 import { useAgent } from '../../../stores/agents';
 import { navigate } from '../../../stores/router';
 import { useSetting } from '../../../stores/settings';
@@ -41,7 +41,6 @@ function TileView({ agent, projectName, focused, highlighted }: TileViewProps) {
   const meta = agentStatusMeta(agent.status);
   const needsTone = meta.tone === 'needs';
   const used = contextFraction(agent.contextUsed, agent.contextWindow);
-  const pct = Math.round(used * 100);
   const badge = modeBadge(agent.mode, defaultMode);
   const statusLabel = agent.status === 'rate-limited' ? 'Paused by plan limit' : meta.label;
 
@@ -90,7 +89,12 @@ function TileView({ agent, projectName, focused, highlighted }: TileViewProps) {
           subject={agent.title}
           warnAt={warnAt}
           dangerAt={suggestAt}
-          tooltip={used >= suggestAt ? `Context ${pct}% full · /compact suggested` : undefined}
+          tooltip={contextTooltip({
+            used: agent.contextUsed,
+            window: agent.contextWindow,
+            baseline: agent.contextBaseline,
+            suffix: used >= suggestAt ? '/compact suggested' : 'click to /compact',
+          })}
           className="ml-1"
           onClick={() => useWall.getState().openCompact(agent.id)}
         />

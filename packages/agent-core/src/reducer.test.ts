@@ -42,7 +42,7 @@ describe('AgentReducer', () => {
       ev({ type: 'usage', messageId: 's1', parentToolUseId: 'toolu_x', usage: { input: 5, output: 5, cacheRead: 50_000, cacheCreation: 0 } }),
     ]);
     expect(s.contextUsed).toBe(1002);
-    expect(s.contextWindow).toBe(200_000);
+    expect(s.contextWindow).toBe(1_000_000); // haiku → claude-haiku-5-5, 1M per the CLI
     expect(s.usage).toEqual({ input: 7, output: 9, cacheRead: 50_100, cacheCreation: 900 }); // m1 counted once
   });
 

@@ -72,12 +72,27 @@ export const AgentEvent = z.discriminatedUnion('type', [
     totalCostUsd: z.number().optional(),
     text: z.string().optional(),
     usage: TokenUsage.optional(),
-    /** Context window of the lead model as reported in the result's `modelUsage` (authoritative over the table). */
+    /** Largest context window in the result's `modelUsage` (kept for older readers; prefer `contextWindows`). */
     contextWindow: z.number().optional(),
+    /** Context window per model id from the result's `modelUsage` (authoritative over the table). */
+    contextWindows: z.record(z.string(), z.number()).optional(),
     /** Set for local slash commands such as `/compact`. */
     localCommand: z.string().optional(),
     /** HTTP status of the API error that ended the turn (401, 404, 429, ...). */
     apiErrorStatus: z.number().nullable().optional(),
+  }),
+  /**
+   * The CLI's own context count from `/context` (the synthetic assistant message's `context_usage`):
+   * `used` tokens of `window`, as the CLI's context screen shows them. Authoritative refresh.
+   */
+  z.object({
+    ...base,
+    type: z.literal('context-usage'),
+    used: z.number().nonnegative(),
+    window: z.number().positive(),
+    percentage: z.number().optional(),
+    model: z.string().optional(),
+    categories: z.array(z.object({ name: z.string(), tokens: z.number(), kind: z.string().optional() })).optional(),
   }),
   /** Permission mode changed (from a set_permission_mode control request or plan-mode exit). */
   z.object({ ...base, type: z.literal('mode-changed'), mode: z.string() }),
