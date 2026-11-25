@@ -9,5 +9,7 @@ In scope: the Electron app (main, preload, renderer), IPC validation, the oIDE M
 loopback endpoints, the extension host, installer and marketplace index checks, worktree and file path
 handling, and anything that could expose credentials or bypass the permission prompt.
 
-oIDE never reads, stores or forwards Claude credentials. A report showing otherwise is critical.
+oIDE never reads, stores or forwards Claude credentials. A report showing otherwise is critical. So is
+any way for opt-in telemetry to send data before consent, after opt-out, or containing code, prompts,
+paths or other content [PRIVACY.md](PRIVACY.md) says is never sent.
 See [docs/wiki/pages/security.md](docs/wiki/pages/security.md) for the security model.

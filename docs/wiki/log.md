@@ -581,3 +581,24 @@ idempotent `git.openPr`, `PrWatcher` (open/draft only, after fetch and on focus,
 [0010](../adr/0010-archive-agents-instead-of-deleting.md). Pages:
 [screen-wall](pages/screen-wall.md#archived-agents), [agent-supervisor](pages/agent-supervisor.md),
 [storage](pages/storage.md).
+
+## [2026-11-25] build | Opt-in telemetry (Umami)
+
+The product owner asked for Umami analytics, crash reports, performance and events, with a first-run
+question and a Settings switch. Research: `data.frostlogic.se` runs Umami v3.5.0 (`/api/scripts/telemetry`);
+its `script.js` has the `event`, `identify`, `performance` (web vitals) and `error` collectors, and the
+v3.5.0 server schemas (`api/send/request-schema.ts`, `lib/errors/schema.ts`) were copied into a unit
+test. Decisions ([ADR 0011](../adr/0011-telemetry.md)): opt-in, two switches (`settings.privacy`), no
+remote script in any window (main sends to `/api/batch` and `/api/send` through the in-memory
+session `oide-telemetry` that can reach only that origin), no session recording (`recorder.js`
+would capture code and prompts). One catalogue in `packages/protocol/src/telemetry.ts` (23 events,
+each with its product question; unknown events and values dropped, unknown properties stripped);
+most events observed in main from IPC commands, agent events and emitted events, so screens are
+untouched. Errors scrubbed beyond the log redactor (paths, URLs, emails, quoted text, ids, tokens,
+user and machine names; app-bundle frames only), fuzz-tested. In-memory queues, batches of 20,
+backoff, `Retry-After`, offline-aware, dropped on quit. `ui.telemetry` (0.1.x) stays unread and is not
+consent. Live check: one batch (identify, pageview, event, performance) and one error with hostname
+`oide-dev` and `test: true` were accepted (4/4 processed, error issue created). Pages:
+[telemetry](pages/telemetry.md), [security](pages/security.md), [screen-settings](pages/screen-settings.md),
+[review-publication](pages/review-publication.md), [reliability](pages/reliability.md); README Privacy,
+PRIVACY.md, docs site [privacy](../site/guide/privacy.md), CLAUDE.md "Analytics and telemetry (every task)".

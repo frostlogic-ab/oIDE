@@ -43,9 +43,27 @@ function current(): OideBridge {
   return fallback ?? unavailable;
 }
 
+let invokeTimer: ((ms: number) => void) | null = null;
+/** lib/telemetry.ts samples IPC round trips through this (no-op until it is set). */
+export function setInvokeTimer(fn: ((ms: number) => void) | null): void {
+  invokeTimer = fn;
+}
+
 export const oide: OideBridge = {
   invoke<K extends CommandName>(command: K, input: CommandInput<K>): Promise<CommandOutput<K>> {
-    return current().invoke(command, input);
+    const timer = invokeTimer;
+    if (!timer || String(command).startsWith('telemetry.')) return current().invoke(command, input);
+    const t0 = performance.now();
+    const done = () => {
+      try {
+        timer(performance.now() - t0);
+      } catch {
+        /* never break a call */
+      }
+    };
+    const p = current().invoke(command, input);
+    p.then(done, done);
+    return p;
   },
   on<K extends EventName>(event: K, listener: (payload: EventPayload<K>) => void): () => void {
     return current().on(event, listener);

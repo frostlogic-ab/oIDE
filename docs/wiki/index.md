@@ -33,6 +33,7 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 - [pages/desktop-shell.md](pages/desktop-shell.md): Electron main, preload bridge, renderer shell, keymap.
 - [pages/security.md](pages/security.md): hardening, trust, bypass guard rails, credential test.
 - [pages/reliability.md](pages/reliability.md): crash isolation, rotating redacted logs, opt-in local crash reports, DB recovery, Windows cleanup, diagnostics.
+- [pages/telemetry.md](pages/telemetry.md): opt-in Umami usage analytics and error reports from main: consent, event catalogue, never-sent list, scrubbing, adding an event, forks.
 - [pages/testing.md](pages/testing.md): Vitest, fake-claude fixtures, Playwright e2e.
 - [pages/packaging.md](pages/packaging.md): electron-builder, CI matrix, updates, signing.
 
@@ -57,4 +58,4 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 
 ## Decisions
 
-- [../adr/](../adr/): ADRs. 0001 node:sqlite, 0002 TS-source packages, 0003 @lydell/node-pty, 0004 artifact versions as numbered snapshots, 0005 whiteboards as a read-only render in v1 (since overtaken: Excalidraw is now embedded as the editor, see [screen-artifacts](pages/screen-artifacts.md)), 0006 pull requests through `gh` from main, 0007 plan usage meters from rate-limit events, 0008 extension language servers deferred, 0009 extension artifact types use the existing storage kinds, 0010 merged and discarded agents are archived, not deleted.
+- [../adr/](../adr/): ADRs. 0001 node:sqlite, 0002 TS-source packages, 0003 @lydell/node-pty, 0004 artifact versions as numbered snapshots, 0005 whiteboards as a read-only render in v1 (since overtaken: Excalidraw is now embedded as the editor, see [screen-artifacts](pages/screen-artifacts.md)), 0006 pull requests through `gh` from main, 0007 plan usage meters from rate-limit events, 0008 extension language servers deferred, 0009 extension artifact types use the existing storage kinds, 0010 merged and discarded agents are archived, not deleted, 0011 opt-in telemetry with Umami, sent from main.

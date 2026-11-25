@@ -84,6 +84,9 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   `OIDE_PUBLISH_OWNER` (e.g. `oide-dev`) and `OIDE_PUBLISH_REPO` (`oide`). Nothing else changes; the
   names are validated (`publishTarget()` in `packages/protocol/src/distribution.ts`), and the
   marketplace index default is separate ([marketplace](marketplace.md#distribution-defaults)).
+- **Telemetry endpoint:** official builds compile in the Umami host and website id from
+  `packages/protocol/src/distribution.ts`; `OIDE_UMAMI_HOST` / `OIDE_UMAMI_WEBSITE_ID` at build time
+  override them, and an empty value compiles telemetry out ([telemetry](telemetry.md#forks-and-builds)).
 - **Off when:** no release feed was compiled in (above), development builds (`!app.isPackaged`), `OIDE_DISABLE_UPDATES=1`, builds without
   `resources/app-update.yml` (portable zip), Linux installs that are not an AppImage (`APPIMAGE` unset:
   deb/rpm users update through their package manager). The state is `disabled` with a reason.

@@ -9,7 +9,7 @@ import { cleanup, startHarness, type Harness } from '../integration/harness.js';
 /**
  * Publication blockers (docs/wiki/pages/review-publication.md): no runtime default may fetch from
  * the unclaimed `oide-dev` GitHub org or the `@oide` npm scope someone else owns, a remote
- * marketplace index needs the user's native confirmation, and there is no telemetry switch.
+ * marketplace index needs the user's native confirmation, and telemetry is opt-in and sent from main only.
  */
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const open: Harness[] = [];
@@ -91,12 +91,35 @@ describe('distribution defaults', () => {
   });
 });
 
-describe('no telemetry', () => {
-  it('Settings › Privacy has no usage-statistics switch and nothing reads ui.telemetry', () => {
+describe('telemetry is opt-in (ADR 0011)', () => {
+  it('Settings › Privacy has the two opt-in switches, both off by default, and nothing reads the deprecated ui.telemetry', async () => {
     const privacy = readFileSync(join(ROOT, 'apps/desktop/src/renderer/src/screens/Settings/OtherSections.tsx'), 'utf8');
-    expect(privacy).not.toMatch(/Share anonymous usage statistics|ui\.telemetry|\{ telemetry:/);
-    expect(privacy).toMatch(/no telemetry/);
-    const readers = shippedSources().filter((f) => /\.telemetry\b/.test(readFileSync(f, 'utf8')));
+    expect(privacy).toMatch(/Share anonymous usage analytics/);
+    expect(privacy).toMatch(/Send crash and error reports/);
+    expect(privacy).not.toMatch(/ui\.telemetry|\{ telemetry:/);
+    const readers = shippedSources().filter((f) => /ui\.telemetry\b/.test(readFileSync(f, 'utf8')));
     expect(readers.map((f) => relative(ROOT, f))).toEqual([]);
+    const { Settings } = await import('../../packages/protocol/src/index.js');
+    const s = Settings.parse({ claude: {}, models: {}, agents: { notifications: {} }, techniques: [], permissions: {}, ui: { telemetry: true } });
+    expect(s.privacy.usageAnalytics).toBe(false);
+    expect(s.privacy.errorReports).toBe(false);
+  });
+
+  it('only main sends: no shipped renderer or preload code loads a remote script or calls the network', () => {
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const p = join(dir, name);
+        if (statSync(p).isDirectory()) {
+          if (!['node_modules', 'mock', 'test'].includes(name)) walk(p);
+        } else if (/\.(ts|tsx|html)$/.test(name) && !/\.(test|spec)\./.test(name)) {
+          const text = readFileSync(p, 'utf8');
+          if (/data\.frostlogic\.se|script\.js|recorder\.js|\/api\/send|\/api\/batch|navigator\.sendBeacon/.test(text)) offenders.push(relative(ROOT, p));
+        }
+      }
+    };
+    walk(join(ROOT, 'apps/desktop/src/renderer'));
+    walk(join(ROOT, 'apps/desktop/src/preload'));
+    expect(offenders).toEqual([]);
   });
 });

@@ -350,7 +350,7 @@ removed and stacks reduced to function names and file base names. Electron's `cr
 with `uploadToServer: false`; its minidumps (which can contain process memory) stay in
 `crash-reports/native/`, only the newest 5 are kept, and turning the setting off deletes every local
 report. **v1 uploads nothing**: there is no crash endpoint; a user can copy a summary into an issue.
-There is no telemetry: no code collects or sends usage statistics, and the Privacy switch for it was removed (`ui.telemetry` stays in the schema, deprecated and unread, so old settings files parse).
+Telemetry is opt-in ([ADR 0011](../../adr/0011-telemetry.md), [telemetry](telemetry.md)): off until the user agrees, sent by main only (no remote script in any window, CSP unchanged) through the in-memory session `oide-telemetry`, whose request filter allows only the compiled-in Umami origin. Events pass the protocol catalogue; errors are scrubbed (paths, URLs, emails, quoted text, tokens, user and machine names) and keep app-bundle frames only. `DO_NOT_TRACK=1`, `OIDE_TELEMETRY=0` and test runs disable it. `ui.telemetry` stays deprecated and unread.
 
 ## Updates and release pipeline
 

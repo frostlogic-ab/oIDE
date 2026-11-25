@@ -148,7 +148,10 @@ packaging and constraints pages.
 code reads it and nothing is collected. Remove it, or label it "not implemented", so it does not
 suggest telemetry that does not exist. **Fixed (2026-11-25):** the switch is gone; Privacy says "oIDE
 has no telemetry". `ui.telemetry` stays in the schema, marked deprecated and unread, so old settings
-parse; a test checks nothing reads it.
+parse; a test checks nothing reads it. **Superseded (2026-11-25, [ADR 0011](../../adr/0011-telemetry.md)):**
+the product owner asked for analytics. Telemetry is now opt-in (Settings › Privacy › Share anonymous
+usage analytics / Send crash and error reports, both off by default, a first-run question), sent from
+main to Umami; see [telemetry](telemetry.md). `ui.telemetry` is still never read and is not consent.
 
 ## 5. Repo hygiene
 

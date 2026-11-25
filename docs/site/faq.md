@@ -34,9 +34,11 @@ answer requires one, is a mode that uses your own API key.
 
 ## Does oIDE send my code or prompts anywhere?
 
-No. oIDE has no server. Prompts, code and paths stay on your computer, between you and the CLI you
-run. Telemetry is off by default; crash reports are opt-in, stay on your computer and strip paths,
-prompts and code. Extensions you install and MCP servers you add can reach the network: check their
+No. Prompts, code and paths stay on your computer, between you and the CLI you run. oIDE can send
+anonymous usage analytics and crash reports, but only if you agree: the first launch asks, both are off
+until you say yes, and Settings › Privacy turns them off again at any time. They never contain your
+code, prompts, file names or paths, project or branch names, or anything about your Claude account. See
+[Privacy and telemetry](guide/privacy.md). Local crash reports (also opt-in) stay on your computer. Extensions you install and MCP servers you add can reach the network: check their
 declared capabilities.
 
 ## Why does each agent get its own worktree?

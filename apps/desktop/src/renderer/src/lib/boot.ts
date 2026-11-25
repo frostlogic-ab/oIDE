@@ -11,6 +11,7 @@ import { isNotImplemented, oide } from './bridge';
 import { connectCommands, registerCoreCommands } from './coreCommands';
 import { connectExtensions } from '../extensions/store';
 import { connectKeybindings } from './keybindings';
+import { connectTelemetry } from './telemetry';
 
 /**
  * Dev only (Vite HMR). A hot update that re-runs a store module (an edit to it or to anything it
@@ -96,6 +97,7 @@ export function startStores(): () => void {
     registerCoreCommands(),
     connectCommands(),
     connectExtensions(),
+    connectTelemetry(),
   ];
 
   void quiet(useSettings.getState().load());

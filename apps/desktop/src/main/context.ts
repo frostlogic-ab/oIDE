@@ -4,6 +4,8 @@ import type { Emit, FrameBatcher } from './ipc/emit.js';
 import type { Logger } from './ipc/router.js';
 import type { ReliabilityContext } from './reliability/index.js';
 import type { AllowedRoots } from './security/roots.js';
+import type { TelemetryObservers } from './telemetry/observers.js';
+import type { TelemetryService } from './telemetry/service.js';
 
 /**
  * Everything a service or handler may need from the shell. Created once in src/main/index.ts and
@@ -30,4 +32,6 @@ export interface MainContext {
   onQuit(fn: () => void | Promise<void>, name?: string): void;
   /** Rotating file logs and opt-in crash reports (the Electron app; absent in plain-Node tests). */
   reliability?: ReliabilityContext;
+  /** Opt-in usage analytics and error reports (ADR 0011; absent in plain-Node tests). Main is the only sender. */
+  telemetry?: { service: TelemetryService; observers: TelemetryObservers };
 }

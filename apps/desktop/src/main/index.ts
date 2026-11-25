@@ -4,10 +4,12 @@ import './security/early-env.js';
 import './warnings.js';
 
 import { existsSync } from 'node:fs';
+import { hostname, release, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, screen, shell } from 'electron';
 import { openStore, type Store } from '@oide/store';
+import { AppVersion, cliVersionBucket, countBucket, screenBucket, telemetryTarget, type AgentEvent } from '@oide/protocol';
 import type { MainContext } from './context.js';
 import { createAgentEventBatcher, createEmitter } from './ipc/emit.js';
 import { attachRouter, IpcRouter, type Logger } from './ipc/router.js';
@@ -20,6 +22,14 @@ import { AllowedRoots } from './security/roots.js';
 import { loadWindowState, MIN_HEIGHT, MIN_WIDTH, trackWindowState } from './window-state.js';
 import { APP_USER_MODEL_ID, resolveAppIcon } from './app-icon.js';
 import { CrashReports, LogManager, openWithRecovery, parseLevel, readCrashReportsPref, Redactor, runShutdown, watchRenderer, writeCrashReportsPref, type ReliabilityContext } from './reliability/index.js';
+import { electronTransport, fileSinkTransport, isOnline } from './telemetry/electron.js';
+import { TelemetryObservers } from './telemetry/observers.js';
+import { createScrubber } from './telemetry/scrub.js';
+import { TelemetryService, unavailableReason } from './telemetry/service.js';
+
+/** Injected by electron-vite from `OIDE_UMAMI_HOST` / `OIDE_UMAMI_WEBSITE_ID` (official defaults; empty = compiled out). */
+declare const __OIDE_UMAMI_HOST__: string | undefined;
+declare const __OIDE_UMAMI_WEBSITE_ID__: string | undefined;
 
 // Tests and portable setups can point userData elsewhere. Must happen before the lock below,
 // which is scoped to the userData folder.
@@ -48,6 +58,43 @@ const crashReports = new CrashReports({
   redactor,
   appVersion: app.getVersion(),
 });
+
+// ---------------------------------------------------------------- opt-in telemetry (ADR 0011)
+
+const devServerAtBoot = !app.isPackaged ? process.env.ELECTRON_RENDERER_URL : undefined;
+const safeUserName = (): string | undefined => {
+  try {
+    return userInfo().username;
+  } catch {
+    return undefined;
+  }
+};
+/** OS version for session data: `10.0.26300` on Windows (the build tells 10 from 11), major.minor elsewhere. */
+const osVersion = (): string => {
+  const parts = release().split(/[.-]/).filter((p) => /^\d+$/.test(p));
+  return parts.slice(0, process.platform === 'win32' ? 3 : 2).join('.') || 'unknown';
+};
+/** E2E only: unpackaged runs may write telemetry to a file instead of the network (main/telemetry/electron.ts). */
+const telemetrySink = !app.isPackaged ? process.env.OIDE_TELEMETRY_SINK || undefined : undefined;
+const umamiTarget = telemetryTarget(typeof __OIDE_UMAMI_HOST__ === 'string' ? __OIDE_UMAMI_HOST__ : '', typeof __OIDE_UMAMI_WEBSITE_ID__ === 'string' ? __OIDE_UMAMI_WEBSITE_ID__ : '');
+const telemetry = new TelemetryService({
+  target: umamiTarget,
+  unavailable: unavailableReason(process.env),
+  dev: !app.isPackaged,
+  appVersion: app.getVersion(),
+  session: { os: process.platform, osVersion: osVersion(), arch: process.arch, electron: process.versions.electron ?? 'unknown' },
+  stateFile: join(userDataAtBoot, 'telemetry.json'),
+  scrubber: createScrubber({
+    redactor,
+    username: safeUserName(),
+    hostname: hostname(),
+    appRoots: [app.getAppPath(), process.resourcesPath].filter((p): p is string => typeof p === 'string' && p.length > 0),
+    appOrigins: devServerAtBoot ? [devServerAtBoot] : [],
+  }),
+  log,
+  ...(telemetrySink ? { client: { flushMs: 300, errorFlushMs: 100 } } : {}),
+});
+
 let nativeCrashReporterStarted = false;
 /** Electron's minidump writer: local only (`uploadToServer: false`), started only when the user opted in. */
 function startNativeCrashReporter(): void {
@@ -66,11 +113,13 @@ startNativeCrashReporter();
 process.on('uncaughtException', (err) => {
   log.error('uncaught exception in main', err);
   crashReports.record('main-exception', { process: 'main', error: err });
+  telemetry.error(err, { source: 'uncaught', process: 'main' });
   logs.flush();
 });
 process.on('unhandledRejection', (reason) => {
   log.error('unhandled rejection in main', reason);
   crashReports.record('unhandled-rejection', { process: 'main', error: reason });
+  telemetry.error(reason, { source: 'unhandledrejection', process: 'main' });
 });
 
 app.enableSandbox();
@@ -104,8 +153,24 @@ async function start(): Promise<void> {
   let mainWindow: BrowserWindow | null = null;
   const quitHooks: Array<{ name: string; fn: () => void | Promise<void> }> = [];
 
-  const emit = createEmitter(() => (mainWindow && !mainWindow.isDestroyed() ? [mainWindow.webContents] : []), log);
+  let observers: TelemetryObservers | null = null;
+  const sendEvent = createEmitter(() => (mainWindow && !mainWindow.isDestroyed() ? [mainWindow.webContents] : []), log);
+  // Telemetry observes what main tells the renderer (search results, removed agents); it never changes it.
+  const emit: typeof sendEvent = (event, payload) => {
+    const sent = sendEvent(event, payload);
+    try {
+      observers?.emitted(event, payload);
+    } catch {}
+    return sent;
+  };
   const agentEvents = createAgentEventBatcher(emit);
+  const pushAgentEvent = agentEvents.push.bind(agentEvents);
+  agentEvents.push = (e: AgentEvent) => {
+    pushAgentEvent(e);
+    try {
+      observers?.agentEvent(e);
+    } catch {}
+  };
   const roots = new AllowedRoots();
 
   app.on('second-instance', () => {
@@ -140,6 +205,7 @@ async function start(): Promise<void> {
     if (details.reason === 'clean-exit' || details.reason === 'killed') return;
     log.error('child process gone', { type: details.type, reason: details.reason, exitCode: details.exitCode, name: details.name ?? details.serviceName });
     crashReports.record('child-process-gone', { process: details.serviceName ?? details.type, reason: details.reason, exitCode: details.exitCode });
+    telemetry.error({ name: 'ChildProcessGone', message: `${details.type} ${details.reason}`, stack: '' }, { source: 'child-process-gone', process: details.type, handled: true });
   });
 
   app.on('window-all-closed', () => {
@@ -195,8 +261,44 @@ async function start(): Promise<void> {
     reliability,
   };
 
-  const router = new IpcRouter({ log, validateOutput: true });
+  const router = new IpcRouter({ log, validateOutput: true, observe: (c, i, o) => observers?.command(c, i, o) });
   const services = await createServices(ctx, { store });
+
+  // Telemetry: consent from settings; the network only through its own session (or the e2e file sink).
+  observers = new TelemetryObservers(telemetry, { officialIndex: () => services.store.settings.get().marketplace.indexUrl === '' });
+  ctx.telemetry = { service: telemetry, observers };
+  telemetry.bindSettings(services.store.settings);
+  if (telemetry.client && umamiTarget) {
+    telemetry.setTransport(telemetrySink ? fileSinkTransport(telemetrySink) : electronTransport(umamiTarget), telemetrySink ? () => true : isOnline);
+  }
+  const display = screen.getPrimaryDisplay().size;
+  telemetry.setContext({ language: app.getLocale(), screen: screenBucket(display.width, display.height) });
+  const version = telemetry.noteVersion();
+  if (version.changed && AppVersion.safeParse(version.previous).success) telemetry.track('update_installed', { from_version: version.previous!, to_version: app.getVersion() });
+  const unknownCliTimer = setInterval(() => observers?.flushUnknownCliEvents(), 30 * 60_000);
+  unknownCliTimer.unref();
+  ctx.onQuit(async () => {
+    clearInterval(unknownCliTimer);
+    observers?.flushUnknownCliEvents();
+    observers?.dispose();
+    await telemetry.shutdown(2_000);
+  }, 'telemetry');
+  let startReported = false;
+  const reportStart = async (): Promise<void> => {
+    if (startReported) return;
+    startReported = true;
+    const coldStartMs = Math.round(performance.now());
+    const cli = await Promise.race([services.cli.ensure().catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), 10_000))]);
+    telemetry.setCliVersion(cli?.version);
+    telemetry.identify();
+    telemetry.track('app_started', {
+      cold_start_ms: Math.min(coldStartMs, 86_400_000),
+      cli_found: !!cli?.found,
+      cli_version: cli?.found ? cliVersionBucket(cli.version) : 'none',
+      projects: countBucket(services.store.projects.list().length),
+      agents: countBucket(services.store.agents.list().length),
+    });
+  };
   // Settings › Privacy › Crash reports: the database is the source of truth; privacy.json mirrors
   // it so the native crash reporter can start before the app is ready on the next launch.
   const syncCrashPref = (on: boolean) => {
@@ -226,13 +328,19 @@ async function start(): Promise<void> {
     win.on('closed', () => {
       if (mainWindow === win) mainWindow = null;
     });
-    win.webContents.on('did-finish-load', () => setTimeout(() => services.flushNotices(), 500));
+    win.webContents.on('did-finish-load', () => {
+      setTimeout(() => services.flushNotices(), 500);
+      void reportStart();
+    });
     // Open pull requests are looked at again when the user comes back (throttled, see pr-watch.ts).
     win.on('focus', () => services.git.onWindowFocus());
     watchRenderer(win.webContents, {
       log,
       reloadApp: () => void loadApp(win).catch((err) => log.error('window reload failed', err)),
-      onCrash: (d) => crashReports.record('renderer-gone', { process: 'renderer', reason: d.reason, exitCode: d.exitCode }),
+      onCrash: (d) => {
+        crashReports.record('renderer-gone', { process: 'renderer', reason: d.reason, exitCode: d.exitCode });
+        telemetry.error({ name: 'RendererGone', message: d.reason, stack: '' }, { source: 'renderer-gone', process: 'renderer', handled: true });
+      },
       onUnresponsive: () => crashReports.record('renderer-unresponsive', { process: 'renderer' }),
       askUnresponsive: async () => {
         const r = await dialog.showMessageBox(win, {

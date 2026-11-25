@@ -32,6 +32,19 @@ agents in parallel, across many projects, in one window. Each agent is the user'
 - Extensions: no install scripts, tarball integrity checked, UI in sandboxed iframes, host code in a
   separate utility process, secrets scoped per extension.
 
+## Analytics and telemetry (every task)
+
+Telemetry is opt-in Umami, sent from main only ([ADR 0011](docs/adr/0011-telemetry.md)). For every change,
+ask whether it needs a new or updated event, error report or performance measure, and add it if it
+answers a product question.
+- Events go only through the catalogue in `packages/protocol/src/telemetry.ts` (enums, booleans,
+  bounded numbers, buckets; never free text). Prefer observing in main (`main/telemetry/observers.ts`).
+- Never send paths, project/repo/branch names, agent titles or goals, prompts, model output, tool
+  inputs, commit messages, artifact contents, extension settings, env values, visited URLs, Claude
+  account data, or custom/local extension ids. No remote scripts in windows; no session recording.
+- Nothing before consent; off means off at once. Tests and e2e never reach the network.
+- Update [docs/wiki/pages/telemetry.md](docs/wiki/pages/telemetry.md) in the same change.
+
 ## Repo layout
 
 ```
