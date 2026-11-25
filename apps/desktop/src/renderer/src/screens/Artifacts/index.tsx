@@ -17,6 +17,8 @@ import { navigate, useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { toast } from '../../stores/ui';
 import { DeleteDialog, ImportDialog, NewArtifactDialog, RenameDialog } from './Dialogs';
+import { useFileDrop } from './drop';
+import { BrokenImportBadge, FixImportPanel } from './FixImportPanel';
 import { ArtifactPreview, KindThumb } from './Preview';
 import { Viewer, type CompareSide, type ViewerMode } from './Viewer';
 import { KIND_LABEL, KIND_TABS, agentsUsing, canOpenClaudeLink, filterArtifacts, usageLine, versionLabel, type KindTab } from './model';
@@ -89,6 +91,8 @@ export default function ArtifactsScreen() {
   const [query, setQuery] = useState('');
   const [dialog, setDialog] = useState<'new' | 'import' | 'rename' | 'delete' | null>(null);
   const [opened, setOpened] = useState<false | OpenAs>(false);
+  /** A file dropped on the grid, handed to the Import dialog. */
+  const [dropped, setDropped] = useState<{ path: string; name: string } | null>(null);
 
   const projectName = useCallback((id: string | undefined) => (id ? nameOf(projects, id) : 'Personal'), [projects]);
   const visible = useMemo(() => filterArtifacts(list ?? [], { kind, project: scope, query }, projectName), [list, kind, scope, query, projectName]);
@@ -127,6 +131,20 @@ export default function ArtifactsScreen() {
     </>
   );
 
+  const created = (meta: ArtifactMeta) => {
+    setDialog(null);
+    setKind('all');
+    setQuery('');
+    if (meta.projectId && scope !== 'all' && scope !== meta.projectId) void setScope(meta.projectId);
+    select(meta.id);
+  };
+
+  const { dragging, dropProps } = useFileDrop((f) => {
+    if ('error' in f) return toast(f.error, 'error');
+    setDropped(f);
+    setDialog('import');
+  }, dialog !== null);
+
   if (opened && shown) {
     return (
       <>
@@ -138,6 +156,10 @@ export default function ArtifactsScreen() {
           compare={opened.compare}
           onClose={() => setOpened(false)}
           onSaved={(meta, content) => setDetail((d) => (d && d.meta.id === meta.id ? withSaved(d, meta, content) : d))}
+          onReplaced={(meta) => {
+            setOpened(false);
+            created(meta);
+          }}
           onRename={() => setDialog('rename')}
           onDelete={() => setDialog('delete')}
         />
@@ -145,14 +167,6 @@ export default function ArtifactsScreen() {
       </>
     );
   }
-
-  const created = (meta: ArtifactMeta) => {
-    setDialog(null);
-    setKind('all');
-    setQuery('');
-    if (meta.projectId && scope !== 'all' && scope !== meta.projectId) void setScope(meta.projectId);
-    select(meta.id);
-  };
 
   return (
     <>
@@ -163,7 +177,12 @@ export default function ArtifactsScreen() {
             <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search artifacts" className="w-[180px] bg-transparent border-0 outline-none text-ink text-[12.5px] placeholder:text-ink-3" />
           </label>
       </HeaderSlot>
-      <main className="flex-1 min-w-[360px] overflow-auto flex flex-col gap-4 px-5 py-[18px] box-border">
+      <main {...dropProps} className={cn('relative flex-1 min-w-[360px] overflow-auto flex flex-col gap-4 px-5 py-[18px] box-border', dragging && 'outline-2 outline-dashed outline-accent -outline-offset-4')}>
+        {dragging && (
+          <div aria-hidden="true" className="absolute inset-4 z-10 rounded-xl bg-ground/80 flex items-center justify-center text-[13px] text-ink pointer-events-none">
+            Drop a file to import it
+          </div>
+        )}
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="m-0 text-[18px] font-semibold">Artifacts</h1>
           <KindTabs value={kind} onChange={setKind} />
@@ -228,7 +247,7 @@ export default function ArtifactsScreen() {
                     <span className="text-[12px] text-ink-3">
                       {KIND_LABEL[a.kind]} · {projectName(a.projectId)}
                     </span>
-                    <span className={cn('text-[11.5px]', line.live ? 'text-ok' : 'text-ink-3')}>{line.text}</span>
+                    {a.brokenImport ? <BrokenImportBadge /> : <span className={cn('text-[11.5px]', line.live ? 'text-ok' : 'text-ink-3')}>{line.text}</span>}
                   </div>
                 </button>
               );
@@ -246,13 +265,22 @@ export default function ArtifactsScreen() {
         agentStatus={(id) => agents[id]?.status}
         onOpen={(o) => setOpened(o ?? {})}
         onRestored={(d) => setDetail(d)}
+        onSaved={(meta, content) => setDetail((d) => (d && d.meta.id === meta.id ? withSaved(d, meta, content) : d))}
+        onReplaced={created}
         onRename={() => setDialog('rename')}
         onDelete={() => setDialog('delete')}
       />
       {actionDialogs}
 
       <NewArtifactDialog open={dialog === 'new'} onClose={() => setDialog(null)} projects={projects} defaultProjectId={scope === 'all' ? undefined : scope} onCreated={created} />
-      <ImportDialog open={dialog === 'import'} onClose={() => setDialog(null)} projects={projects} defaultProjectId={scope === 'all' ? undefined : scope} onImported={created} />
+      <ImportDialog
+        open={dialog === 'import'}
+        onClose={() => {
+          setDialog(null);
+          setDropped(null);
+        }}
+        initialFile={dropped}
+        projects={projects} defaultProjectId={scope === 'all' ? undefined : scope} onImported={created} />
     </>
   );
 }
@@ -307,11 +335,13 @@ interface DetailPaneProps {
   agentStatus: (id: string) => Parameters<typeof agentStatusMeta>[0] | undefined;
   onOpen: (o?: OpenAs) => void;
   onRestored: (d: Detail) => void;
+  onSaved: (meta: ArtifactMeta, content: string) => void;
+  onReplaced: (meta: ArtifactMeta) => void;
   onRename: () => void;
   onDelete: () => void;
 }
 
-function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, onOpen, onRestored, onRename, onDelete }: DetailPaneProps) {
+function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, onOpen, onRestored, onSaved, onReplaced, onRename, onDelete }: DetailPaneProps) {
   const [viewing, setViewing] = useState<{ version: number; content: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -355,17 +385,21 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
 
   return (
     <ResizableAside panel={PANELS.artifactsDetails} aria-label="Artifact details" className="min-h-0 overflow-auto flex flex-col gap-3.5 px-4 py-[18px] bg-panel border-l border-line box-border">
-      <div className="h-[190px] shrink-0 rounded-xl bg-raised border border-line-2 overflow-hidden box-border">
-        <ArtifactPreview
-          artifactId={meta.id}
-          title={viewing ? `${meta.title} v${viewing.version}` : meta.title}
-          kind={meta.kind}
-          content={viewing?.content ?? detail.content}
-          forceInline={Boolean(viewing)}
-          compact
-          version={meta.version}
-        />
-      </div>
+      {meta.brokenImport ? (
+        <FixImportPanel meta={meta} onSaved={onSaved} onReplaced={onReplaced} onDelete={onDelete} />
+      ) : (
+        <div className="h-[190px] shrink-0 rounded-xl bg-raised border border-line-2 overflow-hidden box-border">
+          <ArtifactPreview
+            artifactId={meta.id}
+            title={viewing ? `${meta.title} v${viewing.version}` : meta.title}
+            kind={meta.kind}
+            content={viewing?.content ?? detail.content}
+            forceInline={Boolean(viewing)}
+            compact
+            version={meta.version}
+          />
+        </div>
+      )}
       {viewing && (
         <div role="status" className="flex items-center gap-2 flex-wrap px-2.5 py-2 rounded-md border border-review-line bg-review-bg text-[12px] text-ink-2">
           <span className="flex-1">Viewing v{viewing.version} (current is v{meta.version})</span>

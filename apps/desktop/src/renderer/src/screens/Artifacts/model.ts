@@ -2,7 +2,19 @@
  * Pure helpers for the Artifacts screen: filtering, "used by agents" lines, history labels,
  * claude.ai link checks and front-matter handling. No React, no bridge (unit-testable).
  */
-import type { AgentStatus, AgentSummary, ArtifactKind, ArtifactMeta, ArtifactUse, ArtifactVersion } from '@oide/protocol';
+import {
+  REACT_DESIGN_ENTRY,
+  classifyClaudeLink,
+  inferKindFromContent,
+  isDesignContent,
+  isImportStubContent,
+  type AgentStatus,
+  type AgentSummary,
+  type ArtifactKind,
+  type ArtifactMeta,
+  type ArtifactUse,
+  type ArtifactVersion,
+} from '@oide/protocol';
 
 export type KindTab = 'all' | ArtifactKind;
 
@@ -96,7 +108,10 @@ export function versionLabel(v: ArtifactVersion, agentTitle: (id: string) => str
 
 const CLAUDE_HOSTS = ['claude.ai', 'claude.site'];
 
-/** True for https links on claude.ai / claude.site (the hosts an import may come from). */
+/**
+ * True for https links on claude.ai / claude.site (host only). Used for links already stored on an
+ * artifact; a link about to be imported goes through `classifyClaudeLink` (see `importLinkError`).
+ */
 export function isClaudeLink(url: string | undefined): url is string {
   if (!url) return false;
   try {
@@ -117,14 +132,54 @@ export function canOpenClaudeLink(url: string | undefined): url is string {
   return host === 'claude.ai' || host.endsWith('.claude.ai');
 }
 
+/** Why a link can't be imported (a chat link, another host, not a link), or undefined when it can. */
+export function importLinkError(raw: string): string | undefined {
+  const r = classifyClaudeLink(raw);
+  return r.ok ? undefined : r.reason;
+}
+
+/** The reason an import has to wait: shown under the Import button while it is disabled. */
+export const IMPORT_NEEDS_CODE_REASON = "Paste the artifact's code first. oIDE can't download claude.ai artifacts, even public ones.";
+
+/** Pasted content above this size is refused before it is sent (main checks again). */
+export const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Why `content` can't be stored as `kind` (import or fix): too large, the placeholder older versions
+ * stored, not HTML or React as a design, not JSON as a whiteboard. Main applies the same rules.
+ */
+export function importContentError(kind: ArtifactKind, content: string): string | undefined {
+  // UTF-8 is at most 3 bytes per UTF-16 unit: only encode when the paste could be over the limit.
+  if (content.length * 3 > MAX_IMPORT_BYTES && new TextEncoder().encode(content).length > MAX_IMPORT_BYTES) return 'The content is larger than 10 MB.';
+  if (isImportStubContent(content)) return "That's the placeholder older versions of oIDE stored, not the artifact. Paste the artifact's real code.";
+  if (kind === 'design' && !isDesignContent(content)) {
+    return "This isn't an HTML page or a React component, so it can't be a design. Pick Doc to keep it as text.";
+  }
+  if (kind === 'whiteboard') return validateContent('whiteboard', content.charCodeAt(0) === 0xfeff ? content.slice(1) : content) ?? undefined;
+  return undefined;
+}
+
+/**
+ * Fixing a broken import: the pasted content replaces its notice in place when it fits the artifact's
+ * kind; otherwise (a doc whose paste is a design, say) a new artifact of the content's kind replaces it.
+ */
+export function fixImportPlan(kind: ArtifactKind, content: string): { mode: 'save' } | { mode: 'replace'; kind: ArtifactKind } {
+  const inferred = inferKindFromContent(content);
+  if (inferred === kind || (kind === 'design' && isDesignContent(content))) return { mode: 'save' };
+  return { mode: 'replace', kind: inferred };
+}
+
 /** Removes a leading `---` front-matter block from Markdown. */
 export function stripFrontMatter(md: string): string {
   const BOM = String.fromCharCode(0xfeff);
   return (md.startsWith(BOM) ? md.slice(1) : md).replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
 }
 
+/** Files an import takes, for the picker filter and the drop check. */
+export const IMPORT_EXTENSIONS = ['html', 'htm', 'jsx', 'tsx', 'svg', 'md', 'markdown', 'txt', 'excalidraw', 'json'] as const;
+
 export function kindFromFileName(name: string): ArtifactKind {
-  if (/\.html?$/i.test(name)) return 'design';
+  if (/\.(html?|jsx|tsx|svg)$/i.test(name)) return 'design';
   if (/\.(excalidraw|json)$/i.test(name)) return 'whiteboard';
   return 'doc';
 }
@@ -166,9 +221,12 @@ export function liveDecision(opts: { baseVersion: number; incomingVersion: numbe
   return opts.dirty ? 'conflict' : 'reload';
 }
 
-/** Monaco language for an artifact kind's source. */
-export function sourceLanguage(kind: ArtifactKind): 'markdown' | 'html' | 'json' {
-  return kind === 'doc' ? 'markdown' : kind === 'design' ? 'html' : 'json';
+export type SourceLanguage = 'markdown' | 'html' | 'javascript' | 'json';
+
+/** Monaco language for an artifact's source: a React design (entry App.jsx) is JavaScript. */
+export function sourceLanguage(kind: ArtifactKind, entry?: string): SourceLanguage {
+  if (kind === 'design') return entry === REACT_DESIGN_ENTRY ? 'javascript' : 'html';
+  return kind === 'doc' ? 'markdown' : 'json';
 }
 
 /** Whiteboard JSON is pretty-printed for the version diff (one property per line); other kinds as is. */

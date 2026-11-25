@@ -18,8 +18,12 @@ import {
   InstalledExtension,
   MarketplaceEntry,
   Technique,
+  IMPORT_NEEDS_CONTENT,
+  classifyClaudeLink,
+  designEntryFor,
   inferKindFromContent,
-  looksLikeHtml,
+  isDesignContent,
+  isImportStubContent,
   titleFromContent,
   type ArtifactKind,
   type Commands,
@@ -138,6 +142,13 @@ const IA_BOARD = board([
   { id: 't2', type: 'text', x: 62, y: 126, text: 'Guides', fontSize: 14, strokeColor: '#1e1e1e' },
 ]);
 
+const REACT_DESIGN = `import React from 'react';
+
+export default function App() {
+  return <main style={{ fontFamily: 'sans-serif', padding: 24 }}><h1>Pricing</h1></main>;
+}
+`;
+
 interface MockArtifact {
   meta: ArtifactMeta;
   content: string;
@@ -145,24 +156,35 @@ interface MockArtifact {
   snapshots: Record<number, string>;
 }
 
+/** The entry file for `content`: a design is index.html or, for React, App.jsx (as main stores it). */
+const entryFor = (kind: ArtifactKind, content: string) => (kind === 'design' ? designEntryFor(content) : kind === 'doc' ? 'doc.md' : 'board.excalidraw');
+
+/** Like main: a link-only import made by an older oIDE (its content is the notice) is `brokenImport`. */
+const isBroken = (importedFrom: string | undefined, content: string) => Boolean(importedFrom) && isImportStubContent(content);
+
 function art(
   meta: Omit<ArtifactMeta, 'entry' | 'slug' | 'createdAt'> & { createdAt?: number },
   content: string,
   history: Array<[author: string, minutesAgo: number, note?: string]>,
 ): MockArtifact {
-  const entry = meta.kind === 'design' ? 'index.html' : meta.kind === 'doc' ? 'doc.md' : 'board.excalidraw';
+  const entry = entryFor(meta.kind, content);
   const slug = meta.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const versions = history.map(([author, m, note], i) => ArtifactVersion.parse({ version: i + 1, ts: ago(m), author, note }));
   const snapshots: Record<number, string> = {};
   versions.forEach((v) => (snapshots[v.version] = v.version === versions.length ? content : `${content}\n<!-- version ${v.version} -->`));
   if (meta.kind === 'whiteboard') versions.forEach((v) => (snapshots[v.version] = content));
   return {
-    meta: ArtifactMeta.parse({ ...meta, slug, entry, version: versions.length, createdAt: meta.createdAt ?? versions[0]!.ts, updatedAt: versions[versions.length - 1]!.ts }),
+    meta: ArtifactMeta.parse({ ...meta, brokenImport: isBroken(meta.importedFrom, content) || undefined, slug, entry, version: versions.length, createdAt: meta.createdAt ?? versions[0]!.ts, updatedAt: versions[versions.length - 1]!.ts }),
     content,
     versions: [...versions].reverse(),
     snapshots,
   };
 }
+
+const LEGACY_IMPORT_STUB = `# Pricing page (imported)
+
+oIDE cannot fetch claude.ai artifacts: there is no public API for them. Paste the artifact's content here.
+`;
 
 const artifactSeed: MockArtifact[] = [
   art({ id: 'art-main-v2', title: 'Main window v2', kind: 'design', projectId: 'oide', location: 'repo', importedFrom: 'https://claude.ai/public/artifacts/0b6c-main-window-v2', version: 4, updatedAt: 0 }, DESIGN_HTML, [
@@ -184,6 +206,8 @@ const artifactSeed: MockArtifact[] = [
     ['agent:a-webhook', 62, 'Documented the dead-letter queue'],
   ]),
   art({ id: 'art-invoice', title: 'Invoice page', kind: 'design', projectId: 'billing-api', location: 'app-data', version: 1, updatedAt: 0 }, INVOICE_HTML, [['user', 2000]]),
+  // A link-only import made before oIDE refused to create one without content: shows the fix panel.
+  art({ id: 'art-legacy-import', title: 'Pricing page (imported)', kind: 'doc', projectId: 'oide', location: 'app-data', importedFrom: 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T', version: 1, updatedAt: 0 }, LEGACY_IMPORT_STUB, [['user', 4000, 'Imported from claude.ai']]),
   art({ id: 'art-docs-ia', title: 'Docs IA sketch', kind: 'whiteboard', projectId: 'docs-site', location: 'repo', version: 1, updatedAt: 0 }, IA_BOARD, [['user', 3000]]),
 ];
 
@@ -511,11 +535,13 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
           fail('invalid_input', 'A whiteboard must be a JSON object');
         }
       }
+      if (a.meta.kind === 'design' && !isDesignContent(content)) fail('invalid_input', "A design must be an HTML page or a React component.");
       const next = a.meta.version + 1;
       a.content = content;
       a.snapshots[next] = content;
       a.versions = [ArtifactVersion.parse({ version: next, ts: Date.now(), author: 'user', note }), ...a.versions];
-      a.meta = { ...a.meta, version: next, updatedAt: Date.now() };
+      // The entry file follows the content (index.html or App.jsx); real content clears brokenImport.
+      a.meta = { ...a.meta, version: next, updatedAt: Date.now(), entry: entryFor(a.meta.kind, content), brokenImport: isBroken(a.meta.importedFrom, content) || undefined };
       ctx.emit('artifacts.changed', { id, change: 'saved', version: next, author: 'user' });
       return a.meta;
     },
@@ -540,30 +566,29 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
       return a.meta;
     },
     'artifacts.import': ({ url, content: pasted, filePath, title, kind, projectId, location }) => {
-      let k: ArtifactKind = kind ?? 'doc';
-      let t = title;
-      let content = '';
+      // Same rules as the store: nothing is created without the artifact's real content.
       if (url) {
-        const u = new URL(url);
-        if (u.protocol !== 'https:' || !['claude.ai', 'claude.site'].some((h) => u.hostname === h || u.hostname.endsWith(`.${h}`))) fail('invalid_input', 'Only https://claude.ai links can be imported.');
-        if (u.username || u.password) fail('invalid_input', 'The link must not contain a user name or password.');
+        const info = classifyClaudeLink(url);
+        if (!info.ok) fail('invalid_input', info.reason);
       }
       if (filePath && pasted !== undefined) fail('invalid_input', 'Paste the content or pick a file, not both.');
-      if (url && !filePath && pasted?.trim()) {
-        // Same rules as the store: the kind and title follow the pasted content.
-        k = kind ?? inferKindFromContent(pasted);
-        if (k === 'design' && !looksLikeHtml(pasted)) fail('invalid_input', "This isn't an HTML page, so it can't be a design.");
-        t ??= titleFromContent(k, pasted) ?? 'Imported from claude.ai';
-        content = pasted;
-      } else if (url && !filePath) {
-        t ??= 'Imported from claude.ai';
-        content = k === 'doc' ? `---\ntitle: ${t}\nkind: doc\nimportedFrom: ${url}\n---\n\n# ${t}\n\nA copy of a claude.ai artifact. Paste its content here; it is not synced.\n` : k === 'design' ? `<!doctype html><html><body><p>Imported from ${url}</p></body></html>` : board([]);
-      } else if (filePath) {
+      let k: ArtifactKind;
+      let t = title;
+      let content: string;
+      if (filePath) {
         const name = filePath.split(/[\\/]/).pop() ?? 'file';
-        k = kind ?? (/\.html?$/i.test(name) ? 'design' : /\.(excalidraw|json)$/i.test(name) ? 'whiteboard' : 'doc');
+        k = kind ?? (/\.(html?|jsx|tsx|svg)$/i.test(name) ? 'design' : /\.(excalidraw|json)$/i.test(name) ? 'whiteboard' : 'doc');
         t ??= name.replace(/\.[^.]+$/, '');
-        content = k === 'doc' ? `# ${t}\n\nImported from ${name}.\n` : k === 'design' ? DESIGN_HTML : LIFECYCLE_BOARD;
-      } else fail('invalid_input', 'Paste a link or pick a file');
+        content = k === 'doc' ? `# ${t}\n\nImported from ${name}.\n` : k === 'design' ? (/\.(jsx|tsx)$/i.test(name) ? REACT_DESIGN : DESIGN_HTML) : LIFECYCLE_BOARD;
+      } else {
+        const text = pasted?.trim() ? pasted : undefined;
+        if (!url || text === undefined) return fail('invalid_input', IMPORT_NEEDS_CONTENT);
+        if (isImportStubContent(text)) fail('invalid_input', "That's the placeholder older versions stored, not the artifact. Paste its real code.");
+        k = kind ?? inferKindFromContent(text);
+        if (k === 'design' && !isDesignContent(text)) fail('invalid_input', "This isn't an HTML page or a React component, so it can't be a design.");
+        t ??= titleFromContent(k, text) ?? 'Imported from claude.ai';
+        content = text;
+      }
       const a = art({ id: newId('art'), title: t!, kind: k, projectId, location: location ?? 'app-data', importedFrom: url, version: 1, updatedAt: 0 }, content, [['user', 0, url ? 'Imported from claude.ai' : 'Imported from a file']]);
       artifacts.set(a.meta.id, a);
       ctx.emit('artifacts.changed', { id: a.meta.id });

@@ -142,8 +142,10 @@ describe('Import from claude.ai dialog', () => {
   const url = 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T#open';
   const imported = meta('a-new', 'Checkout', 'design', 'oide');
   const base = invoke.getMockImplementation()!;
+  const REACT_APP = "import React from 'react';\nexport default function App() {\n  return <main>Hi</main>;\n}\n";
   afterEach(() => {
     invoke.mockImplementation(base);
+    delete (window as { oide?: unknown }).oide;
   });
 
   async function open() {
@@ -160,75 +162,318 @@ describe('Import from claude.ai dialog', () => {
   }
   const kind = () => (screen.getByRole('combobox', { name: 'Kind' }) as HTMLSelectElement).value;
   const content = () => screen.getByRole('textbox', { name: 'Artifact content' });
+  const linkField = () => screen.getByRole('textbox', { name: 'claude.ai link' });
+  const importButton = () => screen.getByRole('button', { name: 'Import' }) as HTMLButtonElement;
+  const dropTarget = () => screen.getByRole('tablist', { name: 'How to import' }).parentElement!;
+  const dropFile = (target: Element, file: File) => fireEvent.drop(target, { dataTransfer: { types: ['Files'], files: [file] } });
 
   it('sends the pasted content with the link, the kind following the content', async () => {
     const { onImported } = await open();
-    fireEvent.change(screen.getByRole('textbox', { name: 'claude.ai link' }), { target: { value: url } });
-    expect(screen.getByRole('button', { name: 'Import link only' })).toBeTruthy();
+    fireEvent.change(linkField(), { target: { value: url } });
     const page = '<!doctype html><html><body><h1>Checkout</h1></body></html>';
     fireEvent.change(content(), { target: { value: page } });
     expect(kind()).toBe('design');
-    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    fireEvent.click(importButton());
     await waitFor(() => expect(onImported).toHaveBeenCalledWith(imported));
     expect(invoke).toHaveBeenCalledWith('artifacts.import', { url, content: page, title: undefined, kind: 'design', projectId: 'oide', location: 'app-data' });
   });
 
-  it('opens the link in the browser, and an empty paste imports the link only', async () => {
-    const { onImported } = await open();
-    fireEvent.change(screen.getByRole('textbox', { name: 'claude.ai link' }), { target: { value: url } });
-    fireEvent.click(screen.getByRole('button', { name: 'Open the link on claude.ai' }));
-    expect(invoke).toHaveBeenCalledWith('shell.openExternal', { url });
-    fireEvent.click(screen.getByRole('button', { name: 'Import link only' }));
-    await waitFor(() => expect(onImported).toHaveBeenCalled());
-    expect(invoke).toHaveBeenCalledWith('artifacts.import', { url, title: undefined, kind: 'doc', projectId: 'oide', location: 'app-data' });
+  it('keeps Import disabled until there is content, and says why', async () => {
+    await open();
+    expect(screen.queryByRole('button', { name: 'Import link only' })).toBeNull();
+    fireEvent.change(linkField(), { target: { value: url } });
+    expect(importButton().disabled).toBe(true);
+    const reason = "Paste the artifact's code first. oIDE can't download claude.ai artifacts, even public ones.";
+    expect(screen.getByText(reason)).toBeTruthy();
+    expect(importButton().getAttribute('aria-describedby')).toBe(screen.getByText(reason).id);
+    fireEvent.click(importButton());
+    expect(invoke).not.toHaveBeenCalledWith('artifacts.import', expect.anything());
+    fireEvent.change(content(), { target: { value: '# Notes' } });
+    expect(importButton().disabled).toBe(false);
+    expect(screen.queryByText(reason)).toBeNull();
   });
 
-  it('refuses React source as a design before sending, and keeps a kind the user picked', async () => {
+  it('opens the link in the browser and shows the three steps', async () => {
     await open();
-    fireEvent.change(screen.getByRole('textbox', { name: 'claude.ai link' }), { target: { value: url } });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Kind' }), { target: { value: 'design' } });
-    fireEvent.change(content(), { target: { value: "import React from 'react';\nexport default () => <div/>;" } });
+    fireEvent.change(linkField(), { target: { value: url } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open the link on claude.ai' }));
+    expect(invoke).toHaveBeenCalledWith('shell.openExternal', { url });
+    const steps = screen.getAllByRole('listitem').map((li) => li.textContent);
+    expect(steps).toEqual(['Open the link.', 'On claude.ai, use Copy (or Download).', 'Paste the code here, or drop the downloaded file.']);
+  });
+
+  it('accepts React source as a design, and keeps a kind the user picked', async () => {
+    const { onImported } = await open();
+    fireEvent.change(linkField(), { target: { value: url } });
+    fireEvent.change(content(), { target: { value: REACT_APP } });
     expect(kind()).toBe('design');
-    expect(screen.getByText(/isn't an HTML page/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
-    await Promise.resolve();
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(importButton());
+    await waitFor(() => expect(onImported).toHaveBeenCalled());
+    expect(invoke).toHaveBeenCalledWith('artifacts.import', { url, content: REACT_APP, title: undefined, kind: 'design', projectId: 'oide', location: 'app-data' });
+  });
+
+  it('refuses plain text as a design and the old placeholder as anything, before sending', async () => {
+    await open();
+    fireEvent.change(linkField(), { target: { value: url } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Kind' }), { target: { value: 'design' } });
+    fireEvent.change(content(), { target: { value: 'just some words' } });
+    expect(kind()).toBe('design'); // the user's pick wins over the content
+    expect(screen.getByRole('alert').textContent).toMatch(/HTML page or a React component/);
+    expect(importButton().disabled).toBe(true);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Kind' }), { target: { value: 'doc' } });
+    fireEvent.change(content(), { target: { value: "# Pricing\n\noIDE cannot fetch claude.ai artifacts: there is no public API. Paste the artifact's content here." } });
+    expect(screen.getByRole('alert').textContent).toMatch(/placeholder/);
+    expect(importButton().disabled).toBe(true);
+    expect(invoke).not.toHaveBeenCalledWith('artifacts.import', expect.anything());
+  });
+
+  it('says why a chat link is not an artifact link, on the field', async () => {
+    await open();
+    fireEvent.change(linkField(), { target: { value: 'https://claude.ai/chat/0b6c3f2a-1111-4222-8333-444455556666' } });
+    expect(screen.getByRole('alert').textContent).toMatch(/chat link, not an artifact link/);
+    expect(linkField().getAttribute('aria-invalid')).toBe('true');
+    fireEvent.change(content(), { target: { value: '# Notes' } });
+    expect(importButton().disabled).toBe(true);
+    expect(screen.queryByRole('button', { name: 'Fetch with an agent' })).toBeNull();
+  });
+
+  it('refuses links that are not https claude.ai', async () => {
+    await open();
+    fireEvent.change(linkField(), { target: { value: 'https://example.com/a' } });
+    expect(screen.getByRole('alert').textContent).toBe('Only https links on claude.ai can be imported.');
+    fireEvent.change(content(), { target: { value: '# Notes' } });
+    expect(importButton().disabled).toBe(true);
+  });
+
+  it('Fetch with an agent opens Spawn with a goal that only creates real content', async () => {
+    await open();
+    expect(screen.queryByRole('button', { name: 'Fetch with an agent' })).toBeNull();
+    fireEvent.change(linkField(), { target: { value: url } });
+    expect(screen.getByText(/Chat artifacts can't be fetched, even public ones/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Fetch with an agent' }));
+    const { route } = useRouter.getState();
+    expect(route.screen).toBe('spawn');
+    const params = route.params as { projectId?: string; goal?: string };
+    expect(params.projectId).toBe('oide');
+    expect(params.goal).toContain('https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T');
+    expect(params.goal).toContain('artifacts_create');
+    expect(params.goal).toContain('titled "Imported from claude.ai"');
+    expect(params.goal).toContain('create nothing');
     expect(invoke).not.toHaveBeenCalledWith('artifacts.import', expect.anything());
   });
 
   it('keeps the paste and a picked kind across tabs; Pick a file sends the optional link', async () => {
     const { onImported } = await open();
-    fireEvent.change(screen.getByRole('textbox', { name: 'claude.ai link' }), { target: { value: url } });
+    fireEvent.change(linkField(), { target: { value: url } });
     fireEvent.change(content(), { target: { value: '# Notes' } });
     fireEvent.change(screen.getByRole('combobox', { name: 'Kind' }), { target: { value: 'whiteboard' } });
     fireEvent.click(screen.getByRole('tab', { name: 'Pick a file' }));
     expect(kind()).toBe('whiteboard');
+    expect(importButton().disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Choose a file…' }));
     expect(await screen.findByText('C:\\Downloads\\pricing.html')).toBeTruthy();
     expect(kind()).toBe('whiteboard'); // the user's pick wins over the file name
     fireEvent.change(screen.getByRole('combobox', { name: 'Kind' }), { target: { value: 'design' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    fireEvent.click(importButton());
     await waitFor(() => expect(onImported).toHaveBeenCalled());
     expect(invoke).toHaveBeenCalledWith('artifacts.import', { filePath: 'C:\\Downloads\\pricing.html', url, title: undefined, kind: 'design', projectId: 'oide', location: 'app-data' });
+    expect(invoke).toHaveBeenCalledWith('dialog.pickFile', { title: 'Import an artifact', filters: [{ name: 'Artifacts', extensions: expect.arrayContaining(['html', 'jsx', 'tsx', 'svg']) }] });
   });
 
   it('keeps the instructions visible when content is refused, and only opens claude.ai links', async () => {
     await open();
-    fireEvent.change(screen.getByRole('textbox', { name: 'claude.ai link' }), { target: { value: 'https://claude.site/artifacts/x' } });
+    fireEvent.change(linkField(), { target: { value: 'https://claude.site/artifacts/MyEmjmATV3mpUv6SZmFj4T' } });
     expect((screen.getByRole('button', { name: 'Open the link on claude.ai' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.change(screen.getByRole('combobox', { name: 'Kind' }), { target: { value: 'whiteboard' } });
     fireEvent.change(content(), { target: { value: 'not json' } });
     expect(screen.getByRole('alert').textContent).toMatch(/JSON/);
-    expect(screen.getByText(/copy the artifact's code and paste it here/)).toBeTruthy();
+    expect(screen.getByText('Paste the code here, or drop the downloaded file.')).toBeTruthy();
     expect(content().getAttribute('aria-invalid')).toBe('true');
     fireEvent.change(content(), { target: { value: '\uFEFF{"type":"excalidraw","elements":[]}' } });
     expect(screen.queryByRole('alert')).toBeNull();
   });
 
-  it('refuses links that are not https claude.ai', async () => {
+  it('imports a file dropped on the dialog through the preload drop bridge, by path', async () => {
+    const attachDropped = vi.fn(async () => ({ attachments: [{ kind: 'file' as const, path: 'C:\\Downloads\\App.jsx', name: 'App.jsx', size: 120 }], rejected: [] }));
+    const { onImported } = await open();
+    (window as { oide?: unknown }).oide = { ...bridge, attachDropped };
+    fireEvent.change(linkField(), { target: { value: url } });
+    dropFile(dropTarget(), new File(['x'], 'App.jsx'));
+    expect(await screen.findByText('C:\\Downloads\\App.jsx')).toBeTruthy();
+    expect(attachDropped).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('tab', { name: 'Pick a file', selected: true })).toBeTruthy();
+    expect(kind()).toBe('design');
+    fireEvent.click(importButton());
+    await waitFor(() => expect(onImported).toHaveBeenCalled());
+    expect(invoke).toHaveBeenCalledWith('artifacts.import', { filePath: 'C:\\Downloads\\App.jsx', url, title: undefined, kind: 'design', projectId: 'oide', location: 'app-data' });
+  });
+
+  it('says so when a dropped file has no path (an image) or several files are dropped', async () => {
+    const attachDropped = vi.fn(async () => ({ attachments: [{ kind: 'image' as const, mediaType: 'image/png' as const, dataBase64: 'AAAA', name: 'a.png' }], rejected: [] }));
     await open();
-    fireEvent.change(screen.getByRole('textbox', { name: 'claude.ai link' }), { target: { value: 'https://example.com/a' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Import link only' }));
-    expect(await screen.findByText('Only https links on claude.ai can be imported.')).toBeTruthy();
-    expect(invoke).not.toHaveBeenCalledWith('artifacts.import', expect.anything());
+    (window as { oide?: unknown }).oide = { ...bridge, attachDropped };
+    dropFile(dropTarget(), new File(['x'], 'a.png'));
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Images can't be imported/);
+    fireEvent.drop(dropTarget(), { dataTransfer: { types: ['Files'], files: [new File(['x'], 'a.html'), new File(['y'], 'b.html')] } });
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toBe('Drop one file at a time.'));
+    expect(importButton().disabled).toBe(true);
+  });
+});
+
+describe('Import from claude.ai on the grid', () => {
+  const base = invoke.getMockImplementation()!;
+  afterEach(() => {
+    invoke.mockImplementation(base);
+    delete (window as { oide?: unknown }).oide;
+  });
+
+  it('opens the dialog on the file tab with a file dropped on the grid', async () => {
+    const attachDropped = vi.fn(async () => ({ attachments: [{ kind: 'file' as const, path: '/Users/you/Downloads/pricing.html', name: 'pricing.html', size: 10 }], rejected: [] }));
+    (window as { oide?: unknown }).oide = { ...bridge, attachDropped };
+    const imported = meta('a-new', 'pricing', 'design', 'oide');
+    invoke.mockImplementation(async (command: string, input: unknown) => (command === 'artifacts.import' ? imported : base(command, input)));
+    render(<ArtifactsScreen />);
+    await screen.findByRole('heading', { name: 'Main window v2', level: 2 });
+    fireEvent.drop(screen.getByRole('main'), { dataTransfer: { types: ['Files'], files: [new File(['x'], 'pricing.html')] } });
+    expect(await screen.findByText('/Users/you/Downloads/pricing.html')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Pick a file', selected: true })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('artifacts.import', expect.objectContaining({ filePath: '/Users/you/Downloads/pricing.html', kind: 'design' })));
+  });
+});
+
+describe('Broken imports', () => {
+  const link = 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T';
+  const broken = meta('a-broken', 'Pricing page', 'doc', 'oide', { importedFrom: link, brokenImport: true });
+  const stub = "# Pricing page\n\noIDE cannot fetch claude.ai artifacts: there is no public API for them.\n";
+  const base = invoke.getMockImplementation()!;
+  const paste = () => screen.getByRole('textbox', { name: "Paste the artifact's code" });
+  let current = broken;
+
+  beforeEach(() => {
+    current = broken;
+    invoke.mockImplementation(async (command: string, input: unknown) => {
+      switch (command) {
+        case 'artifacts.list':
+          return [current, ...list];
+        case 'artifacts.get':
+          if ((input as { id: string }).id === 'a-broken') return { meta: current, content: stub, uses: [], versions: [{ version: 1, ts: now, author: 'user' }] };
+          return base(command, input);
+        case 'artifacts.save': {
+          const i = input as { id: string; content: string };
+          current = meta('a-broken', 'Pricing page', 'doc', 'oide', { importedFrom: link, version: 2 });
+          return { ...current, id: i.id };
+        }
+        case 'artifacts.import':
+          return meta('a-fixed', 'Pricing page', 'design', 'oide', { importedFrom: link });
+        case 'artifacts.delete':
+          return { ok: true };
+        case 'dialog.pickFile':
+          return 'C:\\Downloads\\pricing.html';
+        default:
+          return base(command, input);
+      }
+    });
+    useRouter.setState({ route: { screen: 'artifacts', params: { artifactId: 'a-broken' } }, back: [], forward: [] });
+  });
+  afterEach(() => {
+    invoke.mockImplementation(base);
+    delete (window as { oide?: unknown }).oide;
+  });
+
+  it('marks the card with a badge (text and icon) and shows the fix panel in the detail pane', async () => {
+    render(<ArtifactsScreen />);
+    const card = (await screen.findAllByRole('button', { name: /Pricing page/ })).find((b) => grid().contains(b))!;
+    expect(within(card).getByText('Import has no content')).toBeTruthy();
+    expect(card.querySelector('svg')).toBeTruthy();
+    expect(await screen.findByRole('heading', { name: 'This import has no content', level: 3 })).toBeTruthy();
+    expect(screen.getByText("oIDE can't download claude.ai artifacts, so the link came in without the design.")).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Open on claude.ai' })).toBeTruthy();
+    expect(screen.getByText(/Replaces this empty import with the file/)).toBeTruthy();
+    expect(document.querySelector('iframe')).toBeNull();
+  });
+
+  it('saves pasted code as the next version of the import', async () => {
+    render(<ArtifactsScreen />);
+    await screen.findByRole('heading', { name: 'This import has no content' });
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+    fireEvent.change(paste(), { target: { value: '# Pricing\n\nTiers and limits.' } });
+    fireEvent.click(save);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('artifacts.save', { id: 'a-broken', content: '# Pricing\n\nTiers and limits.', note: 'Imported from claude.ai', baseVersion: 1 }));
+    await waitFor(() => expect(screen.queryByRole('heading', { name: 'This import has no content' })).toBeNull());
+  });
+
+  it('refuses the old placeholder as pasted code', async () => {
+    render(<ArtifactsScreen />);
+    await screen.findByRole('heading', { name: 'This import has no content' });
+    fireEvent.change(paste(), { target: { value: stub } });
+    expect(screen.getByRole('alert').textContent).toMatch(/placeholder/);
+    expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('replaces the empty import with a new design when the paste does not fit a doc', async () => {
+    render(<ArtifactsScreen />);
+    await screen.findByRole('heading', { name: 'This import has no content' });
+    const react = "import React from 'react';\nexport default function App() {\n  return <main>Hi</main>;\n}\n";
+    fireEvent.change(paste(), { target: { value: react } });
+    expect(screen.getByText(/This looks like a design, so Save replaces this import with a new one/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('artifacts.delete', { id: 'a-broken' }));
+    expect(invoke).toHaveBeenCalledWith('artifacts.import', { content: react, url: link, title: 'Pricing page', projectId: 'oide', location: 'repo' });
+    expect(invoke).not.toHaveBeenCalledWith('artifacts.save', expect.anything());
+    await waitFor(() => expect(useRouter.getState().route).toEqual({ screen: 'artifacts', params: { artifactId: 'a-fixed' } }));
+  });
+
+  it('imports a chosen or dropped file as a new artifact, then deletes the empty one', async () => {
+    render(<ArtifactsScreen />);
+    await screen.findByRole('heading', { name: 'This import has no content' });
+    fireEvent.click(screen.getByRole('button', { name: 'Choose downloaded file…' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('artifacts.delete', { id: 'a-broken' }));
+    expect(invoke).toHaveBeenCalledWith('artifacts.import', { filePath: 'C:\\Downloads\\pricing.html', url: link, title: 'Pricing page', projectId: 'oide', location: 'repo' });
+    const order = invoke.mock.calls.map((c) => c[0]);
+    expect(order.indexOf('artifacts.import')).toBeLessThan(order.indexOf('artifacts.delete'));
+  });
+
+  it('opens the fix panel in the viewer with the paste box focused', async () => {
+    render(<ArtifactsScreen />);
+    await screen.findByRole('heading', { name: 'This import has no content' });
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Pricing page (open)' })).toBeTruthy());
+    expect(document.activeElement).toBe(paste());
+    expect(screen.queryByRole('tab', { name: 'Preview' })).toBeNull();
+  });
+});
+
+describe('React designs', () => {
+  const base = invoke.getMockImplementation()!;
+  const react = "import React from 'react';\nexport default function App() {\n  return <main>Hi</main>;\n}\n";
+  const design = meta('a-react', 'Pricing app', 'design', 'oide', { entry: 'App.jsx', version: 2 });
+  afterEach(() => invoke.mockImplementation(base));
+
+  it('previews the saved version by URL and shows a notice instead of old React source', async () => {
+    invoke.mockImplementation(async (command: string, input: unknown) => {
+      switch (command) {
+        case 'artifacts.list':
+          return [design];
+        case 'artifacts.get':
+          return { meta: design, content: react, uses: [], versions: [{ version: 2, ts: now, author: 'user' }, { version: 1, ts: now - 1000, author: 'user' }] };
+        case 'artifacts.previewUrl':
+          return { url: 'oide-artifact://a-react/index.html' };
+        case 'artifacts.readVersion':
+          return { content: `${react}// v1` };
+        default:
+          return base(command, input);
+      }
+    });
+    useRouter.setState({ route: { screen: 'artifacts', params: { artifactId: 'a-react' } }, back: [], forward: [] });
+    render(<ArtifactsScreen />);
+    await waitFor(() => expect(document.querySelector('iframe')?.getAttribute('src')).toBe('oide-artifact://a-react/index.html'));
+    fireEvent.click(screen.getByRole('button', { name: /^v1 ·/ }));
+    expect(await screen.findByText('Save to preview React changes. Use Compare to see older versions.')).toBeTruthy();
+    // React source never goes into srcdoc.
+    expect(document.querySelector('iframe[srcdoc]')).toBeNull();
+    expect(document.querySelector('iframe')).toBeNull();
   });
 });

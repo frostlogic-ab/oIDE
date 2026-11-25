@@ -4,6 +4,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { Spinner } from '@oide/ui';
+import type { SourceLanguage } from './model';
 
 type MonacoModule = typeof import('../Files/monaco/setup');
 type Monaco = MonacoModule['monaco'];
@@ -11,7 +12,7 @@ type Monaco = MonacoModule['monaco'];
 export interface VersionDiffProps {
   original: string;
   modified: string;
-  language: 'markdown' | 'html' | 'json';
+  language: SourceLanguage;
   label: string;
   onStats?: (s: { additions: number; deletions: number }) => void;
 }
