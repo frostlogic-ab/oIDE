@@ -1,5 +1,5 @@
-import { existsSync, statSync } from 'node:fs';
-import { delimiter, isAbsolute, posix, win32 } from 'node:path';
+import { existsSync, realpathSync, statSync } from 'node:fs';
+import { delimiter, dirname, isAbsolute, posix, relative, resolve, win32 } from 'node:path';
 import { isValidPermissionRule } from '@oide/protocol';
 import type { AgentSpec, CliInfo, CustomModel, Effort, MessageAttachment, ModelSlot, ModelStrategy, PermissionMode, Settings, SubagentTier, Technique } from '@oide/protocol';
 import { describeContext, textMessage, type ArtifactResolver, type StreamJsonUserMessage } from './messages.js';
@@ -540,17 +540,68 @@ export function targetsProtectedPath(rule: string): boolean {
 
 const EDIT_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 
+/** The paths an edit tool call writes, or undefined for a tool that is not an edit tool. */
+export function editPaths(toolName: string, input: unknown): string[] | undefined {
+  if (!EDIT_TOOLS.has(toolName)) return undefined;
+  const rec = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+  return [rec.file_path, rec.notebook_path, rec.path].filter((v): v is string => typeof v === 'string');
+}
+
+/**
+ * True when a path may name a protected location. Fails closed on forms Windows folds onto another
+ * name (trailing dots or spaces in a component, `:` streams after the drive, `~` short names), and
+ * matches case-insensitively.
+ */
+function pathMayBeProtected(p: string): boolean {
+  if (/~/.test(p) || /:/.test(p.replace(/^[A-Za-z]:/, ''))) return true;
+  const parts = p.split(/[\\/]+/).filter((c) => c !== '' && c !== '.' && c !== '..');
+  if (parts.some((c) => /[. ]$/.test(c))) return true;
+  const lower = parts.map((c) => c.toLowerCase());
+  return lower.some((c) => c === '.oide' || c === '.claude') || lower[lower.length - 1] === '.mcp.json';
+}
+
 /**
  * True when a tool call edits one of the protected paths (SEC-12): the CLI always asks for these,
  * and oIDE must never answer them on the user's behalf (an earlier "Always" for `Edit` included).
  */
 export function requestTargetsProtectedPath(toolName: string, input: unknown): boolean {
-  if (!EDIT_TOOLS.has(toolName)) return false;
-  const rec = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
-  const paths = [rec.file_path, rec.notebook_path, rec.path].filter((v): v is string => typeof v === 'string');
+  const paths = editPaths(toolName, input);
+  if (!paths) return false;
   // No path we can check: treat it as protected, so it is always asked.
   if (!paths.length) return true;
-  return paths.some((p) => targetsProtectedPath(`${toolName}(${p})`));
+  return paths.some(pathMayBeProtected);
+}
+
+/** Real path of `p`, or of its nearest existing ancestor joined with the rest (symlinks followed). */
+function realish(p: string): string {
+  let cur = p;
+  const rest: string[] = [];
+  for (;;) {
+    try {
+      return resolve(realpathSync.native(cur), ...rest.reverse());
+    } catch {
+      const up = dirname(cur);
+      if (up === cur) return p;
+      rest.push(cur.slice(up.length).replace(/^[\\/]+/, ''));
+      cur = up;
+    }
+  }
+}
+
+/**
+ * True when every path of an edit tool call resolves (symlinks followed) inside `root`. Non-edit
+ * tools are true; UNC paths, and edits with no path, are false.
+ */
+export function editStaysInside(toolName: string, input: unknown, root: string | undefined): boolean {
+  const paths = editPaths(toolName, input);
+  if (!paths) return true;
+  if (!root || !paths.length) return false;
+  const base = realish(resolve(root));
+  return paths.every((p) => {
+    if (/^[\\/]{2}/.test(p)) return false;
+    const rel = relative(base, realish(resolve(base, p)));
+    return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+  });
 }
 
 /**

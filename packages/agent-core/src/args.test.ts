@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { AgentSpec, CliInfo, Technique } from '@oide/protocol';
-import { allowListEnv, askRuleCovers, buildLaunch, requestTargetsProtectedPath, customModelEnv, disallowedModelEnvKeys, filterExtraFlags, isAllowedModelEnvEntry, isAllowedModelEnvKey, LaunchError, shellSplit, type LaunchContext } from './args.js';
-import { testSettings } from '../test/helpers.js';
+import { allowListEnv, askRuleCovers, buildLaunch, editStaysInside, requestTargetsProtectedPath, customModelEnv, disallowedModelEnvKeys, filterExtraFlags, isAllowedModelEnvEntry, isAllowedModelEnvKey, LaunchError, shellSplit, type LaunchContext } from './args.js';
+import { mkdirSync, symlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { tempDir, testSettings } from '../test/helpers.js';
 
 const cli = CliInfo.parse({ found: true, path: 'C:\\bin\\claude.exe', version: '2.1.325', inTestedRange: true, features: { effort: true, 'mode:auto': true, agents: true, 'permission-prompt-tool': true, 'include-partial-messages': true, 'forward-subagent-text': true } });
 
@@ -299,6 +301,36 @@ describe('"Always" guards', () => {
     expect(requestTargetsProtectedPath('Edit', {})).toBe(true);
     expect(requestTargetsProtectedPath('Edit', { file_path: '/repo/src/oide.ts' })).toBe(false);
     expect(requestTargetsProtectedPath('Bash', { command: 'cat .oide/setup' })).toBe(false);
+  });
+
+  it('requestTargetsProtectedPath fails closed on names Windows folds onto .oide, .claude or .mcp.json', () => {
+    const r = String.raw;
+    for (const file_path of [r`C:\repo\.OIDE\setup`, r`C:\repo\.oide.\setup`, r`C:\repo\.oide \setup`, r`C:\repo\.oide::$INDEX_ALLOCATION\setup`, r`C:\repo\OIDE~1\setup`, '/repo/.mcp.json.', r`C:\repo\.mcp.json:x`]) {
+      expect(requestTargetsProtectedPath('Write', { file_path }), file_path).toBe(true);
+    }
+    expect(requestTargetsProtectedPath('Write', { file_path: r`C:\repo\src\a.ts` })).toBe(false);
+  });
+
+  it('editStaysInside: edits must resolve inside the worktree (.., absolute, UNC and symlinks out are refused)', () => {
+    const root = tempDir('oide-root-');
+    const outside = tempDir('oide-out-');
+    mkdirSync(join(root, 'src'));
+    expect(editStaysInside('Edit', { file_path: join(root, 'src', 'a.ts') }, root)).toBe(true);
+    expect(editStaysInside('Write', { file_path: 'src/new/b.ts' }, root)).toBe(true);
+    expect(editStaysInside('Edit', { file_path: '../x.ts' }, root)).toBe(false);
+    expect(editStaysInside('Edit', { file_path: join(outside, 'x.ts') }, root)).toBe(false);
+    expect(editStaysInside('Edit', { file_path: String.raw`\\server\share\x.ts` }, root)).toBe(false);
+    expect(editStaysInside('Edit', {}, root)).toBe(false);
+    expect(editStaysInside('Edit', { file_path: 'a.ts' }, undefined)).toBe(false);
+    expect(editStaysInside('Bash', { command: 'rm x' }, root)).toBe(true);
+    let linked = false;
+    try {
+      symlinkSync(outside, join(root, 'link'), 'junction');
+      linked = true;
+    } catch {
+      /* no symlink rights */
+    }
+    if (linked) expect(editStaysInside('Write', { file_path: join(root, 'link', 'x.ts') }, root)).toBe(false);
   });
 
   it('askRuleCovers: whole tools, MCP servers, Bash prefixes, and any other specifier on the same tool', () => {

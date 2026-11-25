@@ -14,7 +14,7 @@ import {
   type PermissionRequest,
   type UserMessage,
 } from '@oide/protocol';
-import { askRuleCovers, buildLaunch, cliPermissionMode, requestTargetsProtectedPath, subagentTiers, LaunchError } from './args.js';
+import { askRuleCovers, buildLaunch, cliPermissionMode, editStaysInside, requestTargetsProtectedPath, subagentTiers, LaunchError } from './args.js';
 import { ClaudeCliDriver, rawJsonOf, type AgentDriver, type AgentHandle } from './driver.js';
 import { ContextWindowBook } from './context-window.js';
 import { AgentReducer, createSummary } from './reducer.js';
@@ -483,9 +483,11 @@ export class Supervisor {
     return true;
   }
 
+  /** Answered without a prompt: an "Always" rule covers it, and an edit stays inside the agent's worktree. */
   private alwaysAllows(rec: AgentRecord, req: PermissionRequest): boolean {
     const rules = this.alwaysAllowed.get(rec.spec.projectId);
-    return !!req.suggestedRule && !!rules?.has(req.suggestedRule) && this.canAlwaysAllow(rec, req);
+    if (!req.suggestedRule || !rules?.has(req.suggestedRule) || !this.canAlwaysAllow(rec, req)) return false;
+    return editStaysInside(req.toolName, req.input, rec.worktree?.path);
   }
 
   /** After a new "Always" rule: allow every waiting prompt in the project it covers. */

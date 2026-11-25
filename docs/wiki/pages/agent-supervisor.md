@@ -136,8 +136,11 @@ reach agents spawned later. The supervisor also keeps the rules approved this ap
 project (`alwaysAllowed`): a new request whose `suggestedRule` is one of them is answered `allow`
 without a prompt, and when the rule is added every waiting prompt in the project it covers is
 allowed. Never for requests "Always" cannot cover (`canAlwaysAllow`): edits of `.oide/`, `.claude/`
-or `.mcp.json` (`requestTargetsProtectedPath`, SEC-12) and tools covered by the launch's always-ask
+or `.mcp.json` (`requestTargetsProtectedPath`, SEC-12; fails closed on Windows name folding: any
+case, trailing dots or spaces in a component, `:` streams, `~` short names) and tools covered by the launch's always-ask
 rules (`LaunchPlan.askRules`: extension tools marked "asks first" and project ask rules, matched
 conservatively by `askRuleCovers`). For those the supervisor strips `suggestedRule` from the
-request, and the tile and Focus grey out the button.
+request, and the tile and Focus grey out the button. An edit is answered without a prompt only when
+every path resolves inside the agent's worktree, symlinks followed (`editStaysInside`; UNC paths and
+`..` escapes ask), because the saved rule for edits is the bare tool name (`Edit`).
 
