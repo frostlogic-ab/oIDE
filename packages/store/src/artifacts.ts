@@ -1,7 +1,8 @@
-import { existsSync } from 'node:fs';
-import { lstat, mkdir, readdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
-import { basename, dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { constants, existsSync } from 'node:fs';
+import { copyFile, lstat, mkdir, open, readdir, readFile, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
+import { basename, dirname, extname, join } from 'node:path';
 import {
+  ARTIFACT_LIMITS,
   ArtifactMeta,
   ArtifactUse,
   ArtifactVersion,
@@ -13,41 +14,56 @@ import {
   isDesignContent,
   isEmptyOideBoard,
   isImportStubContent,
+  isSafeArtifactPath,
   LEGACY_IMPORT_STUB_MAX_BYTES,
   REACT_DESIGN_ENTRY,
   titleFromContent,
   type ArtifactContent,
+  type ArtifactFile,
+  type ArtifactFileContent,
   type ArtifactKind,
+  type ArtifactRetrieval,
   type ArtifactsBackend,
 } from '@oide/protocol';
 import { z } from 'zod';
+import { ArtifactPathError, foldPath, isTextBytes, isTextFile, kindOfEntry, pickEntry, resolveInside, walkFolder, type WalkedFile } from './artifact-files.js';
 import { fromJson, type Database } from './db.js';
 import { newId, num, pathKey, type Row } from './util.js';
 
 /**
- * Local artifacts (v1 has no claude.ai sync). Each artifact is a folder:
+ * Local artifacts (ADR 0004, ADR 0014). Each artifact is a folder of files:
  *
  *   <repo>/.oide/artifacts/<slug>/     shared with the team through git (location "repo")
  *   <app-data>/artifacts/<slug>/       personal (location "app-data")
  *     artifact.json                    ArtifactMeta
- *     index.html | App.jsx | doc.md | board.excalidraw   the entry file (App.jsx: a React design)
- *     .versions/versions.json          ArtifactVersion[]
- *     .versions/<n>/<entry>            snapshot of each version
+ *     <files of the current version>   index.html | App.jsx | doc.md | board.excalidraw, or many files
+ *     .versions/versions.json          ArtifactVersion[] (+ the entry of each version)
+ *     .versions/<n>/…                  full snapshot of every file of version n
  *
- * Numbered snapshots are used for both locations (ADR 0004). SQLite keeps an index (for fast
- * listing and the uses log); the folder is the source of truth for content and meta.
+ * A single-file artifact from before ADR 0014 already fits (`.versions/<n>/<entry>`). Version 0 is a
+ * linked artifact waiting for its first retrieval: no files yet. SQLite keeps an index (fast listing
+ * and the uses log); the folder is the source of truth for content and meta.
  */
 
 export const ENTRY_FILES: Record<ArtifactKind, string> = { design: 'index.html', doc: 'doc.md', whiteboard: 'board.excalidraw' };
-const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
+const MAX_IMPORT_BYTES = ARTIFACT_LIMITS.fileBytes;
 const VERSIONS_DIR = '.versions';
+/** Written while the folder's root is being brought in line with a new snapshot; rescan finishes the job. */
+const SYNC_MARKER = '.sync';
+/** Biggest file `files()` reads to tell text from binary (the rest of a big file is not read). */
+const SNIFF_BYTES = 64 * 1024;
 
 /**
- * Entry file of an artifact: always one of a fixed set, never a name taken from `artifact.json` (a
- * cloned repo could point it outside the folder). Designs are `index.html` or, for React, `App.jsx`.
+ * Entry file of a single-file artifact: one of a fixed set. Designs are `index.html` or, for React,
+ * `App.jsx`. Multi-file artifacts use any `isSafeArtifactPath` entry (`safeEntry`).
  */
 export function entryFileOf(kind: ArtifactKind, entry?: string): string {
   return kind === 'design' && entry === REACT_DESIGN_ENTRY ? REACT_DESIGN_ENTRY : ENTRY_FILES[kind];
+}
+
+/** The entry of `meta` when it is a safe relative path, else the fixed name for its kind. */
+export function safeEntry(meta: Pick<ArtifactMeta, 'kind' | 'entry'>): string {
+  return isSafeArtifactPath(meta.entry) ? meta.entry : entryFileOf(meta.kind, meta.entry);
 }
 
 export interface ArtifactStoreOptions {
@@ -63,7 +79,7 @@ export interface ArtifactStoreOptions {
 
 /** What changed, passed to `onChange` (the `artifacts.changed` event payload minus the id). */
 export interface ArtifactChange {
-  change: 'created' | 'saved' | 'renamed' | 'deleted';
+  change: 'created' | 'saved' | 'renamed' | 'deleted' | 'retrieval';
   version?: number;
   author?: string;
 }
@@ -78,12 +94,12 @@ export interface SaveOptions {
 export const MAX_TITLE_LENGTH = 200;
 
 /** Why an import was refused (a telemetry reason; never the link or the content). */
-export type ImportRefusal = 'no_content' | 'bad_link' | 'wrong_kind' | 'too_large' | 'stub_content';
+export type ImportRefusal = 'no_content' | 'bad_link' | 'wrong_kind' | 'too_large' | 'stub_content' | 'bad_path';
 
 /** Error with a machine-readable code (`conflict`, `invalid_input`), mapped to an IPC error code by main. */
 export class ArtifactError extends Error {
   readonly code: 'conflict' | 'invalid_input';
-  /** Set when an import is refused before anything is created. */
+  /** Set when an import or write is refused before anything is created. */
   readonly reason: ImportRefusal | undefined;
   constructor(message: string, code: 'conflict' | 'invalid_input', reason?: ImportRefusal) {
     super(message);
@@ -107,6 +123,53 @@ export interface ArtifactDetail extends ArtifactContent {
   uses: ArtifactUse[];
   versions: ArtifactVersion[];
 }
+
+/** A file to write: UTF-8 text or base64 bytes (IPC and MCP shape). */
+export type ArtifactFileWrite = { path: string } & ArtifactFileContent;
+
+export interface WriteFilesChange {
+  files?: ArtifactFileWrite[];
+  deletes?: string[];
+  /** Move the entry to another file of the new version. */
+  entry?: string;
+  note?: string;
+  author?: string;
+  baseVersion?: number;
+}
+
+/** Retrieval result committed as one new version (ADR 0014). */
+export interface CommitFolderOptions {
+  entry?: string;
+  /** Applies only while the kind is still the guessed one (the first retrieval, the user gave none). */
+  kind?: ArtifactKind;
+  /** Applies only while the title is still the placeholder (the user gave none). */
+  title?: string;
+  note: string;
+  author: string;
+  retrieval: ArtifactRetrieval;
+}
+
+/**
+ * oIDE's own notes in `artifact.json`, not part of `ArtifactMeta`: whether the title and kind are
+ * still oIDE's guesses for a link import (then the first retrieval may replace them).
+ */
+interface Internal {
+  autoTitle?: boolean;
+  autoKind?: boolean;
+}
+const INTERNAL_KEY = 'oideInternal';
+const InternalSchema = z.object({ autoTitle: z.boolean().optional(), autoKind: z.boolean().optional() });
+
+/** One file of a version being written: new bytes, a file to copy, or an unchanged file of the root. */
+interface PlanFile {
+  path: string;
+  size: number;
+  bytes?: Buffer;
+  from?: string;
+  /** Already at the root with this exact path and content. */
+  unchanged?: boolean;
+}
+type Plan = Map<string, PlanFile>;
 
 export function slugifyTitle(title: string): string {
   const s = title
@@ -219,13 +282,23 @@ function checkImportContent(kind: ArtifactKind, content: string): void {
   }
 }
 
-async function writeAtomic(path: string, content: string): Promise<void> {
+async function writeAtomic(path: string, content: string | Buffer): Promise<void> {
   const tmp = `${path}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
-  await writeFile(tmp, content, 'utf8');
+  await writeFile(tmp, content, typeof content === 'string' ? 'utf8' : undefined);
   await rename(tmp, path);
 }
 
-const VersionsFile = z.array(ArtifactVersion);
+/** Atomic copy (tmp + rename), as a clone where the file system can (copy-on-write). */
+async function copyAtomic(from: string, to: string): Promise<void> {
+  const tmp = `${to}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
+  await copyFile(from, tmp, constants.COPYFILE_FICLONE);
+  await rename(tmp, to);
+}
+
+/** versions.json as stored: each version also records its entry (not part of the IPC `ArtifactVersion`). */
+const StoredVersion = ArtifactVersion.extend({ entry: z.string().optional() });
+type StoredVersion = z.infer<typeof StoredVersion>;
+const VersionsFile = z.array(StoredVersion);
 
 /** Only a never-edited claude.ai import can still hold the old link-only placeholder. */
 function mayBeBrokenImport(meta: ArtifactMeta): boolean {
@@ -244,9 +317,72 @@ function withBrokenFlag(meta: ArtifactMeta, content: string): ArtifactMeta {
   return broken ? { ...rest, brokenImport: true } : rest;
 }
 
-/** The other design entry (a design is `index.html` or `App.jsx`). */
+/** The other design entry (a single-file design is `index.html` or `App.jsx`). */
 function otherDesignEntry(entry: string): string {
   return entry === REACT_DESIGN_ENTRY ? HTML_DESIGN_ENTRY : REACT_DESIGN_ENTRY;
+}
+
+/** Strict base64 (whitespace allowed), decoded; anything else is refused instead of silently dropped. */
+export function decodeBase64(data: string, path: string): Buffer {
+  const clean = data.replace(/\s+/g, '');
+  if (clean.length % 4 === 1 || !/^[A-Za-z0-9+/]*={0,2}$/.test(clean)) throw new ArtifactError(`${path}: not valid base64.`, 'invalid_input', 'wrong_kind');
+  return Buffer.from(clean, 'base64');
+}
+
+function cleanTitle(t: string | undefined): string | undefined {
+  const s = t?.replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE_LENGTH).trim();
+  return s || undefined;
+}
+
+const mb = (n: number) => `${Math.round(n / (1024 * 1024))} MB`;
+
+/** Limits, paths and file/folder clashes of a whole version, before anything is written. */
+function checkPlan(plan: Plan): void {
+  if (plan.size > ARTIFACT_LIMITS.files) {
+    throw new ArtifactError(`An artifact can have at most ${ARTIFACT_LIMITS.files} files (this one would have ${plan.size}).`, 'invalid_input', 'too_large');
+  }
+  let total = 0;
+  const dirs = new Map<string, string>();
+  for (const f of plan.values()) {
+    if (!isSafeArtifactPath(f.path)) throw new ArtifactError(`"${f.path}" is not a valid file path inside an artifact.`, 'invalid_input', 'bad_path');
+    if (f.size > ARTIFACT_LIMITS.fileBytes) throw new ArtifactError(`${f.path} is larger than ${mb(ARTIFACT_LIMITS.fileBytes)}.`, 'invalid_input', 'too_large');
+    total += f.size;
+    const parts = foldPath(f.path).split('/');
+    for (let i = 1; i < parts.length; i++) dirs.set(parts.slice(0, i).join('/'), f.path);
+  }
+  if (total > ARTIFACT_LIMITS.totalBytes) throw new ArtifactError(`An artifact can hold at most ${mb(ARTIFACT_LIMITS.totalBytes)} (this one would hold ${mb(total)}).`, 'invalid_input', 'too_large');
+  for (const [key, f] of plan) if (dirs.has(key)) throw new ArtifactError(`"${f.path}" is both a file and a folder.`, 'invalid_input', 'bad_path');
+}
+
+async function bytesOf(f: PlanFile): Promise<Buffer> {
+  return f.bytes ?? (await readFile(f.from!));
+}
+
+/**
+ * The entry must be a file of the version that fits the kind: a design opens on an HTML page, an SVG
+ * or React source; a whiteboard on an Excalidraw JSON object; a doc on a text file. Returns the path
+ * as stored (its exact case).
+ */
+async function checkEntry(kind: ArtifactKind, entry: string, plan: Plan): Promise<string> {
+  const f = plan.get(foldPath(entry));
+  if (!f) throw new ArtifactError(`The entry file ${entry} is not one of the artifact's files.`, 'invalid_input', 'no_content');
+  const ext = extname(f.path).toLowerCase();
+  if (kind === 'design') {
+    if (['.html', '.htm', '.jsx', '.tsx', '.svg'].includes(ext)) return f.path;
+    const bytes = await bytesOf(f);
+    if (isTextBytes(bytes) && isDesignContent(bytes.toString('utf8'))) return f.path;
+    throw new ArtifactError(`A design opens on an HTML page or a React component; ${f.path} is neither.`, 'invalid_input', 'wrong_kind');
+  }
+  const bytes = await bytesOf(f);
+  if (!isTextBytes(bytes)) throw new ArtifactError(`${f.path} is not a text file, so it can't be the ${kind}'s entry.`, 'invalid_input', 'wrong_kind');
+  if (kind === 'whiteboard') {
+    try {
+      validateContent('whiteboard', bytes.toString('utf8'));
+    } catch (e) {
+      throw new ArtifactError(`${f.path}: ${(e as Error).message}`, 'invalid_input', 'wrong_kind');
+    }
+  }
+  return f.path;
 }
 
 export class ArtifactStore {
@@ -283,34 +419,21 @@ export class ArtifactStore {
     return String(r.dir);
   }
 
-  /**
-   * Path of an artifact's entry file (or a version snapshot of it). The file name is one of the fixed
-   * entry names (`entryFileOf`), never a name from `artifact.json`, and must stay inside the folder.
-   */
-  private async contentPath(id: string, meta: ArtifactMeta, version?: number, entry = meta.entry): Promise<string> {
-    const dir = resolve(this.dirOf(id));
-    const name = entryFileOf(meta.kind, entry);
-    const parts = version === undefined ? [name] : [VERSIONS_DIR, String(version), name];
-    const file = resolve(join(dir, ...parts));
-    const rel = relative(dir, file);
-    if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error('Artifact path escapes its folder');
-    // Symlinks (a cloned repo can commit them) must not redirect reads or writes elsewhere:
-    // the artifact folder must be a real directory and no component below it may be a link.
-    if ((await lstat(dir)).isSymbolicLink()) throw new Error('Artifact folder is a symbolic link');
-    const realDir = await realpath(dir);
-    let cur = dir;
-    for (const part of parts) {
-      cur = join(cur, part);
-      const st = await lstat(cur).catch(() => undefined);
-      if (!st) break; // not created yet; parents checked so far are real
-      if (st.isSymbolicLink()) throw new Error('Artifact path contains a symbolic link');
+  /** Path of a file of the current version, or of version `version` (`.versions/<n>/…`), inside the folder. */
+  private async filePath(id: string, rel: string, version?: number): Promise<string> {
+    if (!isSafeArtifactPath(rel)) throw new ArtifactError(`"${rel}" is not a valid file path inside an artifact.`, 'invalid_input', 'bad_path');
+    const parts = rel.split('/');
+    return this.guard(() => resolveInside(this.dirOf(id), version === undefined ? parts : [VERSIONS_DIR, String(version), ...parts]));
+  }
+
+  /** Path errors (a symbolic link, an escape) keep their message; nothing else is wrapped. */
+  private async guard<T>(fn: () => Promise<T>): Promise<T> {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e instanceof ArtifactPathError) throw new Error(e.message, { cause: e });
+      throw e;
     }
-    const parentReal = await realpath(dirname(file)).catch(() => undefined);
-    if (parentReal) {
-      const r = relative(realDir, parentReal);
-      if (r.startsWith('..') || isAbsolute(r)) throw new Error('Artifact path escapes its folder');
-    }
-    return file;
   }
 
   /* -------------------------------------------------------------- index */
@@ -336,6 +459,32 @@ export class ArtifactStore {
     return ArtifactMeta.parse(fromJson(r.meta));
   }
 
+  /** `artifact.json`: the meta (never `brokenImport`, which is derived) plus oIDE's internal notes. */
+  private async writeMeta(dir: string, meta: ArtifactMeta, internal?: Internal | null): Promise<void> {
+    const { brokenImport: _derived, ...stored } = meta;
+    void _derived;
+    const keep = internal === undefined ? await this.readInternal(dir) : (internal ?? {});
+    const out: Record<string, unknown> = { ...stored };
+    if (keep.autoTitle || keep.autoKind) out[INTERNAL_KEY] = { ...(keep.autoTitle ? { autoTitle: true } : {}), ...(keep.autoKind ? { autoKind: true } : {}) };
+    await writeAtomic(join(dir, 'artifact.json'), JSON.stringify(out, null, 2) + '\n');
+  }
+
+  private async readInternal(dir: string): Promise<Internal> {
+    try {
+      const raw = JSON.parse(await readFile(join(dir, 'artifact.json'), 'utf8')) as Record<string, unknown>;
+      const r = InternalSchema.safeParse(raw[INTERNAL_KEY]);
+      return r.success ? r.data : {};
+    } catch {
+      return {};
+    }
+  }
+
+  /** Files at the root of an artifact folder (its current version), never following links. */
+  private async rootFiles(dir: string): Promise<WalkedFile[]> {
+    if ((await lstat(dir)).isSymbolicLink()) throw new Error('Artifact folder is a symbolic link');
+    return walkFolder(dir, { artifactRoot: true, unsafe: 'skip', max: ARTIFACT_LIMITS.files * 4 });
+  }
+
   /** Re-index artifacts found on disk: app-data plus each project's `.oide/artifacts/` (teammates commit them). */
   async rescan(projects: Array<{ id: string; path: string }> = []): Promise<number> {
     let found = 0;
@@ -351,18 +500,24 @@ export class ArtifactStore {
         try {
           const parsed = ArtifactMeta.safeParse(JSON.parse(await readFile(join(dir, 'artifact.json'), 'utf8')));
           if (!parsed.success) continue;
-          // Never trust `entry` from disk (a cloned repo could point it outside the folder): one of the fixed
-          // names. `brokenImport` is derived when read, so a value on disk is dropped.
+          // `brokenImport` is derived when read, so a value on disk is dropped.
           const { brokenImport: _derived, ...onDisk } = parsed.data;
           void _derived;
-          let entry = entryFileOf(onDisk.kind, onDisk.entry);
-          // A design whose entry file is missing but has the other one (an interrupted format switch,
-          // or a teammate's oIDE that wrote the other format): use the file that is there.
-          if (onDisk.kind === 'design' && !existsSync(join(dir, entry)) && existsSync(join(dir, otherDesignEntry(entry)))) entry = otherDesignEntry(entry);
-          const meta: ArtifactMeta = { ...onDisk, entry, slug: name, location, projectId: location === 'repo' ? projectId : parsed.data.projectId };
           // An id already indexed at a different folder keeps its folder; a copied artifact.json can't hijack it.
-          const sameId = this.d.db.prepare('SELECT dir_key FROM artifacts WHERE id = ?').get(meta.id) as Row | undefined;
-          if (sameId && String(sameId.dir_key) !== pathKey(dir) && existsSync(join(this.dirOf(meta.id), 'artifact.json'))) continue;
+          const sameId = this.d.db.prepare('SELECT dir_key FROM artifacts WHERE id = ?').get(onDisk.id) as Row | undefined;
+          if (sameId && String(sameId.dir_key) !== pathKey(dir) && existsSync(join(this.dirOf(onDisk.id), 'artifact.json'))) continue;
+          if ((await lstat(dir)).isSymbolicLink()) continue;
+          // An interrupted write: the snapshot is complete, the root may not be.
+          const marker = join(dir, VERSIONS_DIR, SYNC_MARKER);
+          // (Not while this store is writing it: the marker is then the write in progress.)
+          if (onDisk.version > 0 && existsSync(marker) && !this.locks.has(onDisk.id)) {
+            await this.syncRoot(dir, onDisk.version)
+              .then(() => rm(marker, { force: true }))
+              .catch(() => undefined);
+          }
+          const files = onDisk.version > 0 ? await this.rootFiles(dir) : [];
+          const entry = onDisk.version > 0 ? this.entryOnDisk(onDisk, files) : isSafeArtifactPath(onDisk.entry) ? onDisk.entry : ENTRY_FILES[onDisk.kind];
+          const meta: ArtifactMeta = { ...onDisk, entry, fileCount: files.length, slug: name, location, projectId: location === 'repo' ? projectId : parsed.data.projectId };
           const clash = this.d.db.prepare('SELECT id FROM artifacts WHERE dir_key = ? AND id != ?').get(pathKey(dir), meta.id) as Row | undefined;
           if (clash) this.d.db.prepare('DELETE FROM artifacts WHERE id = ?').run(String(clash.id));
           this.index(meta, dir);
@@ -380,6 +535,21 @@ export class ArtifactStore {
     }
     this.onChange?.();
     return found;
+  }
+
+  /**
+   * Never trust `entry` from disk blindly (a cloned repo could point it anywhere): a safe relative
+   * path of a real file in the folder, else the fixed name for the kind (or the other design format,
+   * after an interrupted switch), else the default entry of the files that are there.
+   */
+  private entryOnDisk(meta: ArtifactMeta, files: WalkedFile[]): string {
+    const paths = files.map((f) => f.path);
+    const has = (p: string) => paths.includes(p);
+    if (isSafeArtifactPath(meta.entry) && has(meta.entry)) return meta.entry;
+    const fixed = entryFileOf(meta.kind, meta.entry);
+    if (has(fixed)) return fixed;
+    if (meta.kind === 'design' && has(otherDesignEntry(fixed))) return otherDesignEntry(fixed);
+    return pickEntry(meta.kind, paths) ?? fixed;
   }
 
   /* --------------------------------------------------------------- read */
@@ -408,7 +578,7 @@ export class ArtifactStore {
   private async flagBroken(meta: ArtifactMeta): Promise<ArtifactMeta> {
     if (!mayBeBrokenImport(meta)) return meta;
     try {
-      const path = await this.contentPath(meta.id, meta);
+      const path = await this.filePath(meta.id, safeEntry(meta));
       if ((await stat(path)).size > LEGACY_IMPORT_STUB_MAX_BYTES) return meta;
       return withBrokenFlag(meta, await readFile(path, 'utf8'));
     } catch {
@@ -416,17 +586,21 @@ export class ArtifactStore {
     }
   }
 
+  /** Meta and the entry file's text. Version 0 (nothing retrieved yet) has no files: content is empty. */
   async read(id: string, agentId?: string): Promise<ArtifactContent> {
     let meta = this.metaFromIndex(id);
-    let content: string;
-    try {
-      content = await readFile(await this.contentPath(id, meta), 'utf8');
-    } catch (e) {
-      // A design whose entry is missing but has the other format's file (an interrupted switch).
-      if (meta.kind !== 'design' || (e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
-      const other = otherDesignEntry(entryFileOf('design', meta.entry));
-      content = await readFile(await this.contentPath(id, meta, undefined, other), 'utf8');
-      meta = { ...meta, entry: other };
+    let content = '';
+    if (meta.version > 0) {
+      try {
+        content = await readFile(await this.filePath(id, safeEntry(meta)), 'utf8');
+      } catch (e) {
+        // A single-file design whose entry is missing but has the other format's file (an interrupted switch).
+        const entry = safeEntry(meta);
+        if (meta.kind !== 'design' || (e as NodeJS.ErrnoException).code !== 'ENOENT' || (entry !== HTML_DESIGN_ENTRY && entry !== REACT_DESIGN_ENTRY)) throw e;
+        const other = otherDesignEntry(entry);
+        content = await readFile(await this.filePath(id, other), 'utf8');
+        meta = { ...meta, entry: other };
+      }
     }
     if (agentId) this.recordUse(id, agentId, 'read');
     return { meta: withBrokenFlag(meta, content), content };
@@ -442,26 +616,35 @@ export class ArtifactStore {
     return { meta, content, uses: this.uses(id), versions: await this.versions(id) };
   }
 
-  async versions(id: string): Promise<ArtifactVersion[]> {
+  private async storedVersions(id: string): Promise<StoredVersion[]> {
     try {
       const raw = JSON.parse(await readFile(join(this.dirOf(id), VERSIONS_DIR, 'versions.json'), 'utf8'));
       const r = VersionsFile.safeParse(raw);
-      return r.success ? [...r.data].sort((a, b) => b.version - a.version) : [];
+      return r.success ? r.data : [];
     } catch {
       return [];
     }
   }
 
-  /** Content of an older version (History). A design's version is HTML or React (`App.jsx`). */
+  async versions(id: string): Promise<ArtifactVersion[]> {
+    return (await this.storedVersions(id)).map((v) => ArtifactVersion.parse(v)).sort((a, b) => b.version - a.version);
+  }
+
+  /** The entry file's text of an older version (History). */
   async readVersion(id: string, version: number): Promise<string> {
     const meta = this.metaFromIndex(id);
     if (!Number.isInteger(version) || version < 1) throw new Error('Bad version');
-    const current = entryFileOf(meta.kind, meta.entry);
-    const entries = meta.kind === 'design' ? [current, current === REACT_DESIGN_ENTRY ? HTML_DESIGN_ENTRY : REACT_DESIGN_ENTRY] : [current];
+    const stored = (await this.storedVersions(id)).find((v) => v.version === version)?.entry;
+    const current = safeEntry(meta);
+    const candidates = [
+      ...(stored && isSafeArtifactPath(stored) ? [stored] : []),
+      current,
+      ...(meta.kind === 'design' ? [HTML_DESIGN_ENTRY, REACT_DESIGN_ENTRY] : [ENTRY_FILES[meta.kind]]),
+    ];
     let last: unknown;
-    for (const entry of entries) {
+    for (const entry of [...new Set(candidates)]) {
       try {
-        return await readFile(await this.contentPath(id, meta, version, entry), 'utf8');
+        return await readFile(await this.filePath(id, entry, version), 'utf8');
       } catch (e) {
         last = e;
       }
@@ -469,18 +652,59 @@ export class ArtifactStore {
     throw last;
   }
 
+  /** Files of the current version, or of `version`, sorted by path. `text` decides how `readFile` returns each. */
+  async files(id: string, version?: number): Promise<ArtifactFile[]> {
+    const meta = this.metaFromIndex(id);
+    if (version !== undefined && (!Number.isInteger(version) || version < 1 || version > meta.version)) throw new Error('Bad version');
+    if (meta.version === 0) return [];
+    const dir = this.dirOf(id);
+    const base = version === undefined ? dir : await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(version)]));
+    const list = version === undefined ? await this.rootFiles(dir) : await walkFolder(base, { unsafe: 'skip' });
+    const out: ArtifactFile[] = [];
+    for (const f of list.slice(0, ARTIFACT_LIMITS.files * 4)) out.push({ path: f.path, size: f.size, text: await this.sniffText(f) });
+    return out.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  }
+
+  /** Text by extension, then by the first 64 KB (a big file is not read whole to list it). */
+  private async sniffText(f: WalkedFile): Promise<boolean> {
+    if (!isTextFile(f.path, new Uint8Array())) return false;
+    if (f.size === 0) return true;
+    const h = await open(f.abs, 'r');
+    try {
+      const buf = Buffer.alloc(Math.min(SNIFF_BYTES, f.size));
+      const { bytesRead } = await h.read(buf, 0, buf.length, 0);
+      return isTextFile(f.path, buf.subarray(0, bytesRead), bytesRead < f.size);
+    } finally {
+      await h.close();
+    }
+  }
+
+  /** One file of the current version, or of `version`: UTF-8 text, or base64 for anything else. */
+  async readFile(id: string, path: string, version?: number): Promise<ArtifactFileContent> {
+    const meta = this.metaFromIndex(id);
+    if (meta.version === 0) throw new ArtifactError(`${meta.title} has no files yet.`, 'invalid_input', 'no_content');
+    if (version !== undefined && (!Number.isInteger(version) || version < 1 || version > meta.version)) throw new Error('Bad version');
+    const file = await this.filePath(id, path, version);
+    const st = await lstat(file).catch(() => undefined);
+    if (!st?.isFile()) throw new Error(`Unknown artifact file ${path}`);
+    if (st.size > ARTIFACT_LIMITS.fileBytes) throw new ArtifactError(`${path} is larger than ${mb(ARTIFACT_LIMITS.fileBytes)}.`, 'invalid_input', 'too_large');
+    const bytes = await readFile(file);
+    return isTextFile(path, bytes) ? { encoding: 'utf8', data: bytes.toString('utf8') } : { encoding: 'base64', data: bytes.toString('base64') };
+  }
+
   /* -------------------------------------------------------------- write */
 
-  async create(input: CreateArtifactInput, author = 'user'): Promise<ArtifactMeta> {
+  /** A new folder (unique slug) with `artifact.json` at version 0 and no files; not indexed yet. */
+  private async newFolder(input: { title: string; kind: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data'; importedFrom?: string; entry?: string }, internal?: Internal): Promise<{ dir: string; meta: ArtifactMeta }> {
     const location = input.location ?? 'app-data';
-    const title = input.title.trim() || 'Untitled';
+    const title = cleanTitle(input.title) ?? 'Untitled';
     const root = this.root(location, input.projectId);
     await mkdir(root, { recursive: true });
     const base = slugifyTitle(title);
     let slug = base;
     for (let n = 2; existsSync(join(root, slug)); n++) slug = `${base}-${n}`;
     const dir = join(root, slug);
-    await mkdir(join(dir, VERSIONS_DIR, '1'), { recursive: true });
+    await mkdir(join(dir, VERSIONS_DIR), { recursive: true });
     const ts = this.now();
     const meta = ArtifactMeta.parse({
       id: newId(),
@@ -489,25 +713,69 @@ export class ArtifactStore {
       kind: input.kind,
       projectId: input.projectId,
       location,
-      version: 1,
-      entry: input.kind === 'design' && input.content !== undefined ? designEntryFor(input.content) : ENTRY_FILES[input.kind],
+      version: 0,
+      entry: input.entry ?? ENTRY_FILES[input.kind],
+      fileCount: 0,
       createdAt: ts,
       updatedAt: ts,
       importedFrom: input.importedFrom,
     });
+    await writeAtomic(join(dir, VERSIONS_DIR, 'versions.json'), '[]\n');
+    await this.writeMeta(dir, meta, internal ?? null);
+    return { dir, meta };
+  }
+
+  async create(input: CreateArtifactInput, author = 'user'): Promise<ArtifactMeta> {
+    const title = cleanTitle(input.title) ?? 'Untitled';
     let content = input.content ?? defaultContent(input.kind, title);
-    if (input.kind === 'doc') content = withFrontMatter(content, { title, importedFrom: meta.importedFrom });
+    if (input.kind === 'doc') content = withFrontMatter(content, { title, ...(input.importedFrom ? { importedFrom: input.importedFrom } : {}) });
     validateContent(input.kind, content);
-    await writeAtomic(join(dir, meta.entry), content);
-    await writeFile(join(dir, VERSIONS_DIR, '1', meta.entry), content, 'utf8');
-    await writeAtomic(join(dir, VERSIONS_DIR, 'versions.json'), JSON.stringify([{ version: 1, ts, author, note: 'Created' }], null, 2) + '\n');
-    await writeAtomic(join(dir, 'artifact.json'), JSON.stringify(meta, null, 2) + '\n');
+    const entry = input.kind === 'design' && input.content !== undefined ? designEntryFor(input.content) : ENTRY_FILES[input.kind];
+    const bytes = Buffer.from(content, 'utf8');
+    const plan: Plan = new Map([[foldPath(entry), { path: entry, size: bytes.length, bytes }]]);
+    return this.createFromPlan({ ...input, title }, plan, entry, author);
+  }
+
+  /** A new artifact whose first version is `plan` (checked before anything is created). */
+  private async createFromPlan(
+    input: { title: string; kind: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data'; importedFrom?: string },
+    plan: Plan,
+    entry: string,
+    author: string,
+  ): Promise<ArtifactMeta> {
+    checkPlan(plan);
+    const exact = await checkEntry(input.kind, entry, plan);
+    const { dir, meta: draft } = await this.newFolder({ ...input, entry: exact });
+    try {
+      this.index(draft, dir);
+      return await this.withLock(draft.id, () => this.commit(draft, plan, { entry: exact, author, note: 'Created', change: 'created' }));
+    } catch (e) {
+      await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+      this.d.db.prepare('DELETE FROM artifacts WHERE id = ?').run(draft.id);
+      throw e;
+    }
+  }
+
+  /**
+   * A linked artifact at version 0, waiting for an agent to retrieve its files (ADR 0014). The title
+   * and kind given here are the user's; when they gave none, oIDE's guesses may be replaced by the
+   * first retrieval.
+   */
+  async createLinked(input: { url: string; title?: string; kind?: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data' }, author = 'user'): Promise<ArtifactMeta> {
+    const importedFrom = claudeImportUrl(input.url);
+    const title = cleanTitle(input.title);
+    const kind = input.kind ?? 'design';
+    const internal: Internal = { ...(title ? {} : { autoTitle: true }), ...(input.kind ? {} : { autoKind: true }) };
+    const { dir, meta } = await this.newFolder(
+      { title: title ?? 'Imported from claude.ai', kind, importedFrom, ...(input.projectId ? { projectId: input.projectId } : {}), ...(input.location ? { location: input.location } : {}) },
+      internal,
+    );
     this.index(meta, dir);
-    this.onChange?.(meta.id, { change: 'created', version: 1, author });
+    this.onChange?.(meta.id, { change: 'created', version: 0, author });
     return meta;
   }
 
-  /** Save new content as the next numbered version. */
+  /** Save new content of the entry file as the next numbered version (the other files stay). */
   async save(id: string, content: string, opts: SaveOptions = {}): Promise<ArtifactMeta> {
     return this.withLock(id, async () => {
       const cur = this.metaFromIndex(id);
@@ -515,34 +783,210 @@ export class ArtifactStore {
         throw new ArtifactError(`${cur.title} changed since you opened it (now v${cur.version}, you started from v${opts.baseVersion}).`, 'conflict');
       }
       validateContent(cur.kind, content);
-      const dir = this.dirOf(id);
-      const ts = this.now();
-      const version = cur.version + 1;
-      // A design follows its content: React source is stored as App.jsx, HTML as index.html.
-      const entry = cur.kind === 'design' ? designEntryFor(content) : entryFileOf(cur.kind);
-      const oldEntry = entryFileOf(cur.kind, cur.entry);
-      const meta = ArtifactMeta.parse({ ...cur, entry, version, updatedAt: ts });
-      await this.contentPath(id, meta, version); // refuse symlinked .versions before creating anything
-      await mkdir(join(dir, VERSIONS_DIR, String(version)), { recursive: true });
-      await writeFile(await this.contentPath(id, meta, version), content, 'utf8');
-      await writeAtomic(await this.contentPath(id, meta), content);
-      const versions = await this.versions(id);
-      versions.push(ArtifactVersion.parse({ version, ts, author: opts.author ?? 'user', note: opts.note }));
-      versions.sort((a, b) => a.version - b.version);
-      await writeAtomic(join(dir, VERSIONS_DIR, 'versions.json'), JSON.stringify(versions, null, 2) + '\n');
-      await writeAtomic(join(dir, 'artifact.json'), JSON.stringify(meta, null, 2) + '\n');
-      this.index(meta, dir);
-      // Only once meta and index point at the new entry: the other format's file goes, so the preview
-      // never serves a stale page (a failure before this leaves both files, never neither).
-      if (entry !== oldEntry) await rm(await this.contentPath(id, cur), { force: true }).catch(() => undefined);
-      this.onChange?.(id, { change: 'saved', version, author: opts.author ?? 'user' });
-      return meta;
+      const plan = await this.currentPlan(cur);
+      let entry = safeEntry(cur);
+      // A single-file design follows its content: React source is stored as App.jsx, HTML as index.html.
+      const singleDesign = cur.kind === 'design' && [...plan.values()].every((f) => f.path === HTML_DESIGN_ENTRY || f.path === REACT_DESIGN_ENTRY);
+      if (singleDesign) {
+        plan.delete(foldPath(HTML_DESIGN_ENTRY));
+        plan.delete(foldPath(REACT_DESIGN_ENTRY));
+        entry = designEntryFor(content);
+      } else if (cur.version === 0 && !plan.size) entry = cur.kind === 'design' ? designEntryFor(content) : entryFileOf(cur.kind);
+      const bytes = Buffer.from(content, 'utf8');
+      plan.set(foldPath(entry), { path: entry, size: bytes.length, bytes });
+      return this.commit(cur, plan, { entry, author: opts.author ?? 'user', ...(opts.note ? { note: opts.note } : {}) });
     });
   }
 
   /**
+   * Write and delete files as one new version (the viewer's Files panel, the MCP `artifacts_write`).
+   * `entry` moves the entry; deleting the entry needs a new one. `baseVersion` refuses with `conflict`.
+   */
+  async writeFiles(id: string, change: WriteFilesChange): Promise<ArtifactMeta> {
+    const decoded = (change.files ?? []).map((f) => ({ path: f.path, bytes: f.encoding === 'base64' ? decodeBase64(f.data, f.path) : Buffer.from(f.data, 'utf8') }));
+    return this.withLock(id, async () => {
+      const cur = this.metaFromIndex(id);
+      if (change.baseVersion !== undefined && change.baseVersion !== cur.version) {
+        throw new ArtifactError(`${cur.title} changed since you opened it (now v${cur.version}, you started from v${change.baseVersion}).`, 'conflict');
+      }
+      if (!decoded.length && !change.deletes?.length && (change.entry === undefined || change.entry === cur.entry)) {
+        throw new ArtifactError('Nothing to write: give files, deletes or a new entry.', 'invalid_input', 'no_content');
+      }
+      const plan = await this.currentPlan(cur);
+      for (const p of change.deletes ?? []) {
+        if (!isSafeArtifactPath(p)) throw new ArtifactError(`"${p}" is not a valid file path inside an artifact.`, 'invalid_input', 'bad_path');
+        if (!plan.delete(foldPath(p))) throw new ArtifactError(`${p} is not one of the artifact's files.`, 'invalid_input', 'bad_path');
+      }
+      const seen = new Set<string>();
+      for (const f of decoded) {
+        if (!isSafeArtifactPath(f.path)) throw new ArtifactError(`"${f.path}" is not a valid file path inside an artifact.`, 'invalid_input', 'bad_path');
+        const key = foldPath(f.path);
+        if (seen.has(key)) throw new ArtifactError(`${f.path} is given twice.`, 'invalid_input', 'bad_path');
+        seen.add(key);
+        plan.set(key, { path: f.path, size: f.bytes.length, bytes: f.bytes });
+      }
+      let entry = change.entry;
+      if (entry === undefined) {
+        const cur0 = safeEntry(cur);
+        entry = plan.has(foldPath(cur0)) ? cur0 : cur.version === 0 ? pickEntry(cur.kind, [...plan.values()].map((f) => f.path)) : undefined;
+        if (!entry) throw new ArtifactError(`The entry file ${cur0} would be gone: choose another entry.`, 'invalid_input', 'no_content');
+      }
+      return this.commit(cur, plan, { entry, author: change.author ?? 'user', ...(change.note ? { note: change.note } : {}) });
+    });
+  }
+
+  /**
+   * Replace every file with the files under `srcDir` (a retrieval's staging folder, outside the
+   * artifact) as one new version, and record the retrieval as finished. On the first retrieval the
+   * agent's title and kind apply when the user gave none. Nothing changes when it is refused.
+   */
+  async commitFolder(id: string, srcDir: string, o: CommitFolderOptions): Promise<ArtifactMeta> {
+    return this.withLock(id, async () => {
+      const cur = this.metaFromIndex(id);
+      const internal = await this.readInternal(this.dirOf(id));
+      const files = await this.guard(() => walkFolder(srcDir, { unsafe: 'throw' })).catch((e: Error) => {
+        throw new ArtifactError(e.message, 'invalid_input', 'bad_path');
+      });
+      if (!files.length) throw new ArtifactError('No files were handed over.', 'invalid_input', 'no_content');
+      const plan = this.planOf(files);
+      const paths = files.map((f) => f.path);
+      let kind = cur.kind;
+      if (internal.autoKind) kind = o.kind ?? (o.entry ? kindOfEntry(o.entry) : undefined) ?? (pickEntry(cur.kind, paths) ? cur.kind : (['design', 'doc', 'whiteboard'] as const).find((k) => pickEntry(k, paths))) ?? cur.kind;
+      const entry = o.entry ?? pickEntry(kind, paths);
+      if (!entry) throw new ArtifactError(`None of the files can open the ${kind}: ${kind === 'design' ? 'no HTML page or React component' : kind === 'doc' ? 'no Markdown file' : 'no Excalidraw file'}.`, 'invalid_input', 'wrong_kind');
+      const title = internal.autoTitle ? (cleanTitle(o.title) ?? cur.title) : cur.title;
+      return this.commit(cur, plan, { entry, author: o.author, note: o.note, kind, title, patch: { retrieval: o.retrieval }, internal: null });
+    });
+  }
+
+  /** Record the retrieval state (no new version). */
+  async setRetrieval(id: string, retrieval: ArtifactRetrieval | undefined): Promise<ArtifactMeta> {
+    return this.withLock(id, async () => {
+      const cur = this.metaFromIndex(id);
+      const { retrieval: _old, ...rest } = cur;
+      void _old;
+      const meta = ArtifactMeta.parse({ ...rest, ...(retrieval ? { retrieval } : {}), updatedAt: this.now() });
+      const dir = this.dirOf(id);
+      await this.writeMeta(dir, meta);
+      this.index(meta, dir);
+      this.onChange?.(id, { change: 'retrieval', version: meta.version });
+      return this.flagBroken(meta);
+    });
+  }
+
+  /** The current version's files as a plan whose entries are all unchanged. */
+  private async currentPlan(cur: ArtifactMeta): Promise<Plan> {
+    if (cur.version === 0) return new Map();
+    const plan = this.planOf(await this.rootFiles(this.dirOf(cur.id)));
+    for (const f of plan.values()) f.unchanged = true;
+    return plan;
+  }
+
+  private planOf(files: WalkedFile[]): Plan {
+    const plan: Plan = new Map();
+    for (const f of files) {
+      const key = foldPath(f.path);
+      const other = plan.get(key)?.path;
+      if (other !== undefined) throw new ArtifactError(other === f.path ? `Two files are named ${f.path}.` : `${f.path} and ${other} differ only in case.`, 'invalid_input', 'bad_path');
+      plan.set(key, { path: f.path, size: f.size, from: f.abs });
+    }
+    return plan;
+  }
+
+  /**
+   * Write `plan` as version `cur.version + 1`: the full snapshot first (`.versions/<n>/`, renamed into
+   * place when complete), then versions.json, then `artifact.json` and the index, then the root is
+   * brought in line (a marker lets rescan finish that after a crash). Runs under the artifact's lock.
+   */
+  private async commit(
+    cur: ArtifactMeta,
+    plan: Plan,
+    o: { entry: string; author: string; note?: string; kind?: ArtifactKind; title?: string; patch?: Partial<ArtifactMeta>; internal?: Internal | null; change?: 'created' | 'saved' },
+  ): Promise<ArtifactMeta> {
+    const id = cur.id;
+    const kind = o.kind ?? cur.kind;
+    checkPlan(plan);
+    const entry = await checkEntry(kind, o.entry, plan);
+    const dir = this.dirOf(id);
+    const version = cur.version + 1;
+    const ts = this.now();
+    // Every file the root will get must resolve inside the folder (no link on the way) before anything is written.
+    for (const f of plan.values()) if (!f.unchanged) await this.guard(() => resolveInside(dir, f.path.split('/')));
+    const versionsDir = await this.guard(() => resolveInside(dir, [VERSIONS_DIR]));
+    await mkdir(versionsDir, { recursive: true });
+    const final = await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(version)]));
+    // A folder for this number can only be a leftover of an attempt that never committed.
+    await rm(final, { recursive: true, force: true });
+    const tmp = join(versionsDir, `.tmp-${version}-${process.pid}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(tmp);
+    try {
+      for (const f of plan.values()) {
+        const dest = join(tmp, ...f.path.split('/'));
+        await mkdir(dirname(dest), { recursive: true });
+        if (f.bytes) await writeFile(dest, f.bytes);
+        else await copyFile(f.from!, dest, constants.COPYFILE_FICLONE);
+      }
+      await rename(tmp, final);
+    } catch (e) {
+      await rm(tmp, { recursive: true, force: true }).catch(() => undefined);
+      throw e;
+    }
+    const versions = (await this.storedVersions(id)).filter((v) => v.version < version);
+    versions.push(StoredVersion.parse({ version, ts, author: o.author, ...(o.note ? { note: o.note } : {}), entry }));
+    versions.sort((a, b) => a.version - b.version);
+    await writeAtomic(join(versionsDir, 'versions.json'), JSON.stringify(versions, null, 2) + '\n');
+    await writeFile(join(versionsDir, SYNC_MARKER), String(version));
+    const { brokenImport: _derived, ...base } = cur;
+    void _derived;
+    const meta = ArtifactMeta.parse({ ...base, ...o.patch, kind, title: o.title ?? cur.title, entry, version, fileCount: plan.size, updatedAt: ts });
+    await this.writeMeta(dir, meta, o.internal);
+    this.index(meta, dir);
+    await this.syncRoot(dir, version, plan);
+    await rm(join(versionsDir, SYNC_MARKER), { force: true });
+    this.onChange?.(id, { change: o.change ?? 'saved', version, author: o.author });
+    return meta;
+  }
+
+  /**
+   * Make the folder's root hold exactly the files of `.versions/<version>/`: files that go (or change
+   * case) are deleted first, so a case-insensitive file system never loses a new file; then new and
+   * changed files are copied in atomically. `plan` says which files are already there unchanged.
+   */
+  private async syncRoot(dir: string, version: number, plan?: Plan): Promise<void> {
+    const snap = await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(version)]));
+    const want = plan ?? this.planOf(await walkFolder(snap, { unsafe: 'skip' }));
+    const have = await this.rootFiles(dir);
+    const touched = new Set<string>();
+    for (const h of have) {
+      const w = want.get(foldPath(h.path));
+      if (w && w.path === h.path) continue;
+      await rm(h.abs, { force: true });
+      touched.add(dirname(h.abs));
+    }
+    for (const w of want.values()) {
+      if (w.unchanged && plan) continue;
+      const parts = w.path.split('/');
+      const dest = await this.guard(() => resolveInside(dir, parts));
+      await mkdir(dirname(dest), { recursive: true });
+      await copyAtomic(join(snap, ...parts), dest);
+    }
+    // Folders emptied by deletions go too (deepest first).
+    const root = dir.replace(/[\\/]+$/, '');
+    for (const d of [...touched].sort((a, b) => b.length - a.length)) {
+      for (let cur = d; cur.length > root.length && cur.startsWith(root); cur = dirname(cur)) {
+        try {
+          await rmdir(cur);
+        } catch {
+          break;
+        }
+      }
+    }
+  }
+
+  /**
    * New title. The folder (slug) stays as it is, so repo links, git history and agents that hold the
-   * id keep working; only `artifact.json` and the index change. Does not create a version.
+   * id keep working; only `artifact.json` and the index change. Does not create a version. A title
+   * the user gives is theirs: a later retrieval no longer replaces it.
    */
   async rename(id: string, title: string): Promise<ArtifactMeta> {
     const next = title.replace(/\s+/g, ' ').trim();
@@ -550,10 +994,12 @@ export class ArtifactStore {
     if (next.length > MAX_TITLE_LENGTH) throw new ArtifactError(`Titles can be at most ${MAX_TITLE_LENGTH} characters.`, 'invalid_input');
     return this.withLock(id, async () => {
       const cur = this.metaFromIndex(id);
-      if (cur.title === next) return this.flagBroken(cur);
+      const dir = this.dirOf(id);
+      const internal = await this.readInternal(dir);
+      if (cur.title === next && !internal.autoTitle) return this.flagBroken(cur);
       const meta = ArtifactMeta.parse({ ...cur, title: next, updatedAt: this.now() });
-      await writeAtomic(join(this.dirOf(id), 'artifact.json'), JSON.stringify(meta, null, 2) + '\n');
-      this.index(meta, this.dirOf(id));
+      await this.writeMeta(dir, meta, { ...internal, autoTitle: false });
+      this.index(meta, dir);
       this.onChange?.(id, { change: 'renamed', version: meta.version });
       return this.flagBroken(meta);
     });
@@ -578,11 +1024,11 @@ export class ArtifactStore {
   /* ------------------------------------------------------------- import */
 
   /**
-   * "Import from claude.ai" with a pasted link. claude.ai has no public API for artifact content, and
+   * "Import from claude.ai" with pasted content. claude.ai has no public API for artifact content, and
    * oIDE never uses the user's claude.ai sign-in, so main cannot fetch it: the user pastes the content
    * they copied on claude.ai (`content`), and the link is kept as `importedFrom` (Open in claude.ai).
-   * The kind follows the content when none is given. Everything is checked before anything is
-   * created: a link alone, a link that is not an artifact link, or content that does not fit is refused.
+   * A link alone goes through `createLinked` and an agent instead (ADR 0014). The kind follows the
+   * content when none is given. Everything is checked before anything is created.
    */
   async importUrl(
     input: { url?: string; content?: string; title?: string; kind?: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data' },
@@ -625,6 +1071,56 @@ export class ArtifactStore {
     return this.create({ title, kind, content, projectId: input.projectId, location: input.location, ...(importedFrom ? { importedFrom } : {}) }, author);
   }
 
+  /**
+   * New artifact from files on disk (ADR 0014): picked files (each at the top, by its name) or a
+   * picked folder (its files, recursively, keeping relative paths; links and `.git` are skipped).
+   * One picked text file of a known type is imported as before (`importFile`). The kind and entry
+   * follow the files unless given. Limits and names are checked before anything is created.
+   */
+  async importFiles(
+    input: { filePaths?: string[]; folderPath?: string; entry?: string; url?: string; title?: string; kind?: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data' },
+    author = 'user',
+  ): Promise<ArtifactMeta> {
+    const importedFrom = input.url ? claudeImportUrl(input.url) : undefined;
+    const where = { ...(input.projectId ? { projectId: input.projectId } : {}), ...(input.location ? { location: input.location } : {}) };
+    const filePaths = input.filePaths ?? [];
+    if (!input.folderPath && filePaths.length === 1 && !input.entry && inferKind(filePaths[0]!)) {
+      return this.importFile({ filePath: filePaths[0]!, ...(input.url ? { url: input.url } : {}), ...(input.title ? { title: input.title } : {}), ...(input.kind ? { kind: input.kind } : {}), ...where }, author);
+    }
+    let files: WalkedFile[];
+    if (input.folderPath) {
+      const st = await lstat(input.folderPath);
+      if (!st.isDirectory()) throw new ArtifactError('Pick a folder.', 'invalid_input', 'no_content');
+      files = await walkFolder(input.folderPath, { skipGit: true, unsafe: 'throw', max: ARTIFACT_LIMITS.files + 1 }).catch((e: Error) => {
+        throw e instanceof ArtifactPathError ? new ArtifactError(e.message, 'invalid_input', 'bad_path') : e;
+      });
+    } else {
+      files = [];
+      for (const p of filePaths) {
+        const st = await lstat(p);
+        if (st.isSymbolicLink() || !st.isFile()) throw new ArtifactError(`${basename(p)} is not a regular file.`, 'invalid_input', 'bad_path');
+        files.push({ path: basename(p), abs: p, size: st.size });
+      }
+    }
+    if (!files.length) throw new ArtifactError('There are no files to import.', 'invalid_input', 'no_content');
+    const plan = this.planOf(files);
+    checkPlan(plan);
+    const paths = files.map((f) => f.path);
+    let kind = input.kind ?? (input.entry ? kindOfEntry(input.entry) : undefined);
+    if (!kind) kind = (['design', 'doc', 'whiteboard'] as const).find((k) => pickEntry(k, paths));
+    if (!kind) throw new ArtifactError('None of the files can open as an artifact: add an HTML page, a React component, a Markdown file or an Excalidraw file.', 'invalid_input', 'wrong_kind');
+    const entry = input.entry ?? pickEntry(kind, paths);
+    if (!entry) throw new ArtifactError(`None of the files can open the ${kind}.`, 'invalid_input', 'wrong_kind');
+    const entryFile = plan.get(foldPath(entry));
+    let title = cleanTitle(input.title);
+    if (!title && entryFile && kind !== 'whiteboard' && entryFile.size <= 256 * 1024) {
+      const bytes = await bytesOf(entryFile);
+      if (isTextBytes(bytes)) title = titleFromContent(kind, bytes.toString('utf8'));
+    }
+    title ??= input.folderPath ? basename(input.folderPath) : basename(entry, extname(entry));
+    return this.createFromPlan({ title, kind, ...where, ...(importedFrom ? { importedFrom } : {}) }, plan, entry, author);
+  }
+
   /* --------------------------------------------------------------- uses */
 
   recordUse(artifactId: string, agentId: string, op: ArtifactUse['op'], ts = this.now()): ArtifactUse {
@@ -654,20 +1150,54 @@ export class ArtifactStore {
     return meta;
   }
 
-  /** `create` as called by the MCP tool: author is the agent; the use is logged. */
-  async createForAgent(input: { title: string; kind: ArtifactKind; content?: string; projectId?: string }, agentId: string): Promise<ArtifactMeta> {
-    const meta = await this.create({ ...input, location: 'app-data' }, `agent:${agentId}`);
+  /** `writeFiles` as called by the MCP tool: author is the agent; the use is logged. */
+  async writeFilesForAgent(id: string, change: Omit<WriteFilesChange, 'author' | 'baseVersion'>, agentId: string): Promise<ArtifactMeta> {
+    const meta = await this.writeFiles(id, { ...change, author: `agent:${agentId}` });
+    this.recordUse(id, agentId, 'write');
+    return meta;
+  }
+
+  /** `create` as called by the MCP tool: author is the agent; the use is logged. Files make a multi-file artifact. */
+  async createForAgent(
+    input: { title: string; kind: ArtifactKind; content?: string; projectId?: string; location?: 'repo' | 'app-data'; files?: ArtifactFileWrite[]; entry?: string },
+    agentId: string,
+  ): Promise<ArtifactMeta> {
+    const location = input.location ?? 'app-data';
+    let meta: ArtifactMeta;
+    if (input.files?.length) {
+      const plan: Plan = new Map();
+      for (const f of input.files) {
+        if (!isSafeArtifactPath(f.path)) throw new ArtifactError(`"${f.path}" is not a valid file path inside an artifact.`, 'invalid_input', 'bad_path');
+        const bytes = f.encoding === 'base64' ? decodeBase64(f.data, f.path) : Buffer.from(f.data, 'utf8');
+        const key = foldPath(f.path);
+        if (plan.has(key)) throw new ArtifactError(`${f.path} is given twice.`, 'invalid_input', 'bad_path');
+        plan.set(key, { path: f.path, size: bytes.length, bytes });
+      }
+      if (input.content !== undefined) {
+        const entry = input.entry ?? ENTRY_FILES[input.kind];
+        const bytes = Buffer.from(input.content, 'utf8');
+        plan.set(foldPath(entry), { path: entry, size: bytes.length, bytes });
+      }
+      const entry = input.entry ?? pickEntry(input.kind, [...plan.values()].map((f) => f.path));
+      if (!entry) throw new ArtifactError(`None of the files can open the ${input.kind}: give entry.`, 'invalid_input', 'wrong_kind');
+      meta = await this.createFromPlan({ title: input.title, kind: input.kind, location, ...(input.projectId ? { projectId: input.projectId } : {}) }, plan, entry, `agent:${agentId}`);
+    } else {
+      meta = await this.create({ title: input.title, kind: input.kind, location, ...(input.content !== undefined ? { content: input.content } : {}), ...(input.projectId ? { projectId: input.projectId } : {}) }, `agent:${agentId}`);
+    }
     this.recordUse(meta.id, agentId, 'create');
     return meta;
   }
 
-  /** The backend view the MCP server takes (`list`, `read`, `write`, `create` with agent attribution). */
+  /** The backend view the MCP server takes (`list`, `read`, `write`, `create`, files, with agent attribution). */
   backend(): ArtifactsBackend {
     return {
       list: (filter, agentId) => this.list(filter, agentId),
       read: (id, agentId) => this.read(id, agentId),
       write: (id, content, agentId) => this.write(id, content, agentId),
       create: (input, agentId) => this.createForAgent(input, agentId),
+      files: (id) => this.files(id),
+      readFile: (id, path) => this.readFile(id, path),
+      writeFiles: (id, change, agentId) => this.writeFilesForAgent(id, change, agentId),
     };
   }
 
