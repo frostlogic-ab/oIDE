@@ -94,7 +94,7 @@ describe('merge conflicts go back to the agent (main services, fake-claude)', ()
     const msg = (await userTexts(h, a.id)).find((e) => e.origin === 'oide')!;
     expect(msg.text.split('\n')[0]).toBe('[Sent by oIDE] Merge conflicts: please resolve them in your worktree.');
     expect(msg.text).toContain(`\`main\` @ ${head.slice(0, 7)}`);
-    expect(msg.text).toContain('- committed.txt');
+    expect(msg.text).toContain('- "committed.txt"');
     expect(msg.text).toContain('run `git merge main` inside your own worktree');
     expect(msg.text).toMatch(/no fetch is needed/);
     expect(msg.text).toMatch(/keeping the intent of both sides/);

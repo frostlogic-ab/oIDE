@@ -104,7 +104,7 @@ test('a predicted conflict goes back to the agent, which resolves it; then the m
   const events = (await invoke('agents.events', { agentId: agent!.id, limit: 5000 })) as Array<{ type: string; text?: string; origin?: string }>;
   const sent = events.find((e) => e.type === 'user-text' && e.origin === 'oide');
   expect(sent?.text).toContain(`\`main\` @ ${head.slice(0, 7)}`);
-  expect(sent?.text).toContain('- committed.txt');
+  expect(sent?.text).toContain('- "committed.txt"');
   expect(sent?.text).toContain('run `git merge main` inside your own worktree');
 
   // The fake agent merges main, keeps both sides, commits and submits again.
