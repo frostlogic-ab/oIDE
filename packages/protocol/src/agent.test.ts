@@ -57,6 +57,10 @@ describe('cleanAgentTitle', () => {
     expect(cleanAgentTitle('Bad‮ltr\u0007')).toBe('Bad ltr');
     expect(cleanAgentTitle('Fix⁠ed﻿ lo­gin؜')).toBe('Fixed login');
     expect(cleanAgentTitle('⁠﻿')).toBeUndefined();
+    expect(cleanAgentTitle('Hidden\u{e0041}\u{e0042} textㅤ')).toBe('Hidden text');
+    expect(cleanAgentTitle('`foo` and `bar`')).toBe('`foo` and `bar`');
+    expect(cleanAgentTitle('**Fix** the *bug*')).toBe('**Fix** the *bug*');
+    expect(cleanAgentTitle('"Title: Foo"')).toBe('Foo');
     expect(cleanAgentTitle(`"it's fine'`)).toBe(`"it's fine'`);
   });
 

@@ -154,12 +154,20 @@ export function cleanAgentTitle(raw: string): string | undefined {
   let t = raw
     // eslint-disable-next-line no-control-regex -- stripping control and bidi characters is the point
     .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/g, ' ')
-    .replace(/[\u00ad\u061c\u180e\u2060-\u2064\ufeff]/g, '')
+    .replace(/[\u00ad\u061c\u180e\u2060-\u2064\u3164\ufeff\u{e0000}-\u{e007f}]/gu, '')
     .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/^title:\s*/i, '');
+    .trim();
   const pairs: Record<string, string> = { '"': '"', "'": "'", '`': '`', '\u201c': '\u201d', '\u2018': '\u2019', '*': '*', _: '_' };
-  while (t.length >= 2 && pairs[t[0]!] === t[t.length - 1] && t.slice(1, -1).trim()) t = t.slice(1, -1).trim();
+  for (;;) {
+    const label = t.replace(/^title:\s*/i, '');
+    const inner = t.slice(1, -1);
+    const bold = /^(\*\*|__)(.+)\1$/.exec(t);
+    // Strip a wrapping pair only when it is not also used inside ("`a` and `b`" stays as it is).
+    if (label !== t) t = label;
+    else if (bold && bold[2]!.trim() && !bold[2]!.includes(bold[1]!)) t = bold[2]!.trim();
+    else if (t.length >= 2 && pairs[t[0]!] === t[t.length - 1] && inner.trim() && !inner.includes(t[0]!) && !inner.includes(t[t.length - 1]!)) t = inner.trim();
+    else break;
+  }
   t = t.replace(/[.\s]+$/, '');
   const chars = [...t];
   if (chars.length > AGENT_TITLE_MAX) t = `${chars.slice(0, AGENT_TITLE_MAX - 1).join('').trimEnd()}…`;
