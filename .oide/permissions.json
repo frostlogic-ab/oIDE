@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "allow": [
+    "ExitPlanMode",
+    "Edit",
+    "Write"
+  ],
+  "ask": [],
+  "deny": []
+}
