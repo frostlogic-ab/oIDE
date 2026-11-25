@@ -32,6 +32,14 @@ Anthropic's API itself: every model call goes through the CLI you installed and 
   design / doc / whiteboard artifacts agents can read and write, MCP-tool extensions with risk labels,
   and settings stored per install or shared per project in `.oide/`.
 
+## Privacy
+
+Your code, prompts and paths stay on your computer. oIDE can send **anonymous usage analytics and
+crash reports, opt-in only**: the first launch asks, both switches are off until you agree, and
+Settings â€º Privacy turns them off at any time. Nothing sent contains code, prompts, file names or
+paths, project or branch names, or Claude account information. `DO_NOT_TRACK=1` or `OIDE_TELEMETRY=0`
+disables it; forks can point it at their own Umami or build without it. Details: [PRIVACY.md](PRIVACY.md).
+
 ## Requirements
 
 - The [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) installed and signed in (`claude`).

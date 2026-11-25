@@ -87,9 +87,15 @@ network access. Doc artifacts are sanitized before rendering.
 
 ## Telemetry
 
-oIDE has no telemetry: it collects no usage statistics and has no code that could send any.
-Crash reports are opt-in, stay on your computer with paths, prompts and code removed, and are never
-uploaded; you can copy one into a bug report yourself.
+Usage analytics and crash and error reports are **opt-in** (off until you agree) and are sent by
+oIDE's main process to its Umami server through a network session that can reach that host only. The
+app window loads no analytics script and still has no network access. Nothing sent contains code,
+prompts, paths, project or branch names, or Claude account information; error messages are scrubbed
+and stacks keep oIDE's own code locations only. `DO_NOT_TRACK=1` or `OIDE_TELEMETRY=0` turns it off
+entirely. See [Privacy and telemetry](privacy.md).
+
+Local crash reports are a separate opt-in: they stay on your computer with paths, prompts and code
+removed; you can copy one into a bug report yourself.
 
 ## Supply chain
 

@@ -100,10 +100,15 @@ you turned on.
 
 ## Privacy
 
-oIDE has no telemetry: it collects no usage statistics and sends nothing about how you use it.
-**Crash reports** are off by default. Crash reports stay
-on your computer with paths, prompts and code removed; nothing is uploaded, and you can copy one into
-a bug report yourself. oIDE never reads, stores or sends your Claude credentials; prompts, code and
+**Share anonymous usage analytics** and **Send crash and error reports**: both off until you turn
+them on (the first launch asks once; if you close the question it may ask on one more launch, then
+never). They send how the app is used and what went wrong, never your code, prompts, paths or project
+information. Turning a switch off stops sending at once. **See what's sent** lists every event oIDE can
+send. Details: [Privacy and telemetry](../privacy.md).
+
+**Save crash reports on this computer** is off by default. Those reports stay on your computer with
+paths, prompts and code removed; nothing is uploaded by this switch, and you can copy one into a bug
+report yourself. oIDE never reads, stores or sends your Claude credentials; prompts, code and
 paths stay on your computer.
 
 ## Diagnostics

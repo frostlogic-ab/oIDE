@@ -9,6 +9,7 @@ import {
   toolCategoryOf,
   MarketplaceExtensionId,
   type AgentEvent,
+  type ArchiveReason,
   type AgentSpec,
   type CommandName,
   type EventName,
@@ -92,6 +93,9 @@ export class TelemetryObservers {
   };
   private readonly lastSetting = new Map<string, number>();
   private readonly errorCodeSeen = new Map<string, number>();
+  private readonly prUrls = new Set<string>();
+  private readonly prState = new Map<string, string>();
+  private readonly archived = new Map<string, ArchiveReason>();
 
   constructor(
     private readonly sink: TelemetrySink,
@@ -158,8 +162,23 @@ export class TelemetryObservers {
         this.sink.track('agent_merged', { result: (output as { ok?: boolean }).ok ? 'merged' : 'conflicts' });
         return;
       case 'git.openPr':
-        this.sink.track('pr_opened', {});
+        this.sink.track('pr_opened', { existing: !!(output as { existing?: boolean }).existing });
         return;
+      case 'agents.archive':
+        // Reported from the `agents.archived` event (covers automatic archiving too).
+        return;
+      case 'agents.unarchive':
+        this.archived.delete((input as { agentId: string }).agentId);
+        this.sink.track('agent_unarchived', {});
+        return;
+      case 'agents.deletePermanently':
+        if ((output as { deleted?: boolean }).deleted) this.sink.track('agent_deleted', {});
+        return;
+      case 'shell.openExternal': {
+        // View PR: the URL itself is never sent; it only has to be the PR of an agent main knows.
+        if (this.prUrls.has((input as { url: string }).url)) this.sink.track('pr_view_opened', {});
+        return;
+      }
       case 'files.findByName':
         this.noteSearch('name', (output as { results?: unknown[] }).results?.length ?? 0);
         return;
@@ -323,7 +342,37 @@ export class TelemetryObservers {
 
   // ------------------------------------------------------------------------- emitted events
 
+  /** PR state per agent and archive reason per agent (memory only), so each change is reported once. */
+  private notePr(summary: { id?: string; pr?: { url: string; state: string } }): void {
+    if (!summary.id || !summary.pr) return;
+    this.prUrls.add(summary.pr.url);
+    if (this.prUrls.size > 1000) this.prUrls.delete(this.prUrls.values().next().value!);
+    const prev = this.prState.get(summary.id);
+    this.prState.set(summary.id, summary.pr.state);
+    if (summary.pr.state === 'merged' && prev !== undefined && prev !== 'merged')
+      this.sink.track('pr_merged_detected', {});
+  }
+
   emitted(event: EventName, payload: unknown): void {
+    if (event === 'agents.summary' || event === 'agents.archived') {
+      const s = payload as {
+        id?: string;
+        pr?: { url: string; state: string };
+        archived?: { reason: ArchiveReason };
+      };
+      this.notePr(s);
+      if (
+        event === 'agents.archived' &&
+        s.id &&
+        s.archived &&
+        this.archived.get(s.id) !== s.archived.reason
+      ) {
+        this.archived.set(s.id, s.archived.reason);
+        if (this.archived.size > 5000) this.archived.delete(this.archived.keys().next().value!);
+        this.sink.track('agent_archived', { reason: s.archived.reason });
+      }
+      return;
+    }
     if (event === 'files.searchResults') {
       const r = payload as SearchResultsEvent;
       if (!r.done || !this.contentSearches.has(r.searchId)) return;

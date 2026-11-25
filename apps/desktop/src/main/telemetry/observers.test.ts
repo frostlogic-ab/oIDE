@@ -147,7 +147,7 @@ describe('commands', () => {
     expect(events).toEqual([
       { name: 'agent_merged', props: { result: 'conflicts' } },
       { name: 'agent_discarded', props: { worktree_deleted: true } },
-      { name: 'pr_opened', props: {} },
+      { name: 'pr_opened', props: { existing: false } },
       { name: 'compact_requested', props: {} },
     ]);
   });
@@ -255,6 +255,69 @@ describe('commands', () => {
       'agents.maxRunning',
     ]);
     expect(JSON.stringify(events)).not.toMatch(/jane|claude\.exe|5|6|7/);
+  });
+});
+
+describe('archived agents and the PR lifecycle', () => {
+  const summary = (extra: Record<string, unknown>) => ({ id: 'a1', title: 'Secret ACME work', ...extra });
+  const pr = (state: string) => ({ number: 12, url: 'https://github.com/acme/private/pull/12', state });
+
+  it('agent_archived once per reason, with the reason only; unarchive and permanent delete', () => {
+    const { o, events } = make();
+    o.emitted(
+      'agents.archived',
+      summary({ archived: { at: 1, reason: 'completed', worktreeRemoved: false } }),
+    );
+    o.emitted(
+      'agents.archived',
+      summary({ archived: { at: 2, reason: 'completed', worktreeRemoved: true } }),
+    );
+    o.command('agents.unarchive', { agentId: 'a1' }, summary({}));
+    o.emitted(
+      'agents.archived',
+      summary({ archived: { at: 3, reason: 'archived-by-user', worktreeRemoved: false } }),
+    );
+    o.command('agents.deletePermanently', { agentId: 'a1' }, { deleted: false });
+    o.command('agents.deletePermanently', { agentId: 'a1' }, { deleted: true });
+    expect(events).toEqual([
+      { name: 'agent_archived', props: { reason: 'completed' } },
+      { name: 'agent_unarchived', props: {} },
+      { name: 'agent_archived', props: { reason: 'archived-by-user' } },
+      { name: 'agent_deleted', props: {} },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/ACME|Secret/);
+  });
+
+  it('pr_opened says whether the PR already existed; View PR is counted without its URL', () => {
+    const { o, events } = make();
+    o.command(
+      'git.openPr',
+      { agentId: 'a1', title: 't', body: '' },
+      { url: 'https://github.com/acme/private/pull/12', number: 12, state: 'open', existing: true },
+    );
+    o.emitted('agents.summary', summary({ pr: pr('open') }));
+    o.command('shell.openExternal', { url: 'https://github.com/acme/private/pull/12' }, { ok: true });
+    o.command('shell.openExternal', { url: 'https://example.com/docs' }, { ok: true });
+    expect(events).toEqual([
+      { name: 'pr_opened', props: { existing: true } },
+      { name: 'pr_view_opened', props: {} },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/acme|github/);
+  });
+
+  it('pr_merged_detected when a known PR turns merged, once', () => {
+    const { o, events } = make();
+    o.emitted('agents.summary', summary({ pr: pr('merged') })); // first sight: not a transition
+    o.emitted('agents.summary', { ...summary({ pr: pr('open') }), id: 'a2' });
+    o.emitted('agents.summary', { ...summary({ pr: pr('merged') }), id: 'a2' });
+    o.emitted('agents.archived', {
+      ...summary({ pr: pr('merged'), archived: { at: 1, reason: 'merged', worktreeRemoved: false } }),
+      id: 'a2',
+    });
+    expect(events).toEqual([
+      { name: 'pr_merged_detected', props: {} },
+      { name: 'agent_archived', props: { reason: 'merged' } },
+    ]);
   });
 });
 

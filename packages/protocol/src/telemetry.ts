@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Effort, PermissionMode, WorkIn } from './agent.js';
+import { ArchiveReason, Effort, PermissionMode, WorkIn } from './agent.js';
 
 /**
  * Opt-in usage analytics and error reports (docs/wiki/pages/telemetry.md, ADR 0011).
@@ -366,13 +366,33 @@ export const TELEMETRY_EVENTS = {
   }),
   agent_archived: def({
     from: 'main',
-    question:
-      'Do people archive finished agents instead of removing them? (Hook lands with the Archived agents feature.)',
+    question: 'Why do agents leave the Wall: merged, discarded, completed, or archived by hand?',
+    props: z.object({ reason: ArchiveReason }),
+  }),
+  agent_unarchived: def({
+    from: 'main',
+    question: 'Do people bring archived agents back to the Wall?',
+    props: z.object({}),
+  }),
+  agent_deleted: def({
+    from: 'main',
+    question: 'Do people delete archived agents for good?',
     props: z.object({}),
   }),
   pr_opened: def({
     from: 'main',
-    question: 'How often does agent work leave as a pull request instead of a local merge?',
+    question:
+      'How often does agent work leave as a pull request instead of a local merge, and how often did one already exist?',
+    props: z.object({ existing: z.boolean() }),
+  }),
+  pr_view_opened: def({
+    from: 'main',
+    question: 'Do people follow the pull request of an agent from oIDE (View PR)?',
+    props: z.object({}),
+  }),
+  pr_merged_detected: def({
+    from: 'main',
+    question: 'How often does oIDE see the pull request of an agent merged (and archive the agent)?',
     props: z.object({}),
   }),
   compact_requested: def({
