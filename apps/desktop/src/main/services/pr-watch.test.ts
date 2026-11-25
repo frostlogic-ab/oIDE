@@ -66,6 +66,34 @@ function watcher(list: AgentSummary[], opts: { online?: boolean; trusted?: boole
 }
 
 describe('PrWatcher', () => {
+  it('skips projects without a git remote quietly (no lookup, no warning, no backoff)', async () => {
+    const gh = new FakeGh();
+    const warnings: unknown[] = [];
+    const remotes: Record<string, boolean> = { p1: false, p2: true };
+    const marked: string[] = [];
+    const w = new PrWatcher({
+      gh,
+      agents: { list: () => [agent('local'), agent('remote', { projectId: 'p2' })], setPr: () => {} },
+      trusted: () => true,
+      hasRemote: async (id) => remotes[id] ?? false,
+      noRemote: (id) => void marked.push(id),
+      intervalMinutes: () => 10,
+      onMerged: async () => {},
+      log: { debug: () => {}, warn: (...a) => void warnings.push(a) },
+    });
+    await w.poll('timer');
+    expect(gh.calls).toEqual(['oide/remote']);
+    // The cache said "has a remote" but gh found none: same quiet skip, and the cache is corrected.
+    remotes.p1 = true;
+    gh.prLookup = async (_cwd, branch) => (gh.calls.push(branch), branch === 'oide/local' ? { error: 'no git remotes found' } : {});
+    const w2 = new PrWatcher({ gh, agents: { list: () => [agent('local')], setPr: () => {} }, trusted: () => true, hasRemote: async (id) => remotes[id] ?? false, noRemote: (id) => void marked.push(id), intervalMinutes: () => 10, onMerged: async () => {}, log: { debug: () => {}, warn: (...a) => void warnings.push(a) } });
+    await w2.poll('timer');
+    expect(marked).toEqual(['p1']);
+    expect(warnings).toEqual([]);
+    expect(w2.failureCount).toBe(0);
+    expect(w2.backoffUntil).toBe(0);
+  });
+
   it('discovers a PR opened outside oIDE once, then polls only open or draft PRs', async () => {
     const t = watcher([agent('a'), agent('b'), agent('busy', { status: 'running' })]);
     t.gh.prs.set('oide/a', { state: 'open', number: 12, url: URL1 });

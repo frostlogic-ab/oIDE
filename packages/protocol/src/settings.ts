@@ -39,6 +39,28 @@ export const CustomModel = z.object({
 });
 export type CustomModel = z.infer<typeof CustomModel>;
 
+/** Bounds every stored sidebar width must sit in; each panel narrows them further in the renderer. */
+export const PANEL_WIDTH_LIMITS = { min: 120, max: 1600, maxPanels: 64 } as const;
+
+const PanelWidthId = z.string().regex(/^[a-z][a-z0-9.-]{0,63}$/);
+const PanelWidthPx = z.number().int().min(PANEL_WIDTH_LIMITS.min).max(PANEL_WIDTH_LIMITS.max);
+
+/**
+ * `settings.ui.panelWidths`: resizable sidebar id → width in px. Entries with a bad id or width are
+ * dropped (and anything past `maxPanels`) rather than failing: one stale width, say after a later
+ * version tightens the limits, must never reset the accent and the rest of `ui` on load.
+ */
+export const PanelWidths = z.preprocess((v) => {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out: Record<string, number> = {};
+  for (const [k, w] of Object.entries(v)) {
+    if (Object.keys(out).length >= PANEL_WIDTH_LIMITS.maxPanels) break;
+    if (PanelWidthId.safeParse(k).success && PanelWidthPx.safeParse(w).success) out[k] = w as number;
+  }
+  return out;
+}, z.record(PanelWidthId, PanelWidthPx));
+export type PanelWidths = z.infer<typeof PanelWidths>;
+
 export const Settings = z.object({
   claude: z.object({
     cliPath: z.string().optional(),
@@ -95,6 +117,12 @@ export const Settings = z.object({
      * never uploaded (sending reports is `privacy.errorReports`).
      */
     crashReports: z.boolean().default(false),
+    /**
+     * Sidebar widths the user dragged, panel id (`wall.projects`, `files.tree`…) → px. Only resized
+     * panels are stored; a missing id uses the panel's default. The renderer clamps each value to
+     * that panel's own min and max (see `PANEL_WIDTH_LIMITS`), so this schema only bounds the shape.
+     */
+    panelWidths: PanelWidths.default({}),
   }),
   /**
    * Settings › Privacy: opt-in usage analytics and error reports (ADR 0011, wiki telemetry.md). Both

@@ -3,6 +3,7 @@ import { TELEMETRY_SCREENS } from '@oide/protocol';
 import { join } from 'node:path';
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
+import { folderName } from '../reliability/cleanup-queue.js';
 import { collectDiagnostics } from '../reliability/diagnostics.js';
 import { Redactor } from '../reliability/redact.js';
 import type { Services } from '../services/index.js';
@@ -41,6 +42,37 @@ export function registerAppHandlers(router: IpcRouter, services: Services, ctx: 
     const err = await services.platform.openPath(dir);
     if (err) throw new IpcError(`Could not open the logs folder: ${err}`, 'internal');
     return { ok: true as const };
+  });
+
+  // Settings › Diagnostics › Folders waiting to be removed. The renderer can only name folders that
+  // are already in the queue: any other path is refused, so these commands never touch or probe
+  // arbitrary folders.
+  const queued = (path: string) => {
+    const e = services.cleanup.queue.find(path);
+    if (!e) throw new IpcError('That folder is not waiting to be removed.', 'not_found');
+    return e;
+  };
+  router.register('app.pendingCleanups', () =>
+    services.cleanup.queue.list().map((e) => ({
+      path: e.path,
+      name: folderName(e.path),
+      addedAt: e.addedAt,
+      attempts: e.attempts,
+      ...(e.nextAttemptAt !== undefined ? { nextAttemptAt: e.nextAttemptAt } : {}),
+      ...(e.lastError ? { lastError: e.lastError } : {}),
+      holders: e.holders ?? [],
+    })),
+  );
+  router.register('app.retryCleanup', async ({ path }) => {
+    const r = await services.cleanup.retryNow(path !== undefined ? queued(path).path : undefined);
+    return { removed: r.removed, stillPending: r.stillLocked, gaveUp: r.gaveUp };
+  });
+  router.register('app.cleanupHolders', async ({ path }) => {
+    const e = queued(path);
+    if (!services.findHolders) return { supported: false, holders: [] };
+    const r = await services.findHolders(e.path, { excludePids: [process.pid] });
+    services.cleanup.queue.noteHolders(e.path, r.holders);
+    return { supported: r.supported, holders: r.holders, ...(r.error ? { error: r.error } : {}) };
   });
 
   // Renderer error boundaries: the page sends only the error and component stack (no props,

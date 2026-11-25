@@ -102,6 +102,8 @@ The source of truth is `TELEMETRY_EVENTS` in `packages/protocol/src/telemetry.ts
 | `pr_opened` | main | `existing` | Do people open PRs instead of merging locally? |
 | `pr_view_opened` | main | none (the URL is never sent) | Do people follow an agent's PR from oIDE? |
 | `pr_merged_detected` | main | none | How often does oIDE see an agent's PR merged? |
+| `worktree_delete_failed` | main | `holder` [docker, editor, terminal, node, unknown] | How often can a worktree folder not be deleted, and what kind of program holds it? Never the program's name or any path. |
+| `worktree_delete_retried_ok` | main | `attempts` (count bucket) | Does the background retry finish removing those folders, and after how many tries? |
 | `compact_requested` | main | none | Do people compact context by hand? |
 | `slash_command_used` | main | `command` [built-in CLI commands, other] | Which built-in slash commands are used? Skills, plugin and MCP commands are `other`. |
 | `attachments_sent` | main | `where` [spawn, message], `images`, `files` (counts) | Do people attach images and files? |

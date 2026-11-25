@@ -9,6 +9,8 @@ import { useGit } from '../SourceControl/gitStore';
 import { shortBranch } from '../SourceControl/model';
 import { baseName } from './diff';
 import { DeployActions } from '../../extensions/DeployActions';
+import { ResizableAside } from '../../components/ResizableAside';
+import { PANELS } from '../../lib/panels';
 import { MergeDialog, MergeStatus, SensitiveWarning } from './MergeDialog';
 
 const SECTION_LABEL = 'text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3';
@@ -125,9 +127,10 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
   const prLabel = pr?.url ? `View pull request${pr.number ? ` #${pr.number}` : ''}` : prBusy ? 'Opening…' : 'Open pull request';
 
   return (
-    <aside
+    <ResizableAside
+      panel={PANELS.reviewSummary}
       aria-label="Review summary"
-      className="flex-[1_1_300px] max-w-[340px] min-w-[280px] flex flex-col gap-3.5 p-4 bg-panel border-l border-line box-border overflow-auto"
+      className="flex flex-col gap-3.5 p-4 bg-panel border-l border-line box-border overflow-auto"
     >
       <div className="flex flex-col gap-1.5">
         <span className="text-[11px] font-semibold flex items-center gap-1.5" style={{ color: meta.color }}>
@@ -223,7 +226,7 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
         onAsk={(from) => void askToResolve(from)}
         onHandOff={(files) => handConflicts(files)}
       />
-    </aside>
+    </ResizableAside>
   );
 }
 

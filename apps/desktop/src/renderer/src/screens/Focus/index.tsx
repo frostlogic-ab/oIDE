@@ -264,7 +264,7 @@ function FocusBody({ agent, subagentId, list, projectName, warnAt, dangerAt, lab
         labels={labels}
       />
       {/* A size container: the header and the permission prompt adapt to the session width. */}
-      <main className="@container flex-[999_1_560px] min-w-0 min-h-0 flex flex-col" aria-label={sub ? `Subagent ${sub.name}` : agent.title}>
+      <main className="@container flex-1 min-w-[360px] min-h-0 flex flex-col" aria-label={sub ? `Subagent ${sub.name}` : agent.title}>
         {sub ? (
           <SubagentHeader agent={agent} sub={sub} now={now} onLead={() => onSelectSub(undefined)} onStop={() => stopSub(sub.id)} stopRequested={stopRequested.has(sub.id)} />
         ) : (

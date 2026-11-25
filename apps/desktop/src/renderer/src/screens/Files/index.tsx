@@ -23,6 +23,8 @@ import { joinPath, tabId, useFiles, type FileTab } from './filesStore';
 import { SearchPanel, type SearchCheckout } from './SearchPanel';
 import { useSearch } from './searchStore';
 import { TreePanel, type Marker, type ProjectTreeInfo } from './TreePanel';
+import { ResizableAside } from '../../components/ResizableAside';
+import { PANELS } from '../../lib/panels';
 
 const EditorPane = lazy(() => import('./EditorPane'));
 const SECTION_LABEL = 'text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3';
@@ -181,7 +183,7 @@ export default function FilesScreen() {
         <TreePanel trees={trees} scoped={scope !== 'all'} onSearch={() => showSearch()} searchHint={searchKey} />
       )}
 
-      <main className="flex-[999_1_560px] min-w-0 min-h-0 flex flex-col">
+      <main className="flex-1 min-w-[360px] min-h-0 flex flex-col">
         <div className="flex items-stretch bg-chrome border-b border-line min-h-9">
           <div role="tablist" aria-label="Open files" className="flex min-w-0 overflow-x-auto">
             {files.tabs.map((t) => {
@@ -283,7 +285,7 @@ export default function FilesScreen() {
         </div>
       </main>
 
-      <aside aria-label="File activity" className="flex-[1_1_260px] max-w-[300px] min-w-[240px] flex flex-col gap-3 p-4 bg-panel border-l border-line box-border overflow-auto">
+      <ResizableAside panel={PANELS.filesActivity} aria-label="File activity" className="flex flex-col gap-3 p-4 bg-panel border-l border-line box-border overflow-auto">
         <h2 className={`m-0 ${SECTION_LABEL}`}>This file's history</h2>
         {!active && <span className="text-[12.5px] text-ink-3">Open a file to see who changed it.</span>}
         {active && (
@@ -348,7 +350,7 @@ export default function FilesScreen() {
         )}
         <div className="flex-1" />
         <span className="text-[12px] text-ink-3 leading-normal">A full editor is here when you need it. Language servers come from extensions.</span>
-      </aside>
+      </ResizableAside>
     </>
   );
 }

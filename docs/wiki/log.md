@@ -646,3 +646,37 @@ code; the dialog memoises its content check, keeps the instructions visible with
 gives Open a full accessible name. Open and "Open in claude.ai" only appear for claude.ai links
 (`canOpenClaudeLink`): claude.site stays off the external-link allow-list, since anyone can publish there. The dev mock
 mirrors the store. Pages: [artifacts](pages/artifacts.md), [screen-artifacts](pages/screen-artifacts.md).
+
+## [2026-11-25] build | Worktree deletion on Windows
+
+Incident: a discarded agent's worktree (a pnpm install: 68,687 entries, paths up to 412 characters,
+6,095 junctions) could not be deleted; Docker Desktop, started by a `docker` command in the
+worktree, kept it as its current directory. Found while fixing it: `git worktree remove` (git 2.51)
+follows junctions and deleted files of a folder outside the worktree, and `fs.rm`'s `maxRetries`
+compounds per directory level, so a held folder made the delete hang for minutes.
+- `WorktreeManager.remove` makes git's safety checks itself, deletes with `removeTree` (`fs.rm`,
+  `maxRetries: 0`, whole-tree retries), then `git worktree prune` (ADR 0012). `isLockError` /
+  `isLockedFileError`: only `EBUSY` and sharing violations are locks.
+- `reliability/folder-holders.ts`: who holds a folder (Windows handle table via a fixed PowerShell
+  script, folder in an env var; `lsof +d` elsewhere; 10 s timeout; same user; exe names only). The
+  notice names them; after an agent stops or is archived the agent log warns about leftovers.
+- `CleanupScheduler`: retries every 5 minutes with per-folder backoff and at start; "Finished
+  removing <name>"; Settings › Diagnostics › Folders waiting to be removed (Retry now, Show holders).
+- PR lookups skip projects without a git remote quietly (cached `git remote`, refreshed on fetch).
+- Telemetry: `worktree_delete_failed { holder }`, `worktree_delete_retried_ok { attempts }`.
+Pages: [git-worktrees](pages/git-worktrees.md#why-a-worktree-cant-be-deleted-on-windows),
+[reliability](pages/reliability.md#windows), [telemetry](pages/telemetry.md),
+
+## [2026-11-25] build | Resizable sidebars
+
+Every sidebar can be resized by dragging its inner edge, within a per-panel min (where the content
+still fits) and max; the main area always keeps 360px. One component, `ResizableAside`
+(`apps/desktop/src/renderer/src/components/ResizableAside.tsx`), replaces the fixed-width `<aside>`
+on all 14 sidebars; the registry with ids, sides, defaults (the canvas widths) and limits is
+`src/lib/panels.ts`. The handle is a focusable `role="separator"` (arrows, Shift for big steps,
+Home / End; double-click resets; Escape cancels a drag). Widths are saved on release (keyboard: after
+400 ms) to the new `settings.ui.panelWidths` (protocol `PanelWidths`: id `^[a-z][a-z0-9.-]{0,63}$`,
+integer 120-1600 px, at most 64 entries; bad entries are dropped so a stale one never resets the
+rest of `ui`), so they survive restarts; Settings › Appearance has Reset
+sidebar widths. Pages: [design-system](pages/design-system.md), [desktop-shell](pages/desktop-shell.md),
+[screen-settings](pages/screen-settings.md).

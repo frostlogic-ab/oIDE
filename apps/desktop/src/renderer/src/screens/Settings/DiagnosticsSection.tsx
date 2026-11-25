@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Diagnostics } from '@oide/protocol';
+import type { Diagnostics, FolderHolderInfo, PendingCleanupInfo } from '@oide/protocol';
 import { Spinner, cn } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
@@ -11,6 +11,107 @@ const TONE: Record<Diagnostics['checks'][number]['status'], { label: string; cls
   error: { label: 'Problem', cls: 'text-bad border-bad-line' },
   info: { label: 'Info', cls: 'text-ink-3 border-line-3' },
 };
+
+type Holders = { supported: boolean; holders: FolderHolderInfo[]; error?: string };
+
+function holderText(h: Holders): string {
+  if (!h.supported) return 'oIDE cannot list the programs holding a folder on this system.';
+  if (h.error && !h.holders.length) return `Could not list the programs holding this folder (${h.error}).`;
+  if (!h.holders.length) return 'No program holds this folder open right now. Retry now should remove it.';
+  return h.holders.map((x) => (x.exes.length === 1 && x.exes[0] === x.label ? x.label : `${x.label} (${x.exes.join(', ')})`)).join(' · ');
+}
+
+/**
+ * Worktree folders oIDE could not delete because a program held them open (Docker Desktop, an
+ * editor, a terminal). oIDE retries them every 5 minutes and at start; here they can be retried at
+ * once, and the programs holding them listed.
+ */
+function PendingCleanups() {
+  const [items, setItems] = useState<PendingCleanupInfo[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [holders, setHolders] = useState<Record<string, Holders>>({});
+
+  const load = useCallback(async () => {
+    try {
+      setItems(await oide.invoke('app.pendingCleanups', undefined));
+    } catch {
+      setItems([]);
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const retry = async (path: string) => {
+    setBusy(`retry:${path}`);
+    try {
+      const r = await oide.invoke('app.retryCleanup', { path });
+      if (r.stillPending.length) toast('The folder is still in use. oIDE keeps trying in the background.', 'error');
+    } catch (err) {
+      toast(`Could not retry: ${ipcErrorMessage(err)}`, 'error');
+    } finally {
+      setBusy(null);
+      void load();
+    }
+  };
+
+  const show = async (path: string) => {
+    setBusy(`holders:${path}`);
+    try {
+      const h = await oide.invoke('app.cleanupHolders', { path });
+      setHolders((m) => ({ ...m, [path]: h }));
+    } catch (err) {
+      toast(`Could not list the programs: ${ipcErrorMessage(err)}`, 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (!items?.length) return null;
+  return (
+    <>
+      <Sec>Folders waiting to be removed</Sec>
+      <Rd className="block mt-2">
+        Worktree folders a program still held open when their agent was removed. oIDE tries again every 5 minutes and when it starts; quit the program holding a folder and it goes.
+      </Rd>
+      {items.map((e) => {
+        const h = holders[e.path];
+        return (
+          <Row
+            key={e.path}
+            title={e.name}
+            desc={
+              <>
+                <span className="font-mono text-[11.5px] break-all">{e.path}</span>
+                <span className="block mt-1">
+                  {e.attempts} {e.attempts === 1 ? 'try' : 'tries'}
+                  {e.lastError === 'denied' ? ' · access denied' : ''}
+                  {!h && e.holders.length ? ` · last held by ${e.holders.join(', ')}` : ''}
+                </span>
+                {h && (
+                  <span className="block mt-1" role="status">
+                    {holderText(h)}
+                  </span>
+                )}
+              </>
+            }
+          >
+            {() => (
+              <span className="flex gap-2">
+                <button type="button" className={outlineBtn} disabled={busy !== null} onClick={() => void show(e.path)} aria-label={`Show programs holding ${e.name}`}>
+                  {busy === `holders:${e.path}` ? 'Looking…' : 'Show holders'}
+                </button>
+                <button type="button" className={outlineBtn} disabled={busy !== null} onClick={() => void retry(e.path)} aria-label={`Retry removing ${e.name}`}>
+                  {busy === `retry:${e.path}` ? 'Retrying…' : 'Retry now'}
+                </button>
+              </span>
+            )}
+          </Row>
+        );
+      })}
+    </>
+  );
+}
 
 /**
  * Settings › Diagnostics: what oIDE found at startup (CLI and its tested range, git ≥ 2.38 for
@@ -93,6 +194,7 @@ export function DiagnosticsSection() {
           {() => <span className={cn('text-[11.5px] font-semibold px-2 py-0.5 rounded-md border', TONE[c.status].cls)}>{TONE[c.status].label}</span>}
         </Row>
       ))}
+      <PendingCleanups />
       <Sec>Logs</Sec>
       <Row
         title="Log files"

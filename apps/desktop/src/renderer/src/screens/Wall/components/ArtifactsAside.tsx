@@ -5,6 +5,8 @@ import { invokeOr, oide } from '../../../lib/bridge';
 import { projectName, useProjects } from '../../../stores/projects';
 import { navigate } from '../../../stores/router';
 import { useScope } from '../../../stores/scope';
+import { ResizableAside } from '../../../components/ResizableAside';
+import { PANELS } from '../../../lib/panels';
 
 const KIND_LABEL: Record<ArtifactKind, string> = { design: 'Design', doc: 'Doc', whiteboard: 'Whiteboard' };
 
@@ -60,7 +62,7 @@ export function ArtifactsAside() {
   }, [scope, projects]);
 
   return (
-    <aside aria-label="Artifacts" className="w-[280px] shrink-0 hidden min-[1280px]:flex flex-col gap-3 px-4 py-[18px] bg-panel border-l border-line box-border overflow-y-auto">
+    <ResizableAside panel={PANELS.wallArtifacts} handleClassName="hidden min-[1280px]:block" aria-label="Artifacts" className="hidden min-[1280px]:flex flex-col gap-3 px-4 py-[18px] bg-panel border-l border-line box-border overflow-y-auto">
       <div className="flex items-center justify-between">
         <h2 className="m-0 text-[13px] font-semibold">Artifacts</h2>
         <a
@@ -119,7 +121,7 @@ export function ArtifactsAside() {
           Browse extensions
         </LinkButton>
       </div>
-    </aside>
+    </ResizableAside>
   );
 }
 

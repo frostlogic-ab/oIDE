@@ -2,6 +2,8 @@ import { memo } from 'react';
 import type { AgentSummary } from '@oide/protocol';
 import { ContextMeter, Icon, Kbd, agentStatusMeta, contextFraction, modelLetter, subagentStatusMeta } from '@oide/ui';
 import { agentListLine } from '../model/focus';
+import { ResizableAside } from '../../../components/ResizableAside';
+import { PANELS } from '../../../lib/panels';
 
 export interface AgentListProps {
   /** Already in list order (sortAgentList). */
@@ -22,7 +24,7 @@ export interface AgentListProps {
 export const AgentList = memo(function AgentList({ agents, currentId, subagentId, projectName, warnAt, dangerAt, onBack, onSelect, onSelectSubagent, labels }: AgentListProps) {
   return (
     // The list scrolls; the keyboard hints stay pinned at the bottom (visible at 700px tall).
-    <aside aria-label="Other agents" className="w-[216px] shrink-0 flex flex-col bg-panel border-r border-line box-border min-h-0">
+    <ResizableAside panel={PANELS.focusAgents} aria-label="Other agents" className="flex flex-col bg-panel border-r border-line box-border min-h-0">
       <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1.5 px-2.5 pt-3 pb-1.5">
       <a
         href="#wall"
@@ -57,7 +59,7 @@ export const AgentList = memo(function AgentList({ agents, currentId, subagentId
           Next that needs you <Kbd>{labels.needs}</Kbd>
         </span>
       </div>
-    </aside>
+    </ResizableAside>
   );
 });
 

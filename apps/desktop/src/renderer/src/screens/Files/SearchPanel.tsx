@@ -6,6 +6,8 @@ import { toast } from '../../stores/ui';
 import { ReplaceDialog, type ReplaceItem } from './ReplaceDialog';
 import { matchSegments, resultSummary } from './searchModel';
 import { MAX_RESULTS, matchCount, resultKey, useSearch, type SearchScope } from './searchStore';
+import { ResizableAside } from '../../components/ResizableAside';
+import { PANELS } from '../../lib/panels';
 
 export interface SearchCheckout {
   project: Project;
@@ -97,7 +99,7 @@ export function SearchPanel({
   };
 
   return (
-    <aside aria-label="Search" className="flex-[0_0_300px] w-[300px] flex flex-col bg-panel border-r border-line box-border min-h-0">
+    <ResizableAside panel={PANELS.filesSearch} aria-label="Search" className="flex flex-col bg-panel border-r border-line box-border min-h-0">
       <div className="flex items-center gap-1 h-10 px-3 shrink-0">
         <SectionLabel as="h2" className="flex-1">
           Search
@@ -241,7 +243,7 @@ export function SearchPanel({
       {confirm && (
         <ReplaceDialog items={confirm} options={ran} replacement={s.replacement} rootLabel={labelOf} onClose={() => setConfirm(null)} onDone={done} />
       )}
-    </aside>
+    </ResizableAside>
   );
 }
 

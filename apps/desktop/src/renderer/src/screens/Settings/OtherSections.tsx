@@ -153,7 +153,25 @@ export function AppearanceSection({ settings }: { settings: Settings }) {
           </div>
         )}
       </Row>
+      <SidebarWidthsRow settings={settings} />
     </>
+  );
+}
+
+/** Sidebar widths are set by dragging each sidebar's edge; this puts them all back to the defaults. */
+function SidebarWidthsRow({ settings }: { settings: Settings }) {
+  const resized = Object.keys(settings.ui.panelWidths ?? {}).length;
+  return (
+    <Row
+      title="Sidebar widths"
+      desc={`Drag the edge of any sidebar to resize it; double-click the edge to reset that one. ${resized === 0 ? 'All sidebars use their default width.' : `${resized} ${resized === 1 ? 'sidebar has' : 'sidebars have'} a custom width.`}`}
+    >
+      {({ descId }) => (
+        <button type="button" className={outlineBtn} aria-describedby={descId} disabled={resized === 0} onClick={() => void savePatch({ ui: { panelWidths: null } })}>
+          Reset sidebar widths
+        </button>
+      )}
+    </Row>
   );
 }
 

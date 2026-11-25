@@ -19,6 +19,8 @@ import { listName } from './diff';
 import { SummaryPanel } from './SummaryPanel';
 import { UnifiedDiff, type Composer, type UnifiedDiffHandle } from './UnifiedDiff';
 import { useReview } from './useReview';
+import { ResizableAside } from '../../components/ResizableAside';
+import { PANELS } from '../../lib/panels';
 
 const SplitDiff = lazy(() => import('./SplitDiff'));
 
@@ -135,7 +137,7 @@ export default function ReviewScreen() {
   return (
     <>
       {breadcrumb}
-      <aside aria-label="Changed files" className="flex-[0_0_260px] w-[260px] flex flex-col gap-0.5 px-2.5 py-3.5 bg-panel border-r border-line box-border min-h-0">
+      <ResizableAside panel={PANELS.reviewFiles} aria-label="Changed files" className="flex flex-col gap-0.5 px-2.5 py-3.5 bg-panel border-r border-line box-border min-h-0">
         <div className="flex items-center justify-between px-1.5 pb-2">
           <h2 className="m-0 text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3">
             {files.length} {files.length === 1 ? 'file' : 'files'} changed
@@ -207,9 +209,9 @@ export default function ReviewScreen() {
             </button>
           ))}
         </div>
-      </aside>
+      </ResizableAside>
 
-      <main className="flex-[999_1_560px] min-w-0 min-h-0 flex flex-col">
+      <main className="flex-1 min-w-[360px] min-h-0 flex flex-col">
         {file ? (
           <>
             <div className="flex items-center gap-2.5 px-5 py-3 border-b border-line flex-wrap">

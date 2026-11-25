@@ -210,7 +210,9 @@ describe('archived agents (main services, fake-claude)', () => {
       refresh: () => {},
     };
     const h = await harness({ gh: gh as never });
-    const { project: p } = await project(h, '--fake-scenario basic', { agents: { cleanup: 'right-away' } });
+    const { repo, project: p } = await project(h, '--fake-scenario basic', { agents: { cleanup: 'right-away' } });
+    // PR lookups only run for projects with a remote (a local-only repo is skipped quietly).
+    git(repo, 'remote', 'add', 'origin', 'https://github.com/o/r.git');
     const [a] = await h.call('agents.spawn', { projectId: p.id, title: 'Ship it', goal: 'hi', mode: 'acceptEdits', strategy });
     const [b] = await h.call('agents.spawn', { projectId: p.id, title: 'Abandoned', goal: 'hi', mode: 'acceptEdits', strategy });
     const idle = await status(h, a!.id, 'has-question');

@@ -8,7 +8,8 @@ import { repairAgentSummary, type AgentEvent, type AgentSpecInput, type AgentSta
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
 import { boundModelKey } from '../security/model-keys.js';
-import { isLockedFileError, lockedFolderMessage, type CleanupQueue } from '../reliability/cleanup-queue.js';
+import { isLockedFileError, isRetryableDeleteError, lockedFolderMessage, type CleanupQueue } from '../reliability/cleanup-queue.js';
+import { describeHolders, primaryCategory, type FindHoldersOptions, type HolderResult } from '../reliability/folder-holders.js';
 import type { Redactor } from '../reliability/redact.js';
 import { BufferedWriter, StorageErrorReporter } from '../reliability/storage-errors.js';
 import { copyAttachments, validateAttachments } from './attachments.js';
@@ -24,6 +25,8 @@ const RESUME_KEY = 'agents:resume-on-start';
 const MCP_DOWN = "oIDE's MCP server is not running, so agents cannot ask for permission. Restart oIDE.";
 /** Statuses an agent can be archived from by hand: its process is not working on a turn. */
 const ARCHIVABLE: ReadonlySet<AgentStatus> = new Set(['has-question', 'ready-for-review', 'paused', 'stopped', 'rate-limited', 'error', 'done']);
+/** How long after a stop the leftover-process check waits (taskkill /T finishing). */
+const LEFTOVER_CHECK_DELAY_MS = 3000;
 
 export interface ArchivedPage {
   items: AgentSummary[];
@@ -96,8 +99,10 @@ export interface AgentsServiceOptions {
   projects: ProjectsService;
   cli: CliService;
   platform: Platform;
-  /** Worktree folders to delete on next start when a locked file blocks removal (Windows). */
+  /** Worktree folders to delete later when a program holds them open (retried in the background and at start). */
   cleanup?: CleanupQueue;
+  /** Which programs hold a folder open (reliability/folder-holders.ts). Unset: messages stay generic. */
+  findHolders?: (dir: string, opts?: FindHoldersOptions) => Promise<HolderResult>;
   /** False when oIDE's MCP server could not start (agents need it for permission prompts). */
   mcpReady?: () => boolean;
   /** Set after construction (cycle). */
@@ -123,6 +128,8 @@ export class AgentsService {
   private readonly contractWarned = new Set<string>();
   /** Agents restore() did not resume because the MCP server was down: still resumed on the next start. */
   private deferredResume: string[] = [];
+  /** Agents with a leftover-process check pending (one at a time each). */
+  private readonly leftoverChecks = new Set<string>();
   extensions: ExtensionsService | undefined;
   git: GitService | undefined;
   /** Event appends: a full disk or a locked database queues events (bounded) and tells the user once. */
@@ -157,6 +164,7 @@ export class AgentsService {
       this.extensions?.revokeAgent(s.id);
       const safe = this.contractSafe(s);
       if (safe) o.ctx.emit('agents.archived', safe);
+      if (!s.archived?.worktreeRemoved) this.checkLeftovers(s);
     });
   }
 
@@ -211,18 +219,62 @@ export class AgentsService {
         try {
           await o.worktrees.remove(p.path, path, { force: true, deleteBranch: true });
         } catch (err) {
-          // Windows: a program still has a file open in the folder after the retries. Remove the
-          // agent anyway, tell the user which folder, and finish the delete on the next start.
-          if (!isLockedFileError(err) || !o.cleanup) throw err;
-          o.cleanup.schedule(path, p.path);
-          o.ctx.log.warn('worktree folder locked; scheduled for the next start', { path, error: err });
-          o.ctx.emit('notify', { level: 'warning', message: lockedFolderMessage(path, true) });
+          // A program still holds the folder open (or Windows denied a file) after fs.rm's retries.
+          // Remove the agent anyway; name the holders, and keep retrying in the background.
+          if (!o.cleanup || !existsSync(path) || !isRetryableDeleteError(err)) throw err;
+          const locked = isLockedFileError(err);
+          o.cleanup.schedule(path, p.path, { lastError: locked ? 'locked' : 'denied' });
+          o.ctx.log.warn('worktree folder could not be deleted; retrying in the background', { path, error: err });
+          void this.reportStuckFolder(path, locked);
         }
         o.ctx.roots.remove(path);
         this.git?.changed(projectId);
         return true;
       },
     };
+  }
+
+  /**
+   * A worktree folder could not be deleted: find who holds it (when a detector is set), tell the
+   * user by name, remember the names for Settings › Diagnostics, and count the category.
+   */
+  private async reportStuckFolder(path: string, locked: boolean): Promise<void> {
+    const { o } = this;
+    const found = o.findHolders ? await o.findHolders(path, { excludePids: [process.pid] }).catch(() => undefined) : undefined;
+    const holders = found?.holders ?? [];
+    if (holders.length) {
+      o.cleanup?.noteHolders(path, holders);
+      o.ctx.log.warn('worktree folder held open', { holders: describeHolders(holders), pids: holders.flatMap((h) => h.pids) });
+    } else if (found?.error) o.ctx.log.debug('could not list programs holding the folder', found.error);
+    o.ctx.emit('notify', { level: 'warning', message: lockedFolderMessage(path, true, holders, locked || holders.length > 0) });
+    o.ctx.telemetry?.service.track('worktree_delete_failed', { holder: primaryCategory(holders) });
+  }
+
+  /**
+   * After an agent stopped or was archived (its process tree already ended with killTree): warn in
+   * the agent's log when other programs still hold its worktree, typically a daemon started from it
+   * (`docker` → Docker Desktop). oIDE never ends programs it did not start; this only reports.
+   */
+  private checkLeftovers(s: AgentSummary): void {
+    const { o } = this;
+    const wt = s.worktreePath;
+    if (!o.findHolders || o.ctx.platform !== 'win32' || !wt || this.leftoverChecks.has(s.id)) return;
+    const p = o.projects.get(s.projectId);
+    if (!p || samePath(p.path, wt)) return;
+    this.leftoverChecks.add(s.id);
+    const t = setTimeout(() => {
+      void (async () => {
+        try {
+          if (!existsSync(wt)) return;
+          const r = await o.findHolders!(wt, { excludePids: [process.pid] });
+          if (r.holders.length) o.ctx.reliability?.logs.agent(s.id).warn('programs still have this worktree open after the agent stopped; oIDE does not stop programs it did not start, and the folder cannot be deleted while they run', { holders: describeHolders(r.holders) });
+        } catch {
+        } finally {
+          this.leftoverChecks.delete(s.id);
+        }
+      })();
+    }, LEFTOVER_CHECK_DELAY_MS);
+    t.unref?.();
   }
 
   /** Ensure the agents row exists before events reference it (foreign key). */
@@ -382,6 +434,7 @@ export class AgentsService {
       (s.status === 'error' ? agentLog.warn : agentLog.info)(`status ${prev ?? '(new)'} → ${s.status}`, detail);
     }
     if (!ACTIVE.has(s.status)) this.editing.clear(s.id);
+    if (s.status === 'stopped' && prev !== undefined) this.checkLeftovers(s);
     // Finished agents go to the Archived view (after this publish completes).
     if (s.status === 'done' && prev !== undefined) setTimeout(() => void this.archiveAgent(s.id, { reason: 'completed' }).catch((err) => o.ctx.log.warn('auto-archive failed', s.id, err)), 0);
     if (prev === undefined && s.status !== 'needs-permission' && s.status !== 'error') return;

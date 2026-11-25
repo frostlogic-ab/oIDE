@@ -3,3 +3,14 @@
 
 /* Scan the renderer sources (Vite root) and the UI kit (via @source in tokens.css). */
 @source '../';
+
+/* While a sidebar's resize handle is dragged (components/ResizableAside): the resize cursor shows
+   everywhere, text is not selected, and iframes (previews, extension panels) do not swallow the drag. */
+html.oide-resizing,
+html.oide-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+html.oide-resizing iframe {
+  pointer-events: none;
+}

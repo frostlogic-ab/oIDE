@@ -5,6 +5,8 @@ import { freshnessText, useMergePrediction } from '../../stores/mergePrediction'
 import { navigate } from '../../stores/router';
 import { reconcile, runSync } from './actions';
 import type { ProjectGit } from './gitStore';
+import { ResizableAside } from '../../components/ResizableAside';
+import { PANELS } from '../../lib/panels';
 
 const SECTION_LABEL = 'text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3';
 
@@ -25,9 +27,10 @@ export function SidePanel({
   const unpushed = projects.filter((p) => (git[p.id]?.sync?.ahead ?? 0) > 0);
 
   return (
-    <aside
+    <ResizableAside
+      panel={PANELS.sourceControlSide}
       aria-label="Needs you"
-      className="flex-[1_1_280px] max-w-[320px] min-w-[260px] flex flex-col gap-3 px-4 py-[18px] bg-panel border-l border-line box-border overflow-auto"
+      className="flex flex-col gap-3 px-4 py-[18px] bg-panel border-l border-line box-border overflow-auto"
     >
       <h2 className={`m-0 ${SECTION_LABEL}`}>Ready to review</h2>
       {ready.length === 0 && <span className="text-[12px] text-ink-3">Nothing is waiting for your review.</span>}
@@ -79,7 +82,7 @@ export function SidePanel({
 
       <div className="flex-1" />
       <span className="text-[12px] text-ink-3 leading-normal">Project scope is shared: picking a project here also scopes the agent wall and Files.</span>
-    </aside>
+    </ResizableAside>
   );
 }
 
