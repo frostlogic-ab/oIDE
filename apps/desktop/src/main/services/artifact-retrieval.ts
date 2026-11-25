@@ -340,8 +340,8 @@ export class ArtifactRetrievalService {
       ...(r?.retrievedAt ? { retrievedAt: r.retrievedAt } : {}),
     });
     if (agentId) this.byAgent.delete(agentId);
-    await rm(this.stagingOf(artifactId), { recursive: true, force: true }).catch(() => undefined);
     this.o.track?.('artifact_retrieval_finished', { trigger: r?.trigger ?? 'import', outcome, kind: meta.kind, files: countBucket(0) });
+    await rm(this.stagingOf(artifactId), { recursive: true, force: true }).catch(() => undefined);
     return out;
   }
 

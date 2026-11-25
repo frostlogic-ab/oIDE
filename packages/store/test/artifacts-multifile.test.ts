@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
@@ -320,7 +320,8 @@ describe('security: reserved names and planted links', () => {
     const dir = folder();
     const short = (name: string) => {
       try {
-        return execFileSync('cmd', ['/d', '/s', '/c', `"for %I in ("${name}") do @echo %~snxI"`], { cwd: dir, encoding: 'utf8', windowsVerbatimArguments: true }).trim();
+        const r = spawnSync('cmd', ['/d', '/s', '/c', `"for %I in ("${name}") do @echo %~snxI"`], { cwd: dir, encoding: 'utf8', windowsVerbatimArguments: true });
+        return r.status === 0 ? r.stdout.trim() : '';
       } catch {
         return '';
       }
