@@ -1,5 +1,4 @@
-import { constants as fsConstants } from 'node:fs';
-import { copyFile, lstat, mkdir, open, readFile, realpath, stat, writeFile } from 'node:fs/promises';
+import { lstat, mkdir, open, readFile, realpath, stat, unlink, writeFile } from 'node:fs/promises';
 import { basename, extname, isAbsolute, join, posix, relative, resolve } from 'node:path';
 import { Git, pathKey } from '@oide/git';
 import {
@@ -142,21 +141,15 @@ export async function validateAttachments(attachments: readonly MessageAttachmen
     const path = a.path;
     if (!isAbsolute(path) || path.includes('\0') || (process.platform === 'win32' && isUnc(path))) refuse(`${a.name}: not a file oIDE can attach.`);
     const abs = resolve(path);
-    let allowed = opts.picked.has(pathKey(abs));
-    if (!allowed) {
-      // A file the agent's folder holds may be a link to anywhere: its real path must stay inside too.
-      for (const r of opts.roots) {
-        if (!isInside(r, abs)) continue;
-        const real = await realpath(abs).catch(() => undefined);
-        const realRoot = await realpath(r).catch(() => undefined);
-        if (real && realRoot && isInside(realRoot, real)) allowed = true;
-        break;
-      }
-    }
-    if (!allowed) refuse(`${a.name}: attach files with Attach file or by dropping them; other paths are refused.`);
+    const picked = opts.picked.has(pathKey(abs));
+    const inRoot = opts.roots.some((r) => isInside(r, abs));
+    if (!picked && !inRoot) refuse(`${a.name}: attach files with Attach file or by dropping them; other paths are refused.`);
     let size: number;
     try {
-      const st = await stat(abs);
+      // The agent controls its own folder: never follow a link there (lstat), and oIDE never reads
+      // or copies those files; copyAttachments passes them to the CLI by relative path.
+      const st = picked && !inRoot ? await stat(abs) : await lstat(abs);
+      if (st.isSymbolicLink()) refuse(`${a.name}: links cannot be attached.`);
       if (!st.isFile()) refuse(`${a.name}: folders cannot be attached.`);
       size = st.size;
     } catch (err) {
@@ -233,7 +226,8 @@ export async function copyAttachments(cwd: string, attachments: readonly Message
       continue;
     }
     const src = resolve(isAbsolute(a.path) ? a.path : join(cwd, a.path));
-    if (isInside(dir, src)) {
+    if (isInside(cwd, src)) {
+      // Already in the agent's folder: referenced where it is, never read or copied by oIDE.
       out.push({ ...a, path: relative(cwd, src).split('\\').join('/') });
       continue;
     }
@@ -244,8 +238,7 @@ export async function copyAttachments(cwd: string, attachments: readonly Message
       target = `${base.slice(0, base.length - ext.length)}-${i}${ext}`;
     }
     used.add(target.toLowerCase());
-    // EXCL: never write through a file or link that appeared at the target since the check above.
-    await copyFile(src, join(dir, target), fsConstants.COPYFILE_EXCL);
+    await writeInside(cwd, target, await readFile(src));
     out.push({ kind: 'file', path: `${ATTACHMENTS_DIR}/${target}`, name: a.name, size: a.size });
   }
   return out;
@@ -274,12 +267,32 @@ export async function ensureAttachmentsDir(cwd: string): Promise<string> {
   return cur;
 }
 
-async function exists(p: string): Promise<boolean> {
+/**
+ * Write one copy into the attachments folder without trusting a check made earlier: the agent runs
+ * meanwhile and could swap a folder for a link. Re-check every level, create the file exclusively
+ * (`wx`: never through an existing file or link), then confirm the created file's real path is
+ * inside the worktree before writing a byte. If it is not, the empty file is removed and nothing is written.
+ */
+async function writeInside(cwd: string, name: string, data: Buffer): Promise<void> {
+  const dir = await ensureAttachmentsDir(cwd);
+  const file = join(dir, name);
+  const fh = await open(file, 'wx');
+  let ok = false;
   try {
-    const h = await open(p, 'r');
-    await h.close();
-    return true;
-  } catch {
-    return false;
+    const [realFile, realCwd] = await Promise.all([realpath(file), realpath(cwd)]);
+    if (!isInside(realCwd, realFile)) refuse(`${ATTACHMENTS_DIR} changed to point outside this folder; attachments were not copied.`);
+    await fh.writeFile(data);
+    ok = true;
+  } finally {
+    await fh.close();
+    if (!ok) await unlink(file).catch(() => undefined);
   }
+}
+
+/** True when anything (file, folder or link, even a dangling one) is at `p`. Never follows or opens it. */
+async function exists(p: string): Promise<boolean> {
+  return lstat(p).then(
+    () => true,
+    () => false,
+  );
 }

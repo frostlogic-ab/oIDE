@@ -130,13 +130,20 @@ describe('attachments refuse links planted in the agent folder', () => {
     expect(readdirSync(target)).toEqual([]);
   });
 
-  it('refuses a worktree file whose real path is outside the worktree', async (ctx) => {
+  it('refuses a link in the worktree instead of following it', async (ctx) => {
     const link = join(worktree, 'looks-inside.txt');
     try {
       symlinkSync(join(outside, 'secret.txt'), link, 'file');
     } catch {
       ctx.skip(); // file symlinks need Developer Mode or admin on Windows
     }
-    await expect(validateAttachments([{ kind: 'file', path: link, name: 'looks-inside.txt', size: 1 }], { picked: new Set(), roots: [worktree] })).rejects.toThrow(/other paths are refused/);
+    await expect(validateAttachments([{ kind: 'file', path: link, name: 'looks-inside.txt', size: 1 }], { picked: new Set(), roots: [worktree] })).rejects.toThrow(/other paths are refused|links cannot be attached/);
+  });
+});
+
+describe('copyAttachments never reads the agent folder', () => {
+  it('passes files already inside the worktree by relative path without copying them', async () => {
+    const out = await copyAttachments(worktree, [{ kind: 'file', path: join(worktree, 'inside.txt'), name: 'inside.txt', size: 6 }]);
+    expect(out).toEqual([{ kind: 'file', path: 'inside.txt', name: 'inside.txt', size: 6 }]);
   });
 });
