@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Spinner } from '@oide/ui';
+import { Icon, IconButton, Menu, SectionLabel, Spinner, type MenuItem } from '@oide/ui';
 import type { Project, WorktreeInfo } from '@oide/protocol';
 import { shortBranch } from '../SourceControl/model';
 import { ancestorDirs, useFiles, visibleRows, type TreeRow } from './filesStore';
@@ -25,8 +25,14 @@ export interface ProjectTreeInfo {
   gitLoaded: boolean;
 }
 
-/** Left column: one tree per project in scope, each with its own branch / worktree menu. */
-export function TreePanel({ trees, scoped }: { trees: ProjectTreeInfo[]; scoped: boolean }) {
+const DEPTHS = [1, 2, 3] as const;
+
+/**
+ * Left column: one tree per project in scope, each with its own branch / worktree menu. The toolbar
+ * acts on every open tree (Search, Reveal active file, Expand loaded folders / to a depth, Collapse
+ * all); with All projects each project also has its own folder menu.
+ */
+export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: ProjectTreeInfo[]; scoped: boolean; onSearch?: () => void; searchHint?: string }) {
   const s = useFiles();
   const scroller = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ top: 0, height: 0 });
@@ -63,9 +69,28 @@ export function TreePanel({ trees, scoped }: { trees: ProjectTreeInfo[]; scoped:
 
   let offset = 0;
   const viewport = view.height || 1000; // unmeasured (tests, first paint): render a screenful
+  const openRoots = trees.filter((t, i) => scoped || (s.openProjects[t.project.id] ?? i === 0)).map((t) => s.checkout[t.project.id] ?? t.project.path);
+  const activeTab = s.tabs.find((t) => t.id === s.active);
+  const all = (fn: (root: string) => void) => () => openRoots.forEach(fn);
 
   return (
-    <aside aria-label="File tree" className="flex-[0_0_270px] w-[270px] flex flex-col px-2 py-3 bg-panel border-r border-line box-border min-h-0">
+    <aside aria-label="File tree" className="flex-[0_0_270px] w-[270px] flex flex-col px-2 pt-1.5 pb-3 bg-panel border-r border-line box-border min-h-0">
+      <div role="toolbar" aria-label="File tree actions" className="flex items-center gap-0.5 h-8 pl-1.5 mb-1 shrink-0">
+        <SectionLabel as="h2" className="flex-1">
+          Files
+        </SectionLabel>
+        {onSearch && <IconButton icon="search" aria-label="Search in files" title={`Search in files${searchHint ? ` (${searchHint})` : ''}`} onClick={onSearch} />}
+        <IconButton icon="locate" aria-label="Reveal active file" title="Reveal active file" disabled={!activeTab} onClick={() => activeTab && revealTab(activeTab)} />
+        <IconButton icon="expand-all" aria-label="Expand loaded folders" title="Expand loaded folders" disabled={!openRoots.length} onClick={all((r) => s.expandLoaded(r))} />
+        <Menu
+          label="Expand to depth"
+          align="end"
+          triggerClassName="w-5 h-7 flex items-center justify-center rounded-sm border-0 bg-transparent text-ink-3 cursor-pointer hover:bg-raised hover:text-ink"
+          trigger={<Icon name="chevron-down" size={12} />}
+          items={DEPTHS.map((d) => ({ id: `depth-${d}`, label: `Expand to depth ${d}`, onSelect: all((r) => void s.expandToDepth(r, d)) }))}
+        />
+        <IconButton icon="collapse-all" aria-label="Collapse all folders" title="Collapse all folders" disabled={!openRoots.length} onClick={all((r) => s.collapseAll(r))} />
+      </div>
       <div ref={scroller} className="flex-1 min-h-0 overflow-auto">
         {trees.map((t, i) => {
           const p = t.project;
@@ -112,6 +137,14 @@ export function TreePanel({ trees, scoped }: { trees: ProjectTreeInfo[]; scoped:
   );
 }
 
+/** Open the tab's project and checkout in the tree, expand down to the file and scroll to it. */
+export function revealTab(t: { projectId: string; root: string; path: string }): void {
+  const s = useFiles.getState();
+  s.setProjectOpen(t.projectId, true);
+  if ((s.checkout[t.projectId] ?? t.root) !== t.root) s.setCheckout(t.projectId, t.root);
+  s.revealPath(t.root, t.path);
+}
+
 function ProjectTree({
   info,
   root,
@@ -150,6 +183,17 @@ function ProjectTree({
     if (rows.length) idx.add(Math.min(focusIndex, rows.length - 1)); // keep the roving tab stop in the DOM
     return [...idx].sort((a, b) => a - b);
   }, [first, last, focusIndex, rows.length]);
+
+  // Scroll to (and make the tab stop) a revealed file once its folders have loaded.
+  const target = s.revealTarget;
+  useEffect(() => {
+    if (!target || target.root !== root || !open) return;
+    const i = rows.findIndex((r) => r.key === target.path);
+    if (i < 0) return;
+    setFocusKey(target.path);
+    scrollTo(i * ROW_H);
+    s.clearRevealTarget(target.nonce);
+  }, [target, root, open, rows, scrollTo, s]);
 
   useEffect(() => {
     if (!wantFocus.current) return;
@@ -194,6 +238,17 @@ function ProjectTree({
         if (r.kind === 'dir' && r.expanded) void s.setExpanded(root, r.path, false);
         else if (r.parent) moveTo(rows.findIndex((x) => x.key === r.parent));
         break;
+      case '*':
+        // Tree convention: expand every sibling folder of the focused row.
+        for (const x of rows) if (x.parent === r.parent && x.depth === r.depth && x.kind === 'dir' && !x.expanded) void s.setExpanded(root, x.path, true);
+        break;
+      case '-':
+        if (r.kind === 'dir' && r.expanded) void s.setExpanded(root, r.path, false);
+        else if (r.parent) {
+          void s.setExpanded(root, r.parent, false);
+          moveTo(rows.findIndex((x) => x.key === r.parent));
+        }
+        break;
       case 'Enter':
       case ' ':
         activate(r);
@@ -208,6 +263,20 @@ function ProjectTree({
   const options = [
     { root: p.path, label: 'main' },
     ...info.worktrees.filter((w) => !w.orphaned).map((w) => ({ root: w.path, label: shortBranch(w.branch) })),
+  ];
+  const tabHere = activeTab && activeTab.projectId === p.id ? activeTab : undefined;
+  const folderActions: MenuItem[] = [
+    { id: 'collapse', label: 'Collapse all', onSelect: () => s.collapseAll(root) },
+    { id: 'expand', label: 'Expand loaded folders', onSelect: () => (open ? s.expandLoaded(root) : s.setProjectOpen(p.id, true)) },
+    ...DEPTHS.map((d) => ({
+      id: `depth-${d}`,
+      label: `Expand to depth ${d}`,
+      onSelect: () => {
+        s.setProjectOpen(p.id, true);
+        void s.expandToDepth(root, d);
+      },
+    })),
+    { id: 'reveal', label: 'Reveal active file', disabled: !tabHere, onSelect: () => tabHere && revealTab(tabHere) },
   ];
 
   return (
@@ -244,6 +313,16 @@ function ProjectTree({
             </option>
           ))}
         </select>
+        {!scoped && (
+          <Menu
+            label={`Folder actions for ${p.name}`}
+            align="end"
+            className="-ml-1 -mr-1"
+            triggerClassName="w-5 h-6 px-0 flex items-center justify-center rounded-sm border-0 bg-transparent text-ink-3 cursor-pointer hover:bg-raised hover:text-ink"
+            trigger={<Icon name="more" size={14} />}
+            items={folderActions}
+          />
+        )}
       </div>
       {open && (
         <div

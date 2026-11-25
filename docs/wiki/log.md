@@ -544,3 +544,21 @@ header. Open question 18 added (trademark). See [design-system](pages/design-sys
 - Real CLI 2.1.325 check (3 Haiku runs): image blocks accepted; single image recognised ("red"); with two
   images Haiku said it saw only paths, so multi-image recognition is unconfirmed. See
   [cli-integration](pages/cli-integration.md) and [screen-focus](pages/screen-focus.md).
+
+## [2026-11-25] build | Files search, replace and quick open
+
+Files gains a tree toolbar (Search, Reveal active file, Expand loaded folders, Expand to depth 1-3,
+Collapse all) and, with All projects, a per-project folder menu; `*` expands sibling folders and `-`
+collapses. Ctrl/Cmd+K is now also quick open: file names across the projects in scope, ranked in main
+from a per-checkout index (`git ls-files --cached` + `git status -uall`, refreshed by the checkout
+watchers), in sections with commands and sessions; `>` restricts to commands, `name:42` opens at a
+line, Enter opens the file in its checkout and reveals it in the tree. Ctrl/Cmd+Shift+F (or the header
+Search button) opens the Search panel: match case / whole word / regex, include and exclude globs,
+current checkout or all projects in scope, streamed results grouped by file (`git grep` through the
+hardened runner's new `Git.stream`, `-e <pattern> --`, untracked files scanned in main), and Replace /
+Replace all through a preview confirm that warns about agents editing the file; `files.replace`
+refuses files whose hash changed since the search. Protocol additions: `files.findByName`,
+`files.searchContent`, `files.cancelSearch`, `files.replace`, event `files.searchResults`
+(`packages/protocol/src/search.ts`). 100k-file repo: index 0.7 s, queries 50-105 ms, rare-string
+search 2.0 s. Pages: [screen-files](pages/screen-files.md), [desktop-shell](pages/desktop-shell.md),
+[security](pages/security.md), [git-worktrees](pages/git-worktrees.md).

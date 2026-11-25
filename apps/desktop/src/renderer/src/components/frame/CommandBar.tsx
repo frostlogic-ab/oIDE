@@ -1,18 +1,22 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
 import { Icon, Kbd, StatusDot, agentStatusMeta, cn } from '@oide/ui';
 import type { AgentSummary } from '@oide/protocol';
-import { commands, filterCommands, fuzzyFilter, type Command } from '../../lib/commands';
+import { commands, fuzzyFilter } from '../../lib/commands';
+import { buildCommandBarRows, openQuickOpenResult, recentRows, useQuickOpenFiles, useQuickOpenRoots, type CommandBarRow } from '../../lib/quickOpen';
 import { useKeymapScope } from '../../lib/useKeymap';
+import { useFiles } from '../../screens/Files/filesStore';
 import { agentsInScope, useAgents } from '../../stores/agents';
 import { projectName, useProjects } from '../../stores/projects';
 import { navigate } from '../../stores/router';
 import { useUi } from '../../stores/ui';
 
-type Row =
-  | { kind: 'command'; id: string; command: Command; group: string }
-  | { kind: 'agent'; id: string; agent: AgentSummary; group: string };
+type Row = CommandBarRow;
 
-/** Ctrl/Cmd+K: fuzzy command palette over the command registry plus "Jump to session". */
+/**
+ * Ctrl/Cmd+K: quick open and command palette. Plain text finds files by name in the projects in
+ * scope, mixed with commands and sessions in sections; `>` restricts to commands; `name:42` opens
+ * at a line. "Jump to session" switches to an agent list.
+ */
 export function CommandBar() {
   const { open, mode, query } = useUi((s) => s.commandBar);
   if (!open) return null;
@@ -34,6 +38,11 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
   const inputRef = useRef<HTMLInputElement>(null);
   const listId = useId();
   const opener = useRef<HTMLElement | null>(null);
+  const roots = useQuickOpenRoots();
+  const recent = useFiles((s) => s.recent);
+  const commandOnly = query.trimStart().startsWith('>');
+  const found = useQuickOpenFiles(query, roots, mode === 'commands' && !commandOnly);
+  const rootLabel = useMemo(() => new Map(roots.map((r) => [r.root, r.label])), [roots]);
 
   useKeymapScope('command-bar', {}, { modal: true });
 
@@ -50,15 +59,10 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
     const agents = agentsInScope(byId, order, 'all');
     const agentRows = (list: AgentSummary[]): Row[] => list.map((agent) => ({ kind: 'agent', id: `agent:${agent.id}`, agent, group: 'Sessions' }));
     if (mode === 'sessions') return agentRows(fuzzyFilter(agents, query, (a) => `${a.title} ${projectName(projects, a.projectId)}`));
-    const cmdRows: Row[] = filterCommands(commands.list(), query).map((command) => ({
-      kind: 'command',
-      id: command.id,
-      command,
-      group: command.group ?? 'Commands',
-    }));
-    if (!query.trim()) return cmdRows;
-    return [...cmdRows, ...agentRows(fuzzyFilter(agents, query, (a) => a.title).slice(0, 5))];
-  }, [version, byId, order, projects, mode, query]);
+    // File results belong to the query they were fetched for (an older answer is not shown).
+    const files = found.query === query ? found.results : [];
+    return buildCommandBarRows({ query, commands: commands.list(), agents, files, recent: recentRows(recent, roots) });
+  }, [version, byId, order, projects, mode, query, found, recent, roots]);
 
   useEffect(() => setActive(0), [query, mode]);
 
@@ -67,6 +71,11 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
     if (row.kind === 'agent') {
       close();
       navigate('focus', { agentId: row.agent.id });
+      return;
+    }
+    if (row.kind === 'file') {
+      close();
+      openQuickOpenResult(row);
       return;
     }
     const result = await row.command.run();
@@ -112,11 +121,11 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
             aria-controls={listId}
             aria-activedescendant={rows[active] ? `${listId}-${active}` : undefined}
             aria-autocomplete="list"
-            aria-label={mode === 'sessions' ? 'Find a session' : 'Search commands'}
+            aria-label={mode === 'sessions' ? 'Find a session' : 'Search files and commands'}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={mode === 'sessions' ? 'Type an agent name' : 'Spawn an agent, jump to a session, or run a command'}
+            placeholder={mode === 'sessions' ? 'Type an agent name' : 'Open a file, run a command (type > for commands only), or jump to a session'}
             className="flex-1 min-w-0 h-full border-0 outline-none bg-transparent text-ink text-[14px] placeholder:text-ink-3 focus-visible:outline-none"
           />
           <Kbd>Esc</Kbd>
@@ -142,6 +151,8 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
                       <span className="flex-1 truncate">{row.command.title}</span>
                       {row.command.hint && <Kbd>{row.command.hint}</Kbd>}
                     </>
+                  ) : row.kind === 'file' ? (
+                    <FileRowContent match={row.match} label={rootLabel.get(row.match.root) ?? ''} line={row.line} />
                   ) : (
                     <>
                       <StatusDot status={row.agent.status} />
@@ -164,6 +175,16 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
           <span className="flex items-center gap-1.5">
             <Kbd>Enter</Kbd> to run
           </span>
+          {mode === 'commands' && (
+            <>
+              <span className="flex items-center gap-1.5">
+                <Kbd>&gt;</Kbd> commands only
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Kbd>:42</Kbd> go to line
+              </span>
+            </>
+          )}
           {mode === 'sessions' && (
             <span className="flex items-center gap-1.5">
               <Kbd>Backspace</Kbd> for commands
@@ -172,5 +193,40 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
         </div>
       </div>
     </div>
+  );
+}
+
+/** A file result: name and folder with the matched characters marked, project (and worktree) on the right. */
+function FileRowContent({ match, label, line }: { match: { path: string; positions: number[] }; label: string; line?: number | undefined }) {
+  const slash = match.path.lastIndexOf('/');
+  const hit = new Set(match.positions);
+  const mark = (from: number, to: number) => {
+    const out: Array<{ text: string; hit: boolean }> = [];
+    for (let i = from; i < to; i++) {
+      const h = hit.has(i);
+      const last = out[out.length - 1];
+      if (last && last.hit === h) last.text += match.path[i];
+      else out.push({ text: match.path[i]!, hit: h });
+    }
+    return out.map((p, i) =>
+      p.hit ? (
+        <span key={i} className="text-link font-semibold">
+          {p.text}
+        </span>
+      ) : (
+        <span key={i}>{p.text}</span>
+      ),
+    );
+  };
+  return (
+    <>
+      <Icon name="file" size={14} className="text-ink-3 shrink-0" />
+      <span className="shrink-0 max-w-[45%] truncate">{mark(slash + 1, match.path.length)}</span>
+      <span className="flex-1 min-w-0 truncate font-mono text-[11.5px] text-ink-3">{slash > 0 ? mark(0, slash) : null}</span>
+      <span className="text-[11.5px] text-ink-3 whitespace-nowrap">
+        {label}
+        {line !== undefined ? ` · line ${line}` : ''}
+      </span>
+    </>
   );
 }

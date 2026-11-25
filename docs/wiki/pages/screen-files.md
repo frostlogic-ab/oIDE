@@ -6,11 +6,16 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
 
 ## Layout
 
-- Header: title + shared scope switcher.
-- Left (270px, "File tree", `TreePanel.tsx`): per project in scope, a header row (expand toggle,
-  name, number of agent worktrees, a 96px branch / worktree `<select>`: main + each worktree's short
-  branch) and a `role="tree"`. With All projects the first project starts open; with one project
-  in scope its tree is always open. Legend box at the bottom.
+- Header: title + shared scope switcher; on the right a "Search" button (`aria-pressed`, Ctrl/Cmd+Shift+F
+  hint) that toggles the Search panel.
+- Left (270px, "File tree", `TreePanel.tsx`): a toolbar ("FILES" label; 28px icon buttons Search in
+  files, Reveal active file, Expand loaded folders, an "Expand to depth" 1/2/3 menu, Collapse all
+  folders; they act on every open tree), then per project in scope a header row (expand toggle, name,
+  number of agent worktrees, a 96px branch / worktree `<select>`: main + each worktree's short
+  branch, and with All projects a "Folder actions for <project>" menu: Collapse all, Expand loaded
+  folders, Expand to depth 1/2/3, Reveal active file) and a `role="tree"`. With All projects the
+  first project starts open; with one project in scope its tree is always open. Legend box at the
+  bottom. When Search is open the column is the 300px Search panel instead.
 - Middle: open-file tabs (`role="tablist"`, accent top border, close ×, ● when unsaved; right side
   "Ln, Col · Language" and Save), the agent banner, the editor.
 - Right ("File activity"): This file's history, Mentioned in, the language-servers note.
@@ -23,7 +28,14 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   amber waiting on you, blue ready for review) with a tooltip. On first load of a checkout the
   folders containing those files are expanded.
 - Keyboard: roving tabindex per tree, ↑/↓, Home/End, → expand / first child, ← collapse / parent,
-  Enter/Space open or toggle. `aria-level`, `aria-expanded`, `aria-selected`.
+  Enter/Space open or toggle, `*` expands every sibling folder (tree convention), `-` collapses the
+  folder (on a file or closed folder: its parent, and moves there). `aria-level`, `aria-expanded`,
+  `aria-selected`.
+- Expand / collapse (store): `collapseAll(root)`, `expandLoaded(root)` (every folder whose listing is
+  loaded), `expandToDepth(root, n)` (loads level by level, at most 300 folders), `revealPath(root,
+  path)` (expands the ancestors and sets `revealTarget`; the tree scrolls to the row and makes it the
+  tab stop once it is rendered). Reveal active file also opens the project and switches it to the
+  tab's checkout.
 - Rows are a fixed 23px pitch and windowed (only visible rows plus overscan are in the DOM).
 
 ## Editor (`EditorPane.tsx`, `monaco/setup.ts`)
@@ -41,6 +53,65 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   `{ kind: 'file', path, title: 'StatusBar.tsx:5-6' }`, also in the context menu) and "Send to <agent>"
   when an agent is editing the file (`agents.send` text with the path, lines and snippet).
 
+## Search
+
+`SearchPanel.tsx`, `searchStore.ts`, `searchModel.ts`, `ReplaceDialog.tsx`; main:
+`services/file-search.ts`. Opened by the header button, the toolbar's search icon, Ctrl/Cmd+Shift+F
+(`files.search` in the Files keymap scope; rebindable) or the "Search in files" command.
+
+- Form: "SEARCH" label and close; a replace toggle (chevron, `aria-expanded`); the query field with
+  Match case (Aa), Match whole word (ab) and Use regular expression (.*) toggles (`aria-pressed`);
+  the Replace field with Replace all; "Search in" (the current project's checkout, or all projects in
+  scope) when more than one project is in scope; "Files to include and exclude" (comma-separated
+  globs: a name without `/` matches at any depth, `src/**` is relative to the root, a folder covers its
+  contents, `{a,b}` and `[...]` work). Invalid regexes are reported inline and not searched.
+- Searches as you type (250 ms) and on Enter; Esc cancels a running search. `files.searchContent`
+  returns at once; batches arrive as `files.searchResults { searchId }` (25 files or 80 ms), the last
+  with `done`, `truncated` and stats. The status line reads "Searching…" with Cancel, "N results in
+  M files", "No results." or the first-2000 note.
+- Results are grouped by file (name, folder, project when searching several, count badge, collapse)
+  with one 23px row per match: line number and a mono preview cut around the match, the match on
+  `review-line`. Clicking a match opens the file in its checkout and selects the match in Monaco.
+- Replace: with the replace field open, each match row shows the old text struck through on
+  `bad-line` and the new text on `ok-line`; per-match "Replace" and per-file "Replace all in <file>"
+  buttons appear on hover or focus. Every replace (one match, one file or Replace all) opens a confirm:
+  per file a checkbox, "<agent> is changing this file" when `files.editingAgents` says so, and the old
+  and new text of each matched line (`data-kind` del/add rows in the Review colours). Confirm sends only
+  the checked files' listed matches to `files.replace`; files changed since the search come back
+  `stale` and are left alone (warning toast), then the search runs again. Regex replacements expand
+  `$1`, `$<name>`, `$&` and `$$`.
+- Main: `git grep -l -z -I` (`-F` text, `-P` regex, `-i`, `-w`; `-e <pattern> --`) lists candidate
+  tracked files per checkout, and the checkout's untracked (not ignored) files from the index are
+  scanned in main (`git grep --untracked` walks the whole tree and was 4x slower); each is read in main (path guard, 5 MB cap, binary check), matched with
+  the same JavaScript regex replace uses (`buildSearchRegExp` in `packages/protocol/src/search.ts`) and
+  hashed (sha256). Outside git, or when git has no PCRE for a regex, the checkout's file index is
+  scanned instead. At most 4 searches run; a new one with the same id cancels the old. Security
+  details: [security](security.md#search-and-replace-files).
+
+## Quick open
+
+Ctrl/Cmd+K finds files by name across the projects in scope; see
+[desktop-shell](desktop-shell.md#command-bar). Enter sets `filesStore.pending`; the Files screen opens
+the file in that checkout (selecting it in the project's menu), reveals it in the tree and, for
+`name:42`, puts the cursor on that line. Opened files are remembered (`recent`, 50, localStorage) and
+rank first.
+
+## Performance
+
+Measured on Windows 11 with a synthetic 100k-file git repo (`packages/p*/src/mod*/file*.ts`), through
+`services/file-search.ts`:
+
+| Step | Time |
+| --- | --- |
+| Index build (`ls-files --cached` + `status -uall`, in parallel) | 0.63-0.70 s (was 11-15 s with `ls-files --others` + `--deleted`) |
+| Quick-open query (`file4242`, `mod77`, `f`, `src mod1 index`) | 50-105 ms |
+| Search a rare string (1 hit) | 2.0 s total, about what `git grep` itself takes (2.1 s) |
+| Search a common string (`export`, capped at 2000) | first batch 89 ms, done in 0.8 s |
+
+The index is built once per checkout and refreshed in the background after watcher changes, so
+quick open never waits for git after the first query. `git status` runs with `--no-optional-locks`
+so it never holds the index lock an agent's git needs.
+
 ## Banner and activity
 
 - `files.editingAgents { path: <absolute path> }` → banner: "<agent> is changing this file in its
@@ -55,8 +126,16 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
 ## Tests
 
 `Files.test.tsx`: trees per project, revealed compacted folders, markers, lazy expansion via
-click and ←/→, opening another project, switching to a worktree checkout; `visibleRows` /
-`ancestorDirs` model.
+click and ←/→, opening another project, switching to a worktree checkout; toolbar Collapse all /
+Expand loaded / Expand to depth, the per-project menu (absent with one project in scope), `*` and `-`,
+Reveal active file, quick-open requests; search (sections, highlight, regex error, open at a match)
+and replace (one match through the preview, stale refusal after an outside change); `visibleRows` /
+`ancestorDirs` model. `packages/protocol/src/search.test.ts` (ranking, regex, replace, globs),
+`apps/desktop/src/main/services/file-search.test.ts` (index, 100k-path query, git grep argument
+safety, regex vs text, untracked / ignored / binary, cap, cancel, non-git scan, replace safety),
+`test/integration/files-search.test.ts` (IPC validation and path guard),
+`lib/quickOpen.test.ts` and `components/frame/CommandBar.test.tsx` (sections, `>`, `:line`), and
+`e2e/files-search.spec.ts` (Ctrl+K opens a file; Ctrl+Shift+F finds and replaces one match).
 
 ## Deviations
 

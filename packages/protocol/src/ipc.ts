@@ -6,6 +6,7 @@ import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUp
 import { CommitInfo, FileDiff, FileNode, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
 import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settings.js';
 import { UpdateStatus } from './updates.js';
+import { FindByNameInput, FindByNameOutput, ReplaceInput, ReplaceOutput, SearchContentInput, SearchResultsEvent } from './search.js';
 
 /**
  * The IPC contract. Every renderer → main command is a request/response pair, validated with Zod
@@ -132,6 +133,13 @@ export const Commands = {
   'files.editingAgents': cmd(z.object({ path: z.string() }), z.array(Id)),
   /** Artifacts that mention this file (Files › Mentioned in). Path is relative to root. */
   'files.mentionedIn': cmd(z.object({ root: z.string(), path: z.string() }), z.array(ArtifactMeta)),
+  /** Quick open (Ctrl/Cmd+K): fuzzy file-name search over each root's index (git ls-files, kept fresh by the watchers). */
+  'files.findByName': cmd(FindByNameInput, FindByNameOutput),
+  /** Files › Search: starts a content search; results stream as `files.searchResults { searchId }`. */
+  'files.searchContent': cmd(SearchContentInput, Ok),
+  'files.cancelSearch': cmd(z.object({ searchId: z.string().min(1).max(64) }), Ok),
+  /** Files › Search › Replace: replaces exactly the confirmed matches; files changed since the search are refused. */
+  'files.replace': cmd(ReplaceInput, ReplaceOutput),
 
   // Terminals
   // No `command` (SEC-05): renderers get interactive shells only; the sign-in terminal runs in main.
@@ -291,6 +299,8 @@ export const Events = {
     requestId: z.string().optional(),
   }),
   'command.invoke': z.object({ commandId: z.string() }),
+  /** A batch of `files.searchContent` results (the last one has `done: true`). */
+  'files.searchResults': SearchResultsEvent,
   'updates.changed': UpdateStatus,
 } as const;
 

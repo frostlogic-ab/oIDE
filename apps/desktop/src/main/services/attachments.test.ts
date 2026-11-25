@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -87,13 +87,13 @@ describe('readPickedFiles (dialog.pickFiles and drops)', () => {
 describe('copyAttachments', () => {
   it('copies files under .oide/attachments/<timestamp>-<name>, excludes the folder in info/exclude, keeps images', async () => {
     const now = Date.UTC(2026, 10, 25, 14, 30, 12);
-    const out = await copyAttachments(worktree, [image(), { kind: 'file', path: join(outside, 'notes.txt'), name: 'notes.txt', size: 5 }, { kind: 'file', path: join(outside, 'notes.txt'), name: 'notes.txt', size: 5 }], now);
+    const out = await copyAttachments(worktree, [image(), { kind: 'file', path: join(outside, 'notes.txt'), name: 'notes.txt', size: 5 }, { kind: 'file', path: join(outside, 'notes.txt'), name: 'notes.txt', size: 5 }], pickedNotes(), now);
     expect(out[0]).toEqual(image());
     expect(out.slice(1).map((a) => a.kind === 'file' && a.path)).toEqual(['.oide/attachments/20261125T143012-notes.txt', '.oide/attachments/20261125T143012-notes-2.txt']);
     expect(readFileSync(join(worktree, '.oide/attachments/20261125T143012-notes.txt'), 'utf8')).toBe('hello');
     const exclude = readFileSync(join(worktree, '.git/info/exclude'), 'utf8');
     expect(exclude).toContain('/.oide/attachments/');
-    await copyAttachments(worktree, [{ kind: 'file', path: join(outside, 'notes.txt'), name: 'notes.txt', size: 5 }], now + 1000);
+    await copyAttachments(worktree, [{ kind: 'file', path: join(outside, 'notes.txt'), name: 'notes.txt', size: 5 }], pickedNotes(), now + 1000);
     expect(readFileSync(join(worktree, '.git/info/exclude'), 'utf8').split('/.oide/attachments/').length).toBe(2);
     // git sees nothing to commit in the attachments folder.
     expect(execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: worktree, encoding: 'utf8' })).not.toContain('.oide/attachments');
@@ -112,5 +112,47 @@ describe('copyAttachments', () => {
     expect(sniffImage(Buffer.from('GIF89a'))).toBe('image/gif');
     expect(sniffImage(Buffer.from('RIFF\0\0\0\0WEBPVP8 '))).toBe('image/webp');
     expect(sniffImage(Buffer.from('hello'))).toBeUndefined();
+  });
+});
+
+describe('attachments refuse links planted in the agent folder', () => {
+  it('does not copy through a .oide junction that points outside the worktree', async () => {
+    const wt = join(base, 'linked-wt');
+    const target = join(base, 'link-target');
+    mkdirSync(wt, { recursive: true });
+    mkdirSync(target, { recursive: true });
+    execFileSync('git', ['init', '-q'], { cwd: wt });
+    // A junction needs no privileges on Windows; elsewhere it is a plain directory symlink.
+    symlinkSync(target, join(wt, '.oide'), 'junction');
+    const picked = new Set([pathKey(join(outside, 'notes.txt'))]);
+    const files = await validateAttachments([{ kind: 'file', path: join(outside, 'notes.txt'), name: 'notes.txt', size: 5 }], { picked, roots: [wt] });
+    await expect(copyAttachments(wt, files, picked)).rejects.toThrow(/link or not a folder/);
+    expect(readdirSync(target)).toEqual([]);
+  });
+
+  it('refuses a link in the worktree instead of following it', async (ctx) => {
+    const link = join(worktree, 'looks-inside.txt');
+    try {
+      symlinkSync(join(outside, 'secret.txt'), link, 'file');
+    } catch {
+      ctx.skip(); // file symlinks need Developer Mode or admin on Windows
+    }
+    await expect(validateAttachments([{ kind: 'file', path: link, name: 'looks-inside.txt', size: 1 }], { picked: new Set(), roots: [worktree] })).rejects.toThrow(/other paths are refused|links cannot be attached/);
+  });
+});
+
+describe('copyAttachments never reads the agent folder', () => {
+  it('passes files already inside the worktree by relative path without copying them', async () => {
+    const out = await copyAttachments(worktree, [{ kind: 'file', path: join(worktree, 'inside.txt'), name: 'inside.txt', size: 6 }], new Set());
+    expect(out).toEqual([{ kind: 'file', path: 'inside.txt', name: 'inside.txt', size: 6 }]);
+  });
+});
+
+const pickedNotes = (): Set<string> => new Set([pathKey(join(outside, 'notes.txt'))]);
+
+describe('copyAttachments reads only what the user picked', () => {
+  it('refuses a file outside the agent folder that was validated against another root but never picked', async () => {
+    const projectFile = join(outside, 'secret.txt'); // e.g. in the project folder Spawn validated against
+    await expect(copyAttachments(worktree, [{ kind: 'file', path: projectFile, name: 'secret.txt', size: 10 }], new Set())).rejects.toThrow(/only files you attach/);
   });
 });

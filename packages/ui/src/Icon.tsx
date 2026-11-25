@@ -177,6 +177,47 @@ const P = {
       <path d="M18 9c0 5-12 3-12 8" />
     </>
   ),
+  /** Files tree: collapse every folder. */
+  'collapse-all': (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M8 12h8" />
+    </>
+  ),
+  /** Files tree: expand the loaded folders. */
+  'expand-all': (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+      <path d="M8 12h8M12 8v8" />
+    </>
+  ),
+  /** Files tree: reveal the active file. */
+  locate: (
+    <>
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="1.5" />
+      <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+    </>
+  ),
+  /** Files search: replace. */
+  replace: (
+    <>
+      <path d="M4 7h11" />
+      <path d="M12 4l3 3-3 3" />
+      <path d="M20 17H9" />
+      <path d="M12 14l-3 3 3 3" />
+    </>
+  ),
+  /** Files search: replace all. */
+  'replace-all': (
+    <>
+      <path d="M4 5h11" />
+      <path d="M12 2l3 3-3 3" />
+      <path d="M4 11h11" />
+      <path d="M20 19H9" />
+      <path d="M12 16l-3 3 3 3" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof P;

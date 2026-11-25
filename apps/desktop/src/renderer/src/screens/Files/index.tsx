@@ -4,10 +4,13 @@
  * when an agent is changing the open file; file history with agent attribution; Mentioned in.
  * Wiki: screen-files.md.
  */
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { EmptyState, Spinner } from '@oide/ui';
-import { NEEDS_YOU, type AgentSummary, type ArtifactMeta, type CommitInfo, type Project } from '@oide/protocol';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Button, EmptyState, Spinner } from '@oide/ui';
+import { NEEDS_YOU, type AgentSummary, type ArtifactMeta, type CommitInfo, type ContentMatch, type Project } from '@oide/protocol';
+import { HeaderSlot } from '../../components/frame/HeaderSlot';
 import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
+import { keymap } from '../../lib/keymap';
+import { useKeymapScope } from '../../lib/useKeymap';
 import { useAgents } from '../../stores/agents';
 import { useProjects } from '../../stores/projects';
 import { navigate, useRouter } from '../../stores/router';
@@ -15,8 +18,10 @@ import { useScope } from '../../stores/scope';
 import { toast } from '../../stores/ui';
 import { useGit, useGitData } from '../SourceControl/gitStore';
 import { C, commitAuthor, shortBranch, timeAgo } from '../SourceControl/model';
-import type { EditorStatus, SelectionInfo } from './EditorPane';
-import { joinPath, useFiles, type FileTab } from './filesStore';
+import type { EditorPaneProps, EditorStatus, SelectionInfo } from './EditorPane';
+import { joinPath, tabId, useFiles, type FileTab } from './filesStore';
+import { SearchPanel, type SearchCheckout } from './SearchPanel';
+import { useSearch } from './searchStore';
 import { TreePanel, type Marker, type ProjectTreeInfo } from './TreePanel';
 
 const EditorPane = lazy(() => import('./EditorPane'));
@@ -51,7 +56,7 @@ export default function FilesScreen() {
   // Open a file from route params ({ root, path, line }) once.
   const params = useMemo<{ root?: string; path?: string; line?: number }>(() => (route.screen === 'files' ? route.params : {}), [route]);
   const applied = useRef<string>('');
-  const [revealLine, setRevealLine] = useState<number>();
+  const [reveal, setReveal] = useState<EditorPaneProps['reveal']>();
   useEffect(() => {
     const key = JSON.stringify(params);
     if (!params.root || applied.current === key) return;
@@ -62,9 +67,50 @@ export default function FilesScreen() {
     files.setCheckout(projectId, params.root);
     if (params.path) {
       files.openFile(projectId, params.root, params.path);
-      setRevealLine(params.line);
+      if (params.line) setReveal({ tabId: tabId(params.root, params.path), line: params.line, nonce: Date.now() });
     }
   }, [params, allProjects, agents, git, files]);
+
+  // Quick open (Ctrl/Cmd+K): open the file in its project and checkout, reveal it in the tree.
+  const pending = files.pending;
+  useEffect(() => {
+    if (!pending) return;
+    const projectId = projectForRoot(pending.root, allProjects, agents, git);
+    if (!projectId) return;
+    files.clearPending(pending.nonce);
+    files.setProjectOpen(projectId, true);
+    files.setCheckout(projectId, pending.root);
+    files.openFile(projectId, pending.root, pending.path);
+    const tab = tabId(pending.root, pending.path);
+    setReveal(pending.line ? { tabId: tab, line: pending.line, ...(pending.column !== undefined ? { column: pending.column } : {}), nonce: pending.nonce, focus: true } : undefined);
+    useSearch.getState().setOpen(false);
+    files.revealPath(pending.root, pending.path);
+  }, [pending, allProjects, agents, git, files]);
+
+  // Files › Search (header button, Ctrl/Cmd+Shift+F).
+  const searchOpen = useSearch((st) => st.open);
+  const showSearch = useSearch((st) => st.show);
+  const setSearchOpen = useSearch((st) => st.setOpen);
+  useKeymapScope('files', { 'files.search': () => showSearch() });
+  const searchKey = keymap.label('files.search');
+  const checkouts: SearchCheckout[] = useMemo(
+    () =>
+      projects.map((project) => {
+        const root = files.checkout[project.id] ?? project.path;
+        const w = (git[project.id]?.worktrees ?? []).find((x) => x.path === root);
+        return { project, root, label: w ? shortBranch(w.branch) : 'main' };
+      }),
+    [projects, files.checkout, git],
+  );
+  const openMatch = useCallback(
+    (root: string, path: string, m?: ContentMatch) => {
+      const projectId = projectForRoot(root, allProjects, agents, git);
+      if (!projectId) return;
+      files.openFile(projectId, root, path);
+      if (m) setReveal({ tabId: tabId(root, path), line: m.line, column: m.column, length: m.length, nonce: Date.now() + Math.random() });
+    },
+    [allProjects, agents, git, files],
+  );
 
   const active = files.tabs.find((t) => t.id === files.active);
   const activeProject = allProjects.find((p) => p.id === active?.projectId);
@@ -124,7 +170,16 @@ export default function FilesScreen() {
 
   return (
     <>
-      <TreePanel trees={trees} scoped={scope !== 'all'} />
+      <HeaderSlot name="actions">
+        <Button variant="secondary" size={28} icon="search" aria-pressed={searchOpen} aria-keyshortcuts="Control+Shift+F Meta+Shift+F" onClick={() => showSearch({ toggle: true })} kbd={searchKey || undefined}>
+          Search
+        </Button>
+      </HeaderSlot>
+      {searchOpen ? (
+        <SearchPanel checkouts={checkouts} currentProjectId={active?.projectId} onOpen={openMatch} onClose={() => setSearchOpen(false)} />
+      ) : (
+        <TreePanel trees={trees} scoped={scope !== 'all'} onSearch={() => showSearch()} searchHint={searchKey} />
+      )}
 
       <main className="flex-[999_1_560px] min-w-0 min-h-0 flex flex-col">
         <div className="flex items-stretch bg-chrome border-b border-line min-h-9">
@@ -214,7 +269,7 @@ export default function FilesScreen() {
               <EditorPane
                 tabs={files.tabs}
                 active={active}
-                revealLine={revealLine}
+                reveal={reveal}
                 onStatus={setStatus}
                 onDirty={(id, d) => setDirty((prev) => (prev[id] === d ? prev : { ...prev, [id]: d }))}
                 onAsk={ask}

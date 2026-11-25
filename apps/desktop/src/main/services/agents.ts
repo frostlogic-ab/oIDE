@@ -139,7 +139,7 @@ export class AgentsService {
       settings: this.settingsProvider(),
       secrets: this.secretProvider(),
       // Files attached to a message are copied into the agent's folder (`.oide/attachments/`) before they reach the CLI.
-      attachments: { materialize: ({ cwd, attachments }) => copyAttachments(cwd, attachments) },
+      attachments: { materialize: ({ cwd, attachments }) => copyAttachments(cwd, attachments, this.o.picked ?? new Set()) },
       broker: guardedBroker(o.mcp, { ...(o.mcpReady ? { mcpReady: o.mcpReady } : {}), ...(o.ctx.reliability ? { redactor: o.ctx.reliability.logs.redactor } : {}) }),
       ...(o.driver ? { driver: o.driver } : {}),
       log: (m, d) => o.ctx.log.debug('[supervisor]', m, d ?? ''),
@@ -489,7 +489,7 @@ export class AgentsService {
     const checked = await validateAttachments(msg.attachments, { picked: this.o.picked ?? new Set(), roots });
     const hasFiles = checked.some((x) => x.kind === 'file');
     if (hasFiles && !a.worktreePath) throw new IpcError('This agent has no folder yet. Attach files once it has started.', 'conflict');
-    const attachments = hasFiles && a.worktreePath ? await copyAttachments(a.worktreePath, checked) : checked;
+    const attachments = hasFiles && a.worktreePath ? await copyAttachments(a.worktreePath, checked, this.o.picked ?? new Set()) : checked;
     this.supervisor.send(a.id, { ...msg, attachments });
   }
 

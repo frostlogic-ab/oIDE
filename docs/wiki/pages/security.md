@@ -70,6 +70,30 @@ rules in [constraints](constraints.md). Where things live: [desktop-shell](deskt
   known project. The integration harness (`h.allowOpen`) and unpackaged e2e builds
   (`OIDE_E2E_OPEN_PATHS`) have a test-only list (`Platform.openablePaths`); packaged builds have none.
 
+### Search and replace (Files)
+
+`files.findByName`, `files.searchContent` and `files.replace` ([screen-files](screen-files.md#search),
+`apps/desktop/src/main/services/file-search.ts`):
+
+- Every root must be a `project` or `worktree` root (`ctx.roots.assertAllowed`, `forbidden_path`
+  otherwise); results echo the caller's root string but all disk access uses the guarded real path.
+- Content search runs the hardened git runner (`Git.stream`, packages/git): no shell, the absolute
+  `git` from PATH, the repo's exec-capable config neutralised in untrusted checkouts. The pattern is
+  always the argument of `-e`, after every flag and followed by `--`, so `--output=x` or `-n` is a
+  search text, never an option. `-I` skips binary files, `-c grep.fullName=false` keeps names relative.
+  Untracked, not ignored files come from the index (`git --no-optional-locks status -uall`) and are
+  read in main under the same checks. Queries are one line without NUL (Zod).
+- Each candidate file is re-checked in main before it is read: `.git` segments are skipped, a symlink
+  that resolves outside the checkout is skipped (`isInside` with realpath), files over 5 MB and files
+  with a NUL in the first 8 KB are skipped. Results are capped (default 2000, at most 20 000), streamed
+  in batches as `files.searchResults`, and a search can be cancelled (the git process tree is killed).
+- `files.replace` guards every file path (traversal, absolute paths elsewhere, `.git`) before it
+  touches any file: one bad path refuses the whole request. Each file must still hash (sha256) to what
+  the search saw and each confirmed match must still be at its line and column with the same text;
+  otherwise the file is `stale` and nothing is written. Non-UTF-8 files are refused. Only the matches
+  the user confirmed in the preview are replaced; the confirm warns when `files.editingAgents` reports
+  an agent changing the file.
+
 ## Artifact preview protocol
 
 `oide-artifact://<artifact-id>/<file>` is a privileged standard scheme (`services/electron-platform.ts`).

@@ -266,7 +266,7 @@ placeholders marked `PLACEHOLDER` (the Wall placeholder lists agents with the sh
 
 `lib/keymap.ts` holds every shortcut in one rebindable map (`DEFAULT_BINDINGS`): J next agent,
 K previous, N next that needs you, Y allow, D deny, Esc back, Mod+K command bar, Mod+Enter send,
-Shift+Tab switch mode, Alt+←/→ history. `Mod` is Cmd on macOS, Ctrl elsewhere. It listens on the
+Shift+Tab switch mode, Alt+←/→ history, Mod+Shift+F search in files (Files screen scope). `Mod` is Cmd on macOS, Ctrl elsewhere. It listens on the
 renderer window only (never OS-global). Screens activate a scope while mounted:
 
 ```ts
@@ -289,11 +289,24 @@ Extensions' `contributes.commands[].keybinding` are registered with `keymap.defi
 
 `lib/commands.ts` is the registry (`commands.register(cmd | cmd[])` returns an unregister) with a
 fuzzy filter. Core commands (`lib/coreCommands.ts`): Spawn an agent, Jump to session… (switches the
-bar to an agent list), Next agent that needs you, Go to each screen, Show all projects, Open project.
+bar to an agent list), Next agent that needs you, Go to each screen, Search in files, Show all
+projects, Open project.
 Extension commands from `extensions.installed` (extensions on somewhere) run through
 `extensions.runCommand`, with `{ agentId }` as the argument in Focus; panels add "Open <title>" and
 contributed themes add "Next accent colour" (`extensions/commands.ts`). Main can run any command with
 the `command.invoke` event. Typing in command mode also offers matching sessions.
+
+**Quick open** (`lib/quickOpen.ts`, VS Code style). Plain text searches file names in the checkout
+Files shows for each project in scope (`files.findByName`, ranked in main: exact name > name prefix >
+name substring > name subsequence > path, shorter paths first; recently opened files first) and the
+rows come in sections: Recently opened, Files, the command groups, Sessions. Commands lead when the
+text is part of a command title ("marketpl" still runs Go to Marketplace on Enter). A `>` prefix
+lists commands only; `name:42` or `name:42:7` opens at that line. The empty query lists recently
+opened files above the commands. Enter on a file asks Files to open it (`filesStore.requestOpen`):
+Files switches the project to that checkout, opens the tab and reveals the row in the tree. Main keeps
+one index per checkout (`git ls-files --cached` plus untracked, not ignored files and minus deleted
+ones from `git status -uall`; a folder walk outside git), built on first use and marked dirty by the checkout watchers (`GitService.onCheckoutChange`);
+queries use the old list while it rebuilds. Timings: [screen-files](screen-files.md#performance).
 
 ## Tests
 

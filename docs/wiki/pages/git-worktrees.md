@@ -17,6 +17,10 @@ security (trust and bypass rules; `security.md` once written), [architecture.md]
   messages. git never waits for a human.
 - Failures reject with `GitError { args, exitCode, stderr, stdout, timedOut }`.
 - Functions accept `Repo = string | Git`.
+- `stream(args, { onStdout, signal, okExitCodes, cwd, env })` spawns the same hardened git (same
+  binary, env, config overrides and diff flags) and streams stdout without a size cap; aborting the
+  signal kills the process tree (`taskkill /T` on Windows, where `git.exe` is a launcher). Used by
+  Files › Search (`git grep -l`, see [screen-files](screen-files.md#search)).
 - `runShellCommand(cwd, command, { onOutput, signal, timeoutMs })` runs a user command line (the
   `.oide/setup` command) through the platform shell explicitly (`cmd.exe /d /s /c`, `/bin/sh -c`).
   **The caller checks workspace trust**; untrusted projects must not reach it.

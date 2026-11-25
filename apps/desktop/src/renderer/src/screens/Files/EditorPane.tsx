@@ -38,7 +38,8 @@ type LoadState = { state: 'loading' } | { state: 'ready' } | { state: 'binary' }
 export interface EditorPaneProps {
   tabs: FileTab[];
   active: FileTab;
-  revealLine?: number;
+  /** Reveal a line (and select a match) in tab `tabId`, once per `nonce`. Columns are 0-based. */
+  reveal?: { tabId: string; line: number; column?: number; length?: number; nonce: number; focus?: boolean };
   onStatus(s: EditorStatus): void;
   onDirty(tabId: string, dirty: boolean): void;
   /** Selection toolbar: "Ask an agent about this". */
@@ -49,7 +50,7 @@ export interface EditorPaneProps {
   saveRef?: { current: (() => Promise<void>) | null };
 }
 
-export default function EditorPane({ tabs, active, revealLine, onStatus, onDirty, onAsk, sendTo, saveRef }: EditorPaneProps) {
+export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, onAsk, sendTo, saveRef }: EditorPaneProps) {
   const host = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const activeRef = useRef(active);
@@ -182,13 +183,19 @@ export default function EditorPane({ tabs, active, revealLine, onStatus, onDirty
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active.id]);
 
-  // Reveal a line (from Review "Open in editor" or a link).
+  // Reveal a line (Review "Open in editor", quick open "file.ts:42", a search result), once each.
+  const revealed = useRef<number>(undefined);
   useEffect(() => {
     const ed = editorRef.current;
-    if (!ed || !revealLine || load.state !== 'ready') return;
-    ed.revealLineInCenter(revealLine);
-    ed.setPosition({ lineNumber: revealLine, column: 1 });
-  }, [revealLine, load.state, active.id]);
+    if (!ed || !reveal || reveal.tabId !== active.id || revealed.current === reveal.nonce || load.state !== 'ready') return;
+    revealed.current = reveal.nonce;
+    const lineNumber = Math.max(1, Math.min(reveal.line, ed.getModel()?.getLineCount() ?? reveal.line));
+    const startColumn = (reveal.column ?? 0) + 1;
+    ed.revealLineInCenter(lineNumber);
+    if (reveal.length) ed.setSelection({ startLineNumber: lineNumber, startColumn, endLineNumber: lineNumber, endColumn: startColumn + reveal.length });
+    else ed.setPosition({ lineNumber, column: startColumn });
+    if (reveal.focus) ed.focus();
+  }, [reveal, load.state, active.id]);
 
   // Dispose models of closed tabs.
   const openIds = tabs.map((t) => t.id).join('\n');

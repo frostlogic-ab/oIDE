@@ -2,10 +2,11 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative } from 'node:path';
 import { fileHistory, isInside as gitIsInside, samePath } from '@oide/git';
-import type { ArtifactMeta, FileNode } from '@oide/protocol';
+import { buildSearchRegExp, type ArtifactMeta, type FileNode } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
 import { assertInside, isInside } from '../security/paths.js';
+import { ContentSearch, FileIndex, replaceInFiles, type ReplaceTarget } from '../services/file-search.js';
 import type { Services } from '../services/index.js';
 
 const MAX_READ = 5 * 1024 * 1024;
@@ -33,6 +34,15 @@ export function registerFileHandlers(router: IpcRouter, s: Services, ctx: MainCo
     if (toPosix(relative(r, abs)).split('/').includes('.git')) throw new IpcError('The .git folder is not available here', 'forbidden_path');
     return { root: r, abs };
   };
+
+  // Quick-open index and content search (services/file-search.ts), fed by the checkout watchers.
+  const index = new FileIndex({ isWatched: (r) => s.git.isWatching(r), log: ctx.log });
+  const search = new ContentSearch({ index, emit: (batch) => void ctx.emit('files.searchResults', batch), log: ctx.log });
+  s.git.onCheckoutChange((path) => index.invalidate(path));
+  ctx.onQuit(() => {
+    search.cancelAll();
+    index.dispose();
+  }, 'files-search');
 
   router.register('files.tree', async ({ root, dir }) => {
     const { root: r, abs } = inRoot(root, dir);
@@ -68,13 +78,73 @@ export function registerFileHandlers(router: IpcRouter, s: Services, ctx: MainCo
   });
 
   router.register('files.write', async ({ root, path, content }) => {
-    const { abs } = inRoot(root, path);
+    const { root: r, abs } = inRoot(root, path);
     if (!path) throw new IpcError('A file path is required', 'invalid_input');
     await mkdir(dirname(abs), { recursive: true });
     await writeFile(abs, content, 'utf8');
+    index.invalidate(r);
     const co = checkoutOf(s, abs);
     if (co) s.git.changed(co.projectId);
     return { ok: true as const };
+  });
+
+  // ---------------------------------------------------------------- quick open, search, replace
+  // Roots must be a project or worktree (path guard); results echo the caller's spelling of the root.
+  const checkoutRoots = (roots: string[]) => {
+    const seen = new Set<string>();
+    const out: Array<{ root: string; real: string }> = [];
+    for (const root of roots) {
+      const real = ctx.roots.assertAllowed(root, ['project', 'worktree']);
+      const key = process.platform === 'win32' || process.platform === 'darwin' ? real.toLowerCase() : real;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ root, real });
+    }
+    return out;
+  };
+  const regexOf = (o: { query: string; isRegex: boolean; matchCase: boolean; wholeWord: boolean }) => {
+    try {
+      return buildSearchRegExp(o);
+    } catch (err) {
+      throw new IpcError(`Invalid regular expression: ${(err as Error).message}`, 'invalid_input');
+    }
+  };
+
+  router.register('files.findByName', async ({ roots, query, limit, recent }) => {
+    const rs = checkoutRoots(roots);
+    return index.find({ roots: rs, query, limit, recent });
+  });
+
+  router.register('files.searchContent', ({ searchId, roots, query, isRegex, matchCase, wholeWord, include, exclude, maxResults }) => {
+    regexOf({ query, isRegex, matchCase, wholeWord });
+    const rs = checkoutRoots(roots);
+    void search.start({ searchId, roots: rs, query, isRegex, matchCase, wholeWord, include, exclude, maxResults });
+    return { ok: true as const };
+  });
+
+  router.register('files.cancelSearch', ({ searchId }) => {
+    search.cancel(searchId);
+    return { ok: true as const };
+  });
+
+  router.register('files.replace', async ({ files, query, isRegex, matchCase, wholeWord, replacement }) => {
+    regexOf({ query, isRegex, matchCase, wholeWord });
+    // Guard every path before touching any file: one bad path refuses the whole request.
+    const targets: ReplaceTarget[] = files.map((f) => {
+      ctx.roots.assertAllowed(f.root, ['project', 'worktree']);
+      const { abs } = inRoot(f.root, f.path);
+      if (!f.path) throw new IpcError('A file path is required', 'invalid_input');
+      return { root: f.root, path: f.path, abs, hash: f.hash, matches: f.matches };
+    });
+    const results = await replaceInFiles(targets, { query, isRegex, matchCase, wholeWord }, replacement);
+    const projects = new Set<string>();
+    for (const [i, r] of results.entries()) {
+      if (r.status !== 'replaced') continue;
+      const co = checkoutOf(s, targets[i]!.abs);
+      if (co) projects.add(co.projectId);
+    }
+    for (const id of projects) s.git.changed(id);
+    return { results };
   });
 
   router.register('files.history', async ({ root, path }) => {
