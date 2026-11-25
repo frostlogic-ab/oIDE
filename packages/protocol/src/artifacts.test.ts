@@ -95,6 +95,9 @@ describe('artifact import helpers', () => {
     expect(looksLikeReact("Intro text\nimport React from 'react';\nexport default () => <p/>;")).toBe(false);
     // Leading comments and directives, multi-line imports.
     expect(looksLikeReact("import React from 'react';\nfunction App({ ok }) {\n  return ok ? (<Card/>) : null;\n}\nexport { App as default };\n")).toBe(true);
+    // TypeScript generics are not JSX.
+    expect(looksLikeReact('export default function first<T>(xs: T[]): T | undefined {\n  return xs[0];\n}\n')).toBe(false);
+    expect(looksLikeReact('const m = new Map<string, Item>();\nexport default m;\n')).toBe(false);
     expect(looksLikeReact("// Pricing page\n/* v2 */\n'use client';\nimport {\n  useState,\n  useEffect,\n} from 'react';\nexport default function P() { return <p/>; }")).toBe(true);
     expect(inferKindFromContent(app)).toBe('design');
     expect(designEntryFor(app)).toBe('App.jsx');

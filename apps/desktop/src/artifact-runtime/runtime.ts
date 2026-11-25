@@ -109,10 +109,8 @@ function boot(): void {
   window.removeEventListener('error', onParse);
   delete w[HOOK];
   if (!ran) {
-    if (parseError !== undefined) {
-      const [t, d] = problemOf(parseError);
-      showProblem(t, d);
-    } else showProblem('The design could not be started.', 'The preview blocked its script.');
+    // A parse error was already shown by the window error listener (before the first paint).
+    if (parseError === undefined) showProblem('The design could not be started.', 'The preview blocked its script.');
     return;
   }
   if (failure !== undefined) {

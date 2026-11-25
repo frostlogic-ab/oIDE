@@ -158,9 +158,11 @@ export function looksLikeReact(content: string): boolean {
   // `[^;]` spans lines, so a multi-line `import {\n a,\n b\n} from 'react'` counts; bounded to 400 characters.
   const importsReact = /^[ \t]*import[ \t][^;]{0,400}?from[ \t]*['"]react['"]/m.test(text);
   const exportsDefault = /^[ \t]*export[ \t]+default[ \t]/m.test(text) || /^[ \t]*export[ \t]*\{[^}]{0,200}\bas[ \t]+default\b/m.test(text);
-  // JSX: an element right after `return` / `=>`, a component element (`<Card`), or a closing tag.
+  // JSX: an element right after `return` / `=>`, or a component element (`<Card`) where an expression
+  // starts (after a space, `(`, `?`, `:`, `&&`, `=`, `>` …). A generic (`first<T>`, `Map<string, X>`)
+  // follows a name, so it doesn't count.
   const hasJsx =
-    /(?:return|=>)[ \t\r\n]{0,40}\(?[ \t\r\n]{0,40}<[A-Za-z>]/.test(text) || /<[A-Z][\w.]{0,60}[\s/>]/.test(text) || /<\/[a-z][\w-]{0,30}>/.test(text);
+    /(?:return|=>)[ \t\r\n]{0,40}\(?[ \t\r\n]{0,40}<[A-Za-z>]/.test(text) || /(?:^|[\s([{,;:?&|=>])<[A-Z][\w.]{0,60}[\s/>]/m.test(text);
   return (importsReact && (exportsDefault || hasJsx)) || (exportsDefault && hasJsx);
 }
 
