@@ -8,7 +8,7 @@ import { FAKE_CLAUDE, launchApp, type LaunchedApp } from './app';
 /**
  * Merge conflicts go back to the agent, as the user sees it: real Electron main + renderer with
  * tools/fake-claude. A change on main conflicts with the agent's commit; the merge dialog predicts
- * it, "Ask <agent> to resolve" sends the conflicts as a message from oIDE, the fake agent merges
+ * it, "Ask agent to resolve" sends the conflicts as a message from oIDE, the fake agent merges
  * main in its worktree (resolve-conflicts scenario) and submits again, and the dialog then
  * predicts a clean merge. Nothing is merged until the user clicks Merge.
  */
@@ -96,7 +96,7 @@ test('a predicted conflict goes back to the agent, which resolves it; then the m
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText('Merging will conflict in 1 file: committed.txt.');
   await expect(dialog.getByRole('button', { name: 'Merge anyway' })).toBeVisible();
-  await dialog.getByRole('button', { name: 'Ask Conflicting work to resolve' }).click();
+  await dialog.getByRole('button', { name: 'Ask agent to resolve' }).click();
   await expect(dialog).toBeHidden();
 
   // The message went to the agent, marked as sent by oIDE, and the agent is working on it.

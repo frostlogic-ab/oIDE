@@ -14,7 +14,7 @@ export interface MergeDialogState {
 
 export interface MergeDialogProps {
   state: MergeDialogState | null;
-  /** The agent's title, shortened for the button. */
+  /** The agent's title, shortened, for the dialog's notes. */
   agentTitle: string;
   branch: string;
   target: string;
@@ -31,7 +31,7 @@ export interface MergeDialogProps {
 
 /**
  * "Merge into main?": predicts first (git merge-tree, no checkout touched). When the merge would
- * conflict, the primary action is "Ask <agent> to resolve" and "Merge anyway" is secondary; when
+ * conflict, the primary action is "Ask agent to resolve" and "Merge anyway" is secondary; when
  * the real merge stops on conflicts (prediction missed them or could not run), the result offers
  * the same action. Merging never happens on its own: the user clicks Merge again.
  */
@@ -42,7 +42,9 @@ export function MergeDialog({ state, agentTitle, branch, target, prediction, pre
   const predicted = prediction?.status === 'conflicts' ? prediction : undefined;
   const canAsk = prediction ? prediction.canAsk && prediction.status !== 'unavailable' : false;
   const resultFiles = state?.conflicts.length ? state.conflicts : (predicted?.files ?? []);
-  const askLabel = step === 'asking' ? 'Sending…' : `Ask ${agentTitle} to resolve`;
+  // A fixed label: agent titles are free text and would push the footer out of the dialog.
+  // The note above the buttons names the agent.
+  const askLabel = step === 'asking' ? 'Sending…' : 'Ask agent to resolve';
   const sha = prediction?.target?.sha.slice(0, 7);
 
   let description: string;
@@ -70,7 +72,7 @@ export function MergeDialog({ state, agentTitle, branch, target, prediction, pre
               Close
             </Button>
             {canAsk ? (
-              <Button variant="primary" size={32} disabled={busy} onClick={() => onAsk('merge')}>
+              <Button variant="primary" size={32} disabled={busy} title={`Send the conflicts to ${agentTitle}`} onClick={() => onAsk('merge')}>
                 {askLabel}
               </Button>
             ) : (
@@ -88,7 +90,7 @@ export function MergeDialog({ state, agentTitle, branch, target, prediction, pre
               {step === 'busy' ? 'Merging…' : 'Merge anyway'}
             </Button>
             {canAsk && (
-              <Button variant="primary" size={32} disabled={busy} onClick={() => onAsk('prediction')}>
+              <Button variant="primary" size={32} disabled={busy} title={`Send the conflicts to ${agentTitle}`} onClick={() => onAsk('prediction')}>
                 {askLabel}
               </Button>
             )}
@@ -105,7 +107,7 @@ export function MergeDialog({ state, agentTitle, branch, target, prediction, pre
         )
       }
     >
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2.5 wrap-anywhere">
         {!isResult && sensitiveFiles.length > 0 && <SensitiveWarning files={sensitiveFiles} />}
         {!isResult && prediction?.mainDirty && prediction.mainDirty.length > 0 && (
           <div role="note" aria-label="Uncommitted changes in the main checkout" className="flex gap-2 items-start p-2.5 rounded-md border border-warn-line bg-warn-bg text-[12.5px] leading-normal text-ink-2">

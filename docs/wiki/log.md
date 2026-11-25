@@ -819,3 +819,8 @@ See [agent-supervisor](pages/agent-supervisor.md).
 
 ## [2026-11-25] build | Collapsed defaults; Spawn remembers extension tools
 Source control: "Recent commits on <branch>" starts collapsed on every project card. Spawn: "Advanced model settings" starts closed (opens when Custom is picked); "Tools from extensions" starts from the last spawn's picks, saved as `settings.spawn.lastExtensions` (new protocol field, defaulted so older settings parse). No telemetry change.
+
+## [2026-11-25] build | Merge dialog: fixed "Ask agent to resolve" label
+The merge dialog's primary button read "Ask <agent title> to resolve", so long titles pushed the footer
+out of the 480px dialog. The label is now fixed; the note above the buttons and the button tooltip name
+the agent. Dialog footers wrap and descriptions break long unbroken text (paths) instead of overflowing.

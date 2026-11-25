@@ -63,8 +63,9 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
   and the agent branch, no checkout touched; see [git-worktrees](git-worktrees.md#merge-overlaps-remote-prs-commit)).
   - Clean: "It merges cleanly into main @ abc1234." Primary: Merge.
   - Conflicts: "Merging will conflict in 3 files: a.ts, b.ts, c.ts and 1 more.", the file list (binary
-    and submodule files badged), primary **Ask <agent> to resolve**, secondary **Merge anyway** (which
-    still stops and aborts as before).
+    and submodule files badged), primary **Ask agent to resolve**, secondary **Merge anyway** (which
+    still stops and aborts as before). The button label is fixed (agent titles are free text and
+    pushed the footer out of the dialog); the note above it and the button tooltip name the agent.
   - Unknown (git older than 2.38): the reason, and Merge stays the action.
   - Uncommitted files in the main checkout are listed up front ("The ones this merge touches are set
     aside (stashed) for the merge and put back after it."). Merge recovers on its own (2026-11-25:
@@ -76,10 +77,10 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
     merge <branch>` ("run git stash pop in the project folder to bring them back"). See
     [git-worktrees](git-worktrees.md#merge-overlaps-remote-prs-commit).
 - **A merge that stops anyway** (prediction missed it, or could not run) shows "The merge stopped on
-  conflicts" with the same **Ask <agent> to resolve** (`source: 'merge'`; main remembers the files
+  conflicts" with the same **Ask agent to resolve** (`source: 'merge'`; main remembers the files
   the merge reported). When the agent cannot be asked, the old "Hand them to a new agent" (Spawn with
   the files as context) is offered instead.
-- **Ask <agent> to resolve** → `git.askToResolve { agentId, source }`. Main re-predicts, then sends a
+- **Ask agent to resolve** → `git.askToResolve { agentId, source }`. Main re-predicts, then sends a
   `merge-conflicts` message (built in main only; `agents.send` refuses that kind) that the transcript
   shows in full under "Sent by oIDE": target branch and commit (`main` @ abc1234, or the commit on a
   detached HEAD), the conflicted files (binary / submodule notes), run `git merge <target>` in its own
