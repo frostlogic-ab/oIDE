@@ -13,6 +13,7 @@ import { useKeymapScope } from '../../lib/useKeymap';
 import { useAgents } from '../../stores/agents';
 import { useCli } from '../../stores/cli';
 import { useProjects } from '../../stores/projects';
+import { openNewProject } from '../../stores/newProject';
 import { navigate, useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useSettings } from '../../stores/settings';
@@ -268,8 +269,8 @@ export default function SpawnScreen() {
         {noProjects && (
           <Notice tone="warn">
             Open a project first. Agents run in a git worktree of a project.{' '}
-            <button type="button" className="underline bg-transparent border-0 p-0 text-warn" onClick={() => void useProjects.getState().open().catch(() => {})}>
-              Open project
+            <button type="button" className="underline bg-transparent border-0 p-0 text-warn" onClick={() => openNewProject('open')}>
+              New project
             </button>
           </Notice>
         )}

@@ -14,6 +14,8 @@ export function folderNameProblem(name: string): string | undefined {
   if (!name.trim()) return 'Enter a folder name.';
   if (name.length > 255) return 'Use at most 255 characters.';
   if (name === '.' || name === '..') return 'Choose another name.';
+  // `.git` in any spelling git or the file system treats as it (case, trailing dots/spaces, the NTFS short name).
+  if (/^(?:\.git|git~1)[. ]*$/i.test(name)) return 'A project folder cannot be named .git.';
   // eslint-disable-next-line no-control-regex
   if (/[\\/:*?"<>|\x00-\x1f]/.test(name)) return 'A folder name cannot contain \\ / : * ? " < > | or control characters.';
   if (/[. ]$/.test(name)) return 'A folder name cannot end with a dot or a space.';
@@ -32,17 +34,17 @@ const HOST = '[A-Za-z0-9](?:[A-Za-z0-9-]{0,62})(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{
 const URL_FORMS: RegExp[] = [
   // https://host[:port]/path, http://, git://, ssh://[user@]host[:port]/path
   new RegExp(`^(?:https?|git)://(?:[^@/\\s]{1,200}@)?(?:${HOST})(?::\\d{1,5})?/[^\\s]+$`),
-  new RegExp(`^ssh://(?:[A-Za-z0-9._~-]{1,64}@)?(?:${HOST})(?::\\d{1,5})?/[^\\s]+$`),
+  new RegExp(`^ssh://(?:[A-Za-z0-9_][A-Za-z0-9._~-]{0,63}@)?(?:${HOST})(?::\\d{1,5})?/[^\\s]+$`),
   // scp-like: user@host:path (the user part is required, so `C:\repo` never matches)
-  new RegExp(`^[A-Za-z0-9._~-]{1,64}@(?:${HOST}):(?!/)(?!-)[^\\s]+$`),
-  // A local repository: file:///C:/repos/x or file:///home/me/x. Never a host (UNC shares on Windows).
-  /^file:\/\/\/(?![/\\])[^\s]+$/,
+  new RegExp(`^[A-Za-z0-9_][A-Za-z0-9._~-]{0,63}@(?:${HOST}):(?!/)(?!-)[^\\s]+$`),
 ];
 
 /**
- * Why a clone URL is refused, or undefined when it is fine. Only transports that cannot run a
- * command: https, http, git, ssh (also `user@host:path`) and local `file:///` paths. Never an
- * `ext::` or other remote helper, never an option (`-…`), never a network share, never whitespace.
+ * Why a clone URL is refused, or undefined when it is fine. Only network transports that cannot
+ * run a command: https, http, git, ssh (also `user@host:path`). Never an `ext::` or other remote
+ * helper, never an option (`-…`), never whitespace, and never a local path or `file://` URL (SEC-08:
+ * the renderer must not be able to copy any repository on disk into a folder it can then read; a
+ * local repository is opened with Open folder instead).
  */
 export function cloneUrlProblem(url: string): string | undefined {
   const u = url.trim();

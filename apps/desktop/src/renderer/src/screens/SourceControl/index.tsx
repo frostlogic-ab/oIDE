@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react';
 import { Button, EmptyState } from '@oide/ui';
 import { agentsInScope, useAgents } from '../../stores/agents';
 import { useProjects } from '../../stores/projects';
+import { openNewProject } from '../../stores/newProject';
 import { useScope } from '../../stores/scope';
 import { useGit, useGitData } from './gitStore';
 import { ProjectCard } from './ProjectCard';
@@ -15,7 +16,6 @@ import { SidePanel } from './SidePanel';
 export default function SourceControlScreen() {
   const allProjects = useProjects((s) => s.list);
   const loaded = useProjects((s) => s.loaded);
-  const openProject = useProjects((s) => s.open);
   const scope = useScope((s) => s.scope);
   const byId = useAgents((s) => s.byId);
   const order = useAgents((s) => s.order);
@@ -53,8 +53,8 @@ export default function SourceControlScreen() {
             title={allProjects.length ? 'This project is no longer open' : 'No projects open'}
             description="Open a git repository to see its branches, agent worktrees and recent commits."
             action={
-              <Button variant="primary" size={32} icon="plus" onClick={() => void openProject()}>
-                Open project
+              <Button variant="primary" size={32} icon="plus" onClick={() => openNewProject('open')}>
+                New project
               </Button>
             }
             className="flex-1"
