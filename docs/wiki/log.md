@@ -623,3 +623,24 @@ Review, Ready-for-review tiles and Source control from a renderer store refreshe
 `resolve-conflicts`. Pages: [screen-review](pages/screen-review.md#merge-conflicts),
 [git-worktrees](pages/git-worktrees.md), [screen-wall](pages/screen-wall.md), [protocol](pages/protocol.md),
 [telemetry](pages/telemetry.md), [testing](pages/testing.md).
+
+## [2026-11-25] build | Worktree deletion on Windows
+
+Incident: a discarded agent's worktree (a pnpm install: 68,687 entries, paths up to 412 characters,
+6,095 junctions) could not be deleted; Docker Desktop, started by a `docker` command in the
+worktree, kept it as its current directory. Found while fixing it: `git worktree remove` (git 2.51)
+follows junctions and deleted files of a folder outside the worktree, and `fs.rm`'s `maxRetries`
+compounds per directory level, so a held folder made the delete hang for minutes.
+- `WorktreeManager.remove` makes git's safety checks itself, deletes with `removeTree` (`fs.rm`,
+  `maxRetries: 0`, whole-tree retries), then `git worktree prune` (ADR 0012). `isLockError` /
+  `isLockedFileError`: only `EBUSY` and sharing violations are locks.
+- `reliability/folder-holders.ts`: who holds a folder (Windows handle table via a fixed PowerShell
+  script, folder in an env var; `lsof +d` elsewhere; 10 s timeout; same user; exe names only). The
+  notice names them; after an agent stops or is archived the agent log warns about leftovers.
+- `CleanupScheduler`: retries every 5 minutes with per-folder backoff and at start; "Finished
+  removing <name>"; Settings › Diagnostics › Folders waiting to be removed (Retry now, Show holders).
+- PR lookups skip projects without a git remote quietly (cached `git remote`, refreshed on fetch).
+- Telemetry: `worktree_delete_failed { holder }`, `worktree_delete_retried_ok { attempts }`.
+Pages: [git-worktrees](pages/git-worktrees.md#why-a-worktree-cant-be-deleted-on-windows),
+[reliability](pages/reliability.md#windows), [telemetry](pages/telemetry.md),
+[screen-settings](pages/screen-settings.md).

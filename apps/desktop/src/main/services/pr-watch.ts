@@ -28,6 +28,10 @@ export interface PrWatcherDeps {
   agents: { list(): AgentSummary[]; setPr(agentId: string, pr: AgentPrInfo | undefined): void };
   /** Only trusted projects run git or gh on their own (SEC-03). */
   trusted(projectId: string): boolean;
+  /** False for a project without a git remote: gh can only fail there, so it is skipped quietly. */
+  hasRemote?(projectId: string): Promise<boolean>;
+  /** gh said "no git remotes found" for this project (the cache was stale). */
+  noRemote?(projectId: string): void;
   /** Settings › Agents › Fetch interval, in minutes (0 = off: only window focus polls). */
   intervalMinutes(): number;
   isOnline?: () => boolean;
@@ -95,15 +99,30 @@ export class PrWatcher {
       if (now - this.lastFocusAt < FOCUS_MIN_MS) return { checked: 0, skipped: 'throttled' };
       this.lastFocusAt = now;
     }
-    const targets = this.targets();
+    let targets = this.targets();
     if (!targets.length) return { checked: 0 };
     this.running = true;
     let checked = 0;
     try {
+      if (this.d.hasRemote) {
+        const remote = new Map<string, boolean>();
+        for (const id of new Set(targets.map((a) => a.projectId))) remote.set(id, await this.d.hasRemote(id).catch(() => true));
+        targets = targets.filter((a) => remote.get(a.projectId));
+        if (!targets.length) return { checked: 0 };
+      }
       if (!(await this.d.gh.available())) return { checked: 0, skipped: 'gh-unavailable' };
+      const noRemote = new Set<string>();
       for (const a of targets) {
+        if (noRemote.has(a.projectId)) continue;
         const r = await this.d.gh.prLookup(a.worktreePath!, a.branch!);
         if (r.unavailable) return { checked, skipped: 'gh-unavailable' };
+        if (r.error && /no git remotes? found/i.test(r.error)) {
+          // Local-only repo: nothing to look up, not a gh failure (no backoff, no warning).
+          noRemote.add(a.projectId);
+          this.d.noRemote?.(a.projectId);
+          this.d.log?.debug('no git remote; skipping PR lookups for this project');
+          continue;
+        }
         if (r.error) {
           this.failures++;
           this.nextAllowedAt = this.now() + this.backoffMs(this.failures);

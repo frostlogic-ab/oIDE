@@ -78,6 +78,8 @@ export interface HarnessOptions {
   keepEvents?: boolean;
   /** A fake GitHub CLI (pull request state) instead of the user's `gh`. */
   gh?: import('../../packages/git/src/index.js').GhCli;
+  /** The folder-holder scan (off by default in plain Node). */
+  findHolders?: import('../../apps/desktop/src/main/services/core.js').CoreOptions['findHolders'];
 }
 
 export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> {
@@ -128,7 +130,7 @@ export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> 
     background: false,
     ...opts.platform,
   };
-  const services = await createCoreServices({ ctx, platform, terminals, ...(opts.gh ? { gh: opts.gh } : {}), ...(opts.mcpFails ? { startMcp: () => Promise.reject(new Error('listen EACCES 127.0.0.1')) } : {}) });
+  const services = await createCoreServices({ ctx, platform, terminals, ...(opts.gh ? { gh: opts.gh } : {}), ...(opts.findHolders ? { findHolders: opts.findHolders } : {}), ...(opts.mcpFails ? { startMcp: () => Promise.reject(new Error('listen EACCES 127.0.0.1')) } : {}) });
   const router = new IpcRouter({ validateOutput: true, log: quiet });
   registerDomainHandlers(router, services, ctx);
   const dispatch = (command: string, input: unknown) => router.dispatch({ command, input }, { senderId: 1, frameUrl: 'file:///app/index.html' });

@@ -73,6 +73,9 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
       return { generatedAt: new Date().toISOString(), checks, report: checks.map((c) => `${c.label}: ${c.value}`).join('\n') };
     },
     'app.openLogsFolder': () => ({ ok: true as const }),
+    'app.pendingCleanups': () => [],
+    'app.retryCleanup': () => ({ removed: [], stillPending: [], gaveUp: [] }),
+    'app.cleanupHolders': () => ({ supported: false, holders: [] }),
     'app.reportError': () => ({ ok: true as const }),
     'cli.detect': () => fx.cli,
     'projects.list': () => seedProjects(fx.projects, wallMode),
