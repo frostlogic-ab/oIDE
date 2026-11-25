@@ -100,7 +100,7 @@ describe('artifact retrieval (main services, fake-claude)', () => {
     const p = await project(h);
     const linked = await h.services.artifacts.createLinked({ url: LINK });
     // No project of its own and none given: the user has to choose one.
-    expect(await h.fails('artifacts.refresh', { id: linked.id })).toBe('invalid_input');
+    expect(await h.fails('artifacts.refresh', { id: linked.id })).toBe('needs_project');
     const started = await h.call('artifacts.refresh', { id: linked.id, projectId: p.id });
     expect(started.retrieval).toMatchObject({ status: 'retrieving', trigger: 'retry' });
     const cancelled = await h.call('artifacts.cancelRetrieval', { id: linked.id });
@@ -141,6 +141,22 @@ describe('artifact retrieval (main services, fake-claude)', () => {
     const imported = await h.call('artifacts.importFiles', { folderPath: src });
     expect(imported).toMatchObject({ title: 'Picked', kind: 'design', entry: 'index.html', fileCount: 2 });
     expect(await h.fails('artifacts.importFiles', { filePaths: [join(src, 'index.html'), join(src, 'shots', 'a.png')] })).toBe('forbidden_path');
+  });
+
+  it('artifacts.restore brings back every file of a version through IPC, refusing a stale base', async () => {
+    const h = await harness();
+    const art = await h.call('artifacts.create', { title: 'Site', kind: 'design', content: '<!doctype html><p>one</p>' });
+    await h.call('artifacts.writeFiles', { id: art.id, files: [{ path: 'site.css', encoding: 'utf8', data: 'a{}' }, { path: 'shots/a.png', encoding: 'base64', data: 'AQI=' }], baseVersion: 1 });
+    await h.call('artifacts.writeFiles', { id: art.id, files: [{ path: 'site.css', encoding: 'utf8', data: 'b{}' }], deletes: ['shots/a.png'], baseVersion: 2 });
+    expect(await h.fails('artifacts.restore', { id: art.id, version: 2, baseVersion: 2 })).toBe('conflict');
+    expect(await h.fails('artifacts.restore', { id: art.id, version: 9 })).toBe('invalid_input');
+    expect(await h.fails('artifacts.restore', { id: 'nope', version: 1 })).toBe('not_found');
+    const restored = await h.call('artifacts.restore', { id: art.id, version: 2, baseVersion: 3 });
+    expect(restored).toMatchObject({ version: 4, entry: 'index.html', fileCount: 3 });
+    expect((await h.call('artifacts.files', { id: art.id })).map((f) => f.path)).toEqual(['index.html', 'shots/a.png', 'site.css']);
+    expect(await h.call('artifacts.readFile', { id: art.id, path: 'site.css' })).toEqual({ encoding: 'utf8', data: 'a{}' });
+    expect((await h.call('artifacts.get', { id: art.id })).versions[0]).toMatchObject({ version: 4, author: 'user', note: 'Restored v2' });
+    expect(h.eventsOf('artifacts.changed').at(-1)).toEqual({ id: art.id, change: 'saved', version: 4, author: 'user' });
   });
 
   it('dialog.pickArtifactFiles registers the picked files or folder', async () => {
