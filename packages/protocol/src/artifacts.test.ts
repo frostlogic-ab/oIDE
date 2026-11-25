@@ -13,6 +13,20 @@ describe('artifact import helpers', () => {
     expect(looksLikeHtml('# Heading\n\n<b>bold</b>')).toBe(false);
     expect(looksLikeHtml('a < b')).toBe(false);
     expect(looksLikeHtml('<notclosed')).toBe(false);
+    expect(looksLikeHtml('<!-- a --> <!-- b -->\n<div>x</div>')).toBe(true);
+    expect(looksLikeHtml('<!-- never closed <html>')).toBe(false);
+  });
+
+  it('stays fast on hostile input (many comments, huge tags)', () => {
+    const t0 = performance.now();
+    expect(looksLikeHtml('<!---->'.repeat(600) + 'x')).toBe(false);
+    expect(looksLikeHtml('<!--' + '-->'.repeat(2000))).toBe(false);
+    expect(looksLikeHtml('</' + 'a'.repeat(2_000_000))).toBe(false);
+    expect(inferKindFromContent('<' + 'a'.repeat(2_000_000))).toBe('doc');
+    expect(titleFromContent('design', '<title'.repeat(400_000))).toBeUndefined();
+    expect(titleFromContent('doc', '# ' + ' '.repeat(200_000) + 'x'.repeat(500))).toBeUndefined();
+    expect(titleFromContent('doc', '---\n' + 'a\n'.repeat(500_000))).toBeUndefined();
+    expect(performance.now() - t0).toBeLessThan(2000);
   });
 
   it('infers the kind of pasted content', () => {

@@ -79,8 +79,16 @@ function stripBom(s: string): string {
 /** True for an HTML page or fragment (what a design's `index.html` must hold). */
 export function looksLikeHtml(content: string): boolean {
   const text = stripBom(content).trimStart();
-  const head = text.slice(0, 4096);
-  if (/^(?:<!--[\s\S]*?-->\s*)*(?:<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>]|<\?xml\s[^>]*\?>\s*<svg[\s>])/i.test(head)) return true;
+  // Skip leading `<!-- … -->` comments with indexOf (linear; a repeated lazy regex group backtracks badly).
+  let start = 0;
+  while (text.startsWith('<!--', start)) {
+    const end = text.indexOf('-->', start + 4);
+    if (end < 0) return false;
+    start = end + 3;
+    while (start < text.length && /\s/.test(text[start]!)) start++;
+  }
+  const head = text.slice(start, start + 4096);
+  if (/^(?:<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>]|<\?xml\s[^>]*\?>\s*<svg[\s>])/i.test(head)) return true;
   // A fragment: starts with a tag and closes one (`<div>…</div>`, `<svg …/>`). JSX source starts with `import`/`export`.
   return /^<[a-z][\w-]*[\s/>]/i.test(head) && /<\/[a-z][\w-]*\s*>|\/>/i.test(text);
 }
@@ -101,14 +109,19 @@ export function inferKindFromContent(content: string): ArtifactKind {
 
 const HTML_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: ' ' };
 
-/** A title from the content: an HTML `<title>` or `<h1>`, or a Markdown `# heading`. */
+/**
+ * A title from the content: an HTML `<title>` or `<h1>`, or a Markdown `# heading`. Only the first
+ * 256 KB are searched, and every pattern has one way to match (no backtracking blow-up on 10 MB).
+ */
 export function titleFromContent(kind: ArtifactKind, content: string): string | undefined {
+  const text = content.slice(0, 256 * 1024);
   let t: string | undefined;
   if (kind === 'design') {
-    const m = /<title[^>]*>([^<]{1,400})<\/title>/i.exec(content) ?? /<h1[^>]*>([^<]{1,400})<\/h1>/i.exec(content);
+    const m = /<title(?:\s[^<>]*)?>([^<]{1,400})<\/title>/i.exec(text) ?? /<h1(?:\s[^<>]*)?>([^<]{1,400})<\/h1>/i.exec(text);
     t = m?.[1]?.replace(/&(amp|lt|gt|quot|#39|apos|nbsp);/g, (_x, e: string) => HTML_ENTITIES[e] ?? '');
   } else if (kind === 'doc') {
-    t = /^#[ \t]+(.{1,400})$/m.exec(content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, ''))?.[1]?.replace(/[ \t]#+[ \t]*$/, '');
+    const body = text.startsWith('---\n') || text.startsWith('---\r\n') ? text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '') : text;
+    t = /^#[ \t]+([^ \t\r\n][^\r\n]{0,399})$/m.exec(body)?.[1]?.replace(/[ \t]#+[ \t]*$/, '');
   }
   t = t?.replace(/\s+/g, ' ').trim().slice(0, 200).trim();
   return t || undefined;
