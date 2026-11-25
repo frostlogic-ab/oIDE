@@ -589,8 +589,9 @@ function realish(p: string): string {
 }
 
 /**
- * True when every path of an edit tool call resolves (symlinks followed) inside `root`. Non-edit
- * tools are true; UNC paths, and edits with no path, are false.
+ * True when every path of an edit tool call resolves (symlinks followed) inside `root`, and its
+ * real path is not a protected one either (a link such as `src/cfg → ../.oide` passes the literal
+ * check but not this one). Non-edit tools are true; UNC paths, and edits with no path, are false.
  */
 export function editStaysInside(toolName: string, input: unknown, root: string | undefined): boolean {
   const paths = editPaths(toolName, input);
@@ -599,8 +600,11 @@ export function editStaysInside(toolName: string, input: unknown, root: string |
   const base = realish(resolve(root));
   return paths.every((p) => {
     if (/^[\\/]{2}/.test(p)) return false;
-    const rel = relative(base, realish(resolve(base, p)));
-    return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel));
+    const real = realish(resolve(base, p));
+    const rel = relative(base, real);
+    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return false;
+    // Inside `base`, so the real path is `base` + `rel`: check `rel` (the base's own folders may be named anything).
+    return !pathMayBeProtected(rel);
   });
 }
 

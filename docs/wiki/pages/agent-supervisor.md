@@ -142,5 +142,5 @@ rules (`LaunchPlan.askRules`: extension tools marked "asks first" and project as
 conservatively by `askRuleCovers`). For those the supervisor strips `suggestedRule` from the
 request, and the tile and Focus grey out the button. An edit is answered without a prompt only when
 every path resolves inside the agent's worktree, symlinks followed (`editStaysInside`; UNC paths and
-`..` escapes ask), because the saved rule for edits is the bare tool name (`Edit`).
+`..` escapes ask) and its real path is not protected either (a link such as `src/cfg → ../.oide` is caught), because the saved rule for edits is the bare tool name (`Edit`).
 

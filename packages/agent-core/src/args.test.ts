@@ -333,6 +333,23 @@ describe('"Always" guards', () => {
     if (linked) expect(editStaysInside('Write', { file_path: join(root, 'link', 'x.ts') }, root)).toBe(false);
   });
 
+  it('editStaysInside: a link inside the worktree that points at .oide/ is refused', () => {
+    const root = tempDir('oide-root-');
+    mkdirSync(join(root, '.oide'));
+    mkdirSync(join(root, 'src'));
+    try {
+      symlinkSync(join(root, '.oide'), join(root, 'src', 'cfg'), 'junction');
+    } catch {
+      return; // no symlink rights on this machine
+    }
+    // The literal path looks harmless; its real path is .oide/permissions.json.
+    expect(requestTargetsProtectedPath('Write', { file_path: join(root, 'src', 'cfg', 'permissions.json') })).toBe(false);
+    expect(editStaysInside('Write', { file_path: join(root, 'src', 'cfg', 'permissions.json') }, root)).toBe(false);
+    expect(editStaysInside('Write', { file_path: join(root, '.claude', 'settings.json') }, root)).toBe(false);
+    expect(editStaysInside('Write', { file_path: join(root, 'src', 'a.ts') }, root)).toBe(true);
+    expect(editStaysInside('Write', { file_path: root }, root)).toBe(false);
+  });
+
   it('askRuleCovers: whole tools, MCP servers, Bash prefixes, and any other specifier on the same tool', () => {
     expect(askRuleCovers('Bash', 'Bash', { command: 'ls' })).toBe(true);
     expect(askRuleCovers('Bash(git push:*)', 'Bash', { command: 'git push origin main' })).toBe(true);
