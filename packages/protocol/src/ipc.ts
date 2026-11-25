@@ -33,7 +33,6 @@ export type DiagnosticCheck = z.infer<typeof DiagnosticCheck>;
 export const Diagnostics = z.object({ generatedAt: z.string(), checks: z.array(DiagnosticCheck), report: z.string() });
 export type Diagnostics = z.infer<typeof Diagnostics>;
 
-export const Scope = z.union([z.literal('all'), Id]);
 /** Files picked in `dialog.pickFiles` or dropped on an input (`OideBridge.attachDropped`). */
 export const PickedAttachments = z.object({
   attachments: MessageAttachments,
@@ -41,6 +40,7 @@ export const PickedAttachments = z.object({
 });
 export type PickedAttachments = z.infer<typeof PickedAttachments>;
 
+export const Scope = z.union([z.literal('all'), Id]);
 export type Scope = z.infer<typeof Scope>;
 
 export const Commands = {
@@ -220,6 +220,12 @@ export const Commands = {
   'dialog.pickFolder': cmd(z.object({ title: z.string().optional() }), z.string().nullable()),
   /** Native open-file dialog (Import from claude.ai › pick a file). Main remembers the picked path for the follow-up command. */
   'dialog.pickFile': cmd(z.object({ title: z.string().optional(), filters: z.array(z.object({ name: z.string(), extensions: z.array(z.string()) })).default([]) }), z.string().nullable()),
+  /**
+   * Native multi-file picker for "Attach file" (Focus composer, Wall reply, Spawn goal). Main registers the
+   * picked paths for this session and returns them as attachments: images (≤ 5 MB) inline as base64, other
+   * files (≤ 25 MB) by path. Files over the limits come back in `rejected` with the reason.
+   */
+  'dialog.pickFiles': cmd(z.object({ title: z.string().optional() }), PickedAttachments),
   /** Native open-file dialog for Settings › Claude Code › CLI path. Only a path picked here skips the CLI path confirmation (SEC-29). */
   'dialog.pickCli': cmd(Void, z.string().nullable()),
 } as const;
@@ -228,12 +234,6 @@ export type CommandName = keyof typeof Commands;
 export type CommandInput<K extends CommandName> = z.input<(typeof Commands)[K]['input']>;
 export type CommandOutput<K extends CommandName> = z.output<(typeof Commands)[K]['output']>;
 
-  /**
-   * Native multi-file picker for "Attach file" (Focus composer, Wall reply, Spawn goal). Main registers the
-   * picked paths for this session and returns them as attachments: images (≤ 5 MB) inline as base64, other
-   * files (≤ 25 MB) by path. Files over the limits come back in `rejected` with the reason.
-   */
-  'dialog.pickFiles': cmd(z.object({ title: z.string().optional() }), PickedAttachments),
 /** Main → renderer streamed events. Agent events are batched per animation frame. */
 export const Events = {
   'agents.batch': z.object({ events: z.array(AgentEvent) }),
@@ -278,6 +278,12 @@ export type EventPayload<K extends EventName> = z.output<(typeof Events)[K]>;
 
 export const IPC_INVOKE_CHANNEL = 'oide:invoke';
 export const IPC_EVENT_CHANNEL = 'oide:event';
+/**
+ * Preload-only channel: the paths of files the user dropped (or pasted) on an input, read in preload with
+ * `webUtils.getPathForFile` from real `File` objects. Not a contract command, so page code cannot send
+ * arbitrary paths; main registers them like native picks and answers with `PickedAttachments`.
+ */
+export const IPC_DROP_CHANNEL = 'oide:dropped-files';
 
 export type IpcResult<T> = { ok: true; value: T } | { ok: false; error: { message: string; code?: string } };
 
@@ -286,15 +292,9 @@ export interface OideBridge {
   invoke<K extends CommandName>(command: K, input: CommandInput<K>): Promise<CommandOutput<K>>;
   on<K extends EventName>(event: K, listener: (payload: EventPayload<K>) => void): () => void;
   platform: string;
-}
-/**
- * Preload-only channel: the paths of files the user dropped (or pasted) on an input, read in preload with
- * `webUtils.getPathForFile` from real `File` objects. Not a contract command, so page code cannot send
- * arbitrary paths; main registers them like native picks and answers with `PickedAttachments`.
- */
-export const IPC_DROP_CHANNEL = 'oide:dropped-files';
   /**
    * Attach files the user dropped or pasted (real DOM `File` objects only; anything else is skipped).
    * Absent in the browser mock, which has no file paths.
    */
   attachDropped?(files: readonly object[]): Promise<PickedAttachments>;
+}
