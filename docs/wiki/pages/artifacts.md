@@ -110,6 +110,12 @@ for MCP uses), so an open editor can say "Updated by <agent>" without a refetch.
   (then `.txt`) file; a whiteboard on the first `.excalidraw`, else the first `.json`. A refusal changes
   nothing. Both internal notes are cleared on success.
 - `setRetrieval(id, retrieval?)`: the retrieval state, no new version (`change: 'retrieval'`).
+- `restore(id, version, { author?, baseVersion? })`: History > Restore. Walks the snapshot `.versions/<n>`
+  (links refused, unsafe names `bad_path`), takes the entry that version had (from `versions.json`; else
+  the current entry, the fixed names, or `pickEntry`) and commits every file as the next version noted
+  `Restored v<n>` through `commit`, so the limits, entry check, exclusive no-link writes, root sync and
+  `onChange` are the ones every write has. Under the per-artifact lock; `baseVersion` gives `conflict`;
+  an unknown or version-0 target is `invalid_input`. Older snapshots are never touched.
 - `rename(id, title)`: trims and collapses whitespace, 1 to 200 characters (`ArtifactError` `invalid_input`);
   only `artifact.json` and the index change. The folder (slug), id and versions stay. Not a version.
 - `delete(id)`: removes the folder (all versions), the index row and the uses log; `false` if unknown.
@@ -191,7 +197,8 @@ reads Claude Docs). It starts working without oIDE changes once the CLI gets suc
 
 ## IPC (`apps/desktop/src/main/handlers/artifacts.ts`)
 
-`artifacts.list`, `get`, `create`, `save` (`baseVersion?`, `conflict`), `rename`, `delete` (cancels a running
+`artifacts.list`, `get`, `create`, `save` (`baseVersion?`, `conflict`), `restore { id, version, baseVersion? }`
+(the whole snapshot as a new version), `rename`, `delete` (cancels a running
 retrieval first), `import` (pasted content or one picked file), `uses`, `readVersion`, `previewUrl`, and
 (ADR 0014):
 

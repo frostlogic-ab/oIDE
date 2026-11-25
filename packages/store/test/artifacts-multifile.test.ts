@@ -71,6 +71,44 @@ describe('multi-file artifacts', () => {
     await expect(store.writeFiles(art.id, { files: [text('x.css', '')], baseVersion: 2 })).rejects.toMatchObject({ code: 'conflict' });
   });
 
+  it('restore commits the whole snapshot of a version (every file and its entry) as a new version', async () => {
+    const { store, appData, changes } = setup();
+    const art = await store.create({ title: 'Site', kind: 'design', content: '<!doctype html><title>Site v1</title>' });
+    const v1 = await store.writeFiles(art.id, { files: [text('site.css', 'body{color:red}'), b64('shots/home.png', PNG), text('about.html', '<!doctype html><p>About v1</p>')], entry: 'about.html' });
+    expect(v1.version).toBe(2); // the snapshot restored below
+    const original = await Promise.all((await store.files(art.id)).map(async (f) => [f.path, await store.readFile(art.id, f.path)] as const));
+    // v3: two files change, one is deleted, a new one appears, the entry moves.
+    await store.writeFiles(art.id, { files: [text('site.css', 'body{color:blue}'), text('about.html', '<!doctype html><p>About v3</p>'), text('extra/new.txt', 'new')], deletes: ['shots/home.png'], entry: 'index.html' });
+    expect(await store.readFile(art.id, 'site.css')).toEqual({ encoding: 'utf8', data: 'body{color:blue}' });
+
+    const dir = join(appData, 'artifacts', 'site');
+    const restored = await store.restore(art.id, 2, { author: 'user', baseVersion: 3 });
+    expect(restored).toMatchObject({ version: 4, entry: 'about.html', fileCount: 4 });
+    expect((await store.versions(art.id))[0]).toMatchObject({ version: 4, author: 'user', note: 'Restored v2' });
+    // The root and the new snapshot hold exactly v2's files; the extra file and its folder are gone.
+    expect(await Promise.all((await store.files(art.id)).map(async (f) => [f.path, await store.readFile(art.id, f.path)] as const))).toEqual(original);
+    expect(existsSync(join(dir, 'extra'))).toBe(false);
+    expect(readFileSync(join(dir, 'site.css'), 'utf8')).toBe('body{color:red}');
+    expect(readFileSync(join(dir, 'shots', 'home.png')).equals(PNG)).toBe(true);
+    expect(readdirSync(join(dir, '.versions', '4')).sort()).toEqual(['about.html', 'index.html', 'shots', 'site.css']);
+    expect((await store.read(art.id)).content).toContain('About v1');
+    expect(changes.at(-1)).toMatchObject({ id: art.id, info: { change: 'saved', version: 4, author: 'user' } });
+    // Older snapshots are untouched.
+    expect(await store.readFile(art.id, 'site.css', 3)).toEqual({ encoding: 'utf8', data: 'body{color:blue}' });
+  });
+
+  it('restore refuses a stale base, an unknown version and a version-0 artifact, and changes nothing', async () => {
+    const { store, p } = setup();
+    const art = await store.create({ title: 'Site', kind: 'design', content: '<!doctype html><title>Site</title>' });
+    await store.save(art.id, '<!doctype html><title>Site 2</title>');
+    await expect(store.restore(art.id, 1, { baseVersion: 1 })).rejects.toMatchObject({ code: 'conflict' });
+    await expect(store.restore(art.id, 3)).rejects.toMatchObject({ code: 'invalid_input' });
+    await expect(store.restore(art.id, 0)).rejects.toMatchObject({ code: 'invalid_input' });
+    expect((await store.metaOf(art.id)).version).toBe(2);
+    const linked = await store.createLinked({ url: 'https://claude.ai/design/p/abc', projectId: p.id });
+    await expect(store.restore(linked.id, 1)).rejects.toMatchObject({ code: 'invalid_input' });
+  });
+
   it('save writes the entry file and keeps every other file', async () => {
     const { store } = setup();
     const art = await store.create({ title: 'Deck', kind: 'design', content: '<!doctype html><p>1</p>' });

@@ -51,6 +51,7 @@ export function registerArtifactHandlers(router: IpcRouter, s: Services, ctx: Ma
     if (!(await wrap(a.delete(id)))) throw new IpcError(`Unknown artifact ${id}`, 'not_found');
     return OK;
   });
+  router.register('artifacts.restore', ({ id, version, baseVersion }) => wrap(a.restore(id, version, { author: 'user', ...(baseVersion !== undefined ? { baseVersion } : {}) })));
   router.register('artifacts.readVersion', async ({ id, version }) => ({ content: await wrap(a.readVersion(id, version)) }));
   // A file import must be a file the user picked with dialog.pickFile or dropped (never an arbitrary
   // renderer path). Main never fetches the link: claude.ai has no public content API and oIDE never uses

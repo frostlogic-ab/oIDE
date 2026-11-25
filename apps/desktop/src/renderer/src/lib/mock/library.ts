@@ -161,6 +161,8 @@ interface MockArtifact {
   snapshots: Record<number, string>;
   /** Multi-file artifacts (ADR 0014): every file of each version. Single-file ones derive it. */
   fileSets?: Record<number, Record<string, ArtifactFileContent>>;
+  /** The entry each version had, when it changed from the artifact's first one. */
+  entries?: Record<number, string>;
 }
 
 /** Every file of version `v` (a single-file artifact is its entry alone). */
@@ -609,6 +611,7 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
     const e = set[entry]!;
     a.content = e.encoding === 'utf8' ? e.data : '';
     a.snapshots[next] = a.content;
+    a.entries = { ...a.entries, [next]: entry };
     a.versions = [ArtifactVersion.parse({ version: next, ts: Date.now(), author, note }), ...a.versions];
     a.meta = { ...a.meta, version: next, entry, fileCount: Object.keys(set).length, updatedAt: Date.now(), brokenImport: undefined };
     ctx.emit('artifacts.changed', { id: a.meta.id, change: 'saved', version: next, author });
@@ -781,6 +784,21 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
     'artifacts.readFile': ({ id, path, version: v }) => {
       const a = getArt(id);
       return filesAt(a, v ?? a.meta.version)[path] ?? fail('not_found', `No file ${path} in v${v ?? a.meta.version}`);
+    },
+    'artifacts.restore': ({ id, version, baseVersion }) => {
+      const a = getArt(id);
+      if (baseVersion !== undefined && baseVersion !== a.meta.version) fail('conflict', `${a.meta.title} changed since you opened it (now v${a.meta.version}).`);
+      if (version > a.meta.version || a.snapshots[version] === undefined) fail('invalid_input', `${a.meta.title} has no v${version}.`);
+      // Every file of that version comes back; a single-file artifact's entry follows its content.
+      const set = { ...filesAt(a, version) };
+      const entry = a.fileSets ? (a.entries?.[version] && set[a.entries[version]!] ? a.entries[version]! : set[a.meta.entry] ? a.meta.entry : (Object.keys(set)[0] ?? a.meta.entry)) : entryFor(a.meta.kind, a.snapshots[version]!);
+      if (!a.fileSets) {
+        const only = set[a.meta.entry];
+        delete set[a.meta.entry];
+        if (only) set[entry] = only;
+      }
+      writeVersion(a, set, entry, 'user', `Restored v${version}`);
+      return a.meta;
     },
     'artifacts.writeFiles': ({ id, files, deletes, entry, note, baseVersion }) => {
       const a = getArt(id);

@@ -238,6 +238,13 @@ const invoke = vi.fn(async (command: string, input: unknown): Promise<unknown> =
       queueMicrotask(() => emit('artifacts.changed', { id: i.id, change: 'saved', version: v, author: 'user' }));
       return a.meta;
     }
+    case 'artifacts.restore': {
+      const a = arts[i.id]!;
+      if (i.baseVersion !== undefined && i.baseVersion !== a.meta.version) throw new Error(`[conflict] changed (now v${a.meta.version})`);
+      const v = writeSet(a, { ...(a.files?.[i.version!] ?? {}) }, a.meta.entry, 'user', `Restored v${i.version}`);
+      queueMicrotask(() => emit('artifacts.changed', { id: i.id, change: 'saved', version: v, author: 'user' }));
+      return a.meta;
+    }
     default:
       throw new Error(`[not_implemented] ${command}`);
   }
@@ -502,6 +509,22 @@ describe('Rename, delete and compare', () => {
     fireEvent.change(within(viewer).getByLabelText('From'), { target: { value: '2' } });
     fireEvent.change(within(viewer).getByLabelText('To'), { target: { value: '1' } });
     expect(within(viewer).getByTestId('diff-original').textContent).toBe('# Retry\n\nv2 text');
+  });
+});
+
+describe('History > Restore', () => {
+  it('restores the whole version with artifacts.restore, not only the entry text', async () => {
+    agentWritesFiles('a-site', { 'site.css': 'h1{color:blue}', 'index.html': '<h1>Home v2</h1>' });
+    render(<ArtifactsScreen />);
+    fireEvent.click(await screen.findByRole('button', { name: /Docs site/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /^v1 ·/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(calls('artifacts.restore')).toEqual([{ id: 'a-site', version: 1, baseVersion: 2 }]));
+    // The entry-only path is gone: nothing is saved over the current files.
+    expect(calls('artifacts.save')).toEqual([]);
+    expect(calls('artifacts.writeFiles')).toEqual([]);
+    await waitFor(() => expect(useUi.getState().toasts.map((t) => t.message)).toContain('Restored v1 as v3'));
+    expect(arts['a-site']!.files![3]).toEqual(SITE);
   });
 });
 

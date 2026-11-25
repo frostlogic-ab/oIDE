@@ -310,6 +310,12 @@ export const Commands = {
   'artifacts.uses': cmd(z.object({ ids: z.array(Id).max(500) }), z.record(z.string(), z.array(ArtifactUse))),
   /** Content of one numbered snapshot (History › view version). */
   'artifacts.readVersion': cmd(z.object({ id: Id, version: z.number().int().positive() }), z.object({ content: z.string() })),
+  /**
+   * History > Restore: commits the full snapshot of `version` (every file, and the entry it had) as a
+   * new version with the note `Restored v<n>`. `baseVersion` (the version the user was looking at)
+   * refuses with code `conflict` when the artifact has moved on, like `artifacts.save`.
+   */
+  'artifacts.restore': cmd(z.object({ id: Id, version: z.number().int().positive(), baseVersion: z.number().int().nonnegative().optional() }), ArtifactMeta),
   'artifacts.previewUrl': cmd(z.object({ id: Id }), z.object({ url: z.string() })),
   /**
    * New artifact from a link (ADR 0014). Main never downloads it: it creates the artifact at version 0

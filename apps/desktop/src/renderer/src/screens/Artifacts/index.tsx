@@ -412,7 +412,8 @@ function DetailContent({ detail, projectName, agentTitle, agentStatus, onOpen, o
     if (!viewing) return;
     setBusy(true);
     try {
-      const next = await oide.invoke('artifacts.save', { id: meta.id, content: viewing.content, note: `Restored v${viewing.version}` });
+      // The whole snapshot comes back (every file, and its entry), not only the entry's text.
+      const next = await oide.invoke('artifacts.restore', { id: meta.id, version: viewing.version, baseVersion: meta.version });
       toast(`Restored v${viewing.version} as v${next.version}`, 'success');
       onRestored({ ...detail, meta: next, content: viewing.content });
       setViewing(null);

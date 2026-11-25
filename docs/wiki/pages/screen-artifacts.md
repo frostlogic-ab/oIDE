@@ -129,7 +129,7 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
 | Give to an agent | `navigate('spawn', { projectId, context: [{ kind: 'artifact', id, title }] })`; Spawn pre-fills its context chips from `route.params.context` |
 | Open in claude.ai | Only when `importedFrom` is an https link on claude.ai (`canOpenClaudeLink`); `shell.openExternal`. Hidden for claude.site imports: that host is not on the external-link allow-list, since anyone can publish there |
 | Agents using it | Uses grouped per agent: "writes" if it ever wrote or created, else "reads"; status dot and title from the agents store; click → Focus |
-| History | `versions` newest first: "v4 · edited by you · 11:20", "v3 · Window shell layout agent · added a focus view · 10:52". Click a past version → `artifacts.readVersion` → previewed with "Viewing v2 (current is v4)", **Restore** (saves it as a new version) and **Back to latest** |
+| History | `versions` newest first: "v4 · edited by you · 11:20", "v3 · Window shell layout agent · added a focus view · 10:52". Click a past version → `artifacts.readVersion` → previewed with "Viewing v2 (current is v4)", **Restore** (`artifacts.restore({ id, version, baseVersion })`: the whole snapshot, every file and the entry it had, becomes a new version noted "Restored v2"; toast "Restored v2 as v5") and **Back to latest**. Compare and the preview still use the entry's text (`readVersion`) |
 | Fix a broken import | `FixImportPanel`: **Retrieve with an agent** → `artifacts.refresh` (as above). **Choose files…** → `dialog.pickArtifactFiles({ folder: false })`, then `artifacts.importFiles({ filePaths, url: importedFrom (only a link `classifyClaudeLink` accepts), title, projectId, location })`, then `artifacts.get` and `artifacts.delete` of the empty import only if it is still the same broken version (an agent may have written it meanwhile); the new artifact is selected |
 | New artifact › A link | `artifacts.importLink({ url, title?, kind?, projectId, location })`. Main creates the artifact at version 0 with `retrieval.status: 'retrieving'` and starts an ordinary agent in the project (on the Wall, queued behind Max running); oIDE never downloads claude.ai content itself. The dialog closes, the new artifact is selected and shows its retrieving state, and a toast says "Retrieving <title> with an agent. You can follow it on the Wall." |
 | New artifact › Files | `dialog.pickArtifactFiles({ folder: false })` (several files, any type) or `({ folder: true })` (one folder); main registers the picks. Dropped files go through the preload drop bridge (`window.oide.attachDropped`, `drop.ts`, at most 50): non-image files come back by path (main registers them as picked); images come back inline with no path, so they are added right after the import with `artifacts.writeFiles({ id, files: [{ path: name, encoding: 'base64', data }], baseVersion, note: 'Added the dropped images' })`; a dropped folder is refused ("Use Choose a folder… instead"). Then `artifacts.importFiles({ filePaths, folderPath?, entry? (Opens on, when there are several pages), url? (Came from), title?, kind?, projectId?, location })`. Outside the desktop app (dev mock) a drop says "Dropping files needs the desktop app. Use Choose files… instead." |
@@ -143,7 +143,7 @@ route (`artifacts.artifactId`, via `replace`).
 
 `artifacts.uses({ ids })`, `artifacts.readVersion({ id, version })`, `dialog.pickFile`, optional
 `projectId` / `location` on `artifacts.import`, `context` on the Spawn route params,
-`artifacts.rename({ id, title })`, `baseVersion` on `artifacts.save`, and `change` / `version` /
+`artifacts.rename({ id, title })`, `artifacts.restore`, `baseVersion` on `artifacts.save`, and `change` / `version` /
 `author` on the `artifacts.changed` event. ADR 0014 added `artifacts.importLink`, `refresh`,
 `cancelRetrieval`, `files`, `readFile`, `writeFiles`, `importFiles`, `dialog.pickArtifactFiles`,
 `retrieval` / `fileCount` on `ArtifactMeta` (version 0 allowed) and change `retrieval` on
@@ -248,8 +248,8 @@ packaged-CSP build and save v2 with bundled fonts and no CSP violations.
   images alone can't start an artifact by drop (Choose files… can).
 - React designs preview only as the saved current version; an older version or unsaved edit shows a
   notice (use Compare).
-- Several files: Compare, History › view and Restore work on the entry file only (`readVersion`,
-  `artifacts.save`); restoring a past version of a multi-file artifact restores its entry. The Files
+- Several files: Compare and History › view work on the entry file only (`readVersion`); Restore
+  brings back every file (`artifacts.restore`). The Files
   panel edits one non-entry file at a time, has no rename, add or delete, and no Compare for
   non-entry files. The design preview beside a non-entry file shows the saved version, so a CSS
   edit shows after Save.

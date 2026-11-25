@@ -48,6 +48,12 @@ describe('mock artifacts: retrieval and files', () => {
     const next = await call('artifacts.writeFiles', { id: m.id, files: [{ path: 'site.css', encoding: 'utf8', data: 'x' }], entry: 'about.html', baseVersion: 1 });
     expect(next).toMatchObject({ version: 2, entry: 'about.html', fileCount: 9 });
     await expect(call('artifacts.writeFiles', { id: m.id, entry: 'index.html', baseVersion: 1 })).rejects.toThrow(/\[conflict\]/);
+
+    // Restore brings back every file and the entry of that version, as a new version.
+    const back = await call('artifacts.restore', { id: m.id, version: 1, baseVersion: 2 });
+    expect(back).toMatchObject({ version: 3, entry: 'index.html', fileCount: 9 });
+    expect(await call('artifacts.readFile', { id: m.id, path: 'site.css' })).not.toMatchObject({ data: 'x' });
+    await expect(call('artifacts.restore', { id: m.id, version: 1, baseVersion: 2 })).rejects.toThrow(/\[conflict\]/);
   });
 
   it('asks for a project to refresh an artifact that has none, and cancels a running retrieval', async () => {

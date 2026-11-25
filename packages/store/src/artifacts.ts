@@ -847,6 +847,37 @@ export class ArtifactStore {
   }
 
   /**
+   * History > Restore: the full snapshot of `version` (every file, and the entry it had) becomes the
+   * next version, noted `Restored v<n>`. It goes through `commit`, so the limits, the path and entry
+   * checks, the exclusive no-link writes and the root sync all apply; the per-artifact lock and the
+   * `baseVersion` conflict check are the ones `save` uses. Nothing changes when it is refused.
+   */
+  async restore(id: string, version: number, opts: { author?: string; baseVersion?: number } = {}): Promise<ArtifactMeta> {
+    return this.withLock(id, async () => {
+      const cur = this.metaFromIndex(id);
+      if (opts.baseVersion !== undefined && opts.baseVersion !== cur.version) {
+        throw new ArtifactError(`${cur.title} changed since you opened it (now v${cur.version}, you started from v${opts.baseVersion}).`, 'conflict');
+      }
+      if (!Number.isInteger(version) || version < 1 || version > cur.version) {
+        throw new ArtifactError(`${cur.title} has no v${version}.`, 'invalid_input', 'no_content');
+      }
+      const dir = this.dirOf(id);
+      const snap = await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(version)], { reservedTop: VERSIONS_DIR }));
+      const files = await this.guard(() => walkFolder(snap, { unsafe: 'throw', max: ARTIFACT_LIMITS.files + 1 })).catch((e: Error) => {
+        throw new ArtifactError(e.message, 'invalid_input', 'bad_path');
+      });
+      if (!files.length) throw new ArtifactError(`v${version} has no files to restore.`, 'invalid_input', 'no_content');
+      const plan = this.planOf(files);
+      // The entry that version had; older folders without it fall back to the current one, then to the kind's pick.
+      const stored = (await this.storedVersions(id)).find((v) => v.version === version)?.entry;
+      const paths = files.map((f) => f.path);
+      const entry = [stored, safeEntry(cur), ...(cur.kind === 'design' ? [HTML_DESIGN_ENTRY, REACT_DESIGN_ENTRY] : [ENTRY_FILES[cur.kind]])].find((e): e is string => !!e && isSafeArtifactPath(e) && plan.has(foldPath(e))) ?? pickEntry(cur.kind, paths);
+      if (!entry) throw new ArtifactError(`v${version} has no file that can open the ${cur.kind}.`, 'invalid_input', 'wrong_kind');
+      return this.commit(cur, plan, { entry, author: opts.author ?? 'user', note: `Restored v${version}` });
+    });
+  }
+
+  /**
    * Replace every file with the files under `srcDir` (a retrieval's staging folder, outside the
    * artifact) as one new version, and record the retrieval as finished. On the first retrieval the
    * agent's title and kind apply when the user gave none. Nothing changes when it is refused.
