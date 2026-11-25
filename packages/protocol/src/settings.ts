@@ -215,12 +215,14 @@ export const TESTED_CLI_RANGE = { min: '2.1.0', max: '2.99.99' } as const;
  * (`result.modelUsage[model].contextWindow` or `/context`), which always wins.
  * 1,000,000 is what CLI 2.1.325 reports for claude-opus-5-5, claude-sonnet-5-5 and claude-haiku-5-5
  * (fixtures tools/fake-claude/fixtures/real-context-*.jsonl); the bare family aliases resolve to those.
- * Models not verified fall back to 200,000.
+ * claude-fable-5-2 is 1,000,000 too: a real Fable session reached 224k tokens on its first turn, past
+ * the old 200k fallback. Models not verified fall back to 200,000.
  */
 export const CONTEXT_WINDOWS: Array<{ match: RegExp; tokens: number }> = [
   { match: /\[1m\]/i, tokens: 1_000_000 },
   { match: /^claude-(opus|sonnet|haiku)-5-5\b/i, tokens: 1_000_000 },
-  { match: /^(opus|sonnet|haiku)$/i, tokens: 1_000_000 },
+  { match: /^claude-fable-5-2\b/i, tokens: 1_000_000 },
+  { match: /^(opus|sonnet|haiku|fable)$/i, tokens: 1_000_000 },
   { match: /opus|sonnet|haiku|fable|claude/i, tokens: 200_000 },
 ];
 export function contextWindowFor(model: string | undefined): number {

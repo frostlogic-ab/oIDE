@@ -121,7 +121,7 @@ Details worth knowing:
 - Each `user` tool_result carries `tool_use_result` (structured: file, structuredPatch, stdout…) and
   `tool_result_meta[{permission_decision:{decision,source,reason_type}}]`.
 - `result.modelUsage[model].contextWindow` is the authoritative window: **1,000,000** for `claude-opus-5-5`,
-  `claude-sonnet-5-5` and `claude-haiku-5-5` (also `model_usage_since_last_result`). `modelUsage` lists every
+  `claude-sonnet-5-5`, `claude-haiku-5-5` and `claude-fable-5-2` (also `model_usage_since_last_result`). `modelUsage` lists every
   model the turn used, so the parser keeps the per-model map (`result.contextWindows`) and the reducer
   picks the lead model's entry (`[1m]` suffix stripped), never the largest.
 - `/context` in stream-json: a `system/init`, then a **synthetic** assistant message (`model:"<synthetic>"`,

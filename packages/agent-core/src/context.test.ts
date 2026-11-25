@@ -78,9 +78,34 @@ describe('context ring vs the CLI /context (real fixtures)', () => {
 });
 
 describe('context window selection', () => {
-  it('the table knows the 5.5 models are 1M (what the CLI reports) and keeps 200k for unverified ones', () => {
-    for (const m of ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'opus', 'sonnet', 'haiku', 'claude-opus-4-8[1m]']) expect(contextWindowFor(m)).toBe(1_000_000);
-    for (const m of ['claude-opus-4-8', 'claude-fable-5-2', 'something-else']) expect(contextWindowFor(m)).toBe(200_000);
+  it('the table knows the 5.5 models and Fable 5.2 are 1M (what the CLI reports) and keeps 200k for unverified ones', () => {
+    for (const m of ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5', 'claude-fable-5-2', 'opus', 'sonnet', 'haiku', 'fable', 'claude-opus-4-8[1m]']) expect(contextWindowFor(m)).toBe(1_000_000);
+    for (const m of ['claude-opus-4-8', 'claude-fable-5-1', 'something-else']) expect(contextWindowFor(m)).toBe(200_000);
+  });
+
+  it("long first turn on fable (the user's report): 224k is not drawn against 200k", () => {
+    // Numbers from the user's real oIDE session: claude-fable-5-2, 223,905 tokens, no result yet.
+    const r = new AgentReducer(fresh('claude-fable-5-2'));
+    r.apply(ev({ type: 'init', sessionId: 's', model: 'claude-fable-5-2', cwd: '', tools: [], mcpServers: [] }));
+    expect(r.summary.contextWindow).toBe(1_000_000);
+    r.apply(ev({ type: 'usage', messageId: 'm1', model: 'claude-fable-5-2', usage: { input: 5, output: 10, cacheRead: 220_000, cacheCreation: 3_900 } }));
+    expect(Math.round(pct(r.summary))).toBe(22);
+  });
+
+  it('a request larger than a guessed window moves the window up until the CLI reports one', () => {
+    const r = new AgentReducer(fresh('claude-opus-4-8'));
+    r.apply(ev({ type: 'init', sessionId: 's', model: 'claude-opus-4-8', cwd: '', tools: [], mcpServers: [] }));
+    r.apply(ev({ type: 'usage', messageId: 'm1', usage: { input: 2, output: 4, cacheRead: 150_000, cacheCreation: 2_000 } }));
+    expect(r.summary.contextWindow).toBe(200_000);
+    r.apply(ev({ type: 'usage', messageId: 'm2', usage: { input: 2, output: 4, cacheRead: 230_000, cacheCreation: 2_000 } }));
+    expect(r.summary.contextWindow).toBe(1_000_000);
+    // A window the CLI reported is never overridden by the guess.
+    const book = new ContextWindowBook();
+    book.learn('claude-opus-4-8', 200_000);
+    const known = new AgentReducer(fresh('claude-opus-4-8'), { windows: book });
+    known.apply(ev({ type: 'init', sessionId: 's', model: 'claude-opus-4-8', cwd: '', tools: [], mcpServers: [] }));
+    known.apply(ev({ type: 'usage', messageId: 'm3', usage: { input: 2, output: 4, cacheRead: 230_000, cacheCreation: 2_000 } }));
+    expect(known.summary.contextWindow).toBe(200_000);
   });
 
   it("long first turn on opus (the user's 75%/92% report): 84.8k first request reads 8%, not 42%", () => {
@@ -124,20 +149,20 @@ describe('context window selection', () => {
 
   it('a window learned from one agent applies to the next agent before its first result', () => {
     const book = new ContextWindowBook();
-    const a = new AgentReducer(fresh('fable'), { windows: book });
-    a.apply(ev({ type: 'init', sessionId: 's', model: 'claude-fable-5-2', cwd: '', tools: [], mcpServers: [] }));
+    const a = new AgentReducer(fresh('claude-fable-5-1'), { windows: book });
+    a.apply(ev({ type: 'init', sessionId: 's', model: 'claude-fable-5-1', cwd: '', tools: [], mcpServers: [] }));
     expect(a.summary.contextWindow).toBe(200_000);
-    a.apply(ev({ type: 'result', subtype: 'success', isError: false, contextWindows: { 'claude-fable-5-2': 1_000_000 } }));
+    a.apply(ev({ type: 'result', subtype: 'success', isError: false, contextWindows: { 'claude-fable-5-1': 1_000_000 } }));
     expect(a.summary.contextWindow).toBe(1_000_000);
-    const b = new AgentReducer(fresh('fable'), { windows: book });
-    b.apply(ev({ type: 'init', sessionId: 's2', model: 'claude-fable-5-2', cwd: '', tools: [], mcpServers: [] }));
+    const b = new AgentReducer(fresh('claude-fable-5-1'), { windows: book });
+    b.apply(ev({ type: 'init', sessionId: 's2', model: 'claude-fable-5-1', cwd: '', tools: [], mcpServers: [] }));
     expect(b.summary.contextWindow).toBe(1_000_000);
   });
 
   it('a restored agent keeps the window the CLI reported last time when its turn starts again', () => {
-    const restored = { ...fresh('claude-fable-5-2'), contextWindow: 1_000_000, contextUsed: 300_000 };
+    const restored = { ...fresh('claude-fable-5-1'), contextWindow: 1_000_000, contextUsed: 300_000 };
     const r = new AgentReducer(restored);
-    r.apply(ev({ type: 'init', sessionId: 's', model: 'claude-fable-5-2', cwd: '', tools: [], mcpServers: [] }));
+    r.apply(ev({ type: 'init', sessionId: 's', model: 'claude-fable-5-1', cwd: '', tools: [], mcpServers: [] }));
     expect(r.summary.contextWindow).toBe(1_000_000);
     // A stale 200k stored by an older build for a 1M model does not stick.
     const stale = new AgentReducer({ ...fresh('claude-opus-5-5'), contextWindow: 200_000 });
