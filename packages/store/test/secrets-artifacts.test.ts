@@ -127,6 +127,57 @@ describe('ArtifactStore', () => {
     expect(inferKind('a.MD')).toBe('doc');
   });
 
+  it('imports a claude.ai link with the pasted content, the kind and title following the content', async () => {
+    const { store, p } = setup();
+    const url = 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T#open';
+    const page = '<!doctype html>\n<html><head><title>Checkout &amp; pay</title></head><body><h1>Pay</h1></body></html>\n';
+    const design = await store.importUrl({ url, content: page, projectId: p.id, location: 'repo' });
+    expect(design).toMatchObject({ kind: 'design', title: 'Checkout & pay', importedFrom: url, location: 'repo' });
+    expect((await store.read(design.id)).content).toBe(page);
+    expect(readFileSync(join(store.dirOf(design.id), 'index.html'), 'utf8')).toBe(page);
+
+    const doc = await store.importUrl({ url, content: '﻿# Launch plan\n\nShip it.\n' });
+    expect(doc).toMatchObject({ kind: 'doc', title: 'Launch plan' });
+    const md = (await store.read(doc.id)).content;
+    expect(md).toMatch(/^---\ntitle: "Launch plan"\nkind: doc\nimportedFrom: "https:\/\/claude.ai\/artifact\/MyEmjmATV3mpUv6SZmFj4T#open"\n---\n/);
+    expect(md).toContain('# Launch plan\n\nShip it.');
+
+    const board = await store.importUrl({ url, content: JSON.stringify({ type: 'excalidraw', elements: [] }) });
+    expect(board).toMatchObject({ kind: 'whiteboard', title: 'Imported from claude.ai' });
+
+    // A title the user typed wins; whitespace-only content is the link-only stub.
+    expect(await store.importUrl({ url, content: page, title: 'Mine' })).toMatchObject({ title: 'Mine', kind: 'design' });
+    const stub = await store.importUrl({ url, content: '  \n', kind: 'design' });
+    expect((await store.read(stub.id)).content).toMatch(/oIDE cannot fetch claude.ai artifacts/);
+  });
+
+  it('refuses pasted content that does not fit the kind, and links with credentials', async () => {
+    const { store } = setup();
+    const url = 'https://claude.ai/artifact/abc';
+    const jsx = "import { useState } from 'react';\nexport default function App() { return <div>Hi</div>; }\n";
+    await expect(store.importUrl({ url, content: jsx, kind: 'design' })).rejects.toMatchObject({ code: 'invalid_input', message: /isn't an HTML page/ });
+    expect(await store.importUrl({ url, content: jsx })).toMatchObject({ kind: 'doc' });
+    await expect(store.importUrl({ url, content: '{"type":', kind: 'whiteboard' })).rejects.toMatchObject({ code: 'invalid_input' });
+    await expect(store.importUrl({ url, content: 'x'.repeat(10 * 1024 * 1024 + 1) })).rejects.toThrow(/larger than 10 MB/);
+    await expect(store.importUrl({ url: 'https://user:pw@claude.ai/artifact/abc' })).rejects.toMatchObject({ code: 'invalid_input' });
+    await expect(store.importUrl({ url: 'https://claude.ai.evil.example/x', content: '<p>x</p>' })).rejects.toThrow(/claude.ai/);
+    expect(await store.list()).toHaveLength(1);
+  });
+
+  it('keeps the claude.ai link of an imported file, and checks non-HTML files picked as a design', async () => {
+    const { store } = setup();
+    const dir = tempDir();
+    const html = join(dir, 'Pricing.html');
+    writeFileSync(html, 'Plain text in an .html file');
+    const imported = await store.importFile({ filePath: html, url: 'https://claude.ai/artifact/xyz' });
+    expect(imported).toMatchObject({ kind: 'design', importedFrom: 'https://claude.ai/artifact/xyz', title: 'Pricing' });
+    const md = join(dir, 'notes.md');
+    writeFileSync(md, '# Notes');
+    await expect(store.importFile({ filePath: md, kind: 'design' })).rejects.toThrow(/isn't an HTML page/);
+    await expect(store.importFile({ filePath: md, url: 'https://example.com/x' })).rejects.toThrow(/claude.ai/);
+    expect((await store.importFile({ filePath: md })).importedFrom).toBeUndefined();
+  });
+
   it('rescans folders on disk (teammates commit repo artifacts)', async () => {
     const { s, store, repo, p, appData } = setup();
     const a = await store.create({ title: 'Docs IA sketch', kind: 'whiteboard', projectId: p.id, location: 'repo' });

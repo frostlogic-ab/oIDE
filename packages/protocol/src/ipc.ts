@@ -284,7 +284,23 @@ export const Commands = {
   'artifacts.delete': cmd(z.object({ id: Id }), Ok),
   /** New title (the folder slug stays, so links and git history keep working). */
   'artifacts.rename': cmd(z.object({ id: Id, title: z.string().trim().min(1).max(200) }), ArtifactMeta),
-  'artifacts.import': cmd(z.object({ url: z.string().url().optional(), filePath: z.string().optional(), title: z.string().optional(), kind: ArtifactKind.optional(), projectId: Id.optional(), location: z.enum(['repo', 'app-data']).optional() }), ArtifactMeta),
+  /**
+   * Import from claude.ai. `url` alone stores a link-only stub; `url` + `content` stores the content
+   * the user copied on claude.ai (main cannot fetch it); `filePath` (picked with dialog.pickFile)
+   * imports an exported file, with `url` kept as its claude.ai origin when given.
+   */
+  'artifacts.import': cmd(
+    z.object({
+      url: z.string().url().max(2048).optional(),
+      content: z.string().max(10 * 1024 * 1024).optional(),
+      filePath: z.string().optional(),
+      title: z.string().max(200).optional(),
+      kind: ArtifactKind.optional(),
+      projectId: Id.optional(),
+      location: z.enum(['repo', 'app-data']).optional(),
+    }),
+    ArtifactMeta,
+  ),
   /** Uses log for several artifacts at once (the grid's "Read by 2 agents" lines), keyed by artifact id. */
   'artifacts.uses': cmd(z.object({ ids: z.array(Id).max(500) }), z.record(z.string(), z.array(ArtifactUse))),
   /** Content of one numbered snapshot (History › view version). */

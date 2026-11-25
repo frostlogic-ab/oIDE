@@ -18,6 +18,9 @@ import {
   InstalledExtension,
   MarketplaceEntry,
   Technique,
+  inferKindFromContent,
+  looksLikeHtml,
+  titleFromContent,
   type ArtifactKind,
   type Commands,
   type CommandInput,
@@ -536,13 +539,23 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
       ctx.emit('artifacts.changed', { id: a.meta.id });
       return a.meta;
     },
-    'artifacts.import': ({ url, filePath, title, kind, projectId, location }) => {
+    'artifacts.import': ({ url, content: pasted, filePath, title, kind, projectId, location }) => {
       let k: ArtifactKind = kind ?? 'doc';
       let t = title;
       let content = '';
       if (url) {
-        const host = new URL(url).hostname;
-        if (!['claude.ai', 'claude.site'].some((h) => host === h || host.endsWith(`.${h}`))) fail('invalid_input', 'Only claude.ai links can be imported');
+        const u = new URL(url);
+        if (u.protocol !== 'https:' || !['claude.ai', 'claude.site'].some((h) => u.hostname === h || u.hostname.endsWith(`.${h}`))) fail('invalid_input', 'Only https://claude.ai links can be imported.');
+        if (u.username || u.password) fail('invalid_input', 'The link must not contain a user name or password.');
+      }
+      if (filePath && pasted !== undefined) fail('invalid_input', 'Paste the content or pick a file, not both.');
+      if (url && !filePath && pasted?.trim()) {
+        // Same rules as the store: the kind and title follow the pasted content.
+        k = kind ?? inferKindFromContent(pasted);
+        if (k === 'design' && !looksLikeHtml(pasted)) fail('invalid_input', "This isn't an HTML page, so it can't be a design.");
+        t ??= titleFromContent(k, pasted) ?? 'Imported from claude.ai';
+        content = pasted;
+      } else if (url && !filePath) {
         t ??= 'Imported from claude.ai';
         content = k === 'doc' ? `---\ntitle: ${t}\nkind: doc\nimportedFrom: ${url}\n---\n\n# ${t}\n\nA copy of a claude.ai artifact. Paste its content here; it is not synced.\n` : k === 'design' ? `<!doctype html><html><body><p>Imported from ${url}</p></body></html>` : board([]);
       } else if (filePath) {

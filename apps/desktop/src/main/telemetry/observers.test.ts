@@ -323,6 +323,23 @@ describe('archived agents and the PR lifecycle', () => {
     expect(JSON.stringify(events)).not.toMatch(/acme|github/);
   });
 
+  it('artifact_imported says how it came in and the kind, never the link, title or content', () => {
+    const { o, events } = make();
+    const url = 'https://claude.ai/artifact/SecretId';
+    o.command('artifacts.import', { url, content: '<p>Secret</p>', title: 'Secret' }, { kind: 'design' });
+    o.command('artifacts.import', { url, content: '  ' }, { kind: 'doc' });
+    o.command('artifacts.import', { filePath: 'C:\\ACME\\x.md', url }, { kind: 'doc' });
+    o.command('artifacts.import', { filePath: 'C:\\ACME\\b.excalidraw' }, { kind: 'whiteboard' });
+    o.command('artifacts.import', { url }, { kind: 'bogus' });
+    expect(events).toEqual([
+      { name: 'artifact_imported', props: { source: 'link_content', kind: 'design', linked: true } },
+      { name: 'artifact_imported', props: { source: 'link', kind: 'doc', linked: true } },
+      { name: 'artifact_imported', props: { source: 'file', kind: 'doc', linked: true } },
+      { name: 'artifact_imported', props: { source: 'file', kind: 'whiteboard', linked: false } },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/ACME|Secret|claude/);
+  });
+
   it('pr_merged_detected when a known PR turns merged, once', () => {
     const { o, events } = make();
     o.emitted('agents.summary', summary({ pr: pr('merged') })); // first sight: not a transition

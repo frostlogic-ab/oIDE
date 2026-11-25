@@ -38,13 +38,24 @@ export function registerArtifactHandlers(router: IpcRouter, s: Services, ctx: Ma
   });
   router.register('artifacts.readVersion', async ({ id, version }) => ({ content: await wrap(a.readVersion(id, version)) }));
   // A file import must be a file the user picked with dialog.pickFile (never an arbitrary renderer path).
-  router.register('artifacts.import', async ({ url, filePath, title, kind, projectId, location }) => {
+  // Main never fetches the link: claude.ai has no public content API and oIDE never uses the user's
+  // claude.ai sign-in, so content comes from the user (pasted, or an exported file).
+  router.register('artifacts.import', async ({ url, content, filePath, title, kind, projectId, location }) => {
     if (projectId) s.projects.require(projectId);
+    if (location === 'repo' && !projectId) throw new IpcError('Repo artifacts need a project', 'invalid_input');
+    if (filePath && content !== undefined) throw new IpcError('Paste the content or pick a file, not both.', 'invalid_input');
     const where = { ...(title ? { title } : {}), ...(kind ? { kind } : {}), ...(projectId ? { projectId } : {}), ...(location ? { location } : {}) };
-    if (url) return wrap(a.importUrl({ url, ...where }));
-    if (!filePath) throw new IpcError('Give a claude.ai link or pick a file', 'invalid_input');
-    if (!wasPicked(s, filePath)) throw new IpcError('Pick the file with the file dialog first.', 'forbidden_path');
-    return wrap(a.importFile({ filePath, ...where }));
+    let meta;
+    if (filePath) {
+      if (!wasPicked(s, filePath)) throw new IpcError('Pick the file with the file dialog first.', 'forbidden_path');
+      meta = await wrap(a.importFile({ filePath, ...(url ? { url } : {}), ...where }));
+    } else if (url) {
+      meta = await wrap(a.importUrl({ url, ...(content !== undefined ? { content } : {}), ...where }));
+    } else {
+      throw new IpcError('Give a claude.ai link or pick a file', 'invalid_input');
+    }
+    registerRoot(meta.location === 'repo' ? meta.projectId : undefined);
+    return meta;
   });
   router.register('artifacts.uses', ({ ids }) => {
     const out: Record<string, ReturnType<typeof a.uses>> = {};
