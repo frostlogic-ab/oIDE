@@ -49,12 +49,14 @@ for MCP uses), so an open editor can say "Updated by <agent>" without a refetch.
 - `importUrl({ url, content?, title?, kind?, projectId?, location? })`: only `https://claude.ai` (and `claude.site`) links,
   no user name or password in them (`claudeImportUrl`, `ArtifactError` `invalid_input`). oIDE cannot fetch claude.ai
   content (no public API, and it never uses the user's claude.ai sign-in), so the user pastes what they copied there as
-  `content` (10 MB limit). With content: the kind follows it unless given (`inferKindFromContent`: HTML → design,
-  Excalidraw JSON → whiteboard, else doc), the title comes from `<title>`/`<h1>` or a `# heading` unless given
-  (`titleFromContent`), and a design must hold HTML (`looksLikeHtml`; React or other code artifacts are refused with
+  `content` (10 MB limit). With content: the kind follows it unless given (`inferKindFromContent`: an HTML page or
+  fragment → design, but Markdown that opens with an HTML banner stays a doc; Excalidraw JSON → whiteboard; else doc),
+  the title comes from `<title>`/`<h1>`, or a front-matter `title:` or the first `# heading` outside code fences, unless
+  given (`titleFromContent`), and a design must hold HTML (`looksLikeHtml`; React or other code artifacts are refused with
   `invalid_input` because the preview has no network to load them). Without content (or only whitespace): a link-only
   stub (kind defaults to doc) whose note says how to paste the content. The link is kept as `importedFrom` either way;
-  "Open in claude.ai" uses it. The three helpers live in `@oide/protocol` (`artifacts.ts`) so the dialog uses the same rules.
+  "Open in claude.ai" uses it. The three helpers live in `@oide/protocol` (`artifacts.ts`) so the dialog uses the same
+  rules; they skip leading comments with `indexOf` and use patterns with one way to match, so a 10 MB paste stays linear.
 - `importFile({ filePath, url?, title?, kind?, ... })`: `.html/.htm` → design, `.md/.markdown/.txt` → doc, `.excalidraw` or
   Excalidraw `.json` → whiteboard; 10 MB limit. `url` (the claude.ai link the file was downloaded from) becomes
   `importedFrom`. A non-HTML file picked as a design is refused like pasted content; an `.html` file is taken as a page.

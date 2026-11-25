@@ -76,27 +76,41 @@ function stripBom(s: string): string {
   return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s;
 }
 
-/** True for an HTML page or fragment (what a design's `index.html` must hold). */
-export function looksLikeHtml(content: string): boolean {
+/**
+ * How the content starts, after a BOM, whitespace and leading `<!-- … -->` comments: `document` for
+ * a page (`<!doctype html>`, `<html>`, `<head>`, `<body>`, an SVG file), `fragment` for markup that
+ * starts with a tag and closes one (`<div>…</div>`, `<svg …/>`), else null. Comments are skipped with
+ * indexOf and every pattern has one way to match, so 10 MB of hostile input stays linear.
+ */
+function htmlStart(content: string): 'document' | 'fragment' | null {
   const text = stripBom(content).trimStart();
-  // Skip leading `<!-- … -->` comments with indexOf (linear; a repeated lazy regex group backtracks badly).
   let start = 0;
   while (text.startsWith('<!--', start)) {
     const end = text.indexOf('-->', start + 4);
-    if (end < 0) return false;
+    if (end < 0) return null;
     start = end + 3;
     while (start < text.length && /\s/.test(text[start]!)) start++;
   }
   const head = text.slice(start, start + 4096);
-  if (/^(?:<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>]|<\?xml\s[^>]*\?>\s*<svg[\s>])/i.test(head)) return true;
-  // A fragment: starts with a tag and closes one (`<div>…</div>`, `<svg …/>`). JSX source starts with `import`/`export`.
-  return /^<[a-z][\w-]*[\s/>]/i.test(head) && /<\/[a-z][\w-]*\s*>|\/>/i.test(text);
+  if (/^(?:<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>]|<\?xml\s[^>]*\?>\s*(?:<!doctype\s+svg[^>]*>\s*)?<svg[\s>]|<!doctype\s+svg[^>]*>\s*<svg[\s>])/i.test(head)) return 'document';
+  // JSX source starts with `import` / `export`, so it is not a fragment.
+  return /^<[a-z][\w-]*[\s/>]/i.test(head) && /<\/[a-z][\w-]*\s*>|\/>/i.test(text) ? 'fragment' : null;
 }
 
-/** Kind of pasted content: HTML → design, Excalidraw JSON → whiteboard, anything else → doc. */
+/** True for an HTML page or fragment (what a design's `index.html` must hold). */
+export function looksLikeHtml(content: string): boolean {
+  return htmlStart(content) !== null;
+}
+
+/**
+ * Kind of pasted content: an HTML page or fragment → design, Excalidraw JSON → whiteboard, anything
+ * else → doc. Markdown that opens with HTML (a README's centred `<div>` banner) stays a doc.
+ */
 export function inferKindFromContent(content: string): ArtifactKind {
   const text = stripBom(content).trim();
-  if (looksLikeHtml(text)) return 'design';
+  const html = htmlStart(text);
+  if (html === 'document') return 'design';
+  if (html === 'fragment' && !/^#{1,6}[ \t]/m.test(text.slice(0, 256 * 1024))) return 'design';
   if (text.startsWith('{')) {
     try {
       if ((JSON.parse(text) as { type?: unknown }).type === 'excalidraw') return 'whiteboard';
@@ -109,19 +123,49 @@ export function inferKindFromContent(content: string): ArtifactKind {
 
 const HTML_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: ' ' };
 
+/** The first `# heading` of Markdown outside fenced code, or a front-matter `title:`. */
+function markdownTitle(text: string): string | undefined {
+  const lines = text.split(/\r?\n/);
+  let i = 0;
+  const close = lines[0] === '---' ? lines.indexOf('---', 1) : -1;
+  if (close > 0) {
+    for (const line of lines.slice(1, close)) {
+      const m = /^title:[ \t]*(\S.*)$/.exec(line);
+      if (!m) continue;
+      const v = m[1]!.trim();
+      const unquoted = /^"(.*)"$|^'(.*)'$/.exec(v);
+      return unquoted ? (unquoted[1] ?? unquoted[2]) : v;
+    }
+    i = close + 1;
+  }
+  let fence: string | null = null;
+  for (; i < lines.length; i++) {
+    const line = lines[i]!;
+    const f = /^[ ]{0,3}(`{3,}|~{3,})/.exec(line);
+    if (f) {
+      if (!fence) fence = f[1]!;
+      else if (f[1]!.startsWith(fence)) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    const h = /^#[ \t]+(\S.*)$/.exec(line);
+    if (h) return h[1]!.slice(0, 400).replace(/[ \t]#+[ \t]*$/, '');
+  }
+  return undefined;
+}
+
 /**
- * A title from the content: an HTML `<title>` or `<h1>`, or a Markdown `# heading`. Only the first
- * 256 KB are searched, and every pattern has one way to match (no backtracking blow-up on 10 MB).
+ * A title from the content: an HTML `<title>` or `<h1>`, or a Markdown front-matter `title:` or first
+ * `# heading`. Only the first 256 KB are searched, with patterns that have one way to match.
  */
 export function titleFromContent(kind: ArtifactKind, content: string): string | undefined {
-  const text = content.slice(0, 256 * 1024);
+  const text = stripBom(content).slice(0, 256 * 1024);
   let t: string | undefined;
   if (kind === 'design') {
     const m = /<title(?:\s[^<>]*)?>([^<]{1,400})<\/title>/i.exec(text) ?? /<h1(?:\s[^<>]*)?>([^<]{1,400})<\/h1>/i.exec(text);
     t = m?.[1]?.replace(/&(amp|lt|gt|quot|#39|apos|nbsp);/g, (_x, e: string) => HTML_ENTITIES[e] ?? '');
   } else if (kind === 'doc') {
-    const body = text.startsWith('---\n') || text.startsWith('---\r\n') ? text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '') : text;
-    t = /^#[ \t]+([^ \t\r\n][^\r\n]{0,399})$/m.exec(body)?.[1]?.replace(/[ \t]#+[ \t]*$/, '');
+    t = markdownTitle(text);
   }
   t = t?.replace(/\s+/g, ' ').trim().slice(0, 200).trim();
   return t || undefined;

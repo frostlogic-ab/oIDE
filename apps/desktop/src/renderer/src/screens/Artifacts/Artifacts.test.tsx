@@ -152,6 +152,7 @@ describe('Import from claude.ai dialog', () => {
     invoke.mockImplementation(async (command: string) => {
       if (command === 'artifacts.import') return imported;
       if (command === 'shell.openExternal') return { ok: true };
+      if (command === 'dialog.pickFile') return 'C:\\Downloads\\pricing.html';
       throw new Error(`[not_implemented] ${command}`);
     });
     render(<ImportDialog open onClose={() => {}} projects={projects} defaultProjectId="oide" onImported={onImported} />);
@@ -175,7 +176,7 @@ describe('Import from claude.ai dialog', () => {
   it('opens the link in the browser, and an empty paste imports the link only', async () => {
     const { onImported } = await open();
     fireEvent.change(screen.getByRole('textbox', { name: 'claude.ai link' }), { target: { value: url } });
-    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open the link on claude.ai' }));
     expect(invoke).toHaveBeenCalledWith('shell.openExternal', { url });
     fireEvent.click(screen.getByRole('button', { name: 'Import link only' }));
     await waitFor(() => expect(onImported).toHaveBeenCalled());
@@ -192,6 +193,35 @@ describe('Import from claude.ai dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Import' }));
     await Promise.resolve();
     expect(invoke).not.toHaveBeenCalledWith('artifacts.import', expect.anything());
+  });
+
+  it('keeps the paste and a picked kind across tabs; Pick a file sends the optional link', async () => {
+    const { onImported } = await open();
+    fireEvent.change(screen.getByRole('textbox', { name: 'claude.ai link' }), { target: { value: url } });
+    fireEvent.change(content(), { target: { value: '# Notes' } });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Kind' }), { target: { value: 'whiteboard' } });
+    fireEvent.click(screen.getByRole('tab', { name: 'Pick a file' }));
+    expect(kind()).toBe('whiteboard');
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a file…' }));
+    expect(await screen.findByText('C:\\Downloads\\pricing.html')).toBeTruthy();
+    expect(kind()).toBe('whiteboard'); // the user's pick wins over the file name
+    fireEvent.change(screen.getByRole('combobox', { name: 'Kind' }), { target: { value: 'design' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import' }));
+    await waitFor(() => expect(onImported).toHaveBeenCalled());
+    expect(invoke).toHaveBeenCalledWith('artifacts.import', { filePath: 'C:\\Downloads\\pricing.html', url, title: undefined, kind: 'design', projectId: 'oide', location: 'app-data' });
+  });
+
+  it('keeps the instructions visible when content is refused, and only opens claude.ai links', async () => {
+    await open();
+    fireEvent.change(screen.getByRole('textbox', { name: 'claude.ai link' }), { target: { value: 'https://claude.site/artifacts/x' } });
+    expect((screen.getByRole('button', { name: 'Open the link on claude.ai' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Kind' }), { target: { value: 'whiteboard' } });
+    fireEvent.change(content(), { target: { value: 'not json' } });
+    expect(screen.getByRole('alert').textContent).toMatch(/JSON/);
+    expect(screen.getByText(/copy the artifact's code and paste it here/)).toBeTruthy();
+    expect(content().getAttribute('aria-invalid')).toBe('true');
+    fireEvent.change(content(), { target: { value: '\uFEFF{"type":"excalidraw","elements":[]}' } });
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('refuses links that are not https claude.ai', async () => {

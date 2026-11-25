@@ -78,7 +78,7 @@ export function ArtifactsSection() {
       <Sec>claude.ai</Sec>
       <Row
         title="Import from claude.ai"
-        desc="Paste a claude.ai artifact link or pick an exported file. oIDE stores a copy, marked as imported. It is not synced: changes on either side stay there."
+        desc="Paste a claude.ai artifact link with the code you copied from it, or pick a downloaded file. oIDE stores a copy, marked as imported. It is not synced: changes on either side stay there."
       >
         {() => (
           <button type="button" className={outlineBtn} onClick={() => navigate('artifacts', {})}>

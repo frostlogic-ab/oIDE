@@ -15,6 +15,7 @@ describe('artifact import helpers', () => {
     expect(looksLikeHtml('<notclosed')).toBe(false);
     expect(looksLikeHtml('<!-- a --> <!-- b -->\n<div>x</div>')).toBe(true);
     expect(looksLikeHtml('<!-- never closed <html>')).toBe(false);
+    expect(looksLikeHtml('<!-- ' + 'x'.repeat(10_000) + ' -->\n<!doctype html>')).toBe(true);
   });
 
   it('stays fast on hostile input (many comments, huge tags)', () => {
@@ -24,7 +25,8 @@ describe('artifact import helpers', () => {
     expect(looksLikeHtml('</' + 'a'.repeat(2_000_000))).toBe(false);
     expect(inferKindFromContent('<' + 'a'.repeat(2_000_000))).toBe('doc');
     expect(titleFromContent('design', '<title'.repeat(400_000))).toBeUndefined();
-    expect(titleFromContent('doc', '# ' + ' '.repeat(200_000) + 'x'.repeat(500))).toBeUndefined();
+    expect(titleFromContent('doc', '# ' + ' '.repeat(200_000) + 'x'.repeat(500))).toBe('x'.repeat(200));
+    expect(titleFromContent('doc', '---\ntitle:' + ' '.repeat(200_000) + '\n---\n')).toBeUndefined();
     expect(titleFromContent('doc', '---\n' + 'a\n'.repeat(500_000))).toBeUndefined();
     expect(performance.now() - t0).toBeLessThan(2000);
   });
@@ -35,13 +37,21 @@ describe('artifact import helpers', () => {
     expect(inferKindFromContent('{"type":"other"}')).toBe('doc');
     expect(inferKindFromContent('{ not json')).toBe('doc');
     expect(inferKindFromContent('# Plan')).toBe('doc');
+    // A README that opens with an HTML banner stays a doc; a full page with a # in a script is a design.
+    expect(inferKindFromContent('<div align="center"><img src="x.png"/></div>\n\n# Project\n')).toBe('doc');
+    expect(inferKindFromContent('<!doctype html><script>\n# not markdown\n</script>')).toBe('design');
+    expect(inferKindFromContent('<?xml version="1.0"?>\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "x.dtd">\n<svg></svg>')).toBe('design');
+    expect(inferKindFromContent('﻿' + JSON.stringify({ type: 'excalidraw' }))).toBe('whiteboard');
   });
 
   it('takes a title from <title>, <h1> or a Markdown heading', () => {
     expect(titleFromContent('design', '<title> Pricing &amp; plans </title>')).toBe('Pricing & plans');
     expect(titleFromContent('design', '<body><h1 class="x">Checkout</h1></body>')).toBe('Checkout');
     expect(titleFromContent('design', '<body></body>')).toBeUndefined();
-    expect(titleFromContent('doc', '---\ntitle: x\n---\n\n# Launch   plan ##\n')).toBe('Launch plan');
+    expect(titleFromContent('doc', '---\nkind: doc\n---\n\n# Launch   plan ##\n')).toBe('Launch plan');
+    expect(titleFromContent('doc', '---\ntitle: "From front matter"\n---\n\n# Heading\n')).toBe('From front matter');
+    expect(titleFromContent('doc', '---\nno close\n# Real\n')).toBe('Real');
+    expect(titleFromContent('doc', '```sh\n# a shell comment\n```\n\n# Setup\n')).toBe('Setup');
     expect(titleFromContent('doc', 'No heading')).toBeUndefined();
     expect(titleFromContent('whiteboard', '# x')).toBeUndefined();
     expect(titleFromContent('doc', `# ${'a'.repeat(300)}`)?.length).toBe(200);

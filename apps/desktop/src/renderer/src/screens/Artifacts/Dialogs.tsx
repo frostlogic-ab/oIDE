@@ -2,7 +2,7 @@
  * New artifact and Import from claude.ai dialogs (both end with the new artifact selected), and the
  * Rename and Delete confirms.
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { inferKindFromContent, looksLikeHtml, type ArtifactKind, type ArtifactMeta, type Project } from '@oide/protocol';
 import { Button, Dialog, SegmentedControl, Select, Tabs, TextArea, TextField, tabPanelProps } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
@@ -200,7 +200,10 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
         ? 'Only https links on claude.ai can be imported.'
         : undefined
     : undefined;
-  const contentError = tab === 'link' && hasContent ? importContentError(kind, content) : undefined;
+  // Memoised: a multi-MB paste must not be re-scanned on every keystroke in the other fields.
+  const contentError = useMemo(() => (tab === 'link' && hasContent ? importContentError(kind, content) : undefined), [tab, hasContent, kind, content]);
+  const contentHintId = useId();
+  const contentErrorId = useId();
 
   // Start each use from the current scope (the dialog stays mounted between uses).
   useEffect(() => {
@@ -227,7 +230,7 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
   };
 
   const openLink = () => {
-    if (!isClaudeLink(link)) {
+    if (!canOpenLink(link)) {
       setTouched(true);
       return;
     }
@@ -297,11 +300,17 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
         onBlur={() => url && setTouched(true)}
         placeholder="https://claude.ai/artifact/…"
         error={urlError}
-        hint={tab === 'file' ? 'Where the file came from, for Open in claude.ai.' : undefined}
+        hint={
+          tab === 'file'
+            ? 'Where the file came from, for Open in claude.ai.'
+            : isClaudeLink(link) && !canOpenLink(link)
+              ? 'oIDE opens only claude.ai links in your browser; open this one yourself to copy its code.'
+              : undefined
+        }
         containerClassName="flex-1 min-w-0"
       />
       {tab === 'link' && (
-        <Button size={32} icon="external-link" onClick={openLink} disabled={!link} className="mt-[22px] shrink-0">
+        <Button size={32} icon="external-link" onClick={openLink} disabled={!canOpenLink(link)} aria-label="Open the link on claude.ai" className="mt-[22px] shrink-0">
           Open
         </Button>
       )}
@@ -342,17 +351,29 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
         {tab === 'link' ? (
           <>
             {linkField}
-            <TextArea
-              label="Artifact content"
-              mono
-              rows={7}
-              value={content}
-              onChange={(e) => onContent(e.target.value)}
-              placeholder="<!doctype html>…"
-              error={contentError}
-              hint="oIDE can't download from claude.ai: there is no public API, and oIDE never uses your claude.ai sign-in. Open the link, copy the artifact's code and paste it here. Leave it empty to keep only the link."
-              className="max-h-[240px] resize-y"
-            />
+            <div className="flex flex-col gap-1.5">
+              <TextArea
+                label="Artifact content"
+                mono
+                rows={7}
+                value={content}
+                onChange={(e) => onContent(e.target.value)}
+                placeholder="<!doctype html>…"
+                aria-invalid={contentError ? true : undefined}
+                aria-describedby={contentError ? `${contentHintId} ${contentErrorId}` : contentHintId}
+                className="max-h-[240px] resize-y aria-[invalid=true]:border-bad-line"
+              />
+              {/* The instructions stay visible when the content is refused; the refusal is announced. */}
+              <span id={contentHintId} className="text-[12px] text-ink-3 leading-[1.45]">
+                oIDE can&apos;t download from claude.ai: there is no public API, and oIDE never uses your claude.ai sign-in. Open the link, copy the artifact&apos;s code and
+                paste it here. Leave it empty to keep only the link.
+              </span>
+              {contentError && (
+                <span id={contentErrorId} role="alert" className="text-[12px] text-bad">
+                  {contentError}
+                </span>
+              )}
+            </div>
           </>
         ) : (
           <>
@@ -399,12 +420,20 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
 
 /** Why pasted content can't be imported as `kind`, or undefined. Main applies the same rules. */
 function importContentError(kind: ArtifactKind, content: string): string | undefined {
-  if (new TextEncoder().encode(content).length > MAX_PASTE_BYTES) return 'The content is larger than 10 MB.';
+  // UTF-8 is at most 3 bytes per UTF-16 unit: only encode when the paste could be over the limit.
+  if (content.length * 3 > MAX_PASTE_BYTES && new TextEncoder().encode(content).length > MAX_PASTE_BYTES) return 'The content is larger than 10 MB.';
   if (kind === 'design' && !looksLikeHtml(content)) {
     return "This isn't an HTML page, so it can't be a design: React and other code artifacts don't run in oIDE's preview. Ask Claude on claude.ai for one self-contained HTML file, or import it as a doc.";
   }
-  if (kind === 'whiteboard') return validateContent('whiteboard', content) ?? undefined;
+  if (kind === 'whiteboard') return validateContent('whiteboard', content.charCodeAt(0) === 0xfeff ? content.slice(1) : content) ?? undefined;
   return undefined;
+}
+
+/** Links the Open button can hand to the system browser (main's allow-list has claude.ai, not claude.site). */
+function canOpenLink(link: string): boolean {
+  if (!isClaudeLink(link)) return false;
+  const host = new URL(link).hostname.toLowerCase();
+  return host === 'claude.ai' || host.endsWith('.claude.ai');
 }
 
 export interface RenameDialogProps {
