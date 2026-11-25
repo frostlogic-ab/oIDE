@@ -84,11 +84,20 @@ holders ([reliability](reliability.md#windows)).
 
 ## Merge, overlaps, remote, PRs, commit
 
-- `mergeLocal(mainCheckout, branch, { message? })` → `{ ok, conflicts, sha?, error? }`:
-  `git merge --no-ff --no-edit`; on conflicts lists them (`--diff-filter=U`) and runs `merge --abort`,
-  so the main checkout is never left mid-merge. When git refuses because uncommitted (or untracked)
-  files in the main checkout would be overwritten, `blockedBy` lists them (`parseBlockedByLocalChanges`)
-  and `error` says to commit or stash them.
+- `mergeLocal(mainCheckout, branch, { message?, autoStash? })` → `{ ok, conflicts, sha?, error?,
+  blockedBy?, autoStash? }`: `git merge --no-ff --no-edit`; on conflicts lists them (`--diff-filter=U`)
+  and runs `merge --abort`, so the main checkout is never left mid-merge. When git refuses because
+  uncommitted (or untracked) files in the main checkout would be overwritten
+  (`parseBlockedByLocalChanges`, which reads both git refusals, tracked and untracked), it recovers on
+  its own: it stashes **only those files** (`git stash push --include-untracked` with literal
+  pathspecs, message `oide: local changes set aside to merge <branch>`), merges again, and re-applies
+  the stash by its commit (`git stash apply <sha>`, then drops that entry only, never another stash).
+  `autoStash { files, restored, stash? }` reports it. If re-applying clashes with what was merged,
+  `git reset --merge` undoes the partial apply (unrelated local changes stay), the files are left as
+  merged, and the stash is kept (`restored: false`, `stash` names it): no conflict markers in the main
+  checkout and nothing lost. If the second merge fails (conflicts), it was aborted, so the stash goes
+  back onto the unchanged checkout. `autoStash: false` keeps the old refusal (`blockedBy` + an error
+  that says to commit or stash). `autoStashNote()` words the outcome for the UI.
 - `predictMerge(mainCheckout, branch)` → `MergeForecast { supported, conflicts, files, binary,
   submodules, target: { branch?, sha }, branchSha, behind, ahead, error? }`: `git merge-tree
   --write-tree -z <HEAD> <branch>` without `--name-only`, parsed by `parseMergeTree` (stage entries

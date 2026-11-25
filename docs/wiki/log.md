@@ -760,3 +760,18 @@ and the `fable` alias as 1M; and when a lead request is larger than a window tha
 reported by the CLI), the reducer lifts the window to 1M until the CLI reports one. Tests in
 `packages/agent-core/src/context.test.ts`. Pages: [cli-integration](pages/cli-integration.md),
 [agent-supervisor](pages/agent-supervisor.md).
+
+## [2026-11-25] build | Merge recovers from uncommitted changes in the main checkout
+
+"Merge failed: The main checkout has uncommitted changes that the merge would overwrite
+(tools/marketplace-index/bundled/index.json)": oIDE should recover on its own by stashing, merging and
+unstashing. `mergeLocal` in `packages/git/src/merge.ts` now stashes only the files git names, merges
+again and re-applies the stash; when re-applying clashes with the merge it undoes the partial apply
+(`git reset --merge`), leaves the files as merged and keeps the stash (no conflict markers, nothing
+lost). `git.mergeLocal` returns `autoStash { files, restored, note }`; Review's toast says what
+happened (warning when the changes stay in the stash). Also fixed `parseBlockedByLocalChanges`: it
+read only the first of git's two refusals (tracked and untracked) and took the trailer "Merge with
+strategy ort failed." for a file name (staged files are indented with two spaces, not a tab).
+Telemetry: `agent_merged` gains `local_changes`. Tests in `packages/git/test/merge-autostash.test.ts`
+and `test/integration/merge-conflicts.test.ts`. Pages: [git-worktrees](pages/git-worktrees.md),
+[screen-review](pages/screen-review.md), [telemetry](pages/telemetry.md).

@@ -101,7 +101,8 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
       const res = await oide.invoke('git.mergeLocal', { agentId: agent.id });
       if (res.ok) {
         setMerge(null);
-        toast(`Merged ${branch} into ${target}`, 'success');
+        const stash = res.autoStash;
+        toast(`Merged ${branch} into ${target}.${stash ? ` ${stash.note}` : ''}`, stash && !stash.restored ? 'warning' : 'success');
         void useGit.getState().load(agent.projectId);
       } else {
         setMerge({ step: 'conflicts', conflicts: res.conflicts, from: 'merge' });
