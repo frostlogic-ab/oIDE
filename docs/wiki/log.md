@@ -797,6 +797,34 @@ docs site Artifacts guide, FAQ and Settings text now describe the link flow (an 
 user's CLI), Update, the Files panel and history. Pages: [artifacts.md](pages/artifacts.md),
 [screen-artifacts.md](pages/screen-artifacts.md).
 
+## [2026-11-25] build | Agents name their own task (set_title)
+- Spawn's title was the start of the user's prompt. Spawn now marks it `autoTitle`; the oIDE contract asks the
+  agent to call the new MCP tool `mcp__oide__set_title` once, first thing, with a short title. The supervisor
+  cleans it (`cleanAgentTitle` in protocol), keeps attempt `#n` suffixes, updates the spec and emits
+  `title-changed` (reducer → `summary.title`; store mirrors the `title` column). Titles the caller gave
+  (reconcile, extensions) are kept: `set_title` is refused for them and after the first call.
+- The CLI emits no title of its own in stream-json, so nothing is taken from it.
+- fake-claude gained a `name-task` scenario. Focus shows "Named the task …" as a notice.
+- Telemetry: `agent_spawned.auto_title`, new `agent_titled { after }` (duration bucket only, never the title).
+Pages: [agent-supervisor](pages/agent-supervisor.md#agent-named-titles), [mcp-server](pages/mcp-server.md),
+[screen-spawn](pages/screen-spawn.md), [telemetry](pages/telemetry.md).
+
+## [2026-11-25] build | Agents keep their branch up to date with the base
+The oIDE contract (`packages/agent-core/src/args.ts`, `syncContract`) now tells every worktree agent with a
+named base (`main`, `origin/main`, a branch; not a bare sha) to `git merge <base>` before starting a new task
+and again right before `submit_for_review`, resolving conflicts, re-running checks and reporting an
+"Up to date with <base>" check. The supervisor passes the worktree's `baseRef` into `buildLaunch`. No telemetry
+change: this is prompt text, and the existing review/merge events already cover the outcome.
+See [agent-supervisor](pages/agent-supervisor.md).
+
+## [2026-11-25] build | Collapsed defaults; Spawn remembers extension tools
+Source control: "Recent commits on <branch>" starts collapsed on every project card. Spawn: "Advanced model settings" starts closed (opens when Custom is picked); "Tools from extensions" starts from the last spawn's picks, saved as `settings.spawn.lastExtensions` (new protocol field, defaulted so older settings parse). No telemetry change.
+
+## [2026-11-25] build | Merge dialog: fixed "Ask agent to resolve" label
+The merge dialog's primary button read "Ask <agent title> to resolve", so long titles pushed the footer
+out of the 480px dialog. The label is now fixed; the note above the buttons and the button tooltip name
+the agent. Dialog footers wrap and descriptions break long unbroken text (paths) instead of overflowing.
+
 ## [2026-11-25] build | New project: open folder (with git init), clone, new repository
 "Open project" was a bare folder picker that refused anything but a git repository. It is now one
 **New project** dialog with three tabs: Open folder (a plain folder can be initialized with a first

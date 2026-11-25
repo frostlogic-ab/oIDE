@@ -148,6 +148,10 @@ describe('Spawn', () => {
   it('switches the focus to Custom when a slot changes', () => {
     render(<SpawnScreen />);
     expect(screen.getByRole('radio', { name: /Balanced/ }).getAttribute('aria-checked')).toBe('true');
+    const adv = screen.getByRole('button', { name: 'Advanced model settings' });
+    expect(adv.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('radiogroup', { name: 'Simple subagent tasks: model' })).toBeNull();
+    fireEvent.click(adv);
     fireEvent.click(screen.getByRole('radiogroup', { name: 'Simple subagent tasks: model' }).querySelector('[role="radio"]:nth-child(2)')!);
     expect(screen.getByRole('radio', { name: /Custom/ }).getAttribute('aria-checked')).toBe('true');
   });

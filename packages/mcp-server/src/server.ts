@@ -61,6 +61,7 @@ const SubmitInput = z.object({
     )
     .default([]),
 });
+const TitleInput = z.object({ title: z.string().min(1).max(1000) });
 const ListInput = z.object({ kind: ArtifactKind.optional(), query: z.string().optional() });
 const ReadInput = z.object({ id: z.string().min(1), path: ArtifactPath.optional() });
 const FileInputs = z.array(AgentArtifactFileInput).max(ARTIFACT_LIMITS.files);
@@ -132,6 +133,16 @@ const TOOLS = {
         },
       },
       required: ['summary'],
+    },
+  },
+  set_title: {
+    name: 'set_title',
+    description:
+      'Name your task in oIDE. The title shows on the agent tile and in its header. Give a short title (3 to 8 words, under 60 characters) that says what the task is, like "Fix flaky invoice test" or "Add dark mode to settings". Call it once, at the start, only when the oIDE contract asks you to.',
+    inputSchema: {
+      type: 'object',
+      properties: { title: { type: 'string', description: 'A short title for the task, in the language the user wrote in. No quotes, no trailing full stop.' } },
+      required: ['title'],
     },
   },
   artifacts_list: {
@@ -504,6 +515,7 @@ export class OideMcpServer {
       tools: [
         TOOLS.permission_prompt,
         TOOLS.submit_for_review,
+        TOOLS.set_title,
         ...(backend ? [TOOLS.artifacts_list, TOOLS.artifacts_read, TOOLS.artifacts_write, TOOLS.artifacts_create] : []),
         ...(backend?.retrievalAddFiles && backend.isRetrievalAgent?.(agent.agentId) ? [TOOLS.artifact_retrieval_add_files, TOOLS.artifact_retrieval_finish] : []),
       ],
@@ -520,6 +532,12 @@ export class OideMcpServer {
             if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
             agent.handlers.onReview({ summary: r.data.summary, checks: r.data.checks });
             return text('Submitted for review. The user will review your changes in oIDE. End your turn now unless they reply.');
+          }
+          case 'set_title': {
+            const r = TitleInput.safeParse(args);
+            if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
+            const res = agent.handlers.onTitle?.(r.data.title) ?? { ok: false as const, message: 'oIDE cannot change the title of this agent.' };
+            return res.ok ? text(`Title set to "${res.title}". From now on end every commit message with the trailer line: Oide-Agent: ${res.title}. Carry on with the task.`) : text(`${res.message} Carry on with the task.`, true);
           }
           case 'artifacts_list':
           case 'artifacts_read':

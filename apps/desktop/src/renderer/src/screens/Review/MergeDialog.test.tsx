@@ -8,7 +8,7 @@ import { setupMockApp } from '../SourceControl/testing';
 import ReviewScreen from './index';
 
 /**
- * "Merge into main?" states: predicted clean, predicted conflicts (Ask <agent> to resolve primary,
+ * "Merge into main?" states: predicted clean, predicted conflicts (Ask agent to resolve primary,
  * Merge anyway secondary), a merge that stopped anyway, prediction unavailable (old git), and an
  * agent that cannot be asked (worktree gone). Against the dev mock bridge.
  */
@@ -48,11 +48,14 @@ describe('merge dialog', () => {
     expect(screen.getByRole('status', { name: /Merge status: Up to date with main/ })).toBeTruthy();
   });
 
-  it('predicted conflicts: files up front, "Ask <agent> to resolve" first, "Merge anyway" second; asking sends and closes', async () => {
+  it('predicted conflicts: files up front, "Ask agent to resolve" first, "Merge anyway" second; asking sends and closes', async () => {
     const { dialog, invoke } = await openDialog('a-bridge');
     await waitFor(() => expect(dialog.textContent).toMatch(/Merging will conflict in 1 file: package\.json\./));
     const buttons = within(dialog).getAllByRole('button').map((b) => b.textContent);
-    expect(buttons.slice(-3)).toEqual(['Cancel', 'Merge anyway', 'Ask Wire the Claude Code CLI br… to resolve']);
+    expect(buttons.slice(-3)).toEqual(['Cancel', 'Merge anyway', 'Ask agent to resolve']);
+    // The agent's title stays out of the button (long titles pushed it out of the dialog); the note names it.
+    expect(within(dialog).getByRole('button', { name: 'Ask agent to resolve' }).title).toBe('Send the conflicts to Wire the Claude Code CLI br…');
+    expect(dialog.textContent).toMatch(/oIDE sends Wire the Claude Code CLI br… the conflicts as a message/);
     expect(within(dialog).getByRole('list', { name: 'Conflicted files' }).textContent).toContain('package.json');
     expect(dialog.textContent).toMatch(/to resolve in its own worktree\. Merge again once it submits for review/);
     fireEvent.click(within(dialog).getByRole('button', { name: /Ask .* to resolve/ }));
