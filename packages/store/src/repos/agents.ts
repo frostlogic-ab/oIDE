@@ -246,6 +246,7 @@ export class AgentsRepo {
     // The archive columns follow the summary: set while archived, cleared (NULL) once it is back on the Wall.
     const patch: AgentPatch = { summary: s, status: s.status, updatedAt: s.updatedAt, archivedAt: s.archived?.at, archiveReason: s.archived?.reason, mergeCommit: s.archived?.mergeCommit };
     // Only overwrite columns the summary knows about.
+    if (s.title) patch.title = s.title;
     if (s.sessionId !== undefined) patch.sessionId = s.sessionId;
     if (s.branch !== undefined) patch.branch = s.branch;
     if (s.worktreePath !== undefined) patch.worktreePath = s.worktreePath;

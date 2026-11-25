@@ -131,6 +131,7 @@ export class TelemetryObservers {
           has_context: spec.context.length > 0,
           techniques: Math.min(spec.techniques.length, 10_000),
           extensions: Math.min(spec.extensions.length, 10_000),
+          auto_title: spec.autoTitle === true,
         });
         if (a.images + a.files > 0) this.sink.track('attachments_sent', { where: 'spawn', ...a });
         return;
@@ -367,6 +368,10 @@ export class TelemetryObservers {
         return;
       case 'result':
         if (run && e.numTurns !== undefined) run.turns = e.numTurns;
+        return;
+      case 'title-changed':
+        // The duration only, never the title itself.
+        if (run && !e.parentToolUseId) this.sink.track('agent_titled', { after: durationBucket(Math.max(0, e.ts - run.startedAt)) });
         return;
       case 'review-submitted': {
         const since = this.resolving.get(e.agentId);

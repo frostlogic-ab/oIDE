@@ -118,7 +118,7 @@ describe('OideMcpServer', () => {
     const { server, reg, rec } = await setup();
     const client = await connect(reg.url, reg.secret);
     const tools = await client.listTools();
-    expect(tools.tools.map((t) => t.name)).toEqual(['permission_prompt', 'submit_for_review']);
+    expect(tools.tools.map((t) => t.name)).toEqual(['permission_prompt', 'submit_for_review', 'set_title']);
     const call = client.callTool({ name: 'permission_prompt', arguments: { tool_name: 'Bash', input: { command: 'npm test' }, tool_use_id: 'toolu_1' } });
     for (let i = 0; i < 100 && !rec.requests.length; i++) await new Promise((r) => setTimeout(r, 10));
     const req = rec.requests[0]!;
@@ -211,6 +211,23 @@ describe('OideMcpServer', () => {
     expect(rec.reviews).toEqual([{ summary: 'Fixed login', checks: [{ name: 'npm test', status: 'passed' }, { name: 'lint', status: 'failed', detail: '2 errors' }] }]);
     const bad = await client.callTool({ name: 'submit_for_review', arguments: {} });
     expect(bad.isError).toBe(true);
+    await client.close();
+  });
+
+  it('set_title hands the title to the agent handler and reports a refusal as an error', async () => {
+    const { reg, rec } = await setup();
+    const client = await connect(reg.url, reg.secret);
+    // The recorder has no onTitle: the tool is refused, never thrown.
+    const none = await client.callTool({ name: 'set_title', arguments: { title: 'Fix login' } });
+    expect(none.isError).toBe(true);
+    const titles: string[] = [];
+    rec.handlers.onTitle = (t) => (titles.push(t), titles.length === 1 ? { ok: true, title: 'Fix login' } : { ok: false, message: 'This agent already has its title; keep it.' });
+    expect(textOf(await client.callTool({ name: 'set_title', arguments: { title: ' Fix login. ' } }))).toMatch(/Title set to "Fix login"/);
+    const again = await client.callTool({ name: 'set_title', arguments: { title: 'Other' } });
+    expect(again.isError).toBe(true);
+    expect(textOf(again)).toMatch(/already has its title/);
+    expect((await client.callTool({ name: 'set_title', arguments: {} })).isError).toBe(true);
+    expect(titles).toEqual([' Fix login. ', 'Other']);
     await client.close();
   });
 

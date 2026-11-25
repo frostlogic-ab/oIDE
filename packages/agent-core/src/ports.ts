@@ -96,11 +96,18 @@ export interface SecretProvider {
 }
 
 /** Callbacks the MCP server calls for one agent. */
+export type TitleResult = { ok: true; title: string } | { ok: false; message: string };
+
 export interface AgentToolHandlers {
   onPermissionRequest(request: PermissionRequest): void;
   /** `reason: 'quit'` when oIDE denied the prompt because it was closing. */
   onPermissionResolved(requestId: string, behavior: 'allow' | 'deny', reason?: 'quit'): void;
   onReview(review: { summary: string; checks: CheckResult[] }): void;
+  /**
+   * `set_title`: the agent names its task. Returns the title oIDE kept, or why it was refused (the
+   * user gave the title, or it was empty after cleaning). Optional: without it the tool is refused.
+   */
+  onTitle?(title: string): TitleResult;
 }
 
 export interface PermissionBroker {

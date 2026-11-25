@@ -446,7 +446,7 @@ export const SUBAGENT_MODEL_ENV = 'CLAUDE_CODE_SUBAGENT_MODEL';
 
 // ---------------------------------------------------------------- system prompt contract
 
-export function oideContract(opts: { agentName: string; agentId: string; cwd: string; branch?: string; routed: boolean }): string {
+export function oideContract(opts: { agentName: string; agentId: string; cwd: string; branch?: string; routed: boolean; autoTitle?: boolean }): string {
   const lines = [
     `You are running inside oIDE as the agent "${opts.agentName}" (oIDE agent id ${opts.agentId}).`,
     `You work in ${opts.branch ? `your own git worktree on branch ${opts.branch}` : 'this directory'} (${opts.cwd}). Other agents work in parallel in their own worktrees; stay inside yours.`,
@@ -457,6 +457,11 @@ export function oideContract(opts: { agentName: string; agentId: string; cwd: st
     `- Commit your work as you go with clear messages. End every commit message with this trailer line: Oide-Agent: ${opts.agentName}`,
     '- oIDE artifacts (designs, docs, whiteboards) are available through mcp__oide__artifacts_list, mcp__oide__artifacts_read, mcp__oide__artifacts_write and mcp__oide__artifacts_create.',
   ];
+  if (opts.autoTitle) {
+    lines.push(
+      '- Your oIDE title above is only the start of the user message. Before anything else, call mcp__oide__set_title once with a short title (3 to 8 words, under 60 characters) that names the task, in the language the user wrote in. Do not mention it to the user; then carry on. Keep using the Oide-Agent trailer above for this session.',
+    );
+  }
   if (opts.routed) {
     lines.push(
       `- Delegate with the Agent tool by task size. Rate each sub-task and pick subagent_type "${ROUTED_AGENT_NAMES.simple}" for small, well-defined steps, "${ROUTED_AGENT_NAMES.standard}" for ordinary multi-step work, and "${ROUTED_AGENT_NAMES.complex}" for hard or cross-cutting work. Do trivial steps yourself.`,
@@ -527,7 +532,7 @@ function uniq(xs: string[]): string[] {
   return [...new Set(xs.filter((x) => x.trim().length > 0))];
 }
 
-const OIDE_READ_TOOLS = ['mcp__oide__submit_for_review', 'mcp__oide__artifacts_list', 'mcp__oide__artifacts_read'];
+const OIDE_READ_TOOLS = ['mcp__oide__submit_for_review', 'mcp__oide__set_title', 'mcp__oide__artifacts_list', 'mcp__oide__artifacts_read'];
 
 /**
  * Files that configure the agent itself (SEC-12): oIDE's `.oide/` (permissions, setup, extensions),
@@ -700,7 +705,7 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
   const routed = spec.strategy.kind === 'routed';
   const agentName = ctx.agentName ?? spec.title;
   const systemParts = [
-    oideContract({ agentName, agentId: ctx.agentId, cwd: ctx.cwd, ...(ctx.branch ? { branch: ctx.branch } : {}), routed }),
+    oideContract({ agentName, agentId: ctx.agentId, cwd: ctx.cwd, ...(ctx.branch ? { branch: ctx.branch } : {}), routed, ...(spec.autoTitle ? { autoTitle: true } : {}) }),
     ...picked.filter((t) => t.placement === 'system-prompt').map((t) => t.text.trim()),
   ];
   const appendSystemPrompt = systemParts.filter(Boolean).join('\n\n');

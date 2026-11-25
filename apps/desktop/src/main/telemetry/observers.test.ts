@@ -66,11 +66,24 @@ describe('commands', () => {
           has_context: true,
           techniques: 0,
           extensions: 0,
+          auto_title: false,
         },
       },
       { name: 'attachments_sent', props: { where: 'spawn', images: 1, files: 0 } },
     ]);
     expect(JSON.stringify(events)).not.toMatch(/ACME|acme|secret|shot/);
+  });
+
+  it('agent_titled: how long after the start the agent named its task, never the title', () => {
+    const { o, events } = make();
+    o.agentEvent(ev({ type: 'title-changed', title: 'ACME secret task' })); // no run seen: nothing to measure
+    o.agentEvent(ev({ type: 'status', status: 'starting' }));
+    now += 20_000;
+    o.agentEvent(ev({ type: 'title-changed', title: 'ACME secret task', parentToolUseId: 'task-1' }));
+    o.agentEvent(ev({ type: 'title-changed', title: 'ACME secret task' }));
+    expect(events.filter((e) => e.name === 'agent_titled')).toHaveLength(1);
+    expect(events.find((e) => e.name === 'agent_titled')!.props).toHaveProperty('after');
+    expect(JSON.stringify(events)).not.toMatch(/ACME|secret/);
   });
 
   it('slash commands: built-in names only', () => {

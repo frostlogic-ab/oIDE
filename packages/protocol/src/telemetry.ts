@@ -332,7 +332,14 @@ export const TELEMETRY_EVENTS = {
       has_context: z.boolean(),
       techniques: SmallCount,
       extensions: SmallCount,
+      /** The title is a stand-in from the goal; the agent is asked to name the task (set_title). */
+      auto_title: z.boolean().optional(),
     }),
+  }),
+  agent_titled: def({
+    from: 'main',
+    question: 'Do agents asked to name their task do so, and how soon after they start?',
+    props: z.object({ after: DurationBucket }),
   }),
   agent_finished: def({
     from: 'main',

@@ -81,6 +81,8 @@ export function describeToolUse(name: string, input: unknown, cwd?: string): str
     case 'Agent':
     case 'Task':
       return clip(`Delegate: ${s('description') ?? s('subagent_type') ?? 'subagent'}`);
+    case 'mcp__oide__set_title':
+      return 'Name the task';
     case 'mcp__oide__submit_for_review':
       return 'Submit for review';
     case 'mcp__oide__permission_prompt':
@@ -343,6 +345,9 @@ export class AgentReducer {
             if (sub) subChanges.push(sub);
           }
         }
+        break;
+      case 'title-changed':
+        if (lead && s.title !== e.title) s.title = e.title;
         break;
       case 'review-submitted':
         s.review = e.review;

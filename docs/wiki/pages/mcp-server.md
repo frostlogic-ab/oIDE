@@ -29,6 +29,7 @@ Artifacts storage: [artifacts](artifacts.md).
 | --- | --- |
 | `permission_prompt` | Input `{tool_name, input, tool_use_id?}` (+ `_meta["claudecode/toolUseId"]`). Creates a `PermissionRequest` (`perm-<uuid>`, summary like "Run npm test", `suggestedRule` like `Bash(npm test)`), calls `onPermissionRequest`, and **blocks** until `answer(requestId, …)` for that exact id. Returns text `{"behavior":"allow","updatedInput":…}` or `{"behavior":"deny","message":…}`. Optional `permissionTimeoutMs`; otherwise it waits for the user. `close()` and `unregisterAgent()` deny every pending prompt. |
 | `submit_for_review` | `{summary, checks[{name, status, detail?}]}`; status words are normalized (`pass`/`ok` → `passed`, `fail`/`error` → `failed`, unknown → `warning`). Calls `onReview`. |
+| `set_title` | `{title}`. The agent names its task. Calls `onTitle(title)` (optional handler) and returns its `{ok, title}` or `{ok:false, message}` (an MCP error result, never thrown). Without a handler it is refused. Auto-allowed (`--allowedTools`), summary "Set title". |
 | `artifacts_list` / `artifacts_read` / `artifacts_write` / `artifacts_create` | Only listed when an `ArtifactsBackend` is passed. Every call is logged through `onArtifactUse({artifactId, agentId, op, ts})` (`list` uses artifactId `*`). Artifacts are also MCP resources `oide://artifacts/<id>`. `artifacts_list` items carry `importedFrom` and `brokenImport` when set. `artifacts_read` of a `brokenImport` (a claude.ai link-only import from an older oIDE) returns `content: null`, `status: 'import-has-no-content'` and a message (`brokenImportMessage`): don't build from it, ask the user to paste the code or drop the file in oIDE, or read a Claude Docs / Claude Design link with the claude.ai connectors and `artifacts_write` it. A design written or created may be HTML or React source ([ADR 0013](../../adr/0013-react-designs-with-a-bundled-offline-runtime.md)). |
 
 ## API
@@ -36,7 +37,7 @@ Artifacts storage: [artifacts](artifacts.md).
 ```ts
 const mcp = new OideMcpServer({ appDataDir, artifacts?, onArtifactUse?, permissionTimeoutMs?, port?, log? });
 await mcp.start();                                   // { port }
-await mcp.registerAgent(agentId, { onPermissionRequest, onPermissionResolved, onReview }, extraServers?, { projectId? });
+await mcp.registerAgent(agentId, { onPermissionRequest, onPermissionResolved, onReview, onTitle? }, extraServers?, { projectId? });
                                                      // → { agentId, url, secret, mcpConfigPath }
 mcp.answer(requestId, permissionAnswer)              // false unless requestId is exactly pending (and matches answer.requestId)
 mcp.pendingRequests(agentId?)

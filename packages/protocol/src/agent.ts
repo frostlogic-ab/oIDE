@@ -117,6 +117,11 @@ export type CustomModelRef = z.infer<typeof CustomModelRef>;
 export const AgentSpec = z.object({
   projectId: Id,
   title: z.string().min(1).max(200),
+  /**
+   * The title is only a stand-in made from the start of the goal (Spawn): the agent is asked to name
+   * the task itself through `mcp__oide__set_title`. Cleared once it has. Unset when a title was given.
+   */
+  autoTitle: z.boolean().optional(),
   goal: z.string().min(1).max(100_000),
   context: z.array(ContextChip).default([]),
   /** Images and files sent with the first message (not persisted with the spec; see supervisor). */
@@ -137,6 +142,27 @@ export const AgentSpec = z.object({
 });
 export type AgentSpec = z.infer<typeof AgentSpec>;
 export type AgentSpecInput = z.input<typeof AgentSpec>;
+
+/** Longest title an agent may give itself (`mcp__oide__set_title`). */
+export const AGENT_TITLE_MAX = 80;
+
+/**
+ * Clean a title an agent proposed: one line, no control characters, no wrapping quotes or trailing
+ * full stop, at most AGENT_TITLE_MAX characters. Undefined when nothing is left.
+ */
+export function cleanAgentTitle(raw: string): string | undefined {
+  let t = raw
+    .replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^title:\s*/i, '');
+  const pairs: Record<string, string> = { '"': '"', "'": "'", '`': '`', '\u201c': '\u201d', '\u2018': '\u2019', '*': '*', _: '_' };
+  while (t.length >= 2 && pairs[t[0]!] === t[t.length - 1] && t.slice(1, -1).trim()) t = t.slice(1, -1).trim();
+  t = t.replace(/[.\s]+$/, '');
+  const chars = [...t];
+  if (chars.length > AGENT_TITLE_MAX) t = `${chars.slice(0, AGENT_TITLE_MAX - 1).join('').trimEnd()}…`;
+  return t || undefined;
+}
 
 export const AgentStatus = z.enum([
   'queued',

@@ -121,7 +121,21 @@ really 15%) and 184k (92%, really 18%) before any result arrived. Token counting
 `AgentSummary.planText`, `.backgroundTasks`, `.planUsage`; `PermissionRequest.toolUseId`; `result` event
 `contextWindow`, `localCommand`, `apiErrorStatus`; `error` event `code`; new events `mode-changed`,
 `compact`, `subagent-task`, `background-tasks`, `plan-usage`; `result.contextWindows`, `context-usage`,
-`AgentSummary.contextBaseline`, `SubagentInfo.contextWindow` (context ring accuracy).
+`AgentSummary.contextBaseline`, `SubagentInfo.contextWindow` (context ring accuracy). `AgentSpec.autoTitle` and the
+`title-changed` event (agent-named titles, below).
+
+## Agent-named titles
+
+Spawn's title is only the start of the goal (`titleFromGoal`), so Spawn sets `AgentSpec.autoTitle`. While it is
+set, the oIDE contract (`oideContract({ autoTitle })`) asks the agent to call `mcp__oide__set_title` once, before
+anything else, with a 3 to 8 word title. The supervisor's `onTitle` cleans it (`cleanAgentTitle`: one line, no
+wrapping quotes or trailing full stop, at most 80 characters), keeps a parallel attempt's ` #n` suffix, updates the
+spec (title set, `autoTitle` dropped) and emits `title-changed`; the reducer sets `summary.title` and the store
+mirrors it into the `title` column. A title given by the caller (reconcile agents, extensions) has no `autoTitle`,
+so `set_title` is refused and the title is kept; a second call is refused too. Restore and unarchive take the
+summary's title (and drop `autoTitle`) when it differs from the stored spec. The worktree branch keeps its first
+name. The Claude Code CLI itself emits no title in stream-json (checked against the 2.1.325 fixtures), so oIDE
+asks for one.
 
 ## Known gaps
 
