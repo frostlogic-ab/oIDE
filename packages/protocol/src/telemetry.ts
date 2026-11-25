@@ -332,7 +332,14 @@ export const TELEMETRY_EVENTS = {
       has_context: z.boolean(),
       techniques: SmallCount,
       extensions: SmallCount,
+      /** The title is a stand-in from the goal; the agent is asked to name the task (set_title). */
+      auto_title: z.boolean().optional(),
     }),
+  }),
+  agent_titled: def({
+    from: 'main',
+    question: 'Do agents asked to name their task do so, and how soon after they start?',
+    props: z.object({ after: DurationBucket }),
   }),
   agent_finished: def({
     from: 'main',
@@ -360,8 +367,12 @@ export const TELEMETRY_EVENTS = {
   }),
   agent_merged: def({
     from: 'main',
-    question: 'How often does agent work get merged locally, and how often does it conflict?',
-    props: z.object({ result: z.enum(['merged', 'conflicts']) }),
+    question:
+      'How often does agent work get merged locally, and how often does it conflict? How often were uncommitted main-checkout files in the way (stashed, and put back or kept in the stash)?',
+    props: z.object({
+      result: z.enum(['merged', 'conflicts']),
+      local_changes: z.enum(['none', 'stashed_restored', 'stashed_kept']).optional(),
+    }),
   }),
   merge_conflict_predicted: def({
     from: 'main',
@@ -471,23 +482,36 @@ export const TELEMETRY_EVENTS = {
   artifact_imported: def({
     from: 'main',
     question:
-      'How do people bring claude.ai artifacts in (a link with pasted content, or an exported file), which kinds, and how many are React?',
+      'How do people bring artifacts in (a link with pasted content, one exported file, several files, a folder), which kinds, and how many are React?',
     props: z.object({
-      source: z.enum(['link_content', 'file']),
+      source: z.enum(['link_content', 'file', 'files', 'folder']),
       kind: ArtifactKind,
       linked: z.boolean(),
       format: z.enum(['html', 'react', 'svg', 'markdown', 'excalidraw']),
+      /** Files in the new artifact (multi-file imports, ADR 0014). */
+      files: CountBucket.optional(),
     }),
   }),
   artifact_import_refused: def({
     from: 'main',
-    question: 'Why are claude.ai imports refused before anything is created (no content, a bad link, the wrong kind)?',
-    props: z.object({ reason: z.enum(['no_content', 'bad_link', 'wrong_kind', 'too_large', 'stub_content', 'other']) }),
+    question: 'Why are imports refused before anything is created (no content, a bad link, the wrong kind, too big, a file name that is not allowed)?',
+    props: z.object({ reason: z.enum(['no_content', 'bad_link', 'wrong_kind', 'too_large', 'stub_content', 'bad_path', 'other']) }),
   }),
-  artifact_fetch_with_agent_started: def({
-    from: 'renderer',
-    question: 'Do people hand a claude.ai link to an agent to fetch (Claude Docs or Claude Design links)?',
-    props: z.object({}),
+  artifact_retrieval_started: def({
+    from: 'main',
+    question: 'How often do people have an agent retrieve a linked claude.ai artifact (a new link, Update, Retry), and of which kind?',
+    props: z.object({ trigger: z.enum(['import', 'update', 'retry']), kind: ArtifactKind }),
+  }),
+  artifact_retrieval_finished: def({
+    from: 'main',
+    question:
+      'Do agent retrievals of claude.ai artifacts work: how many end ready, fail (no tool can read the link, bad files), are cancelled, or lose their agent, and how many files do they bring?',
+    props: z.object({
+      trigger: z.enum(['import', 'update', 'retry']),
+      outcome: z.enum(['ready', 'failed', 'cancelled', 'agent_stopped']),
+      kind: ArtifactKind,
+      files: CountBucket,
+    }),
   }),
   extension_installed: def({
     from: 'main',

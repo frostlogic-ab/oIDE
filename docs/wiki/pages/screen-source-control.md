@@ -21,7 +21,7 @@ Data meaning: [git-worktrees](git-worktrees.md). Frame and stores: [desktop-shel
 | Your changes on main + Commit… | `SyncState.dirtyFiles`; `CommitDialog.tsx` (message, per-file checkboxes, Ctrl/Cmd+Enter) → `git.commit` (`files` omitted when all are picked) |
 | Agent worktrees · N | `git.worktrees`; row = status dot, agent title (→ Focus), `branch · from main · 2 behind`, status, `7 files · +214 −37`, PR state, Review (blue when ready-for-review), ··· menu |
 | ··· menu | Open folder (`shell.revealPath`), Reconcile with … (enabled only when the row is in an overlap → `git.reconcile`), Remove worktree… (confirm → `agents.remove { deleteWorktree: true }`, or `git.pruneOrphans` for orphaned rows) |
-| Recent commits on main | `git.log { ref: 'HEAD', limit: 20 }`; who = `commitAuthor()`: `Oide-Agent` trailer → "<name> agent", a `Merge a/b` subject → "You, from an agent", else "You" |
+| Recent commits on main (collapsed by default) | `git.log { ref: 'HEAD', limit: 20 }`; who = `commitAuthor()`: `Oide-Agent` trailer → "<name> agent", a `Merge a/b` subject → "You, from an agent", else "You" |
 
 Status column collapses needs-permission / has-question / error / rate-limited into "Needs you"
 (as drawn). PR column: `prView()` ("No PR", "Ready to open" when ready-for-review, "Draft PR #18",

@@ -53,6 +53,19 @@ describe('telemetry catalogue', () => {
     ).toBeNull();
   });
 
+  it('artifact retrieval events take enums and buckets only, from main only (ADR 0014)', () => {
+    expect(validateTelemetryEvent('artifact_retrieval_started', { trigger: 'import', kind: 'design', url: 'https://claude.ai/artifact/x' })).toEqual({
+      name: 'artifact_retrieval_started',
+      props: { trigger: 'import', kind: 'design' },
+    });
+    expect(validateTelemetryEvent('artifact_retrieval_finished', { trigger: 'update', outcome: 'agent_stopped', kind: 'doc', files: '2-5' })).not.toBeNull();
+    expect(validateTelemetryEvent('artifact_retrieval_finished', { trigger: 'update', outcome: 'No tool can read it', kind: 'doc', files: '2-5' })).toBeNull();
+    expect(validateTelemetryEvent('artifact_retrieval_finished', { trigger: 'update', outcome: 'ready', kind: 'doc', files: 12 })).toBeNull();
+    expect(validateTelemetryEvent('artifact_retrieval_started', { trigger: 'import', kind: 'design' }, 'renderer')).toBeNull();
+    expect(validateTelemetryEvent('artifact_imported', { source: 'folder', kind: 'design', linked: false, format: 'html', files: '21-100' })).not.toBeNull();
+    expect(TELEMETRY_EVENT_NAMES).not.toContain('artifact_fetch_with_agent_started');
+  });
+
   it('lets the renderer report only renderer events', () => {
     expect(validateTelemetryEvent('agent_merged', { result: 'merged' }, 'renderer')).toBeNull();
     expect(validateTelemetryEvent('command_palette_used', { command: 'oide.spawn' }, 'renderer')).toEqual({

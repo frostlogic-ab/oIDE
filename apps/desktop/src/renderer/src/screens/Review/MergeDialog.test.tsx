@@ -95,7 +95,7 @@ describe('merge dialog', () => {
     const dialog = await screen.findByRole('dialog');
     await waitFor(() => expect(dialog.textContent).toMatch(/git 2\.38 or newer is needed/));
     expect(dialog.textContent).toMatch(/It stops on conflicts and leaves main as it was/);
-    expect(within(dialog).getByRole('note', { name: 'Uncommitted changes in the main checkout' }).textContent).toMatch(/1 file \(README\.md\).*commit or stash them first/);
+    expect(within(dialog).getByRole('note', { name: 'Uncommitted changes in the main checkout' }).textContent).toMatch(/1 file \(README\.md\).*set aside \(stashed\) for the merge and put back/);
     expect(within(dialog).getByRole('button', { name: 'Merge' })).toBeTruthy();
   });
 

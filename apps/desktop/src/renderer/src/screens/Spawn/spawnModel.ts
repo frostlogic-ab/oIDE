@@ -282,8 +282,12 @@ export function extensionRisk(ext: InstalledExtension): 'read' | 'ask' | 'none' 
   return tools.some((t) => t.risk === 'ask') ? 'ask' : 'read';
 }
 
-export function defaultExtensions(list: InstalledExtension[], projectId: string): Record<string, boolean> {
-  return Object.fromEntries(list.filter((e) => extensionTools(e).length).map((e) => [e.id, extensionEnabledFor(e, projectId)]));
+/**
+ * Extensions offered in Spawn and whether each starts on: the user's last selection
+ * (`settings.spawn.lastExtensions`) when there is one, else whether it is enabled for the project.
+ */
+export function defaultExtensions(list: InstalledExtension[], projectId: string, last: Record<string, boolean> = {}): Record<string, boolean> {
+  return Object.fromEntries(list.filter((e) => extensionTools(e).length).map((e) => [e.id, last[e.id] ?? extensionEnabledFor(e, projectId)]));
 }
 
 export function defaultTechniques(list: Technique[]): Record<string, boolean> {
@@ -385,6 +389,8 @@ export function buildSpec(form: SpawnForm, ctx: BuildContext): BuildResult {
   const parsed = AgentSpec.safeParse({
     projectId: form.projectId,
     title: titleFromGoal(goal) || 'Untitled agent',
+    // A stand-in: the agent names the task itself (mcp__oide__set_title) once it starts.
+    autoTitle: true,
     goal,
     context: form.context,
     workIn: form.workIn,

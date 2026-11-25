@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest';
 import { Git, GitError, type GitResult, type GitRunOptions } from '../src/git.js';
-import { mergeLocal, parseBlockedByLocalChanges, parseMergeTree, predictMerge } from '../src/merge.js';
+import { parseMergeTree, predictMerge } from '../src/merge.js';
 import { cleanup, commitAll, makeRepo, sh, write } from './helpers.js';
 
 afterAll(cleanup);
@@ -133,25 +133,3 @@ describe('parseMergeTree', () => {
   });
 });
 
-describe('mergeLocal with local changes in the main checkout', () => {
-  it('refuses with a clear message naming the files, and changes nothing', async () => {
-    const repo = diverged();
-    sh(repo, 'checkout', '-q', '-b', 'oide/other', 'main');
-    write(repo, 'other.txt', 'agent\n');
-    commitAll(repo, 'other');
-    sh(repo, 'checkout', '-q', 'main');
-    write(repo, 'other.txt', 'uncommitted\n');
-    const head = sh(repo, 'rev-parse', 'HEAD').trim();
-    const r = await mergeLocal(repo, 'oide/other');
-    expect(r).toMatchObject({ ok: false, conflicts: [], blockedBy: ['other.txt'] });
-    expect(r.error).toMatch(/uncommitted changes .*other\.txt.*Commit or stash them/);
-    expect(sh(repo, 'rev-parse', 'HEAD').trim()).toBe(head);
-    expect(sh(repo, 'status', '--porcelain').trim()).toBe('M other.txt');
-  });
-
-  it("parses git's refusal for tracked and untracked files", () => {
-    expect(parseBlockedByLocalChanges('error: Your local changes to the following files would be overwritten by merge:\n\ta.txt\n\tsrc/b.ts\nPlease commit your changes or stash them before you merge.\nAborting\n')).toEqual(['a.txt', 'src/b.ts']);
-    expect(parseBlockedByLocalChanges('error: The following untracked working tree files would be overwritten by merge:\n\tnew.txt\nPlease move or remove them before you merge.\nAborting\n')).toEqual(['new.txt']);
-    expect(parseBlockedByLocalChanges('fatal: refusing to merge unrelated histories')).toBeUndefined();
-  });
-});

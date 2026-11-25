@@ -98,6 +98,14 @@ describe('buildLaunch', () => {
     expect(flagValue(p.args, '--append-system-prompt')).toBe(p.appendSystemPrompt);
   });
 
+  it('asks the agent to name its task only when the title was made from the goal; set_title needs no prompt', () => {
+    const given = buildLaunch(spec(), ctx());
+    expect(given.appendSystemPrompt).not.toMatch(/set_title/);
+    const auto = buildLaunch(spec({ autoTitle: true }), ctx());
+    expect(auto.appendSystemPrompt).toMatch(/call mcp__oide__set_title once/);
+    for (const p of [given, auto]) expect(flagValue(p.args, '--allowedTools')!.split(',')).toContain('mcp__oide__set_title');
+  });
+
   it('adds context chips to the first message, artifacts by MCP id and path', () => {
     const p = buildLaunch(
       spec({ context: [{ kind: 'artifact', id: 'art-1', title: 'Login design' }, { kind: 'file', path: 'src/login.ts' }, { kind: 'url', url: 'https://example.com/spec' }] }),
@@ -397,5 +405,38 @@ describe('"Always" guards', () => {
   it('buildLaunch reports the always-ask rules', () => {
     const plan = buildLaunch(spec(), ctx({ projectRules: { allow: [], ask: ['Bash(git push:*)'], deny: [] } }));
     expect(plan.askRules).toEqual(['Bash(git push:*)']);
+  });
+});
+
+describe('keep-in-sync contract', () => {
+  const prompt = (patch: Partial<LaunchContext> = {}) => flagValue(buildLaunch(spec(), ctx(patch)).args, '--append-system-prompt');
+
+  it('tells a worktree agent to merge its base before starting and before submit_for_review', () => {
+    const p = prompt({ baseRef: 'main' });
+    expect(p).toContain('Before you start on a new task, make sure your branch is up to date with `main`');
+    expect(p).toContain('Right before you call submit_for_review, check again');
+    expect(p).toContain('`git merge main`');
+    expect(p).toContain('"Up to date with main"');
+    expect(p).not.toContain('git fetch');
+  });
+
+  it('fetches first when the base is a remote-tracking branch', () => {
+    const p = prompt({ baseRef: 'origin/main' });
+    expect(p).toContain('`git fetch origin`');
+    expect(p).toContain('`git merge origin/main`');
+  });
+
+  it('treats a slashed local branch as local', () => {
+    const p = prompt({ baseRef: 'feature/login' });
+    expect(p).toContain('`git merge feature/login`');
+    expect(p).not.toContain('git fetch');
+  });
+
+  it('adds nothing without a branch, without a base, or when the base is a bare sha', () => {
+    for (const patch of [{ baseRef: 'main', branch: undefined }, {}, { baseRef: '0f8d94e1a2b3c4d5e6f708192a3b4c5d6e7f8091' }] as Partial<LaunchContext>[]) {
+      const p = prompt(patch);
+      expect(p).not.toContain('up to date with');
+      expect(p).toContain('oIDE contract:');
+    }
   });
 });

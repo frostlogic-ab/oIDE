@@ -33,7 +33,13 @@ test('edit a doc artifact in Monaco and save it as version 2', async () => {
     .click();
   await page.getByRole('button', { name: '+ New artifact' }).click();
   const dialog = page.getByRole('dialog', { name: 'New artifact' });
-  await dialog.getByLabel('Title').fill('E2E retry notes');
+  // One creation flow: start from a link (the default), files, or blank.
+  await expect(dialog.getByRole('radio', { name: 'A link' })).toHaveAttribute('aria-checked', 'true');
+  await dialog.getByRole('textbox', { name: 'Link' }).fill('https://claude.ai/chat/0f8fad5b-d9cb-469f-a165-70867728950e');
+  await expect(dialog.getByRole('alert')).toContainText('chat link, not an artifact link');
+  await expect(dialog.getByRole('button', { name: 'Retrieve' })).toBeDisabled();
+  await dialog.getByRole('radio', { name: 'Blank' }).click();
+  await dialog.getByLabel('Title', { exact: true }).fill('E2E retry notes');
   await dialog.getByRole('button', { name: 'Create' }).click();
   await expect(page.getByRole('heading', { name: 'E2E retry notes', level: 2 })).toBeVisible();
 
@@ -91,7 +97,9 @@ test('a whiteboard opens in Excalidraw with bundled fonts and no CSP violations'
 
   await page.getByRole('button', { name: '+ New artifact' }).click();
   const dialog = page.getByRole('dialog', { name: 'New artifact' });
-  await dialog.getByLabel('Title').fill('E2E board');
+  // The dialog keeps the last "Start from" choice (Blank, from the test above); pick it anyway.
+  await dialog.getByRole('radio', { name: 'Blank' }).click();
+  await dialog.getByLabel('Title', { exact: true }).fill('E2E board');
   await dialog
     .getByRole('radio', { name: 'Whiteboard' })
     .or(dialog.getByRole('button', { name: 'Whiteboard' }))

@@ -6,26 +6,39 @@
  * Plus Preview (docs, designs) and Compare (a side-by-side diff of any two versions, or of a version
  * and your unsaved edits).
  *
- * Save writes a new numbered version (`artifacts.save` with `baseVersion`). When an agent saves
- * while the artifact is open (`artifacts.changed` reloads `detail`), the editor loads it and says
- * "Updated by <agent>"; with unsaved edits it keeps them and shows a conflict banner instead.
+ * Save writes a new numbered version (`artifacts.save` with `baseVersion`; `artifacts.writeFiles`
+ * for an artifact of several files). When an agent saves while the artifact is open
+ * (`artifacts.changed` reloads `detail`), the editor loads it and says "Updated by <agent>"; with
+ * unsaved edits it keeps them and shows a conflict banner instead.
+ *
+ * An artifact of several files (ADR 0014) gets a Files panel: the entry opens in the editors above,
+ * any other text file in Monaco (FilesPanel.tsx), an image inline, and a design's other pages offer
+ * "Open on this page". With no files yet (version 0, a link being retrieved or a failed retrieval)
+ * the retrieval status stands in for the editors.
  */
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { ArtifactMeta, CommandOutput } from '@oide/protocol';
+import type { ArtifactFile, ArtifactMeta, CommandOutput } from '@oide/protocol';
 import { Badge, Button, Dialog, DiffStat, Icon, Menu, Select, Spinner, Tabs, tabPanelProps } from '@oide/ui';
-import { ipcErrorCode, ipcErrorMessage, oide } from '../../lib/bridge';
+import { formatSize } from '../../lib/attachments';
+import { invokeOr, ipcErrorCode, ipcErrorMessage, oide } from '../../lib/bridge';
 import { useKeymapScope } from '../../lib/useKeymap';
 import { useAgents } from '../../stores/agents';
 import { toast } from '../../stores/ui';
 import { ExtensionArtifactView } from '../../extensions/ExtensionArtifactView';
 import { artifactTypeOf } from '../../extensions/model';
 import { useExtensions } from '../../extensions/store';
+import { FilesPanel, useArtifactFile, type ArtifactFileState } from './FilesPanel';
 import { FixImportPanel } from './FixImportPanel';
 import { DesignFrame, MarkdownView } from './Preview';
+import { RetrievalStatus, useRetrieval } from './Retrieval';
 import {
   KIND_LABEL,
   authorLabel,
   contentForDiff,
+  imageDataUrl,
+  isImagePath,
+  isPagePath,
+  languageForPath,
   liveDecision,
   sourceLanguage,
   validateContent,
@@ -49,6 +62,8 @@ export interface ViewerProps {
   compare?: { from: CompareSide; to: CompareSide };
   onClose: () => void;
   onSaved: (meta: ArtifactMeta, content: string) => void;
+  /** New meta from main without new content (a retrieval started or was cancelled, a new entry). */
+  onMeta: (meta: ArtifactMeta) => void;
   /** A broken import was replaced by a new artifact (the empty one is deleted). */
   onReplaced: (meta: ArtifactMeta) => void;
   onRename: () => void;
@@ -68,6 +83,7 @@ export function Viewer({
   compare: initialCompare,
   onClose,
   onSaved,
+  onMeta,
   onReplaced,
   onRename,
   onDelete,
@@ -98,8 +114,27 @@ export function Viewer({
   const headingRef = useRef<HTMLHeadingElement>(null);
   const own = useRef(new Set<number>());
   const dirty = baseline !== null && draft !== baseline;
-  const live = useRef({ base, dirty });
-  live.current = { base, dirty };
+  const live = useRef({ base, dirty, entry: meta.entry });
+  live.current = { ...live.current, base, dirty };
+  const retrieval = useRetrieval(meta, onMeta);
+
+  // Several files: the Files panel, and one other file open at a time (null = the entry).
+  const multi = (meta.fileCount ?? 1) > 1;
+  const [files, setFiles] = useState<ArtifactFile[] | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [switchTo, setSwitchTo] = useState<string | null>(null);
+  const otherPath = multi && selected && selected !== meta.entry ? selected : null;
+  const otherInfo = otherPath ? files?.find((f) => f.path === otherPath) : undefined;
+  useEffect(() => {
+    if (!multi) return setFiles(null);
+    let on = true;
+    invokeOr('artifacts.files', { id: meta.id }, [])
+      .then((list) => on && setFiles(list))
+      .catch((err) => on && setError(`Couldn't list the files: ${ipcErrorMessage(err)}`));
+    return () => {
+      on = false;
+    };
+  }, [meta.id, meta.version, multi]);
 
   // A broken import puts the cursor in its paste box instead.
   useEffect(() => {
@@ -109,6 +144,18 @@ export function Viewer({
   }, []);
 
   const authorOf = (version: number) => detail.versions.find((v) => v.version === version)?.author;
+  const file = useArtifactFile({
+    id: meta.id,
+    path: otherPath && otherInfo?.text !== false ? otherPath : null,
+    version: meta.version,
+    authorOf,
+    own,
+    onSaved: (next) => {
+      toast(`Saved ${otherPath} as v${next.version}`, 'success');
+      onSaved(next, base.content);
+    },
+  });
+  const anyDirty = dirty || file.dirty;
 
   // An artifacts.changed reload brought a newer version: ours, someone else's, or a conflict.
   useEffect(() => {
@@ -117,18 +164,28 @@ export function Viewer({
       content: detail.content,
       author: authorOf(detail.meta.version),
     };
+    // The entry moved to another file ("Open on this page", or an agent): the editor starts from it.
+    if (detail.meta.entry !== live.current.entry) {
+      live.current.entry = detail.meta.entry;
+      if (!live.current.dirty) return loadOther(incoming, false);
+    }
     const d = liveDecision({
       baseVersion: live.current.base.version,
       incomingVersion: incoming.version,
       ownVersions: own.current,
       dirty: live.current.dirty,
     });
+    // A version that left the entry as it was (another file changed): no reload, no conflict.
+    if ((d === 'reload' || d === 'conflict') && incoming.content === live.current.base.content) {
+      setBase({ version: incoming.version, content: incoming.content });
+      return;
+    }
     if (d === 'own') setBase({ version: incoming.version, content: incoming.content });
     else if (d === 'reload') loadOther(incoming, true);
     else if (d === 'conflict') setConflict(incoming);
-    // Only a new version or content matters here; the rest is read through refs.
+    // Only a new version, content or entry matters here; the rest is read through refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [detail.meta.version, detail.content]);
+  }, [detail.meta.version, detail.content, detail.meta.entry]);
 
   /** Replace the editor content with another saved version (an agent's, or "Use theirs"). */
   const loadOther = (o: Other, announce: boolean) => {
@@ -141,7 +198,7 @@ export function Viewer({
     setNotice(announce ? o : null);
   };
 
-  const requestClose = () => (dirty ? setConfirmClose(true) : onClose());
+  const requestClose = () => (anyDirty ? setConfirmClose(true) : onClose());
   useKeymapScope('artifact-viewer', {
     'view.back': () => {
       // Esc inside the whiteboard belongs to Excalidraw (deselect, close a menu).
@@ -149,15 +206,6 @@ export function Viewer({
       requestClose();
     },
   });
-
-  // Pasted code saved from the fix panel: it is our own version, and the editor starts from it.
-  const fixed = (next: ArtifactMeta, content: string) => {
-    own.current.add(next.version);
-    setBase({ version: next.version, content });
-    setDraft(content);
-    setBaseline(content);
-    onSaved(next, content);
-  };
 
   const save = async () => {
     if (!dirty || saving) return;
@@ -169,12 +217,12 @@ export function Viewer({
     // With a conflict open, saving keeps your version on top of theirs (theirs stays in History).
     const over = conflict;
     try {
-      const next = await oide.invoke('artifacts.save', {
-        id: meta.id,
-        content,
-        note: over ? `Edited by you over v${over.version}` : 'Edited by you',
-        baseVersion: over ? over.version : base.version,
-      });
+      const note = over ? `Edited by you over v${over.version}` : 'Edited by you';
+      const baseVersion = over ? over.version : base.version;
+      // Several files: only the entry changes in the new version, the other files stay as they are.
+      const next = multi
+        ? await oide.invoke('artifacts.writeFiles', { id: meta.id, files: [{ path: meta.entry, encoding: 'utf8', data: content }], note, baseVersion })
+        : await oide.invoke('artifacts.save', { id: meta.id, content, note, baseVersion });
       own.current.add(next.version);
       setBase({ version: next.version, content });
       setBaseline(content);
@@ -217,6 +265,37 @@ export function Viewer({
     setMode('compare');
   };
 
+  /** Files panel: open another file; unsaved edits to the one open (not the entry) need a confirm. */
+  const select = (path: string) => {
+    const next = path === meta.entry ? null : path;
+    if (next === otherPath) return;
+    if (file.dirty) return setSwitchTo(path);
+    setSelected(next);
+    setError(null);
+  };
+
+  /** "Open on this page": a new version whose entry is `path` (no file changes). */
+  const openOn = async (path: string) => {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const next = await oide.invoke('artifacts.writeFiles', { id: meta.id, entry: path, note: `Opens on ${path}`, baseVersion: meta.version });
+      own.current.add(next.version);
+      setSelected(null);
+      onMeta(next);
+      toast(`${meta.title} now opens on ${path}`, 'success');
+    } catch (err) {
+      setError(ipcErrorCode(err) === 'conflict' ? 'Someone saved a newer version meanwhile. Try again.' : ipcErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const noFiles = meta.version === 0;
+  const fileMode = otherPath !== null;
+  const canSave = fileMode ? file.dirty && !file.saving : dirty && !saving;
+
   return (
     <section aria-label={`${meta.title} (open)`} className="flex-1 min-w-0 flex flex-col">
       <div className="flex items-center gap-3 px-5 py-3 border-b border-line bg-panel flex-wrap">
@@ -228,15 +307,16 @@ export function Viewer({
             {meta.title}
           </h2>
           <span className="text-[12px] text-ink-3">
-            {extType ? `${extType.label} (${extType.displayName})` : KIND_LABEL[kind]} · {projectName || 'Personal'} · v{base.version}
+            {extType ? `${extType.label} (${extType.displayName})` : KIND_LABEL[kind]} · {projectName || 'Personal'} · {noFiles ? 'no files yet' : `v${base.version}`}
+            {multi && ` · ${meta.fileCount} files`}
           </span>
         </div>
-        {dirty && <Badge tone="warn">Unsaved changes</Badge>}
+        {anyDirty && <Badge tone="warn">Unsaved changes</Badge>}
         <div className="flex-1" />
-        {!meta.brokenImport && <Tabs label="View" idPrefix="viewer" variant="pill" tabs={tabs} value={mode} onChange={setMode} />}
-        {!meta.brokenImport && (
-          <Button size={32} variant="primary" onClick={() => void save()} disabled={!dirty || saving}>
-            {saving ? 'Saving…' : 'Save'}
+        {!meta.brokenImport && !noFiles && !fileMode && <Tabs label="View" idPrefix="viewer" variant="pill" tabs={tabs} value={mode} onChange={setMode} />}
+        {!meta.brokenImport && !noFiles && (
+          <Button size={32} variant="primary" onClick={() => void (fileMode ? file.save() : save())} disabled={!canSave}>
+            {(fileMode ? file.saving : saving) ? 'Saving…' : 'Save'}
           </Button>
         )}
         <Menu
@@ -251,7 +331,7 @@ export function Viewer({
         />
       </div>
 
-      {conflict && (
+      {!fileMode && conflict && (
         <Banner tone="warn" role="alert">
           <span className="flex-1">
             <strong className="font-semibold text-ink">
@@ -271,7 +351,7 @@ export function Viewer({
           </Button>
         </Banner>
       )}
-      {!conflict && notice && (
+      {!fileMode && !conflict && notice && (
         <Banner tone="review" role="status">
           <span className="flex-1">
             Updated by{' '}
@@ -298,14 +378,40 @@ export function Viewer({
         </div>
       )}
 
+      {fileMode && <FileBanners file={file} path={otherPath} agentTitle={agentTitle} />}
+
       {meta.brokenImport ? (
         <div className="flex-1 min-h-0 overflow-auto p-4">
           <div className="max-w-[720px] mx-auto">
-            <FixImportPanel meta={meta} autoFocus onSaved={fixed} onReplaced={onReplaced} onDelete={onDelete} />
+            <FixImportPanel meta={meta} actions={retrieval} autoFocus onReplaced={onReplaced} onDelete={onDelete} />
+          </div>
+        </div>
+      ) : noFiles ? (
+        <div className="flex-1 min-h-0 overflow-auto p-4">
+          <div className="max-w-[560px] mx-auto">
+            {meta.retrieval ? (
+              <RetrievalStatus meta={meta} actions={retrieval} onDelete={onDelete} />
+            ) : (
+              <p className="m-0 text-[12.5px] text-ink-3">This artifact has no files yet.</p>
+            )}
           </div>
         </div>
       ) : (
-      <div {...tabPanelProps('viewer', mode)} className="flex-1 min-h-0 flex gap-4 p-4 outline-none">
+      <div className="flex-1 min-h-0 flex gap-4 p-4">
+        {multi && <FilesPanel files={files} entry={meta.entry} selected={otherPath} onSelect={select} />}
+        {fileMode ? (
+          <OtherFile
+            meta={meta}
+            path={otherPath}
+            info={otherInfo}
+            file={file}
+            busy={saving}
+            entryDirty={dirty}
+            onOpenOn={(p) => void openOn(p)}
+            preview={kind === 'design' ? <PreviewPane kind={kind} meta={meta} draft={draft} saved={base} dirty={dirty} /> : null}
+          />
+        ) : (
+      <div {...tabPanelProps('viewer', mode)} className="flex-1 min-w-0 min-h-0 flex gap-4 outline-none">
         <Suspense fallback={<Loading />}>
           {mode === 'edit' && kind === 'whiteboard' && (
             <div className="flex-1 min-w-0 min-h-0 rounded-xl border border-line-2 overflow-hidden">
@@ -361,8 +467,34 @@ export function Viewer({
           )}
         </Suspense>
       </div>
+        )}
+      </div>
       )}
 
+      <Dialog
+        open={switchTo !== null}
+        onClose={() => setSwitchTo(null)}
+        title="Discard your changes?"
+        description={`Your edits to ${otherPath ?? 'this file'} are not saved.`}
+        footer={
+          <>
+            <Button size={32} onClick={() => setSwitchTo(null)}>
+              Keep editing
+            </Button>
+            <Button
+              size={32}
+              variant="danger"
+              onClick={() => {
+                const to = switchTo;
+                setSwitchTo(null);
+                setSelected(to === meta.entry ? null : to);
+              }}
+            >
+              Discard
+            </Button>
+          </>
+        }
+      />
       <Dialog
         open={confirmClose}
         onClose={() => setConfirmClose(false)}
@@ -380,6 +512,133 @@ export function Viewer({
         }
       />
     </section>
+  );
+}
+
+/** The "Updated by" and conflict banners of a non-entry file (same wording as the entry's). */
+function FileBanners({ file, path, agentTitle }: { file: ArtifactFileState; path: string; agentTitle: (id: string) => string | undefined }) {
+  if (file.conflict)
+    return (
+      <Banner tone="warn" role="alert">
+        <span className="flex-1">
+          <strong className="font-semibold text-ink">{cap(authorLabel(file.conflict.author, agentTitle))}</strong> saved v{file.conflict.version} with changes to{' '}
+          <span className="font-mono">{path}</span> while you were editing it. Saving keeps yours as a new version on top (v{file.conflict.version} stays in History).
+        </span>
+        <Button size={28} variant="primary" onClick={() => void file.save()} disabled={file.saving}>
+          Keep mine
+        </Button>
+        <Button size={28} variant="ghost" onClick={file.takeTheirs}>
+          Use theirs
+        </Button>
+      </Banner>
+    );
+  if (file.notice)
+    return (
+      <Banner tone="review" role="status">
+        <span className="flex-1">
+          Updated by <strong className="font-semibold text-ink">{authorLabel(file.notice.author, agentTitle)}</strong> · v{file.notice.version}
+        </span>
+        <Button size={28} variant="ghost" onClick={file.dismissNotice}>
+          Dismiss
+        </Button>
+      </Banner>
+    );
+  if (file.error)
+    return (
+      <div role="alert" className="px-5 py-2 text-[12.5px] text-bad bg-bad-bg border-b border-bad-line">
+        {file.error}
+      </div>
+    );
+  return null;
+}
+
+/** A non-entry file: Monaco for text, the image inline, a note for other binary files. */
+function OtherFile({
+  meta,
+  path,
+  info,
+  file,
+  busy,
+  entryDirty,
+  onOpenOn,
+  preview,
+}: {
+  meta: ArtifactMeta;
+  path: string;
+  info: ArtifactFile | undefined;
+  file: ArtifactFileState;
+  busy: boolean;
+  entryDirty: boolean;
+  onOpenOn: (path: string) => void;
+  preview: ReactNode;
+}) {
+  const binary = info?.text === false;
+  const openOnBlocked = file.dirty || entryDirty;
+  const header = (
+    <div className="flex items-center gap-2 flex-wrap min-h-[28px]">
+      <span className="font-mono text-[12px] text-ink-2 truncate">{path}</span>
+      {info && <span className="text-[11.5px] text-ink-3">{formatSize(info.size)}</span>}
+      <span className="flex-1" />
+      {meta.kind === 'design' && isPagePath(path) && (
+        <Button size={28} onClick={() => onOpenOn(path)} disabled={busy || openOnBlocked} title={openOnBlocked ? 'Save your changes first.' : undefined}>
+          Open on this page
+        </Button>
+      )}
+    </div>
+  );
+  if (binary) {
+    return (
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-2">
+        {header}
+        {isImagePath(path) ? <ImageFile id={meta.id} path={path} version={meta.version} /> : <p className="m-0 text-[12.5px] text-ink-3">A binary file. It can&apos;t be shown here.</p>}
+      </div>
+    );
+  }
+  return (
+    <>
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-2">
+        {header}
+        <div className="flex-1 min-h-0 flex flex-col">
+          {file.base ? (
+            <Suspense fallback={<Loading />}>
+              <SourceEditor key={path} value={file.draft} language={languageForPath(path)} label={`Source of ${path}`} onChange={file.setDraft} onSave={() => void file.save()} />
+            </Suspense>
+          ) : file.error ? null : (
+            <Loading />
+          )}
+        </div>
+      </div>
+      {preview}
+    </>
+  );
+}
+
+/** An image file of the current version, as a data: URL (the renderer CSP allows data: images). */
+function ImageFile({ id, path, version }: { id: string; path: string; version: number }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  useEffect(() => {
+    let on = true;
+    setSrc(null);
+    setFailed(null);
+    oide
+      .invoke('artifacts.readFile', { id, path })
+      .then((c) => on && setSrc(c.encoding === 'base64' ? imageDataUrl(path, c.data) : null))
+      .catch((err) => on && setFailed(ipcErrorMessage(err)));
+    return () => {
+      on = false;
+    };
+  }, [id, path, version]);
+  if (failed)
+    return (
+      <div role="alert" className="text-[12.5px] text-bad">
+        Couldn&apos;t open {path}: {failed}
+      </div>
+    );
+  return (
+    <div className="flex-1 min-h-0 rounded-xl border border-line-2 bg-raised overflow-auto flex items-start justify-center p-4">
+      {src ? <img src={src} alt={path} className="max-w-full h-auto" /> : <Spinner label={`Loading ${path}`} />}
+    </div>
   );
 }
 

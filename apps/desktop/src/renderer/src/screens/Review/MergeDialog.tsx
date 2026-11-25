@@ -113,7 +113,7 @@ export function MergeDialog({ state, agentTitle, branch, target, prediction, pre
           <div role="note" aria-label="Uncommitted changes in the main checkout" className="flex gap-2 items-start p-2.5 rounded-md border border-warn-line bg-warn-bg text-[12.5px] leading-normal text-ink-2">
             <Icon name="warning" size={16} className="text-warn mt-px shrink-0" />
             <span>
-              The main checkout has uncommitted changes in {plural(prediction.mainDirty.length, 'file')} ({fileList(prediction.mainDirty)}). git refuses to merge over the ones this merge touches: commit or stash them first.
+              The main checkout has uncommitted changes in {plural(prediction.mainDirty.length, 'file')} ({fileList(prediction.mainDirty)}). The ones this merge touches are set aside (stashed) for the merge and put back after it.
             </span>
           </div>
         )}

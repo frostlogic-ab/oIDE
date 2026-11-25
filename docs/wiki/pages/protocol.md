@@ -34,7 +34,7 @@ stay optional (for example `AgentSpecInput`).
 Fields added after the first cut (all optional or defaulted):
 
 - Git/store build (2026-11-24): `CommitInfo.body`; `FocusPreset.builtIn`; `Settings.models.versions`
-  (family → `latest` or version) and `models.lastUsedStrategy` ("Custom (last used)");
+  (family → `latest` or version) and `models.lastUsedStrategy` ("Custom (last used)"); `spawn.lastExtensions` (Spawn's last "Tools from extensions" picks);
   `Settings.permissions.defaults` (`editFiles` allow/ask, `shell` ask/allow, `network`
   ask/allow/block, from Settings > Permissions > Defaults); `MODEL_FAMILIES`,
   `KNOWN_MODEL_VERSIONS`, `resolveModel()`; `ArtifactContent`, `ArtifactsBackend`, `ArtifactSource`.

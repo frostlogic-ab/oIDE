@@ -31,6 +31,20 @@ When two live worktrees change the same file, Source control shows a heads-up wi
 the files, and predicts whether their branches merge cleanly (`git merge-tree --write-tree`; only
 commits count). **Ask an agent to reconcile** spawns an agent that combines the two branches.
 
+## Staying up to date
+
+Other agents keep merging into the base branch while an agent works. To keep conflicts small, oIDE
+tells every worktree agent to bring its base branch in twice:
+
+- **When it starts** a new task: `git merge <base>` (after `git fetch origin` when the base is
+  `origin/...`), resolving any conflicts before it begins.
+- **Right before it submits for review**: commit, merge the base again, resolve conflicts, re-run
+  its checks, and report a check named **Up to date with &lt;base&gt;**, so the branch is ready to merge.
+
+The agent only merges into its own branch; it never rebases, force-pushes or touches the base
+branch or the main checkout. Agents that work in the project folder, or whose base is a bare
+commit, skip this.
+
 ## The review loop
 
 1. The agent finishes and calls oIDE's `submit_for_review` tool with a summary and the checks it ran

@@ -1,17 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { ArtifactMeta, ArtifactUse, type AgentSummary } from '@oide/protocol';
 import {
+  activeRetrieval,
   agentsUsing,
   authorLabel,
+  baseName,
   canOpenClaudeLink,
+  canUpdateFromLink,
   contentForDiff,
+  entryCandidates,
+  fileTree,
   filterArtifacts,
-  fixImportPlan,
-  importContentError,
+  imageDataUrl,
   importLinkError,
   isClaudeLink,
-  kindFromFileName,
+  isImagePath,
+  isPagePath,
+  kindFromFiles,
+  languageForPath,
   liveDecision,
+  retrievalLine,
   sourceLanguage,
   stripFrontMatter,
   usageLine,
@@ -20,11 +28,9 @@ import {
   versionLabel,
 } from './model';
 
-const REACT_APP = "import React from 'react';\nexport default function App() {\n  return <div>Hi</div>;\n}\n";
-
 const now = 1_800_000_000_000;
-const meta = (id: string, kind: ArtifactMeta['kind'], projectId?: string) =>
-  ArtifactMeta.parse({ id, slug: id, title: `T ${id}`, kind, projectId, location: 'app-data', version: 1, entry: 'x', createdAt: now, updatedAt: now });
+const meta = (id: string, kind: ArtifactMeta['kind'], projectId?: string, extra: Partial<ArtifactMeta> = {}) =>
+  ArtifactMeta.parse({ id, slug: id, title: `T ${id}`, kind, projectId, location: 'app-data', version: 1, entry: 'x', createdAt: now, updatedAt: now, ...extra });
 const use = (agentId: string, op: ArtifactUse['op'], minsAgo: number) => ArtifactUse.parse({ artifactId: 'a', agentId, op, ts: now - minsAgo * 60_000 });
 const agent = (id: string, status: AgentSummary['status']) =>
   ({ id, status, title: `Agent ${id}` }) as unknown as AgentSummary;
@@ -79,27 +85,33 @@ describe('artifacts model', () => {
     expect(importLinkError('nope')).toBe('Not a valid link.');
   });
 
-  it('checks pasted content like main: stub, design = HTML or React, whiteboard = JSON', () => {
-    expect(importContentError('design', '<!doctype html><p>x</p>')).toBeUndefined();
-    expect(importContentError('design', REACT_APP)).toBeUndefined();
-    expect(importContentError('design', 'just words')).toMatch(/HTML page or a React component/);
-    expect(importContentError('doc', 'Imported from https://claude.ai/artifact/x. oIDE cannot fetch claude.ai artifacts: open the link, copy the code.')).toMatch(/placeholder/);
-    expect(importContentError('whiteboard', 'not json')).toMatch(/JSON/);
-    expect(importContentError('whiteboard', '\uFEFF{"type":"excalidraw","elements":[]}')).toBeUndefined();
+  it('detects the kind a set of files makes, like main', () => {
+    for (const f of ['a.jsx', 'a.tsx', 'a.svg', 'a.html', 'site.css']) expect(kindFromFiles([f])).toBe('design');
+    expect(kindFromFiles(['README.md', 'shots/a.png'])).toBe('doc');
+    expect(kindFromFiles(['a.png', 'b.jpg'])).toBe('design');
+    expect(kindFromFiles(['board.excalidraw', 'notes.md'])).toBe('whiteboard');
+    expect(kindFromFiles(['notes.md'])).toBe('doc');
+    expect(kindFromFiles([])).toBe('doc');
   });
 
-  it('plans a fix: save in place when the paste fits the kind, else replace with the content kind', () => {
-    expect(fixImportPlan('design', '<!doctype html><p>x</p>')).toEqual({ mode: 'save' });
-    expect(fixImportPlan('design', REACT_APP)).toEqual({ mode: 'save' });
-    expect(fixImportPlan('doc', '# Notes')).toEqual({ mode: 'save' });
-    expect(fixImportPlan('doc', REACT_APP)).toEqual({ mode: 'replace', kind: 'design' });
-    expect(fixImportPlan('design', '# Notes\n\nText')).toEqual({ mode: 'replace', kind: 'doc' });
+  it('lists the pages a design can open on, index first', () => {
+    expect(entryCandidates(['site.css', 'pricing.html', 'about.htm', 'index.html', 'pricing.html'])).toEqual(['index.html', 'about.htm', 'pricing.html']);
+    expect(entryCandidates(['site.css'])).toEqual([]);
+    expect(baseName('C:\\Downloads\\site\\index.html')).toBe('index.html');
+    expect(baseName('/Users/you/site/')).toBe('site');
   });
 
-  it('takes React and SVG files as designs', () => {
-    for (const f of ['a.jsx', 'a.tsx', 'a.svg', 'a.html']) expect(kindFromFileName(f)).toBe('design');
-    expect(kindFromFileName('a.md')).toBe('doc');
-    expect(kindFromFileName('a.excalidraw')).toBe('whiteboard');
+  it('says what a retrieval is doing, for the card and the detail pane', () => {
+    const retrieval = (status: 'retrieving' | 'ready' | 'failed') => ({ status, trigger: 'import' as const, startedAt: now });
+    expect(activeRetrieval(meta('a', 'design'))).toBeNull();
+    expect(activeRetrieval(meta('a', 'design', 'p', { retrieval: retrieval('ready') }))).toBeNull();
+    expect(retrievalLine(meta('a', 'design', 'p', { version: 0, retrieval: retrieval('retrieving') }))).toEqual({ text: 'Retrieving with an agent', tone: 'live' });
+    expect(retrievalLine(meta('a', 'design', 'p', { version: 0, retrieval: retrieval('failed') }))).toEqual({ text: 'Retrieval failed', tone: 'bad' });
+    expect(retrievalLine(meta('a', 'design', 'p', { version: 3, retrieval: retrieval('failed') }))).toEqual({ text: 'Update failed', tone: 'bad' });
+    expect(retrievalLine(meta('a', 'design', 'p', { retrieval: retrieval('ready') }))).toBeNull();
+    expect(canUpdateFromLink(meta('a', 'design', 'p', { importedFrom: 'https://claude.ai/design/p/x' }))).toBe(true);
+    expect(canUpdateFromLink(meta('a', 'design', 'p', { importedFrom: 'https://claude.site/artifacts/x' }))).toBe(false);
+    expect(canUpdateFromLink(meta('a', 'design'))).toBe(false);
   });
 
   it('strips front matter and validates whiteboards', () => {
@@ -131,10 +143,33 @@ describe('artifact editors model', () => {
     expect(sourceLanguage('design')).toBe('html');
     expect(sourceLanguage('design', 'index.html')).toBe('html');
     expect(sourceLanguage('design', 'App.jsx')).toBe('javascript');
+    expect(sourceLanguage('design', 'project/Main.html')).toBe('html');
+    expect(sourceLanguage('design', 'shots/a.png')).toBe('html');
     expect(sourceLanguage('whiteboard')).toBe('json');
+    expect(languageForPath('site.css')).toBe('css');
+    expect(languageForPath('canvas.json')).toBe('json');
+    expect(languageForPath('src/App.TSX')).toBe('typescript');
+    expect(languageForPath('notes.md')).toBe('markdown');
+    expect(languageForPath('LICENSE')).toBe('plaintext');
     expect(contentForDiff('whiteboard', '{"a":1,"b":[2]}')).toBe('{\n  "a": 1,\n  "b": [\n    2\n  ]\n}\n');
     expect(contentForDiff('whiteboard', 'not json')).toBe('not json');
     expect(contentForDiff('doc', '{"a":1}')).toBe('{"a":1}');
+  });
+
+  it('builds a compact file tree: folders first, sorted, with depth', () => {
+    const f = (path: string, text = true) => ({ path, size: 10, text });
+    const rows = fileTree([f('site.css'), f('shots/b.png', false), f('index.html'), f('shots/a.png', false), f('docs/guide/start.md')]);
+    expect(rows.map((r) => `${'  '.repeat(r.depth)}${r.dir ? `${r.name}/` : r.name}`)).toEqual(['docs/', '  guide/', '    start.md', 'shots/', '  a.png', '  b.png', 'index.html', 'site.css']);
+    expect(rows.find((r) => r.name === 'a.png')).toMatchObject({ path: 'shots/a.png', dir: false, text: false });
+  });
+
+  it('shows images by data URL and tells pages apart', () => {
+    expect(isImagePath('shots/a.PNG')).toBe(true);
+    expect(isImagePath('a.svg')).toBe(false);
+    expect(imageDataUrl('a.jpg', 'AAAA')).toBe('data:image/jpeg;base64,AAAA');
+    expect(imageDataUrl('a.bin', 'AAAA')).toBe('data:application/octet-stream;base64,AAAA');
+    expect(isPagePath('project/Main.html')).toBe(true);
+    expect(isPagePath('site.css')).toBe(false);
   });
 
   it('validates rename titles', () => {

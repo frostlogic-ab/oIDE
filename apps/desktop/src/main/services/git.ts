@@ -10,6 +10,7 @@ import {
   gitPull,
   gitPush,
   log as gitLog,
+  autoStashNote,
   mergeLocal as gitMergeLocal,
   predictMerge as gitPredictMerge,
   isInside,
@@ -313,7 +314,7 @@ export class GitService {
   }
 
   /** Merge the agent's branch into the main checkout (`--no-ff`); cleanup follows Settings. */
-  async mergeLocal(agentId: string): Promise<{ ok: boolean; conflicts: string[] }> {
+  async mergeLocal(agentId: string): Promise<{ ok: boolean; conflicts: string[]; autoStash?: { files: string[]; restored: boolean; note: string } }> {
     const a = this.agent(agentId);
     const p = this.project(a.projectId);
     if (!a.branch || !a.worktreePath || samePath(a.worktreePath, p.path)) throw new IpcError('This agent works in the project folder; there is no branch to merge.', 'conflict');
@@ -339,7 +340,9 @@ export class GitService {
       if (cleanup === 'after-7-days') this.o.store.ui.kv.set(MERGED_KEY(agentId), Date.now());
       await this.o.archiveMerged(agentId, { ...(r.sha ? { mergeCommit: r.sha } : {}), deleteWorktree: cleanup === 'right-away' });
     }
-    return { ok: r.ok, conflicts: r.conflicts };
+    // Uncommitted files in the main checkout that were in the way were stashed and put back (or kept in the stash).
+    const autoStash = r.autoStash ? { files: r.autoStash.files, restored: r.autoStash.restored, note: autoStashNote(r.autoStash) } : undefined;
+    return { ok: r.ok, conflicts: r.conflicts, ...(autoStash ? { autoStash } : {}) };
   }
 
   // ---------------------------------------------------------------- merge conflicts

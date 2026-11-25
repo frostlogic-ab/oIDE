@@ -67,10 +67,15 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
     still stops and aborts as before). The button label is fixed (agent titles are free text and
     pushed the footer out of the dialog); the note above it and the button tooltip name the agent.
   - Unknown (git older than 2.38): the reason, and Merge stays the action.
-  - Uncommitted files in the main checkout are listed up front; git refuses to merge over the ones
-    the merge touches, and `git.mergeLocal` then fails with code `conflict` and "The main checkout
-    has uncommitted changes that the merge would overwrite (…). Commit or stash them, then merge
-    again. Nothing was changed."
+  - Uncommitted files in the main checkout are listed up front ("The ones this merge touches are set
+    aside (stashed) for the merge and put back after it."). Merge recovers on its own (2026-11-25:
+    "oIDE should automatically recover by stashing, merging and then unstashing"): `git.mergeLocal`
+    stashes only the files in the way, merges, re-applies the stash and returns `autoStash { files,
+    restored, note }`. The toast reads "Merged <branch> into <target>. Your uncommitted changes to …
+    were set aside for the merge and put back." When they clash with the merge, the toast is a warning:
+    the files are left as merged and the changes stay in the stash `oide: local changes set aside to
+    merge <branch>` ("run git stash pop in the project folder to bring them back"). See
+    [git-worktrees](git-worktrees.md#merge-overlaps-remote-prs-commit).
 - **A merge that stops anyway** (prediction missed it, or could not run) shows "The merge stopped on
   conflicts" with the same **Ask agent to resolve** (`source: 'merge'`; main remembers the files
   the merge reported). When the agent cannot be asked, the old "Hand them to a new agent" (Spawn with

@@ -1,5 +1,5 @@
-import { HTML_DESIGN_ENTRY, REACT_DESIGN_ENTRY } from '@oide/protocol';
-import type { ArtifactStore } from '@oide/store';
+import { HTML_DESIGN_ENTRY, type ArtifactMeta } from '@oide/protocol';
+import { isReactEntry, safeEntry, type ArtifactStore } from '@oide/store';
 import { ARTIFACT_SCHEME, resolveArtifactUrl } from './core.js';
 
 /**
@@ -65,7 +65,8 @@ export async function resolveArtifactRequest(artifacts: ArtifactStore, url: stri
   // `__oide` is oIDE's own namespace (case-folded, as Windows and macOS ignore case): one exact file.
   const first = rel.split(/[\\/]/)[0]?.toLowerCase().replace(/[. ]+$/, '');
   if (first === '__oide') return rel === REACT_RUNTIME_PATH && runtimeFile ? { file: runtimeFile, mime: JS_MIME } : null;
-  if (meta.kind === 'design' && meta.entry === REACT_DESIGN_ENTRY && rel === HTML_DESIGN_ENTRY) {
+  if (meta.version === 0) return null; // nothing retrieved yet
+  if (isReactDesign(meta) && rel === HTML_DESIGN_ENTRY) {
     try {
       const { content } = await artifacts.read(id);
       return { body: reactPreviewPage(content), mime: HTML_MIME };
@@ -74,4 +75,19 @@ export async function resolveArtifactRequest(artifacts: ArtifactStore, url: stri
     }
   }
   return resolveArtifactUrl(artifacts, url);
+}
+
+/** A design that opens on React source (`App.jsx`, or any .jsx / .tsx entry): previewed through the generated page. */
+export function isReactDesign(meta: Pick<ArtifactMeta, 'kind' | 'entry'>): boolean {
+  return meta.kind === 'design' && isReactEntry(safeEntry(meta));
+}
+
+/**
+ * `oide-artifact://<id>/<entry>` with each path segment encoded, so relative links in the entry
+ * (`site.css`, `shots/home.png`, other pages) resolve against its folder. A React design opens on
+ * the generated page at `index.html`.
+ */
+export function previewUrlOf(meta: Pick<ArtifactMeta, 'id' | 'kind' | 'entry'>): string {
+  const path = isReactDesign(meta) ? HTML_DESIGN_ENTRY : safeEntry(meta);
+  return `${ARTIFACT_SCHEME}://${encodeURIComponent(meta.id)}/${path.split('/').map(encodeURIComponent).join('/')}`;
 }

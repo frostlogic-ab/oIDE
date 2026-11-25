@@ -61,7 +61,7 @@ export default function SourceControlScreen() {
           />
         )}
 
-        {projects.map((p, i) => (
+        {projects.map((p) => (
           <ProjectCard
             key={p.id}
             project={p}
@@ -69,8 +69,8 @@ export default function SourceControlScreen() {
             agents={byId}
             open={!closed[p.id]}
             onToggle={() => setClosed({ ...closed, [p.id]: !closed[p.id] })}
-            logOpen={logs[p.id] ?? i === 0}
-            onToggleLog={() => setLogs({ ...logs, [p.id]: !(logs[p.id] ?? i === 0) })}
+            logOpen={logs[p.id] ?? false}
+            onToggleLog={() => setLogs({ ...logs, [p.id]: !logs[p.id] })}
           />
         ))}
       </main>
