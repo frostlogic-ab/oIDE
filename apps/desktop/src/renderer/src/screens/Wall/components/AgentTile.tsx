@@ -99,21 +99,24 @@ function TileView({ agent, projectName, focused, highlighted }: TileViewProps) {
           onClick={() => useWall.getState().openCompact(agent.id)}
         />
       </div>
-      <div className="flex items-start gap-2 mx-3 mt-1 mb-2">
-        <h2 id={titleId} className="m-0 flex-1 min-w-0 text-[14px] font-semibold leading-[1.35]">
-          {agent.title}
-        </h2>
-        {badge && (
-          <Badge tone={badge.warn ? 'bad' : 'neutral'} icon={badge.warn ? 'warning' : undefined} title={badge.title} className="mt-px">
-            {badge.label}
-          </Badge>
-        )}
-        {agent.mergeConflict && (
-          <Badge tone="warn" icon="branch" title={`Resolving the merge conflicts with ${agent.mergeConflict.target} that oIDE sent it`} className="mt-px">
-            Resolving merge conflicts
-          </Badge>
-        )}
-      </div>
+      {/* The title owns its row; badges wrap on the row below so they never squeeze it. */}
+      <h2 id={titleId} className="m-0 mx-3 mt-1 mb-2 min-w-0 text-[14px] font-semibold leading-[1.35] break-words">
+        {agent.title}
+      </h2>
+      {(badge || agent.mergeConflict) && (
+        <div className="flex flex-wrap items-center gap-1.5 mx-3 -mt-1 mb-2">
+          {badge && (
+            <Badge tone={badge.warn ? 'bad' : 'neutral'} icon={badge.warn ? 'warning' : undefined} title={badge.title}>
+              {badge.label}
+            </Badge>
+          )}
+          {agent.mergeConflict && (
+            <Badge tone="warn" icon="branch" title={`Resolving the merge conflicts with ${agent.mergeConflict.target} that oIDE sent it`}>
+              Resolving merge conflicts
+            </Badge>
+          )}
+        </div>
+      )}
       <TileBody agent={agent} />
       <SubagentChips agent={agent} now={now} />
       <TileFooter agent={agent} projectName={projectName} focused={focused} />

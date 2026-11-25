@@ -19,8 +19,9 @@ Data: [agent-supervisor](agent-supervisor.md) (statuses, activity, context), [su
 ## Tile
 
 Header: `project · branch` (mono), status label + dot (`Running · 14m`, `Needs permission`, `Has a question`,
-`Ready for review`, `Paused by plan limit`, `Error`, `Queued`, …), context ring button. Title, with a mode
-badge when the agent's mode differs from Settings › default mode (Bypass always, as a red warning badge).
+`Ready for review`, `Paused by plan limit`, `Error`, `Queued`, …), context ring button. Title on its own full-width row; below it, a wrapping badge row (only when there is a
+badge): a mode badge when the agent's mode differs from Settings › default mode (Bypass always, as a red
+warning badge), and the merge-conflict badge. Badges never share the title's row, so they can't squeeze it.
 Tone (card colours) from `agentStatusMeta(status).tone`.
 
 The 92px body depends on `tileBodyKind(agent)`:
@@ -45,7 +46,7 @@ Context ring: `contextUsed / contextWindow`, amber from Settings `contextWarnAt`
 `agents.compact` and then toasts "Sent /compact to … Compacting…". oIDE never compacts without it.
 
 Merge conflicts ([screen-review](screen-review.md#merge-conflicts)): a tile whose agent is resolving conflicts oIDE sent it
-(`summary.mergeConflict`) carries a "Resolving merge conflicts" badge next to the mode badge. A Ready-for-review tile
+(`summary.mergeConflict`) carries a "Resolving merge conflicts" badge in the badge row under the title, after the mode badge. A Ready-for-review tile
 shows, next to its diff stat, how its branch stands against the main checkout ("Up to date with main",
 "Behind main by 2 · would conflict"), from the cached `git.predictMerge` answer (`stores/mergePrediction.ts`).
 
