@@ -152,6 +152,14 @@ const P = {
       <path d="M9 7V4h6v3" />
     </>
   ),
+  /** Extra: Archive / Archived agents (a box with a lid). */
+  archive: (
+    <>
+      <rect x="3" y="4" width="18" height="4" rx="1" />
+      <path d="M5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8" />
+      <path d="M10 12h4" />
+    </>
+  ),
   link: (
     <>
       <path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1" />

@@ -3,6 +3,7 @@ import { navigate, useRouter } from '../stores/router';
 import { useAgents, agentsInScope, nextNeedsYou } from '../stores/agents';
 import { useScope } from '../stores/scope';
 import { useUi, toast } from '../stores/ui';
+import { useWall } from '../screens/Wall/wallState';
 import { invokeOr, ipcErrorMessage, oide } from './bridge';
 import { commands, type Command } from './commands';
 import { keymap } from './keymap';
@@ -44,7 +45,26 @@ export function registerCoreCommands(): () => void {
         else toast('No agent needs you right now');
       },
     },
-    { id: 'oide.go.wall', title: 'Go to Agents', group: 'Go to', keywords: ['wall', 'mission control', 'home'], run: () => navigate('wall') },
+    {
+      id: 'oide.go.wall',
+      title: 'Go to Agents',
+      group: 'Go to',
+      keywords: ['wall', 'mission control', 'home'],
+      run: () => {
+        useWall.getState().setView('active');
+        navigate('wall');
+      },
+    },
+    {
+      id: 'oide.showArchived',
+      title: 'Show archived agents',
+      group: 'Agents',
+      keywords: ['archive', 'archived', 'merged', 'discarded', 'finished', 'history', 'done'],
+      run: () => {
+        useWall.getState().setView('archived');
+        navigate('wall');
+      },
+    },
     { id: 'oide.go.artifacts', title: 'Go to Artifacts', group: 'Go to', keywords: ['designs', 'docs', 'whiteboards'], run: () => navigate('artifacts', {}) },
     { id: 'oide.go.files', title: 'Go to Files', group: 'Go to', keywords: ['editor', 'tree'], run: () => navigate('files', {}) },
     { id: 'oide.go.sourceControl', title: 'Go to Source control', group: 'Go to', keywords: ['git', 'worktrees', 'commit'], run: () => navigate('source-control') },

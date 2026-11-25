@@ -5,7 +5,7 @@ import { useAgent } from '../../../stores/agents';
 import { navigate } from '../../../stores/router';
 import { useSetting } from '../../../stores/settings';
 import { useNow } from '../actions';
-import { branchLabel, modeBadge, statusAnnouncement, statusDetail, subagentDetail, subagentSummary } from '../logic';
+import { branchLabel, modeBadge, statusAnnouncement, statusDetail, subagentDetail, subagentSummary, tileStatusLabel } from '../logic';
 import { useWall } from '../wallState';
 import { TileBody, TileFooter } from './TileBody';
 
@@ -42,7 +42,7 @@ function TileView({ agent, projectName, focused, highlighted }: TileViewProps) {
   const needsTone = meta.tone === 'needs';
   const used = contextFraction(agent.contextUsed, agent.contextWindow);
   const badge = modeBadge(agent.mode, defaultMode);
-  const statusLabel = agent.status === 'rate-limited' ? 'Paused by plan limit' : meta.label;
+  const statusLabel = tileStatusLabel(agent, meta.label);
 
   const open = () => navigate('focus', { agentId: agent.id });
   const onClick = (e: MouseEvent<HTMLElement>) => {

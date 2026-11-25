@@ -78,8 +78,13 @@ export class GitService {
       worktrees: WorktreeManager;
       projects: ProjectsService;
       agents: AgentLookup;
-      /** Remove an agent (and its worktree); used by cleanup after merge. */
-      removeAgent(agentId: string): Promise<void>;
+      /**
+       * After a full merge: archive the agent (reason `merged`, with the merge commit); its worktree is
+       * deleted now when Settings › Agents › Clean up is "Right away".
+       */
+      archiveMerged(agentId: string, opts: { mergeCommit?: string; deleteWorktree: boolean }): Promise<void>;
+      /** Clean up "After 7 days": delete a merged agent's worktree (archived or not). True when removed. */
+      removeWorktreeOf(agentId: string): Promise<boolean>;
       watch?: WatchFn | undefined;
       background?: boolean | undefined;
       gh?: GhCli;
@@ -190,7 +195,9 @@ export class GitService {
         return pr ? { ...info, pr: { state: pr.state, ...(pr.number !== undefined ? { number: pr.number } : {}), ...(pr.url ? { url: pr.url } : {}) } } : info;
       }),
     );
-    const orphans = await this.o.worktrees.orphans(p.path, p.id, agents.map((a) => a.worktreePath)).catch(() => []);
+    // Archived agents' kept worktrees are not orphans: Unarchive can resume them.
+    const known = [...agents.map((a) => a.worktreePath), ...this.o.store.agents.archivedWorktrees(projectId)];
+    const orphans = await this.o.worktrees.orphans(p.path, p.id, known).catch(() => []);
     for (const o of orphans) out.push({ projectId, path: o.path, branch: o.branch ?? '', baseRef: '', ahead: 0, behind: 0, changedFiles: [], orphaned: true });
     return out;
   }
@@ -224,8 +231,10 @@ export class GitService {
 
   /** The agent's changes; files that configure agents, git or MCP are marked `sensitive` (SEC-12). */
   async diff(agentId: string): Promise<FileDiff[]> {
-    const a = this.agent(agentId);
-    if (!a.worktreePath || !a.baseRef) return [];
+    // An archived agent (Focus, read-only) shows its changes while its worktree still exists.
+    const a = this.o.agents.get(agentId) ?? this.o.store.agents.get(agentId)?.summary;
+    if (!a) throw new IpcError(`Unknown agent ${agentId}`, 'not_found');
+    if (!a.worktreePath || !a.baseRef || (a.archived && !existsSync(a.worktreePath))) return [];
     const diffs = await fileDiffs(a.worktreePath, a.baseRef);
     return diffs.map((d) => {
       const why = sensitivePathReason(d.path) ?? (d.oldPath ? sensitivePathReason(d.oldPath) : undefined);
@@ -252,9 +261,10 @@ export class GitService {
     if (r.error && !r.conflicts.length) throw new IpcError(r.error, 'git_failed');
     this.changed(p.id);
     if (r.ok && (await this.fullyMerged(p.path, a.worktreePath, a.branch))) {
+      // Merged agents move to the Archived view (row, summary and transcript stay); worktree cleanup follows Settings.
       const cleanup = this.o.settings.get().agents.cleanup;
-      if (cleanup === 'right-away') await this.o.removeAgent(agentId);
-      else if (cleanup === 'after-7-days') this.o.store.ui.kv.set(MERGED_KEY(agentId), Date.now());
+      if (cleanup === 'after-7-days') this.o.store.ui.kv.set(MERGED_KEY(agentId), Date.now());
+      await this.o.archiveMerged(agentId, { ...(r.sha ? { mergeCommit: r.sha } : {}), deleteWorktree: cleanup === 'right-away' });
     }
     return { ok: r.ok, conflicts: r.conflicts };
   }
@@ -283,10 +293,11 @@ export class GitService {
       const agentId = key.slice('merged:'.length);
       if (typeof at === 'number' && now - at < 7 * DAY) continue;
       this.o.store.ui.kv.delete(key);
-      if (this.o.agents.get(agentId)) {
-        await this.o.removeAgent(agentId).catch((err) => this.o.ctx.log.warn('cleanup failed', err));
-        removed.push(agentId);
-      }
+      const done = await this.o.removeWorktreeOf(agentId).catch((err) => {
+        this.o.ctx.log.warn('cleanup failed', err);
+        return false;
+      });
+      if (done) removed.push(agentId);
     }
     return removed;
   }
@@ -308,10 +319,13 @@ export class GitService {
 
   async pruneOrphans(projectId: string): Promise<{ removed: string[] }> {
     const p = this.project(projectId);
-    const known = this.o.agents
-      .list()
-      .filter((a) => a.projectId === projectId && a.worktreePath)
-      .map((a) => a.worktreePath!);
+    const known = [
+      ...this.o.agents
+        .list()
+        .filter((a) => a.projectId === projectId && a.worktreePath)
+        .map((a) => a.worktreePath!),
+      ...this.o.store.agents.archivedWorktrees(projectId),
+    ];
     const orphans = await this.o.worktrees.orphans(p.path, p.id, known);
     const removed: string[] = [];
     for (const o of orphans) {

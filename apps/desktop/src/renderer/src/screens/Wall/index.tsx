@@ -2,8 +2,8 @@
  * The Wall: Mission Control main screen (docs/wiki/raw/design/Main.dc.html).
  * Page: docs/wiki/pages/screen-wall.md.
  *
- * Projects sidebar (scope switcher) · filter chips · one tile per agent · Artifacts / Marketplace
- * teasers. Keys: J / K move between tiles, N jumps to the next tile that needs you, Enter opens
+ * Projects sidebar (scope switcher) · Active / Archived (N) · filter chips · one tile per agent ·
+ * Artifacts / Marketplace teasers. Archived shows finished, merged and discarded agents as a list. Keys: J / K move between tiles, N jumps to the next tile that needs you, Enter opens
  * Focus, Y / D answer the focused tile's permission prompt, Esc clears the selection.
  *
  * Re-render budget: this component subscribes to the visible id list and the counts (both
@@ -12,20 +12,22 @@
 import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { AgentSummary } from '@oide/protocol';
-import { Button, EmptyState, FilterChip, Kbd, buttonClass, cn } from '@oide/ui';
+import { Button, EmptyState, FilterChip, Kbd, SegmentedControl, TextField, buttonClass, cn } from '@oide/ui';
 import { useKeymapScope, useShortcutLabel } from '../../lib/useKeymap';
 import { nextNeedsYou, stepAgent, useAgents } from '../../stores/agents';
+import { useArchive } from '../../stores/archive';
 import { projectName, useProjects } from '../../stores/projects';
 import { navigate } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { toast } from '../../stores/ui';
 import { answerPermission } from './actions';
 import { AgentTile, tileDomId } from './components/AgentTile';
+import { ArchivedList } from './components/ArchivedList';
 import { ArtifactsAside } from './components/ArtifactsAside';
 import { CompactDialog } from './components/CompactDialog';
 import { ProjectSidebar, openProject } from './components/ProjectSidebar';
 import { filterCounts, matchesFilter } from './logic';
-import { useWall, type WallFilter } from './wallState';
+import { useWall, type WallFilter, type WallView } from './wallState';
 
 const FILTERS: Array<{ id: WallFilter; label: string; tone?: 'warn' }> = [
   { id: 'all', label: 'All' },
@@ -78,6 +80,11 @@ export function jumpToNextNeedsYou(): boolean {
 export default function WallScreen() {
   const scope = useScope((s) => s.scope);
   const filter = useWall((s) => s.filter);
+  const view = useWall((s) => s.view);
+  const archiveQuery = useWall((s) => s.archiveQuery);
+  const archivedCount = useArchive((s) => (s.countScope === scope ? s.count : undefined));
+  const loadError = useAgents((s) => s.loadError);
+  const agentsLoading = useAgents((s) => s.loading);
   const projects = useProjects((s) => s.list);
   const projectsLoaded = useProjects((s) => s.loaded);
   const ids = useAgents(
@@ -97,6 +104,11 @@ export default function WallScreen() {
   useEffect(() => {
     if (firstHighlighted) requestAnimationFrame(() => focusTile(firstHighlighted));
   }, [firstHighlighted]);
+
+  // The "Archived (N)" count for this scope.
+  useEffect(() => {
+    void useArchive.getState().refreshCount(scope);
+  }, [scope]);
 
   // Push the scope after the first commit: child effects run before App's, and the newest scope
   // wins, so pushing on mount would let App's global N (open Focus) shadow the Wall's N.
@@ -123,10 +135,15 @@ export default function WallScreen() {
       const active = document.activeElement as HTMLElement | null;
       if (active?.closest('[data-agent-id]')) active.blur();
     },
-  }, { enabled: keysReady });
+  }, { enabled: keysReady && view === 'active' });
 
   const title = scope === 'all' ? 'All agents' : projectName(projects, scope);
   const noProjects = projectsLoaded && projects.length === 0;
+  const archived = view === 'archived';
+  const viewOptions: Array<{ value: WallView; label: string }> = [
+    { value: 'active', label: 'Active' },
+    { value: 'archived', label: archivedCount === undefined ? 'Archived' : `Archived (${archivedCount})` },
+  ];
 
   return (
     <>
@@ -135,7 +152,21 @@ export default function WallScreen() {
         {/* One row down to the 1100px window minimum: "Next that needs you" shortens to "Next". */}
         <div className="flex items-center gap-3 flex-nowrap min-w-0 min-h-8">
           <h1 className="m-0 min-w-0 truncate text-[18px] font-semibold tracking-[-0.01em]">{title}</h1>
-          <div role="group" aria-label="Filter" className={cn('flex gap-1.5 flex-wrap shrink-0', counts.all === 0 && 'hidden')}>
+          {!noProjects && <SegmentedControl label="Show agents" options={viewOptions} value={view} onChange={(v) => useWall.getState().setView(v)} size={28} className="shrink-0" />}
+          {archived && (
+            <TextField
+              label="Search archived agents"
+              hideLabel
+              type="search"
+              size={28}
+              placeholder="Search by title"
+              value={archiveQuery}
+              onChange={(e) => useWall.getState().setArchiveQuery(e.target.value)}
+              containerClassName="w-[240px] shrink min-w-[140px]"
+              autoComplete="off"
+            />
+          )}
+          <div role="group" aria-label="Filter" className={cn('flex gap-1.5 flex-wrap shrink-0', (counts.all === 0 || archived) && 'hidden')}>
             {FILTERS.map((f) => (
               <FilterChip key={f.id} selected={filter === f.id} tone={f.tone} onClick={() => useWall.getState().setFilter(f.id)}>
                 {f.label} · {counts[f.id]}
@@ -145,7 +176,7 @@ export default function WallScreen() {
           <div className="flex-1" />
           <button
             type="button"
-            className={buttonClass('warn-outline', 32, cn('text-warn! gap-2! shrink-0', counts.all === 0 && 'hidden!'))}
+            className={buttonClass('warn-outline', 32, cn('text-warn! gap-2! shrink-0', (counts.all === 0 || archived) && 'hidden!'))}
             onClick={() => jumpToNextNeedsYou()}
             aria-keyshortcuts={nKey}
             aria-label="Next that needs you"
@@ -164,7 +195,22 @@ export default function WallScreen() {
           )}
         </div>
 
-        {noProjects && counts.all === 0 ? (
+        {/* A failed agents.list never looks like an empty Wall (it retries with backoff in stores/agents). */}
+        {loadError && !archived && (
+          <div role="alert" className="flex items-center gap-3 px-3.5 py-2.5 rounded-lg border border-bad-line bg-bad-bg text-[12.5px] text-ink-2">
+            <span className="flex-1 min-w-0">
+              <span className="text-bad font-semibold">Couldn't load your agents from oIDE.</span> They keep running in the background. {loadError}
+              {agentsLoading ? ' Retrying…' : ''}
+            </span>
+            <Button disabled={agentsLoading} onClick={() => void useAgents.getState().load()}>
+              Retry
+            </Button>
+          </div>
+        )}
+
+        {archived ? (
+          <ArchivedList scope={scope} />
+        ) : noProjects && counts.all === 0 ? (
           <EmptyState
             icon="folder"
             title="Open a project to get started"
@@ -176,7 +222,7 @@ export default function WallScreen() {
               </Button>
             }
           />
-        ) : counts.all === 0 ? (
+        ) : counts.all === 0 && loadError ? null : counts.all === 0 ? (
           <EmptyState
             icon="agents"
             title="No agents yet"

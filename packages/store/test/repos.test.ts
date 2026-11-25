@@ -99,7 +99,7 @@ describe('events', () => {
     s.events.appendDraft('a1', { type: 'usage', usage: { input: 10, output: 5, cacheRead: 1, cacheCreation: 0 } }, undefined, old + 1);
     s.events.appendDraft('a1', { type: 'assistant-text', text: 'All done' }, undefined, old + 2);
     s.events.appendDraft('a1', { type: 'user-text', text: 'recent' }, undefined, now - DAY);
-    expect(s.events.compactOlderThan(30, now)).toEqual({ agents: 1, removed: 3 });
+    expect(s.events.compactOlderThan(30, now)).toEqual({ agents: 1, removed: 3, trimmed: 0 });
     expect(s.events.list('a1').map((e) => e.type)).toEqual(['user-text']);
     const [sum] = s.events.summaries('a1');
     expect(sum).toMatchObject({ fromSeq: 0, toSeq: 2, count: 3, tools: { Read: 1 }, usage: { input: 10, output: 5, cacheRead: 1 }, lastAssistantText: 'All done' });

@@ -217,7 +217,7 @@ export function modeBadge(mode: PermissionMode, defaultMode: PermissionMode): Mo
 
 // ---------- tile body ----------
 
-export type TileBodyKind = 'permission' | 'interrupted' | 'question' | 'review' | 'queued' | 'rate-limited' | 'error' | 'activity';
+export type TileBodyKind = 'permission' | 'interrupted' | 'interrupted-run' | 'question' | 'review' | 'queued' | 'rate-limited' | 'error' | 'activity';
 
 /** Statuses in which an agent waits for the user (nothing is running on its own). */
 const IDLE_FOR_USER = new Set<AgentSummary['status']>(['has-question', 'stopped', 'paused', 'done']);
@@ -226,12 +226,40 @@ export function tileBodyKind(a: AgentSummary): TileBodyKind {
   if (a.status === 'needs-permission' && a.pendingPermission) return 'permission';
   // A prompt was still open when oIDE quit (it was denied then): say so until the user replies.
   if (a.interruptedPermission && IDLE_FOR_USER.has(a.status)) return 'interrupted';
+  // It was working when oIDE quit or crashed: "Interrupted" with Resume (`--resume`).
+  if (a.interrupted && a.status === 'stopped') return 'interrupted-run';
   if (a.status === 'has-question') return 'question';
   if (a.status === 'ready-for-review') return 'review';
   if (a.status === 'queued') return 'queued';
   if (a.status === 'rate-limited') return 'rate-limited';
   if (a.status === 'error') return 'error';
   return 'activity';
+}
+
+/** Statuses an agent can be archived from (main refuses the others): not working on a turn. */
+const ARCHIVABLE = new Set<AgentSummary['status']>(['has-question', 'ready-for-review', 'paused', 'stopped', 'rate-limited', 'error', 'done']);
+
+export function canArchive(a: Pick<AgentSummary, 'status'>): boolean {
+  return ARCHIVABLE.has(a.status);
+}
+
+/** Tile status label: "Interrupted" for an agent oIDE's restart or crash stopped mid-work. */
+export function tileStatusLabel(a: AgentSummary, metaLabel: string): string {
+  if (a.status === 'rate-limited') return 'Paused by plan limit';
+  if (a.status === 'stopped' && a.interrupted) return 'Interrupted';
+  return metaLabel;
+}
+
+/** Why the agent stopped, for the "Interrupted" body. */
+export function interruptionText(reason: NonNullable<AgentSummary['interrupted']>['reason']): string {
+  switch (reason) {
+    case 'crash':
+      return 'Interrupted: oIDE stopped unexpectedly while this agent was working.';
+    case 'mcp-down':
+      return "Not resumed: oIDE's MCP server was not running when oIDE started, so agents could not ask for permission.";
+    default:
+      return 'Interrupted: oIDE quit while this agent was working.';
+  }
 }
 
 /** Text after the status label: "Running · 14m", "Paused by plan limit". */

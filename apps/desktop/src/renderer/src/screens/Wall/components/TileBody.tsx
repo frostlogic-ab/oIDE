@@ -1,15 +1,16 @@
 import { useEffect, useId, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import type { AgentSummary } from '@oide/protocol';
-import { Button, DiffStat, LinkButton, Tooltip } from '@oide/ui';
+import { Button, DiffStat, IconButton, LinkButton, Tooltip } from '@oide/ui';
 import { invokeOr } from '../../../lib/bridge';
 import { formatResetTime } from '../../../lib/format';
 import { useShortcutLabel } from '../../../lib/useKeymap';
 import { INTERRUPTED_PERMISSION_NOTE, isRunning } from '../../../stores/agents';
+import { archiveAgent } from '../../../stores/archive';
 import { navigate } from '../../../stores/router';
 import { useSetting } from '../../../stores/settings';
 import { AttachFileButton, AttachmentTray, useAttachments } from '../../../components/Attachments';
 import { answerPermission, openPullRequest, resumeAgent, sendReply, type PermissionChoice } from '../actions';
-import { parseActivity, permissionView, tileBodyKind } from '../logic';
+import { canArchive, interruptionText, parseActivity, permissionView, tileBodyKind } from '../logic';
 
 /**
  * The black box in the middle of a tile. The canvas draws the prompt boxes 92px tall
@@ -51,6 +52,17 @@ export function TileBody({ agent }: { agent: AgentSummary }) {
           <span className="text-ink-3 truncate" title={p.summary ?? p.toolName}>
             It was asking to use <span className="font-mono text-ink-2">{p.toolName}</span>
             {p.summary ? `: ${p.summary}` : ''}
+          </span>
+        </div>
+      );
+    }
+    case 'interrupted-run': {
+      const lastLine = agent.activity.filter((l) => !/^(Thinking|Writing)…?$/.test(l.trim())).at(-1);
+      return (
+        <div className={`${BOX} p-2.5 flex flex-col gap-1.5 text-[12px] leading-normal`} role="note" aria-label="Interrupted">
+          <span className="text-warn">{interruptionText(agent.interrupted!.reason)}</span>
+          <span className="text-ink-3 line-clamp-2">
+            {agent.resumeBlocked ?? (lastLine ? <>Last step: <span className="font-mono text-ink-2">{lastLine}</span></> : 'Resume continues the same session where it stopped.')}
           </span>
         </div>
       );
@@ -201,6 +213,8 @@ export function TileFooter({ agent, projectName, focused }: { agent: AgentSummar
             Review diff
           </LinkButton>
           <OpenPrButton agent={agent} />
+          <div className="flex-1" />
+          <ArchiveButton agent={agent} />
         </div>
       );
     case 'rate-limited':
@@ -209,6 +223,17 @@ export function TileFooter({ agent, projectName, focused }: { agent: AgentSummar
         <div className={`${FOOTER} text-ink-3 text-[12px]`}>
           {kind === 'rate-limited' && agent.rateLimitResetAt ? <span>Resets {formatResetTime(agent.rateLimitResetAt)}</span> : agent.diff ? <Diff agent={agent} /> : null}
           <div className="flex-1" />
+          <ArchiveButton agent={agent} />
+          <ResumeButton agent={agent} />
+          {open()}
+        </div>
+      );
+    case 'interrupted-run':
+      return (
+        <div className={`${FOOTER} gap-2.5 text-ink-3 text-[12px]`}>
+          {agent.diff ? <Diff agent={agent} /> : <span>No changes yet</span>}
+          <div className="flex-1" />
+          <ArchiveButton agent={agent} />
           <ResumeButton agent={agent} />
           {open()}
         </div>
@@ -218,6 +243,7 @@ export function TileFooter({ agent, projectName, focused }: { agent: AgentSummar
         <div className={`${FOOTER} gap-2.5 text-ink-3 text-[12px]`}>
           {kind === 'queued' ? <span>Queued</span> : agent.diff ? <Diff agent={agent} /> : <span>No changes yet</span>}
           <div className="flex-1" />
+          {(agent.status === 'paused' || agent.status === 'stopped' || agent.status === 'done') && <ArchiveButton agent={agent} />}
           {(agent.status === 'paused' || agent.status === 'stopped') && <ResumeButton agent={agent} />}
           {open()}
         </div>
@@ -230,8 +256,34 @@ function Diff({ agent }: { agent: AgentSummary }) {
   return <DiffStat files={d.files} additions={d.additions} deletions={d.deletions} />;
 }
 
+/** Archive (finished or stopped agents): off the Wall, into Wall › Archived. */
+function ArchiveButton({ agent }: { agent: AgentSummary }) {
+  const [busy, setBusy] = useState(false);
+  if (!canArchive(agent)) return null;
+  return (
+    <IconButton
+      icon="archive"
+      aria-label={`Archive ${agent.title}`}
+      title="Archive"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        await archiveAgent(agent.id, agent.title);
+        setBusy(false);
+      }}
+    />
+  );
+}
+
 function ResumeButton({ agent }: { agent: AgentSummary }) {
   const [busy, setBusy] = useState(false);
+  // Its worktree is gone (or it never had a session): Resume cannot work, so say why instead.
+  if (agent.resumeBlocked)
+    return (
+      <span className="text-[12px] text-ink-3" title={agent.resumeBlocked}>
+        Can't resume
+      </span>
+    );
   return (
     <Button
       disabled={busy}

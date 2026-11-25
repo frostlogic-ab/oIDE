@@ -6,14 +6,21 @@ import { create } from 'zustand';
  * Agent data itself lives in stores/agents; this store never copies it.
  */
 export type WallFilter = 'all' | 'needs' | 'running' | 'review';
+/** Active: the tile grid. Archived: finished, merged, discarded and hand-archived agents (a list). */
+export type WallView = 'active' | 'archived';
 
 export const HIGHLIGHT_MS = 6000;
 
 interface WallState {
+  view: WallView;
+  /** Search text of the Archived view. */
+  archiveQuery: string;
   filter: WallFilter;
   focusedId: string | null;
   highlighted: Record<string, true>;
   compactFor: string | null;
+  setView(view: WallView): void;
+  setArchiveQuery(query: string): void;
   setFilter(filter: WallFilter): void;
   setFocused(id: string | null): void;
   /** Highlight tiles (new agents from Spawn); the first one gets focus. Clears after HIGHLIGHT_MS. */
@@ -26,15 +33,19 @@ interface WallState {
 let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 
 export const useWall = create<WallState>()((set) => ({
+  view: 'active',
+  archiveQuery: '',
   filter: 'all',
   focusedId: null,
   highlighted: {},
   compactFor: null,
+  setView: (view) => set((s) => (s.view === view ? s : { view, focusedId: null })),
+  setArchiveQuery: (archiveQuery) => set({ archiveQuery }),
   setFilter: (filter) => set({ filter }),
   setFocused: (focusedId) => set((s) => (s.focusedId === focusedId ? s : { focusedId })),
   highlight: (ids) => {
     if (highlightTimer) clearTimeout(highlightTimer);
-    set({ highlighted: Object.fromEntries(ids.map((id) => [id, true as const])), focusedId: ids[0] ?? null, filter: 'all' });
+    set({ highlighted: Object.fromEntries(ids.map((id) => [id, true as const])), focusedId: ids[0] ?? null, filter: 'all', view: 'active' });
     highlightTimer = setTimeout(() => set({ highlighted: {} }), HIGHLIGHT_MS);
   },
   clearHighlight: () => set({ highlighted: {} }),

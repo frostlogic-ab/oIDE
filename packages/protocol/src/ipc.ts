@@ -79,6 +79,25 @@ export const Commands = {
     z.array(AgentEvent),
   ),
   'agents.stopSubagent': cmd(z.object({ agentId: Id, subagentId: Id }), Ok),
+  // Archived agents: finished, merged, discarded or archived by hand. Row, summary and transcript stay.
+  /** Archive a finished or stopped agent (Wall tile, Focus header). Refused while it works (`conflict`). */
+  'agents.archive': cmd(z.object({ agentId: Id }), AgentSummary),
+  /** Back to the Wall; resumable when its session and worktree still exist (else `resumeBlocked`). */
+  'agents.unarchive': cmd(z.object({ agentId: Id }), AgentSummary),
+  /** Archived agents, most recently archived first, paged with `cursor` (the last item's `archived.at` and id). */
+  'agents.listArchived': cmd(
+    z.object({
+      projectId: Id.optional(),
+      query: z.string().max(200).optional(),
+      limit: z.number().int().min(1).max(200).default(50),
+      cursor: z.object({ at: z.number(), id: Id }).optional(),
+    }),
+    z.object({ items: z.array(AgentSummary), total: z.number().int().nonnegative(), nextCursor: z.object({ at: z.number(), id: Id }).optional() }),
+  ),
+  /** One archived agent (Focus opens it read-only, transcript from `agents.events`). */
+  'agents.getArchived': cmd(z.object({ agentId: Id }), AgentSummary),
+  /** Delete the agent's row and events after a native confirmation in main; `deleted: false` when the user cancels. */
+  'agents.deletePermanently': cmd(z.object({ agentId: Id }), z.object({ deleted: z.boolean() })),
 
   // Git / source control
   'git.sync': cmd(z.object({ projectId: Id }), SyncState),
@@ -239,6 +258,8 @@ export const Events = {
   'agents.batch': z.object({ events: z.array(AgentEvent) }),
   'agents.summary': AgentSummary,
   'agents.removed': z.object({ agentId: Id }),
+  /** An agent moved to (or changed in) the Archived view. It is no longer on the Wall. */
+  'agents.archived': AgentSummary,
   'projects.changed': z.array(Project),
   'scope.changed': Scope,
   'git.changed': z.object({ projectId: Id }),

@@ -1,4 +1,5 @@
 import { connectAgents, useAgents } from '../stores/agents';
+import { connectArchive } from '../stores/archive';
 import { connectCli, useCli } from '../stores/cli';
 import { connectExtensionHosts } from '../stores/extensionHosts';
 import { connectProjects, useProjects } from '../stores/projects';
@@ -10,6 +11,18 @@ import { isNotImplemented, oide } from './bridge';
 import { connectCommands, registerCoreCommands } from './coreCommands';
 import { connectExtensions } from '../extensions/store';
 import { connectKeybindings } from './keybindings';
+
+/**
+ * Dev only (Vite HMR). A hot update that re-runs a store module (an edit to it or to anything it
+ * imports, such as `packages/protocol`) gives every component a new, empty store, while
+ * `startStores()` ran once and keeps loading and feeding the old one. The Wall then said "No agents
+ * yet" with agents still running in main (2026-11-25). This module imports every store it wires,
+ * so it is the HMR boundary for all of them: reload the page, and `startStores()` rehydrates from
+ * main (`agents.list`, `agents.events`), like the reload after a renderer crash.
+ */
+if (import.meta.hot) {
+  import.meta.hot.accept(() => window.location.reload());
+}
 
 /** Agent summaries stream while agents work; one `usage.summary` per this window is plenty. */
 export const USAGE_REFRESH_DEBOUNCE_MS = 2_000;
@@ -39,7 +52,7 @@ export function connectUsage(refresh: () => Promise<unknown>, debounceMs = USAGE
     }, next.getTime() - now.getTime());
   };
   armMidnight();
-  const offs = [oide.on('agents.summary', schedule), oide.on('agents.removed', schedule), oide.on('projects.changed', schedule)];
+  const offs = [oide.on('agents.summary', schedule), oide.on('agents.removed', schedule), oide.on('agents.archived', schedule), oide.on('projects.changed', schedule)];
   return () => {
     if (timer) clearTimeout(timer);
     if (midnight) clearTimeout(midnight);
@@ -61,6 +74,7 @@ export function startStores(): () => void {
 
   const offs = [
     connectAgents(),
+    connectArchive(),
     connectProjects(),
     connectScope(),
     connectSettings(),
@@ -87,6 +101,7 @@ export function startStores(): () => void {
   void quiet(useSettings.getState().load());
   void quiet(useScope.getState().load());
   void quiet(useProjects.getState().load());
+  // Retries with backoff by itself and keeps `loadError` for the Wall while it fails.
   void quiet(useAgents.getState().load());
   void quiet(useCli.getState().detect());
   void quiet(useCli.getState().refreshUsage());
