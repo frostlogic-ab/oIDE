@@ -156,7 +156,13 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   `app.dock.setIcon(build/icon.png)` on macOS, so the taskbar/dock no longer shows Electron's icon.
   Packaged Windows/macOS use the exe/bundle icon; packaged Linux reads `<resources>/icon.png`
   (`linux.extraResources`). On Windows `app.setAppUserModelId('dev.oide.app')` (= `appId`) runs before
-  ready so dev and installed windows group under the oIDE icon.
+  ready so dev and installed windows group under the oIDE icon. Windows draws a window with an explicit
+  AUMID with the icon of the Start Menu shortcut that carries that AUMID, not the window icon. Electron
+  writes such a shortcut itself for toast notifications (`<exe ProductName>.lnk`, so `Electron.lnk` →
+  `electron.exe` in dev, with no icon), which made the dev taskbar show Electron's logo. Unpackaged Windows
+  runs therefore set `build/icon.ico` on every Start Menu shortcut that targets the running exe with our
+  AUMID (`brandAppShortcuts`, at ready and again 3 s later). Electron's rewrite check ignores the icon, so
+  it sticks. Packaged builds skip this: that shortcut targets `oide.exe`, which carries the oIDE icon.
 - Licences: `pnpm licenses:notices` (`tools/licenses/notices.mjs`) writes `THIRD_PARTY_NOTICES.md` for
   everything a packaged build ships (desktop `dependencies`, libraries bundled into `out/`, Electron);
   `pnpm licenses:check` fails on a licence outside the MIT-compatible allow-list or a stale file.
