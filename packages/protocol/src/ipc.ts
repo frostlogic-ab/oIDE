@@ -90,6 +90,25 @@ export const Commands = {
     z.array(AgentEvent),
   ),
   'agents.stopSubagent': cmd(z.object({ agentId: Id, subagentId: Id }), Ok),
+  // Archived agents: finished, merged, discarded or archived by hand. Row, summary and transcript stay.
+  /** Archive a finished or stopped agent (Wall tile, Focus header). Refused while it works (`conflict`). */
+  'agents.archive': cmd(z.object({ agentId: Id }), AgentSummary),
+  /** Back to the Wall; resumable when its session and worktree still exist (else `resumeBlocked`). */
+  'agents.unarchive': cmd(z.object({ agentId: Id }), AgentSummary),
+  /** Archived agents, most recently archived first, paged with `cursor` (the last item's `archived.at` and id). */
+  'agents.listArchived': cmd(
+    z.object({
+      projectId: Id.optional(),
+      query: z.string().max(200).optional(),
+      limit: z.number().int().min(1).max(200).default(50),
+      cursor: z.object({ at: z.number(), id: Id }).optional(),
+    }),
+    z.object({ items: z.array(AgentSummary), total: z.number().int().nonnegative(), nextCursor: z.object({ at: z.number(), id: Id }).optional() }),
+  ),
+  /** One archived agent (Focus opens it read-only, transcript from `agents.events`). */
+  'agents.getArchived': cmd(z.object({ agentId: Id }), AgentSummary),
+  /** Delete the agent's row and events after a native confirmation in main; `deleted: false` when the user cancels. */
+  'agents.deletePermanently': cmd(z.object({ agentId: Id }), z.object({ deleted: z.boolean() })),
 
   // Git / source control
   'git.sync': cmd(z.object({ projectId: Id }), SyncState),
@@ -102,7 +121,11 @@ export const Commands = {
   'git.overlaps': cmd(z.object({ projectId: Id }), z.array(OverlapWarning)),
   'git.diff': cmd(z.object({ agentId: Id }), z.array(FileDiff)),
   'git.mergeLocal': cmd(z.object({ agentId: Id }), z.object({ ok: z.boolean(), conflicts: z.array(z.string()).default([]) })),
-  'git.openPr': cmd(z.object({ agentId: Id, title: z.string(), body: z.string().default('') }), z.object({ url: z.string() })),
+  /** Idempotent: when the branch already has a pull request, it is returned instead of opening another one (`existing: true`). */
+  'git.openPr': cmd(
+    z.object({ agentId: Id, title: z.string(), body: z.string().default('') }),
+    z.object({ url: z.string(), number: z.number().int().optional(), state: z.enum(['open', 'draft', 'merged', 'closed']).optional(), existing: z.boolean().optional() }),
+  ),
   'git.reconcile': cmd(z.object({ projectId: Id, agentIds: z.tuple([Id, Id]) }), z.array(AgentSummary)),
   'git.pruneOrphans': cmd(z.object({ projectId: Id }), z.object({ removed: z.array(z.string()) })),
   /** Whether PRs can be opened for this project (gh installed and signed in). Source control hides PR state and Review disables Open pull request when false. */
@@ -257,6 +280,8 @@ export const Events = {
   'agents.batch': z.object({ events: z.array(AgentEvent) }),
   'agents.summary': AgentSummary,
   'agents.removed': z.object({ agentId: Id }),
+  /** An agent moved to (or changed in) the Archived view. It is no longer on the Wall. */
+  'agents.archived': AgentSummary,
   'projects.changed': z.array(Project),
   'scope.changed': Scope,
   'git.changed': z.object({ projectId: Id }),

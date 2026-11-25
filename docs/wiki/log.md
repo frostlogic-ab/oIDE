@@ -562,3 +562,22 @@ refuses files whose hash changed since the search. Protocol additions: `files.fi
 (`packages/protocol/src/search.ts`). 100k-file repo: index 0.7 s, queries 50-105 ms, rare-string
 search 2.0 s. Pages: [screen-files](pages/screen-files.md), [desktop-shell](pages/desktop-shell.md),
 [security](pages/security.md), [git-worktrees](pages/git-worktrees.md).
+
+## [2026-11-25] build | Archived agents and reload rehydration
+
+Bug: a live agent vanished from the Wall in a dev session ("No agents yet", "0 sessions · 0
+worktrees") while main kept running it. Reproduced against `electron-vite dev` with fake-claude: a
+Vite hot update that re-runs a store module (an edit to `packages/protocol`, which every store
+imports) gives the components a new, empty agents store, while `startStores()` ran once and keeps
+loading and feeding the old one. `lib/boot.ts` is now the HMR boundary for the stores it wires and
+reloads the page. Hardening: `agents.load()` retries with backoff and the Wall shows the error with
+Retry; `repairAgentSummary` (protocol) repairs or drops a summary that fails the contract instead of
+failing `agents.list`; `AgentsRepo.list()` skips unreadable rows. Archived agents: merge, a PR merged
+on GitHub, discard, `done` and a new Archive action move agents to Wall › Archived (migration 3,
+`agents.archive` / `unarchive` / `listArchived` / `getArchived` / `deletePermanently`, event
+`agents.archived`), read-only Focus, Interrupted tiles after a restart or crash, archived transcripts
+compacted (not deleted) after 30 days. Pull requests: `summary.pr`, "View PR #N" with state,
+idempotent `git.openPr`, `PrWatcher` (open/draft only, after fetch and on focus, backoff). ADR
+[0010](../adr/0010-archive-agents-instead-of-deleting.md). Pages:
+[screen-wall](pages/screen-wall.md#archived-agents), [agent-supervisor](pages/agent-supervisor.md),
+[storage](pages/storage.md).

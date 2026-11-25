@@ -332,6 +332,8 @@ async function start(): Promise<void> {
       setTimeout(() => services.flushNotices(), 500);
       void reportStart();
     });
+    // Open pull requests are looked at again when the user comes back (throttled, see pr-watch.ts).
+    win.on('focus', () => services.git.onWindowFocus());
     watchRenderer(win.webContents, {
       log,
       reloadApp: () => void loadApp(win).catch((err) => log.error('window reload failed', err)),

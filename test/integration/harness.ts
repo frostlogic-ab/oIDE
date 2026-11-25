@@ -76,6 +76,8 @@ export interface HarnessOptions {
   onEvent?: (event: EventName, payload: unknown) => void;
   /** Keep events in `events` (default true; long soak runs turn it off to measure memory). */
   keepEvents?: boolean;
+  /** A fake GitHub CLI (pull request state) instead of the user's `gh`. */
+  gh?: import('../../packages/git/src/index.js').GhCli;
 }
 
 export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> {
@@ -126,7 +128,7 @@ export async function startHarness(opts: HarnessOptions = {}): Promise<Harness> 
     background: false,
     ...opts.platform,
   };
-  const services = await createCoreServices({ ctx, platform, terminals, ...(opts.mcpFails ? { startMcp: () => Promise.reject(new Error('listen EACCES 127.0.0.1')) } : {}) });
+  const services = await createCoreServices({ ctx, platform, terminals, ...(opts.gh ? { gh: opts.gh } : {}), ...(opts.mcpFails ? { startMcp: () => Promise.reject(new Error('listen EACCES 127.0.0.1')) } : {}) });
   const router = new IpcRouter({ validateOutput: true, log: quiet });
   registerDomainHandlers(router, services, ctx);
   const dispatch = (command: string, input: unknown) => router.dispatch({ command, input }, { senderId: 1, frameUrl: 'file:///app/index.html' });

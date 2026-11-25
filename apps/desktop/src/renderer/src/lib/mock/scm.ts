@@ -574,7 +574,13 @@ export function createScmHandlers({ agents, emit, fallbackDiffs = {}, artifacts 
       const url = `https://github.com/you/${w.projectId}/pull/${number}`;
       w.pr = { state: 'open', number, url };
       changed(w.projectId);
-      return { url };
+      const a = agents.get(agentId);
+      if (a) {
+        const next = { ...a, pr: { number, url, state: 'open' as const }, updatedAt: Date.now() };
+        agents.set(agentId, next);
+        emit('agents.summary', next);
+      }
+      return { url, number, state: 'open' as const };
     },
     'git.reconcile': ({ projectId, agentIds }) => {
       const [a, b] = agentIds.map((id) => agents.get(id)?.title ?? id);

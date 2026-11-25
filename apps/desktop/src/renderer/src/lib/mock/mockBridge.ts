@@ -22,7 +22,7 @@ import * as fx from './fixtures';
 import { focusDiffs, focusEvents, focusHandlers, patchFocusAgent, startFocusDemo } from './focus';
 import { libraryHandlers, seedLibrarySettings } from './library';
 import { createScmHandlers } from './scm';
-import { seedAgents, seedProjects, wallHandlers, wallMockMode } from './wall';
+import { seedAgents, seedArchived, seedProjects, wallHandlers, wallMockMode } from './wall';
 
 type Listener = (payload: unknown) => void;
 
@@ -39,6 +39,8 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
   const wallMode = wallMockMode();
   const agents = new Map<string, AgentSummary>(seedAgents(fx.agents, wallMode).map((a) => [a.id, structuredClone(patchFocusAgent(a))]));
   const events = new Map<string, AgentEvent[]>(Object.entries({ ...fx.events, ...focusEvents }).map(([k, v]) => [k, [...v]]));
+  // Wall › Archived: a few finished agents (dev:web), newest first.
+  const archived = new Map<string, AgentSummary>(seedArchived(fx.agents).map((a) => [a.id, a]));
   let scope: Scope = 'all';
   let settings = seedLibrarySettings(structuredClone(fx.settings));
   const latency = opts.latency ?? 40;
@@ -119,6 +121,48 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
     'agents.resume': ({ agentId }) => (updateAgent(agentId, { status: 'running' }), { ok: true as const }),
     'agents.stop': ({ agentId }) => (updateAgent(agentId, { status: 'stopped' }), { ok: true as const }),
     'agents.setMode': ({ agentId, mode }) => (updateAgent(agentId, { mode }), { ok: true as const }),
+    'agents.archive': ({ agentId }) => {
+      const a = agents.get(agentId);
+      if (!a) throw new Error(`[not_found] No agent ${agentId}`);
+      if (['running', 'starting', 'needs-permission', 'queued'].includes(a.status)) throw new Error(`[conflict] "${a.title}" is still working. Stop it first, then archive it.`);
+      const s: AgentSummary = { ...a, archived: { at: Date.now(), reason: a.status === 'done' ? 'completed' : 'archived-by-user', worktreeRemoved: false }, updatedAt: Date.now() };
+      agents.delete(agentId);
+      archived.set(agentId, s);
+      emit('agents.archived', s);
+      return s;
+    },
+    'agents.unarchive': ({ agentId }) => {
+      const a = archived.get(agentId);
+      if (!a) throw new Error(`[not_found] No archived agent ${agentId}`);
+      const { archived: info, ...rest } = a;
+      const s: AgentSummary = { ...rest, status: 'stopped', ...(info?.worktreeRemoved ? { resumeBlocked: 'Its worktree was deleted, so this session cannot be resumed. Open it to read the transcript.' } : {}), updatedAt: Date.now() };
+      archived.delete(agentId);
+      agents.set(agentId, s);
+      emit('agents.summary', s);
+      return s;
+    },
+    'agents.listArchived': ({ projectId, query, limit = 50, cursor }) => {
+      const q = query?.trim().toLowerCase();
+      const all = [...archived.values()]
+        .filter((a) => (!projectId || a.projectId === projectId) && (!q || a.title.toLowerCase().includes(q)))
+        .sort((a, b) => b.archived!.at - a.archived!.at || (b.id < a.id ? -1 : 1));
+      const start = cursor ? all.findIndex((a) => a.id === cursor.id) + 1 : 0;
+      const items = all.slice(start, start + limit);
+      const last = items[items.length - 1];
+      return { items, total: all.length, ...(start + limit < all.length && last ? { nextCursor: { at: last.archived!.at, id: last.id } } : {}) };
+    },
+    'agents.getArchived': ({ agentId }) => {
+      const a = archived.get(agentId);
+      if (!a) throw new Error(`[not_found] No archived agent ${agentId}`);
+      return a;
+    },
+    'agents.deletePermanently': ({ agentId }) => {
+      if (!window.confirm('Delete this agent permanently? Its transcript is deleted from oIDE.')) return { deleted: false };
+      archived.delete(agentId);
+      agents.delete(agentId);
+      emit('agents.removed', { agentId });
+      return { deleted: true };
+    },
     'artifacts.list': ({ projectId, kind }) => fx.artifacts.filter((a) => (!projectId || a.projectId === projectId) && (!kind || a.kind === kind)),
     'settings.get': () => settings,
     'settings.update': ({ patch }) => {

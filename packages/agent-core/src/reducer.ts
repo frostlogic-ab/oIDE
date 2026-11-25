@@ -158,6 +158,8 @@ export class AgentReducer {
   private readonly windows: ContextWindowBook;
   private lastStderr = '';
   private leadUsage: TokenUsage = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
+  /** The CLI's `total_cost_usd` is cumulative per process; this is the last value of the current one. */
+  private processCost = 0;
 
   constructor(initial: AgentSummary, opts: ReducerOptions = {}) {
     this.summary = { ...initial };
@@ -227,6 +229,7 @@ export class AgentReducer {
         if (e.status === 'starting' && e.detail) pushActivity(clip(e.detail));
         break;
       case 'init':
+        this.processCost = 0;
         if (e.sessionId) s.sessionId = e.sessionId;
         if (e.model) {
           s.model = e.model;
@@ -301,6 +304,12 @@ export class AgentReducer {
         {
           const w = this.resultWindow(s.model, e.contextWindows, e.contextWindow);
           if (w) s.contextWindow = w;
+        }
+        if (e.totalCostUsd !== undefined && e.totalCostUsd >= 0) {
+          // A smaller total than before means a new process whose init we did not see.
+          const delta = e.totalCostUsd >= this.processCost ? e.totalCostUsd - this.processCost : e.totalCostUsd;
+          this.processCost = e.totalCostUsd;
+          s.costUsd = Math.round(((s.costUsd ?? 0) + delta) * 1e6) / 1e6;
         }
         dropEphemeral();
         s.status = this.statusAfterResult(s, e);

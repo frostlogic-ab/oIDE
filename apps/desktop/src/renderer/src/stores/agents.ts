@@ -1,14 +1,17 @@
 import { useEffect, useMemo } from 'react';
 import { create } from 'zustand';
 import { NEEDS_YOU, type AgentEvent, type AgentSummary, type Scope } from '@oide/protocol';
-import { invokeOr, oide } from '../lib/bridge';
+import { invokeOr, ipcErrorMessage, oide } from '../lib/bridge';
 
 /**
  * Agent state, fed by main:
  * - `agents.summary` (one AgentSummary per change) → `byId`
  * - `agents.batch` (normalized AgentEvents, one batch per ~16 ms) → `events[agentId]`, a live tail
  *   capped at MAX_EVENTS_PER_AGENT. Full history comes from `agents.events` (paged) in Focus.
- * - `agents.removed` → delete
+ * - `agents.removed` → delete; `agents.archived` → off the Wall (stores/archive.ts lists it)
+ *
+ * `load()` (boot, and every reload of the window) retries with backoff and keeps `loadError` set
+ * while it fails, so the Wall shows the problem instead of a silent "No agents yet".
  */
 export const MAX_EVENTS_PER_AGENT = 2000;
 /**
@@ -20,6 +23,9 @@ export const MAX_RETAINED_EVENTS = 10_000;
 
 /** Shown on the tile and in Focus when a prompt was still waiting for an answer as oIDE quit (it was denied then). */
 export const INTERRUPTED_PERMISSION_NOTE = 'oIDE closed while waiting for your answer; send a message to continue.';
+
+/** Waits between `agents.list` attempts; after the last one `load()` gives up until Retry. */
+export const LOAD_RETRY_DELAYS_MS = [250, 1000, 2000, 4000, 8000];
 
 export interface AgentCounts {
   total: number;
@@ -37,7 +43,12 @@ interface AgentsState {
   /** Per-agent cap while history is loaded (default MAX_EVENTS_PER_AGENT). */
   limits: Record<string, number>;
   loaded: boolean;
-  load(): Promise<void>;
+  /** Why the last `agents.list` failed (shown on the Wall); null once it succeeds. */
+  loadError: string | null;
+  /** A load (with its retries) is in flight. */
+  loading: boolean;
+  /** Load from main, retrying with backoff. `delays` is a test seam. */
+  load(opts?: { delays?: readonly number[] }): Promise<void>;
   applySummary(summary: AgentSummary): void;
   applyBatch(events: AgentEvent[]): void;
   remove(agentId: string): void;
@@ -53,18 +64,58 @@ function sortOrder(byId: Record<string, AgentSummary>): string[] {
     .map((a) => a.id);
 }
 
+/** Bumped by each load(); an older load that finishes late is dropped. */
+let loadGeneration = 0;
+/** Ids removed or archived while a load was in flight: its (older) list must not bring them back. */
+const goneDuringLoad = new Set<string>();
+
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 export const useAgents = create<AgentsState>()((set, get) => ({
   byId: {},
   order: [],
   events: {},
   limits: {},
   loaded: false,
-  load: async () => {
-    const list = await invokeOr('agents.list', undefined, []);
-    const byId = Object.fromEntries(list.map((a) => [a.id, a]));
-    set({ byId, order: sortOrder(byId), loaded: true });
+  loadError: null,
+  loading: false,
+  load: async (opts) => {
+    const gen = ++loadGeneration;
+    goneDuringLoad.clear();
+    const delays = opts?.delays ?? LOAD_RETRY_DELAYS_MS;
+    set({ loading: true });
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const list = await invokeOr('agents.list', undefined, []);
+        if (gen !== loadGeneration) return;
+        // Summaries that arrived while the list was in flight are newer than it: keep them.
+        const live = get().byId;
+        const byId: Record<string, AgentSummary> = {};
+        for (const a of list) if (!a.archived && !goneDuringLoad.has(a.id)) byId[a.id] = a;
+        for (const [id, a] of Object.entries(live)) if (!byId[id] || a.updatedAt > byId[id]!.updatedAt) byId[id] = a;
+        set({ byId, order: sortOrder(byId), loaded: true, loadError: null, loading: false });
+        return;
+      } catch (err) {
+        if (gen !== loadGeneration) return;
+        const message = ipcErrorMessage(err);
+        console.warn(`[oide] agents.list failed (attempt ${attempt + 1})`, err);
+        const delay = delays[attempt];
+        if (delay === undefined) {
+          set({ loadError: message, loading: false });
+          return;
+        }
+        set({ loadError: message });
+        await wait(delay);
+        if (gen !== loadGeneration) return;
+      }
+    }
   },
   applySummary: (summary) => {
+    // Archived agents are not Wall agents (stores/archive.ts); a stray one must not add a tile.
+    if (summary.archived) {
+      if (get().byId[summary.id]) get().remove(summary.id);
+      return;
+    }
     const prev = get().byId;
     const isNew = !prev[summary.id];
     const byId = { ...prev, [summary.id]: summary };
@@ -91,6 +142,7 @@ export const useAgents = create<AgentsState>()((set, get) => ({
     set({ events });
   },
   remove: (agentId) => {
+    if (get().loading) goneDuringLoad.add(agentId);
     const byId = { ...get().byId };
     delete byId[agentId];
     const events = { ...get().events };
@@ -225,6 +277,7 @@ export function connectAgents(): () => void {
     oide.on('agents.summary', (s) => useAgents.getState().applySummary(s)),
     oide.on('agents.batch', ({ events }) => useAgents.getState().applyBatch(events)),
     oide.on('agents.removed', ({ agentId }) => useAgents.getState().remove(agentId)),
+    oide.on('agents.archived', (s) => useAgents.getState().remove(s.id)),
   ];
   return () => offs.forEach((off) => off());
 }

@@ -1,11 +1,12 @@
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
+import { confirmNative, safeDialogText } from '../security/confirm.js';
 import type { Services } from '../services/index.js';
 
 const OK = { ok: true as const };
 
 /** agents.* */
-export function registerAgentHandlers(router: IpcRouter, s: Services, _ctx: MainContext): void {
+export function registerAgentHandlers(router: IpcRouter, s: Services, ctx: MainContext): void {
   const a = s.agents;
   router.register('agents.list', () => a.list());
   router.register('agents.spawn', (spec) => a.spawn(spec));
@@ -34,8 +35,7 @@ export function registerAgentHandlers(router: IpcRouter, s: Services, _ctx: Main
     return OK;
   });
   router.register('agents.resume', async ({ agentId }) => {
-    a.require(agentId);
-    await a.supervisor.resume(agentId);
+    await a.resume(agentId);
     return OK;
   });
   router.register('agents.compact', ({ agentId }) => {
@@ -46,6 +46,28 @@ export function registerAgentHandlers(router: IpcRouter, s: Services, _ctx: Main
   router.register('agents.remove', async ({ agentId, deleteWorktree }) => {
     await a.remove(agentId, deleteWorktree);
     return OK;
+  });
+  // Archived agents (Wall › Archived, Focus read-only).
+  router.register('agents.archive', ({ agentId }) => a.archive(agentId));
+  router.register('agents.unarchive', ({ agentId }) => a.unarchive(agentId));
+  router.register('agents.listArchived', (input) => a.listArchived(input));
+  router.register('agents.getArchived', ({ agentId }) => a.getArchived(agentId));
+  // A renderer-side confirm proves nothing: main asks natively, Cancel is the default.
+  router.register('agents.deletePermanently', async ({ agentId }) => {
+    const live = a.supervisor.get(agentId);
+    const rec = live ? undefined : s.store.agents.get(agentId);
+    const title = live?.title ?? rec?.summary?.title ?? rec?.title;
+    if (!title) throw new IpcError(`Unknown agent ${agentId}`, 'not_found');
+    const ok = await confirmNative(ctx, {
+      title: 'Delete agent permanently',
+      message: `Delete "${safeDialogText(title, { max: 80 })}" permanently?`,
+      detail: 'Its transcript and history are deleted from oIDE, and its worktree folder too if it still exists. This cannot be undone. Commits already merged stay in your project.',
+      confirmLabel: 'Delete permanently',
+      danger: true,
+    });
+    if (!ok) return { deleted: false };
+    await a.deletePermanently(agentId);
+    return { deleted: true };
   });
   router.register('agents.events', ({ agentId, beforeSeq, limit }) => {
     if (!a.supervisor.get(agentId) && !s.store.agents.get(agentId)) throw new IpcError(`Unknown agent ${agentId}`, 'not_found');

@@ -124,27 +124,80 @@ export class EventsRepo {
   }
 
   /**
-   * Turn events older than `days` into one summary row per agent (counts by type, tools used,
-   * token totals, last assistant text and result) and delete them. Default retention is 30 days.
+   * Retention, run at startup. Events older than `days` (default 30):
+   *
+   * - Agents on the Wall: turned into one summary row per agent (counts by type, tools used, token
+   *   totals, last assistant text and result) and deleted, as before.
+   * - Archived agents keep a readable transcript (Focus opens them read-only): their old events are
+   *   compacted, not deleted. Bookkeeping events nobody reads back (usage, context and plan meters,
+   *   background-task counts, stderr, unknown) go into a summary row and are deleted; the rest stay
+   *   without their raw CLI JSON, and tool output is cut to TRIMMED_TOOL_OUTPUT characters.
    */
-  compactOlderThan(days = 30, now = Date.now()): { agents: number; removed: number } {
+  compactOlderThan(days = 30, now = Date.now()): { agents: number; removed: number; trimmed: number } {
     const cutoff = now - days * DAY;
     return this.d.transaction(() => {
-      const agents = (this.d.db.prepare('SELECT DISTINCT agent_id FROM events WHERE ts < ?').all(cutoff) as Row[]).map((r) => String(r.agent_id));
+      const agents = (
+        this.d.db.prepare('SELECT DISTINCT e.agent_id AS agent_id, a.archived_at AS archived_at FROM events e JOIN agents a ON a.id = e.agent_id WHERE e.ts < ?').all(cutoff) as Row[]
+      ).map((r) => ({ id: String(r.agent_id), archived: r.archived_at !== null && r.archived_at !== undefined }));
       let removed = 0;
-      for (const agentId of agents) {
+      let trimmed = 0;
+      let touched = 0;
+      for (const { id: agentId, archived } of agents) {
+        if (archived) {
+          const r = this.compactArchived(agentId, cutoff);
+          removed += r.removed;
+          trimmed += r.trimmed;
+          if (r.removed || r.trimmed) touched++;
+          continue;
+        }
         const rows = this.d.db.prepare('SELECT * FROM events WHERE agent_id = ? AND ts < ? ORDER BY seq ASC').all(agentId, cutoff) as Row[];
         if (!rows.length) continue;
-        const summary = summarize(agentId, rows.map(parseEvent));
-        this.d.db
-          .prepare('INSERT INTO event_summaries (agent_id, from_seq, to_seq, from_ts, to_ts, count, data) VALUES (?, ?, ?, ?, ?, ?, ?)')
-          .run(agentId, summary.fromSeq, summary.toSeq, summary.fromTs, summary.toTs, summary.count, JSON.stringify(summary));
+        this.insertSummary(summarize(agentId, rows.map(parseEvent)));
         removed += Number(this.d.db.prepare('DELETE FROM events WHERE agent_id = ? AND ts < ?').run(agentId, cutoff).changes);
+        touched++;
       }
-      return { agents: agents.length, removed };
+      return { agents: touched, removed, trimmed };
     });
   }
+
+  private insertSummary(summary: EventSummary): void {
+    this.d.db
+      .prepare('INSERT INTO event_summaries (agent_id, from_seq, to_seq, from_ts, to_ts, count, data) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(summary.agentId, summary.fromSeq, summary.toSeq, summary.fromTs, summary.toTs, summary.count, JSON.stringify(summary));
+  }
+
+  /** See compactOlderThan. Idempotent: a second run finds nothing left to do. */
+  private compactArchived(agentId: string, cutoff: number): { removed: number; trimmed: number } {
+    const noiseList = [...ARCHIVE_NOISE].map(() => '?').join(',');
+    const noise = this.d.db.prepare(`SELECT * FROM events WHERE agent_id = ? AND ts < ? AND type IN (${noiseList}) ORDER BY seq ASC`).all(agentId, cutoff, ...ARCHIVE_NOISE) as Row[];
+    let removed = 0;
+    if (noise.length) {
+      this.insertSummary(summarize(agentId, noise.map(parseEvent)));
+      removed = Number(this.d.db.prepare(`DELETE FROM events WHERE agent_id = ? AND ts < ? AND type IN (${noiseList})`).run(agentId, cutoff, ...ARCHIVE_NOISE).changes);
+    }
+    const heavy = this.d.db
+      .prepare("SELECT seq, type, data FROM events WHERE agent_id = ? AND ts < ? AND (raw IS NOT NULL OR (type = 'tool-result' AND length(data) > ?))")
+      .all(agentId, cutoff, TRIMMED_TOOL_OUTPUT + 200) as Row[];
+    const update = this.d.db.prepare('UPDATE events SET raw = NULL, data = ? WHERE agent_id = ? AND seq = ?');
+    for (const r of heavy) {
+      let data = String(r.data);
+      if (r.type === 'tool-result') {
+        const ev = fromJson<Record<string, unknown>>(data);
+        if (ev && typeof ev.content === 'string' && ev.content.length > TRIMMED_TOOL_OUTPUT) {
+          data = JSON.stringify({ ...ev, content: `${ev.content.slice(0, TRIMMED_TOOL_OUTPUT)}
+… (trimmed after 30 days)` });
+        }
+      }
+      update.run(data, agentId, num(r.seq)!);
+    }
+    return { removed, trimmed: heavy.length };
+  }
 }
+
+/** Event types of archived agents that compaction deletes (into a summary row) after the retention period. */
+export const ARCHIVE_NOISE: readonly string[] = ['usage', 'context-usage', 'background-tasks', 'plan-usage', 'stderr', 'unknown'];
+/** Tool output kept per tool-result event of an archived agent after the retention period. */
+export const TRIMMED_TOOL_OUTPUT = 4000;
 
 export function summarize(agentId: string, events: AgentEvent[]): EventSummary {
   const byType: Record<string, number> = {};

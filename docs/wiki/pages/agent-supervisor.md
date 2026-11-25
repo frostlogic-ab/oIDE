@@ -73,7 +73,16 @@ Injected interfaces (`ports.ts`):
 - Rate limit: status `rate-limited` with `rateLimitResetAt`; the supervisor never retries by itself.
 - Crash: non-zero exit → `error` with `exitCode` and the last stderr line; Resume respawns with `--resume`.
 - Pause: interrupt the turn, status `paused`, hold messages; resume flushes them (or respawns if needed).
-- Restore: live statuses become `stopped` (their process is gone), queued agents re-enter the queue.
+- Restore: live statuses become `stopped` (their process is gone) with `summary.interrupted`
+  (`restart`, `crash` or `mcp-down`, from `RestoreEntry.interruption`), cleared once it runs again;
+  queued agents re-enter the queue; archived summaries are skipped.
+- Archive: `archive(agentId, { reason, mergeCommit?, deleteWorktree? })` denies pending prompts, ends
+  the process, optionally removes the worktree, stamps `summary.archived`, saves it and drops the
+  agent (event `archived`). `unarchive({ spec, summary, lastSeq, resumeBlocked? })` brings it back
+  stopped. `resume`/`send` throw `LaunchError` while `summary.resumeBlocked` is set (worktree gone).
+  See [screen-wall](screen-wall.md#archived-agents).
+- `setPr(agentId, pr)` (main's gh lookups) and `summary.costUsd` (the CLI's per-process cumulative
+  `total_cost_usd`, summed across processes by the reducer).
 
 ## Status derivation (reducer)
 

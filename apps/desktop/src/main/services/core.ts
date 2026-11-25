@@ -153,8 +153,10 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     settings,
     worktrees,
     projects,
-    agents: { list: () => agents.list(), get: (id) => agents.supervisor.get(id), setDiff: (id, d) => agents.supervisor.setDiff(id, d) },
-    removeAgent: (id) => agents.remove(id, true),
+    agents: { list: () => agents.list(), get: (id) => agents.supervisor.get(id), setDiff: (id, d) => agents.supervisor.setDiff(id, d), setPr: (id, pr) => agents.supervisor.setPr(id, pr) },
+    ...(platform.isOnline ? { isOnline: platform.isOnline } : {}),
+    archiveMerged: async (id, o) => void (await agents.archiveAgent(id, { reason: 'merged', ...o })),
+    removeWorktreeOf: (id) => agents.removeWorktreeOf(id),
     watch: platform.background ? (opts.watch ?? parcelWatch) : opts.watch,
     background: platform.background,
     ...(opts.gh ? { gh: opts.gh } : {}),
@@ -202,7 +204,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     for (const a of agents.list()) if (a.projectId === p.id && a.worktreePath) git.watch(a.worktreePath, p.id);
   });
   projects.onRemoved(async (p) => {
-    for (const a of agents.list().filter((x) => x.projectId === p.id)) await agents.remove(a.id, false).catch(() => undefined);
+    // The project's rows are deleted with it: a hard delete, not an archive.
+    for (const a of agents.list().filter((x) => x.projectId === p.id)) await agents.purge(a.id, false).catch(() => undefined);
     await git.unwatchProject(p.id);
   });
 

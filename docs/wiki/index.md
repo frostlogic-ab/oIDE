@@ -38,7 +38,7 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 
 ## Screens
 
-- [pages/screen-wall.md](pages/screen-wall.md): Mission Control wall (Main): tiles per status, inline permission / reply / review, subagent chips, compact confirm, J/K/N/Y/D keys.
+- [pages/screen-wall.md](pages/screen-wall.md): Mission Control wall (Main): tiles per status, inline permission / reply / review, subagent chips, compact confirm, J/K/N/Y/D keys; Archived agents, Interrupted, pull request lifecycle, reload rehydration.
 - [pages/screen-focus.md](pages/screen-focus.md): Focus: virtualized paged transcript, subagent views by parentToolUseId, pinned permission prompt, composer with / commands and artifacts, inspector (Plan, Subagents, Changes, Artifacts, Terminal).
 - [pages/screen-spawn.md](pages/screen-spawn.md): Spawn agent: fields → AgentSpec, presets and model slots, Bypass rules, CLI feature gating.
 - [pages/screen-source-control.md](pages/screen-source-control.md): Source control: project cards (sync, Commit…, agent worktrees, PR state, recent commits), Ready to review, overlap heads-up, unpushed notice; shared git store.
@@ -57,4 +57,4 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 
 ## Decisions
 
-- [../adr/](../adr/): ADRs. 0001 node:sqlite, 0002 TS-source packages, 0003 @lydell/node-pty, 0004 artifact versions as numbered snapshots, 0005 whiteboards as a read-only render in v1 (since overtaken: Excalidraw is now embedded as the editor, see [screen-artifacts](pages/screen-artifacts.md)), 0006 pull requests through `gh` from main, 0007 plan usage meters from rate-limit events, 0008 extension language servers deferred, 0009 extension artifact types use the existing storage kinds.
+- [../adr/](../adr/): ADRs. 0001 node:sqlite, 0002 TS-source packages, 0003 @lydell/node-pty, 0004 artifact versions as numbered snapshots, 0005 whiteboards as a read-only render in v1 (since overtaken: Excalidraw is now embedded as the editor, see [screen-artifacts](pages/screen-artifacts.md)), 0006 pull requests through `gh` from main, 0007 plan usage meters from rate-limit events, 0008 extension language servers deferred, 0009 extension artifact types use the existing storage kinds, 0010 merged and discarded agents are archived, not deleted.

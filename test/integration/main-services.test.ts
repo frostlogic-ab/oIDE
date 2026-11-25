@@ -132,11 +132,11 @@ describe('main services (plain Node, fake-claude)', () => {
     expect(readFileSync(join(repo, 'feature.txt'), 'utf8')).toBe('feature\n');
     const log = await h.call('git.log', { projectId: project.id, ref: 'HEAD', limit: 5 });
     expect(log.some((l) => l.agent === 'Add feature')).toBe(true);
-    // Cleanup "Right away": worktree and branch removed, agent gone.
+    // Cleanup "Right away": worktree and branch removed; the agent leaves the Wall for the Archived view.
     await waitFor(() => !existsSync(ready.worktreePath!) && true, 'worktree removed');
     expect(git(repo, 'branch', '--list', 'oide/add-feature')).toBe('');
     expect(await agent(h, a!.id)).toBeUndefined();
-    expect(h.eventsOf('agents.removed').some((e) => e.agentId === a!.id)).toBe(true);
+    expect(h.eventsOf('agents.archived').find((e) => e.id === a!.id)?.archived).toMatchObject({ reason: 'merged', mergeCommit: git(repo, 'rev-parse', 'HEAD'), worktreeRemoved: true });
     expect(h.eventsOf('agents.batch').length).toBeGreaterThan(0);
     const usage = await h.call('usage.summary', undefined);
     expect(usage.projectsOpen).toBe(1);
