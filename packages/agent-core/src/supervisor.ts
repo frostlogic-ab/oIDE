@@ -4,8 +4,10 @@ import {
   AgentSpec,
   type AgentEventDraft,
   type AgentSpecInput,
+  type AgentInterruption,
   type AgentStatus,
   type AgentSummary,
+  type ArchiveReason,
   type MessageAttachment,
   type PermissionAnswer,
   type PermissionMode,
@@ -16,7 +18,7 @@ import { buildLaunch, cliPermissionMode, subagentTiers, LaunchError } from './ar
 import { ClaudeCliDriver, rawJsonOf, type AgentDriver, type AgentHandle } from './driver.js';
 import { ContextWindowBook } from './context-window.js';
 import { AgentReducer, createSummary } from './reducer.js';
-import { messageText } from './messages.js';
+import { mergeConflictsText, messageText } from './messages.js';
 import type { AttachmentProvider, EventSink, PermissionBroker, SecretProvider, SettingsProvider, WorktreeProvider, WorktreeResult } from './ports.js';
 
 /**
@@ -43,7 +45,19 @@ export interface SupervisorEvents {
   event: (e: AgentEvent) => void;
   summary: (s: AgentSummary) => void;
   removed: (agentId: string) => void;
+  /** The agent left the supervisor for the Archived view; `s.archived` is set. */
+  archived: (s: AgentSummary) => void;
 }
+
+export interface ArchiveOptions {
+  reason: ArchiveReason;
+  mergeCommit?: string;
+  /** Delete the worktree too (Settings › Agents › Clean up, or Remove worktree). */
+  deleteWorktree?: boolean;
+}
+
+/** Shown on a tile instead of Resume when the worktree the session ran in is gone. */
+export const WORKTREE_GONE = 'Its worktree was deleted, so this session cannot be resumed. Open it to read the transcript.';
 
 /** Statuses that hold a "running" slot. Idle agents (has-question, ready-for-review) do not. */
 const ACTIVE: ReadonlySet<AgentStatus> = new Set(['starting', 'running', 'needs-permission']);
@@ -80,6 +94,8 @@ export interface RestoreEntry {
   summary: AgentSummary;
   /** Highest stored seq, so new events continue the sequence. */
   lastSeq?: number;
+  /** Set when the agent was working at quit or crash: why its process is gone (default `restart` for a live status). */
+  interruption?: AgentInterruption['reason'];
 }
 
 function slugify(s: string): string {
@@ -95,7 +111,7 @@ function slugify(s: string): string {
 export class Supervisor {
   private readonly agents = new Map<string, AgentRecord>();
   private readonly queue: QueueEntry[] = [];
-  private readonly listeners: { [K in keyof SupervisorEvents]: Set<SupervisorEvents[K]> } = { event: new Set(), summary: new Set(), removed: new Set() };
+  private readonly listeners: { [K in keyof SupervisorEvents]: Set<SupervisorEvents[K]> } = { event: new Set(), summary: new Set(), removed: new Set(), archived: new Set() };
   private readonly driver: AgentDriver;
   /** Context windows the CLI reported, shared so one agent's result fixes the next agent's first turn. */
   private readonly contextWindows = new ContextWindowBook();
@@ -326,6 +342,8 @@ export class Supervisor {
         ...(this.deps.log ? { log: this.deps.log } : {}),
       });
       rec.handle = handle;
+      // Running again: no longer "Interrupted" (the next status event publishes this).
+      delete rec.reducer.summary.interrupted;
       const wasStarted = rec.started;
       rec.started = true;
       void this.consume(rec, handle);
@@ -448,6 +466,7 @@ export class Supervisor {
   send(agentId: string, msg: UserMessage): void {
     const rec = this.require(agentId);
     const status = rec.reducer.summary.status;
+    if (rec.reducer.summary.resumeBlocked && !rec.handle?.alive) throw new LaunchError(rec.reducer.summary.resumeBlocked);
     if (status === 'paused' || status === 'queued' || rec.launching) {
       rec.held.push(msg);
       return;
@@ -463,9 +482,19 @@ export class Supervisor {
   private deliver(rec: AgentRecord, msg: UserMessage): void {
     const isCompact = msg.kind === 'command' && msg.command.trim() === '/compact';
     rec.handle!.send(msg);
-    const text = msg.kind === 'text' ? msg.text : msg.kind === 'command' ? msg.command : msg.kind === 'review-feedback' ? `Review feedback (${msg.comments.length} comments)` : `Artifact ${msg.artifactId}`;
+    const text =
+      msg.kind === 'text'
+        ? msg.text
+        : msg.kind === 'command'
+          ? msg.command
+          : msg.kind === 'review-feedback'
+            ? `Review feedback (${msg.comments.length} comments)`
+            : msg.kind === 'merge-conflicts'
+              ? mergeConflictsText(msg)
+              : `Artifact ${msg.artifactId}`;
     const attachments = msg.kind === 'text' || msg.kind === 'artifact' ? msg.attachments : undefined;
-    this.emitDraft(rec, { type: 'user-text', text, ...(attachments?.length ? { attachments } : {}) });
+    // Merge conflicts are written by oIDE: the transcript shows the whole message, marked "Sent by oIDE".
+    this.emitDraft(rec, { type: 'user-text', text, ...(attachments?.length ? { attachments } : {}), ...(msg.kind === 'merge-conflicts' ? { origin: 'oide' as const } : {}) });
     this.emitDraft(rec, { type: 'status', status: 'running', ...(isCompact ? { detail: 'compact' } : {}) });
   }
 
@@ -564,6 +593,7 @@ export class Supervisor {
       return;
     }
     if (ACTIVE.has(status) || status === 'queued') return;
+    if (rec.reducer.summary.resumeBlocked) throw new LaunchError(rec.reducer.summary.resumeBlocked);
     rec.idleStatus = status === 'paused' || status === 'stopped' || status === 'error' || status === 'done' ? IDLE_AFTER_RESUME : status;
     this.enqueueResume(rec);
   }
@@ -576,6 +606,27 @@ export class Supervisor {
     if (cur && diff && cur.files === diff.files && cur.additions === diff.additions && cur.deletions === diff.deletions) return;
     if (diff) rec.reducer.summary.diff = diff;
     else delete rec.reducer.summary.diff;
+    this.publishSummary(rec);
+  }
+
+  /** The branch's pull request (main's gh lookups); publishes only on a change. */
+  setPr(agentId: string, pr: AgentSummary['pr']): void {
+    const rec = this.agents.get(agentId);
+    if (!rec) return;
+    const cur = rec.reducer.summary.pr;
+    if (cur?.number === pr?.number && cur?.state === pr?.state && cur?.url === pr?.url && cur?.mergeCommit === pr?.mergeCommit) return;
+    if (pr) rec.reducer.summary.pr = pr;
+    else delete rec.reducer.summary.pr;
+    this.publishSummary(rec);
+  }
+
+  /** "Resolving merge conflicts" (main sets it after sending the conflicts; the reducer clears it on submit_for_review). */
+  setMergeConflict(agentId: string, info: AgentSummary['mergeConflict']): void {
+    const rec = this.agents.get(agentId);
+    if (!rec) return;
+    if (!info && !rec.reducer.summary.mergeConflict) return;
+    if (info) rec.reducer.summary.mergeConflict = info;
+    else delete rec.reducer.summary.mergeConflict;
     this.publishSummary(rec);
   }
 
@@ -603,6 +654,70 @@ export class Supervisor {
     void this.pump();
   }
 
+  /**
+   * Move an agent to the Archived view: end its process (pending prompts are denied), optionally
+   * delete its worktree, stamp `summary.archived` and save it. The agent leaves the supervisor, so
+   * it no longer counts toward Max running or any Wall counter; its row, summary and events stay.
+   */
+  async archive(agentId: string, opts: ArchiveOptions): Promise<AgentSummary> {
+    const rec = this.require(agentId);
+    this.dropFromQueue(agentId);
+    rec.held = [];
+    for (const [id] of rec.pendingPermissions) this.deps.broker.answer(id, { requestId: id, behavior: 'deny', message: 'The agent was archived' });
+    const status = rec.reducer.summary.status;
+    if (ACTIVE.has(status) || status === 'queued' || status === 'paused') this.emitDraft(rec, { type: 'status', status: 'stopped' });
+    await this.killProcess(rec);
+    await this.deps.broker.unregisterAgent(agentId).catch((err) => this.deps.log?.('unregister failed', err));
+    let worktreeRemoved = false;
+    if (opts.deleteWorktree && rec.worktree && this.deps.worktrees.remove) {
+      try {
+        const r = await this.deps.worktrees.remove({ agentId, path: rec.worktree.path, projectId: rec.spec.projectId, ...(rec.worktree.branch ? { branch: rec.worktree.branch } : {}) });
+        worktreeRemoved = r !== false;
+      } catch (err) {
+        // Archive anyway: the folder stays (it is not an orphan) and the user can delete it later.
+        this.deps.log?.('worktree removal failed while archiving', err);
+      }
+    }
+    const now = Date.now();
+    const s = rec.reducer.summary;
+    delete s.pendingPermission;
+    delete s.interrupted;
+    s.archived = { at: now, reason: opts.reason, ...(opts.mergeCommit ? { mergeCommit: opts.mergeCommit } : {}), worktreeRemoved };
+    if (worktreeRemoved) s.resumeBlocked = WORKTREE_GONE;
+    s.updatedAt = now;
+    try {
+      const p = this.deps.sink.saveSummary?.(s, rec.spec);
+      if (p && typeof (p as Promise<void>).catch === 'function') await (p as Promise<void>);
+    } catch (err) {
+      this.deps.log?.('saveSummary failed while archiving', err);
+    }
+    this.agents.delete(agentId);
+    this.fire('archived', { ...s });
+    void this.pump();
+    return { ...s };
+  }
+
+  /**
+   * Bring an archived agent back to the Wall (stopped; Resume respawns with `--resume`). Pass
+   * `resumeBlocked` when its session cannot be resumed (the worktree is gone).
+   */
+  unarchive(entry: RestoreEntry & { resumeBlocked?: string }): AgentSummary {
+    const existing = this.agents.get(entry.summary.id);
+    if (existing) return existing.reducer.summary;
+    const s: AgentSummary = { ...entry.summary };
+    delete s.archived;
+    delete s.pendingPermission;
+    delete s.interrupted;
+    if (ACTIVE.has(s.status) || s.status === 'queued' || s.status === 'paused') s.status = 'stopped';
+    if (entry.resumeBlocked) s.resumeBlocked = entry.resumeBlocked;
+    else delete s.resumeBlocked;
+    s.updatedAt = Date.now();
+    const rec = this.newRecord(AgentSpec.parse(entry.spec), s, (entry.lastSeq ?? -1) + 1, Boolean(s.sessionId));
+    this.agents.set(rec.id, rec);
+    this.publishSummary(rec);
+    return rec.reducer.summary;
+  }
+
   private dropFromQueue(agentId: string): void {
     for (let i = this.queue.length - 1; i >= 0; i--) if (this.queue[i]!.id === agentId) this.queue.splice(i, 1);
   }
@@ -614,12 +729,16 @@ export class Supervisor {
    * gone; Resume respawns with `--resume <sessionId>`); queued agents go back into the queue.
    */
   restore(entries: RestoreEntry[]): AgentSummary[] {
-    for (const { spec, summary, lastSeq } of entries) {
-      if (this.agents.has(summary.id)) continue;
+    const now = Date.now();
+    for (const { spec, summary, lastSeq, interruption } of entries) {
+      if (this.agents.has(summary.id) || summary.archived) continue;
       const wasQueued = summary.status === 'queued';
       const started = !wasQueued && Boolean(summary.sessionId);
       const s: AgentSummary = { ...summary };
       delete s.pendingPermission;
+      // It was working when oIDE went away (a live status, or the caller knows it was): "Interrupted"
+      // on the Wall until it runs again. A clean quit already saved these as stopped.
+      if (ACTIVE.has(s.status) || interruption) s.interrupted = { at: now, reason: interruption ?? 'restart' };
       if (ACTIVE.has(s.status) || s.status === 'paused') s.status = 'stopped';
       const rec = this.newRecord(AgentSpec.parse(spec), s, (lastSeq ?? -1) + 1, started);
       this.agents.set(rec.id, rec);

@@ -104,6 +104,18 @@ describe('AgentReducer', () => {
     expect(r.summary.interruptedPermission).toBeUndefined();
   });
 
+  it('merge conflicts from oIDE: activity says so; the next submit_for_review clears "Resolving merge conflicts"', () => {
+    const r = new AgentReducer({ ...fresh(), mergeConflict: { target: 'main', targetSha: 'abc1234', files: ['a.ts'], sentAt: 1 } });
+    r.apply(ev({ type: 'user-text', text: '[Sent by oIDE] Merge conflicts: …', origin: 'oide' }));
+    expect(r.summary.activity.at(-1)).toBe('Resolving merge conflicts');
+    // A subagent's review does not count; the lead's does.
+    r.apply(ev({ type: 'review-submitted', review: { agentId: 'agent-1', summary: 'sub', checks: [], submittedAt: 1 }, parentToolUseId: 'task-1' }));
+    expect(r.summary.mergeConflict).toBeDefined();
+    r.apply(ev({ type: 'review-submitted', review: { agentId: 'agent-1', summary: 'Merged main', checks: [], submittedAt: 2 } }));
+    expect(r.summary.mergeConflict).toBeUndefined();
+    expect(r.summary.status).toBe('ready-for-review');
+  });
+
   it('a new user message resets ready-for-review; result without review = has-question', () => {
     const { s } = run([
       ev({ type: 'review-submitted', review: { agentId: 'agent-1', summary: 'x', checks: [], submittedAt: 1 } }),

@@ -158,6 +158,8 @@ export class AgentReducer {
   private readonly windows: ContextWindowBook;
   private lastStderr = '';
   private leadUsage: TokenUsage = { input: 0, output: 0, cacheRead: 0, cacheCreation: 0 };
+  /** The CLI's `total_cost_usd` is cumulative per process; this is the last value of the current one. */
+  private processCost = 0;
 
   constructor(initial: AgentSummary, opts: ReducerOptions = {}) {
     this.summary = { ...initial };
@@ -227,6 +229,7 @@ export class AgentReducer {
         if (e.status === 'starting' && e.detail) pushActivity(clip(e.detail));
         break;
       case 'init':
+        this.processCost = 0;
         if (e.sessionId) s.sessionId = e.sessionId;
         if (e.model) {
           s.model = e.model;
@@ -302,6 +305,12 @@ export class AgentReducer {
           const w = this.resultWindow(s.model, e.contextWindows, e.contextWindow);
           if (w) s.contextWindow = w;
         }
+        if (e.totalCostUsd !== undefined && e.totalCostUsd >= 0) {
+          // A smaller total than before means a new process whose init we did not see.
+          const delta = e.totalCostUsd >= this.processCost ? e.totalCostUsd - this.processCost : e.totalCostUsd;
+          this.processCost = e.totalCostUsd;
+          s.costUsd = Math.round(((s.costUsd ?? 0) + delta) * 1e6) / 1e6;
+        }
         dropEphemeral();
         s.status = this.statusAfterResult(s, e);
         if (s.status === 'error' && e.isError && e.text) s.error = e.text;
@@ -336,6 +345,8 @@ export class AgentReducer {
         s.review = e.review;
         this.reviewSinceSend = true;
         if (s.status !== 'needs-permission') s.status = 'ready-for-review';
+        // Merge conflicts oIDE sent are resolved once the agent submits again (the user merges by hand).
+        if (lead) delete s.mergeConflict;
         pushActivity('Submitted for review');
         break;
       case 'rate-limit':
@@ -382,6 +393,7 @@ export class AgentReducer {
       case 'user-text':
         // The user answered the agent after a prompt was cut off by quitting: the note has done its job.
         if (lead) delete s.interruptedPermission;
+        if (lead && e.origin === 'oide') pushActivity('Resolving merge conflicts');
         break;
       case 'subagent':
       case 'tool-result':

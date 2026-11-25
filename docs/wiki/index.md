@@ -33,16 +33,17 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 - [pages/desktop-shell.md](pages/desktop-shell.md): Electron main, preload bridge, renderer shell, keymap.
 - [pages/security.md](pages/security.md): hardening, trust, bypass guard rails, credential test.
 - [pages/reliability.md](pages/reliability.md): crash isolation, rotating redacted logs, opt-in local crash reports, DB recovery, Windows cleanup, diagnostics.
+- [pages/telemetry.md](pages/telemetry.md): opt-in Umami usage analytics and error reports from main: consent, event catalogue, never-sent list, scrubbing, adding an event, forks.
 - [pages/testing.md](pages/testing.md): Vitest, fake-claude fixtures, Playwright e2e.
 - [pages/packaging.md](pages/packaging.md): electron-builder, CI matrix, updates, signing.
 
 ## Screens
 
-- [pages/screen-wall.md](pages/screen-wall.md): Mission Control wall (Main): tiles per status, inline permission / reply / review, subagent chips, compact confirm, J/K/N/Y/D keys.
+- [pages/screen-wall.md](pages/screen-wall.md): Mission Control wall (Main): tiles per status, inline permission / reply / review, subagent chips, compact confirm, J/K/N/Y/D keys; Archived agents, Interrupted, pull request lifecycle, reload rehydration.
 - [pages/screen-focus.md](pages/screen-focus.md): Focus: virtualized paged transcript, subagent views by parentToolUseId, pinned permission prompt, composer with / commands and artifacts, inspector (Plan, Subagents, Changes, Artifacts, Terminal).
 - [pages/screen-spawn.md](pages/screen-spawn.md): Spawn agent: fields → AgentSpec, presets and model slots, Bypass rules, CLI feature gating.
 - [pages/screen-source-control.md](pages/screen-source-control.md): Source control: project cards (sync, Commit…, agent worktrees, PR state, recent commits), Ready to review, overlap heads-up, unpushed notice; shared git store.
-- [pages/screen-review.md](pages/screen-review.md): Review changes: custom unified diff with inline comments, Monaco split view, Viewed, summary and checks, Send feedback / Open PR / Merge locally, J/K and ]/[ keys.
+- [pages/screen-review.md](pages/screen-review.md): Review changes: custom unified diff with inline comments, Monaco split view, Viewed, summary and checks, Send feedback / Open PR / Merge locally (predicts conflicts first; "Ask <agent> to resolve" sends them back to the agent), J/K and ]/[ keys.
 - [pages/screen-files.md](pages/screen-files.md): Files: lazy per-project trees with checkout menus and agent markers, one Monaco editor (local, lazy), agent banner, history, Mentioned in.
 - [pages/screen-artifacts.md](pages/screen-artifacts.md): Artifacts: grid by kind / scope / search, sandboxed previews, Open with editor, Give to an agent, history with view and restore, Import from claude.ai, New artifact.
 - [pages/screen-marketplace.md](pages/screen-marketplace.md): Extension marketplace: categories, list and detail, install consent, updates, Add custom (URL, import, command/JSON, folder/git).
@@ -57,4 +58,4 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 
 ## Decisions
 
-- [../adr/](../adr/): ADRs. 0001 node:sqlite, 0002 TS-source packages, 0003 @lydell/node-pty, 0004 artifact versions as numbered snapshots, 0005 whiteboards as a read-only render in v1 (since overtaken: Excalidraw is now embedded as the editor, see [screen-artifacts](pages/screen-artifacts.md)), 0006 pull requests through `gh` from main, 0007 plan usage meters from rate-limit events, 0008 extension language servers deferred, 0009 extension artifact types use the existing storage kinds.
+- [../adr/](../adr/): ADRs. 0001 node:sqlite, 0002 TS-source packages, 0003 @lydell/node-pty, 0004 artifact versions as numbered snapshots, 0005 whiteboards as a read-only render in v1 (since overtaken: Excalidraw is now embedded as the editor, see [screen-artifacts](pages/screen-artifacts.md)), 0006 pull requests through `gh` from main, 0007 plan usage meters from rate-limit events, 0008 extension language servers deferred, 0009 extension artifact types use the existing storage kinds, 0010 merged and discarded agents are archived, not deleted, 0011 opt-in telemetry with Umami, sent from main.

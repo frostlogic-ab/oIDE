@@ -107,11 +107,15 @@ export const Settings = z.object({
   ui: z.object({
     accent: z.string().default('#7AA2F7'),
     /**
-     * @deprecated Unused. oIDE collects no usage statistics and has no telemetry code; the Settings
-     * switch was removed. Kept only so settings files saved by 0.1.x still parse. Nothing reads it.
+     * @deprecated Never read. 0.1.x had a usage-statistics switch here while oIDE had no telemetry
+     * code at all, so a `true` saved then is NOT consent to the opt-in telemetry that `privacy`
+     * describes now (different wording, nothing was ever sent). Kept so old settings files parse.
      */
     telemetry: z.boolean().default(false),
-    /** Settings › Privacy › Crash reports. Off by default; local only (never uploaded in v1). */
+    /**
+     * Settings › Privacy › Save crash reports on this computer. Off by default; local files only,
+     * never uploaded (sending reports is `privacy.errorReports`).
+     */
     crashReports: z.boolean().default(false),
     /**
      * Sidebar widths the user dragged, panel id (`wall.projects`, `files.tree`…) → px. Only resized
@@ -120,6 +124,22 @@ export const Settings = z.object({
      */
     panelWidths: PanelWidths.default({}),
   }),
+  /**
+   * Settings › Privacy: opt-in usage analytics and error reports (ADR 0011, wiki telemetry.md). Both
+   * off by default; the first-run question sets both. Defaulted as a whole so older settings parse.
+   */
+  privacy: z
+    .object({
+      /** "Share anonymous usage analytics": screen views, feature events and performance numbers. */
+      usageAnalytics: z.boolean().default(false),
+      /** "Send crash and error reports": scrubbed error name, message and app-relative stack. */
+      errorReports: z.boolean().default(false),
+      /** The first-run question was answered, or a switch was changed in Settings: never ask again. */
+      consentAnswered: z.boolean().default(false),
+      /** Launches on which the question was shown and closed without a choice (asked at most MAX_CONSENT_PROMPTS times). */
+      consentPromptsShown: z.number().int().min(0).max(1000).default(0),
+    })
+    .default({ usageAnalytics: false, errorReports: false, consentAnswered: false, consentPromptsShown: 0 }),
   /** Settings › Updates (M7). Defaulted as a whole so settings saved before M7 still parse. */
   updates: z
     .object({

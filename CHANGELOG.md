@@ -9,6 +9,10 @@ The detailed build history lives in [docs/wiki/log.md](docs/wiki/log.md).
 
 ### Added
 
+- Opt-in usage analytics and crash and error reports (Umami), sent from the main process only: a
+  first-run question, two switches in Settings › Privacy (both off by default), `DO_NOT_TRACK` and
+  `OIDE_TELEMETRY=0` respected, no code, prompts, paths or project information ever sent. See
+  [PRIVACY.md](PRIVACY.md).
 - Auto-update through electron-updater on GitHub Releases, with stable and beta channels and a
   Settings › Updates section (channel, check now, current version, last check). Updates never install
   without consent and are off in development builds.

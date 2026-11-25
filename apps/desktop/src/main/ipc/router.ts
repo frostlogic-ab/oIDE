@@ -59,6 +59,11 @@ export interface RouterOptions {
   /** Validate handler output against the contract (default true). Catches drift early. */
   validateOutput?: boolean;
   log?: Logger;
+  /**
+   * Called after each successful command with the parsed input and the output (telemetry observes
+   * commands here, main/telemetry/observers.ts). Must not throw; errors are swallowed.
+   */
+  observe?: (command: CommandName, input: unknown, output: unknown) => void;
 }
 
 const silentLog: Logger = { debug: () => {}, warn: () => {}, error: () => {} };
@@ -83,10 +88,21 @@ export class IpcRouter {
   private readonly handlers = new Map<CommandName, Handler<any>>();
   private readonly validateOutput: boolean;
   private readonly log: Logger;
+  private readonly observe: RouterOptions['observe'];
 
   constructor(opts: RouterOptions = {}) {
     this.validateOutput = opts.validateOutput ?? true;
     this.log = opts.log ?? silentLog;
+    this.observe = opts.observe;
+  }
+
+  private observed(command: CommandName, input: unknown, output: unknown): void {
+    if (!this.observe) return;
+    try {
+      this.observe(command, input, output);
+    } catch (err) {
+      this.log.debug(`[ipc] observer failed for ${command}`, (err as Error)?.message);
+    }
   }
 
   register<K extends CommandName>(name: K, handler: Handler<K>): void {
@@ -144,8 +160,10 @@ export class IpcRouter {
         this.log.error(`[ipc] ${command} returned output that does not match the contract: ${summarizeIssues(out.error)}`);
         return fail(`Handler for ${command} returned invalid output`, 'invalid_output');
       }
+      this.observed(command, parsed.data, out.data);
       return { ok: true, value: out.data };
     }
+    this.observed(command, parsed.data, value);
     return { ok: true, value };
   }
 }

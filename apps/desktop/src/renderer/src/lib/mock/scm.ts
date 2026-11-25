@@ -520,7 +520,9 @@ export function createScmHandlers({ agents, emit, fallbackDiffs = {}, artifacts 
     viewed: structuredClone(viewed),
   };
   let nextId = 100;
-  const need = <T>(v: T | undefined, what: string): T => {
+  /** Agents asked to resolve their merge conflicts (their prediction is clean afterwards). */
+  const resolved = new Set<string>();
+  const need =<T>(v: T | undefined, what: string): T => {
     if (v === undefined) throw new Error(`[not_found] ${what}`);
     return v;
   };
@@ -568,13 +570,54 @@ export function createScmHandlers({ agents, emit, fallbackDiffs = {}, artifacts 
       changed(w.projectId);
       return { ok: true, conflicts: [] };
     },
+    // Same rule as mergeLocal: the second agent of a conflicting overlap would conflict, until it was asked to resolve.
+    'git.predictMerge': ({ agentId, withMainStatus }) => {
+      const w = worktreeOf(agentId);
+      const now = Date.now();
+      if (!w) return { agentId, status: 'unavailable' as const, reason: 'This agent works in the project folder; there is no branch to merge.', files: [], binary: [], submodules: [], behind: 0, ahead: 0, canAsk: false, computedAt: now };
+      const conflict = resolved.has(agentId) ? undefined : (state.overlaps[w.projectId] ?? []).find((o) => o.conflicts && o.agentIds[1] === agentId);
+      const s = syncOf(w.projectId);
+      return {
+        agentId,
+        status: conflict ? ('conflicts' as const) : ('clean' as const),
+        target: { branch: s.branch, sha: 'c0ffee1234567890c0ffee1234567890c0ffee12' },
+        branchSha: 'beef00000000000000000000000000000000beef',
+        files: conflict?.files ?? [],
+        binary: [],
+        submodules: [],
+        behind: conflict ? 2 : w.behind,
+        ahead: w.ahead,
+        ...(withMainStatus ? { mainDirty: s.dirtyFiles } : {}),
+        canAsk: true,
+        computedAt: now,
+      };
+    },
+    'git.askToResolve': ({ agentId }) => {
+      const w = need(worktreeOf(agentId), `No worktree for ${agentId}`);
+      const conflict = (state.overlaps[w.projectId] ?? []).find((o) => o.conflicts && o.agentIds[1] === agentId);
+      resolved.add(agentId);
+      const a = agents.get(agentId);
+      if (a) {
+        const next = { ...a, status: 'running' as const, mergeConflict: { target: syncOf(w.projectId).branch, targetSha: 'c0ffee1', files: conflict?.files ?? [], sentAt: Date.now() }, updatedAt: Date.now() };
+        agents.set(agentId, next);
+        emit('agents.summary', next);
+      }
+      changed(w.projectId);
+      return { status: 'running' as const, files: conflict?.files.length ?? 0, unarchived: false, resumed: false };
+    },
     'git.openPr': ({ agentId }) => {
       const w = need(worktreeOf(agentId), `No worktree for ${agentId}`);
       const number = nextId++;
       const url = `https://github.com/you/${w.projectId}/pull/${number}`;
       w.pr = { state: 'open', number, url };
       changed(w.projectId);
-      return { url };
+      const a = agents.get(agentId);
+      if (a) {
+        const next = { ...a, pr: { number, url, state: 'open' as const }, updatedAt: Date.now() };
+        agents.set(agentId, next);
+        emit('agents.summary', next);
+      }
+      return { url, number, state: 'open' as const };
     },
     'git.reconcile': ({ projectId, agentIds }) => {
       const [a, b] = agentIds.map((id) => agents.get(id)?.title ?? id);

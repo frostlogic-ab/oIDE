@@ -25,6 +25,11 @@ describe('buildRows: event → transcript row mapping', () => {
     expect(rows[1]).toMatchObject({ kind: 'thinking', text: 'Plan A\n\nPlan B' });
   });
 
+  it('keeps oIDE as the origin of a message oIDE wrote (merge conflicts), so it shows as "Sent by oIDE"', () => {
+    const rows = buildRows(mk([{ type: 'user-text', text: 'Mine' }, { type: 'user-text', text: '[Sent by oIDE] Merge conflicts: …', origin: 'oide' }]));
+    expect(rows.map((r) => (r.kind === 'user' ? r.origin : 'x'))).toEqual([undefined, 'oide']);
+  });
+
   it('groups consecutive tool calls into one card, attaches results by id and merges adjacent Reads', () => {
     const rows = buildRows(
       mk([

@@ -74,3 +74,48 @@ export function publishTarget(owner: string | undefined, repo: string | undefine
   if (!GITHUB_OWNER.test(o) || !GITHUB_REPO.test(r)) return null;
   return { owner: o, repo: r, releasesUrl: `https://github.com/${o}/${r}/releases` };
 }
+
+// ------------------------------------------------------------------------------- telemetry
+
+/**
+ * Opt-in usage analytics and error reports go to this Umami instance in official builds (ADR 0011,
+ * docs/wiki/pages/telemetry.md). Forks override both at build time with `OIDE_UMAMI_HOST` and
+ * `OIDE_UMAMI_WEBSITE_ID` (electron.vite.config.ts), or set either to an empty string to compile
+ * telemetry out: then `telemetryTarget()` is null, nothing is ever sent and no question is asked.
+ * Main sends from its own network session, which may reach this host only.
+ */
+export const OFFICIAL_UMAMI_HOST = 'https://data.frostlogic.se';
+export const OFFICIAL_UMAMI_WEBSITE_ID = '8e219a5f-f8d7-4ae8-885f-14501223d568';
+/** Umami `hostname` of release builds and of development (unpackaged) runs, so they never mix. */
+export const TELEMETRY_HOSTNAME = 'oide';
+export const TELEMETRY_DEV_HOSTNAME = 'oide-dev';
+
+export interface TelemetryTarget {
+  /** `https://host[:port]`, no path. */
+  origin: string;
+  websiteId: string;
+  /** `<origin>/api/send` (one payload: errors). */
+  sendUrl: string;
+  /** `<origin>/api/batch` (an array of payloads: pageviews, events, performance, identify). */
+  batchUrl: string;
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The Umami endpoint this build reports to, or null (telemetry compiled out). The host must be an
+ * https origin without a path, user name or password; the website id a UUID.
+ */
+export function telemetryTarget(host: string | undefined, websiteId: string | undefined): TelemetryTarget | null {
+  const h = host?.trim() ?? '';
+  const id = websiteId?.trim() ?? '';
+  if (!h || !UUID.test(id)) return null;
+  let u: URL;
+  try {
+    u = new URL(h);
+  } catch {
+    return null;
+  }
+  if (u.protocol !== 'https:' || u.username || u.password || (u.pathname !== '/' && u.pathname !== '') || u.search || u.hash) return null;
+  return { origin: u.origin, websiteId: id.toLowerCase(), sendUrl: `${u.origin}/api/send`, batchUrl: `${u.origin}/api/batch` };
+}

@@ -44,6 +44,11 @@ Context ring: `contextUsed / contextWindow`, amber from Settings `contextWarnAt`
 "/compact suggested" from `contextSuggestCompactAt`. Clicking opens the confirm; only Compact calls
 `agents.compact` and then toasts "Sent /compact to … Compacting…". oIDE never compacts without it.
 
+Merge conflicts ([screen-review](screen-review.md#merge-conflicts)): a tile whose agent is resolving conflicts oIDE sent it
+(`summary.mergeConflict`) carries a "Resolving merge conflicts" badge next to the mode badge. A Ready-for-review tile
+shows, next to its diff stat, how its branch stands against the main checkout ("Up to date with main",
+"Behind main by 2 · would conflict"), from the cached `git.predictMerge` answer (`stores/mergePrediction.ts`).
+
 Each tile has a visually hidden `aria-live="polite"` region with "<title>: <status>", so status
 changes are announced.
 
@@ -118,3 +123,66 @@ Max running and stream activity.
 `screens/Wall/Wall.test.tsx` (jsdom: tile statuses, rate-limit/error tiles, live store updates,
 filters, Allow / Always / Deny and Y / D send the exact request id, reply, compact confirm, J / K / N /
 Enter / Esc).
+
+## Archived agents
+
+Finished agents leave the tile grid for **Wall › Archived** instead of disappearing (ADR
+[0010](../../adr/0010-archive-agents-instead-of-deleting.md)). The toggle next to the title reads
+"Active · Archived (N)" (N for the current project scope); the command bar has "Show archived agents".
+
+| Goes to Archived | Reason | Worktree |
+| --- | --- | --- |
+| Merge locally (Review), fully merged | `merged` + merge commit | Settings › Agents › Clean up (right away / after 7 days / never) |
+| Its pull request merged on GitHub (see below) | `merged` + the PR's merge commit | same, but never deletes uncommitted work |
+| Source control › Remove worktree (`agents.remove`) | `discarded` | deleted |
+| Status `done` | `completed` | kept |
+| Archive on a finished or stopped tile, or in the Focus header | `archived-by-user` (`completed` when done) | kept |
+
+Archive is offered for `has-question`, `ready-for-review`, `paused`, `stopped`, `rate-limited`,
+`error` and `done`; main refuses it (`conflict`) while the agent is working. An archived agent's row,
+summary (`summary.archived = { at, reason, mergeCommit?, worktreeRemoved }`) and transcript stay in the
+database; it is not in `agents.list`, so it never counts toward Max running, the header counters, the
+status bar or the project counts.
+
+The list (`components/ArchivedList.tsx`, TanStack Virtual, pages of 50 from `agents.listArchived`
+with an `{ at, id }` cursor) shows title, outcome badge (Merged / Completed / Discarded / Archived),
+project · branch, ended date, merge commit, "worktree deleted", +/− lines and the CLI-reported cost,
+newest first, with a title search. Rows: Open (Focus, read-only: transcript from `agents.events`,
+header with Unarchive and Delete permanently, no composer), Unarchive (`agents.unarchive`: back on the
+Wall, stopped; Resume respawns with `--resume`, or is replaced by "Can't resume" when the worktree is
+gone, `summary.resumeBlocked`), Delete permanently (`agents.deletePermanently`: main shows a native
+confirmation, then deletes the row, its events and any leftover worktree). Store:
+`stores/archive.ts` (`agents.archived` adds, an `agents.summary` for a held id means unarchived,
+`agents.removed` deletes).
+
+**Interrupted.** Agents that were working when oIDE quit or crashed come back on the Wall as
+`stopped` with `summary.interrupted = { reason: 'restart' | 'crash' | 'mcp-down' }`: status label
+"Interrupted", a body that says why and the last step, Resume and Archive. They are resumed
+automatically (except `mcp-down`, resumed on the next good start); the flag clears once the process
+runs again.
+
+**Pull requests.** `summary.pr = { number, url, state, mergeCommit? }` comes from the user's own `gh`:
+set when `git.openPr` succeeds and whenever a lookup finds a PR for the branch, also one opened
+outside oIDE. Tiles, the Focus header and Review show "View PR #12" with an Open / Draft / Merged /
+PR closed badge (opened through the external-link allow-list); "Open PR" shows only without a PR, and
+`git.openPr` is idempotent (an existing open PR is returned with `existing: true`, also after gh's
+"already exists"). `main/services/pr-watch.ts` polls only open and draft PRs (plus one discovery
+lookup per finished agent per session), one at a time, after the background fetch (Settings › Agents
+› Fetch interval) and on window focus (at most every 2 minutes); never offline, never without gh or
+for untrusted projects; a gh error stops the round and backs off (interval × 2^n, at most 2 h). A
+merged PR archives the agent (reason `merged`, process stopped, cleanup as for an in-oIDE merge,
+including the 7-day sweep) and toasts "PR #12 merged · <title> archived". A closed PR only shows its
+badge; Archive stays on the tile.
+
+**Reload rehydration (bug fixed 2026-11-25).** A live agent vanished from the Wall ("No agents yet",
+"0 sessions") while it kept running in main. Cause: in dev, a Vite hot update that re-ran a store
+module (any edit to it or to `packages/protocol`, which every store imports) gave the components a
+new, empty store while `startStores()` had run once and kept loading and feeding the old one.
+`lib/boot.ts` is now the HMR boundary for the stores it wires and reloads the page, so
+`startStores()` rehydrates from main. Also: `agents.load()` retries with backoff (250 ms to 8 s) and
+the Wall shows "Couldn't load your agents" with Retry instead of an empty state; a summary that fails
+the IPC contract is repaired (invalid optional fields and list items dropped) or left out and logged
+once, so one bad agent never empties `agents.list`; unreadable rows are skipped at restore. Tests:
+`stores/rehydrate.test.ts`, `screens/Wall/Archive.test.tsx`, `screens/Focus/Archived.test.tsx`,
+`test/integration/archive.test.ts`, `services/pr-watch.test.ts`, `e2e/archive.spec.ts` (reload with a
+live agent, archive → Archived → unarchive).

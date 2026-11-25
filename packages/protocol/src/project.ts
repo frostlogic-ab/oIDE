@@ -58,6 +58,39 @@ export const OverlapWarning = z.object({
 });
 export type OverlapWarning = z.infer<typeof OverlapWarning>;
 
+/**
+ * "Merge into main?" before merging: what `git merge-tree --write-tree` predicts for merging the agent
+ * branch into the main checkout's HEAD (`git.predictMerge`). Cached in main per (HEAD, branch) commit pair.
+ */
+export const MergePrediction = z.object({
+  agentId: Id,
+  /**
+   * `clean`: merges without conflicts. `conflicts`: `files` would conflict. `unknown`: could not
+   * predict (git older than 2.38); the merge still stops on conflicts. `unavailable`: nothing to merge
+   * (the agent works in the project folder, or its branch is gone); see `reason`.
+   */
+  status: z.enum(['clean', 'conflicts', 'unknown', 'unavailable']),
+  reason: z.string().optional(),
+  /** The main checkout's branch (absent on a detached HEAD) and commit. */
+  target: z.object({ branch: z.string().optional(), sha: z.string() }).optional(),
+  branchSha: z.string().optional(),
+  files: z.array(z.string()).default([]),
+  /** Conflicted files git cannot merge line by line. */
+  binary: z.array(z.string()).default([]),
+  /** Conflicted submodule pointers. */
+  submodules: z.array(z.string()).default([]),
+  /** Commits on the target the branch does not have ("Behind main by N"). */
+  behind: z.number().int().nonnegative().default(0),
+  ahead: z.number().int().nonnegative().default(0),
+  /** Uncommitted changes in the main checkout (`withMainStatus`): git refuses to merge over the ones the merge touches. */
+  mainDirty: z.array(z.string()).optional(),
+  /** Whether "Ask <agent> to resolve" can work; `askBlocked` says why not. */
+  canAsk: z.boolean().default(false),
+  askBlocked: z.string().optional(),
+  computedAt: z.number(),
+});
+export type MergePrediction = z.infer<typeof MergePrediction>;
+
 export const FileDiff = z.object({
   path: z.string(),
   oldPath: z.string().optional(),

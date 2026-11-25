@@ -7,6 +7,8 @@ import type { TerminalService } from './terminals.js';
  * Node (test/integration). `services/electron-platform.ts` is the real implementation.
  */
 export interface Platform {
+  /** False while the machine is offline (Electron `net.isOnline()`); background PR polling waits. */
+  isOnline?: () => boolean;
   /** `safeStorage` (writes refused when `available()` is false). */
   cipher: Cipher;
   /** Native folder picker; null when cancelled. */

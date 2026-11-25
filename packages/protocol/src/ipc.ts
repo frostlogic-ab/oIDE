@@ -1,12 +1,13 @@
 import { z } from 'zod';
-import { AgentSpec, AgentSummary, GitRef, Id, MessageAttachments, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
+import { AgentSpec, AgentStatus, AgentSummary, GitRef, Id, MessageAttachments, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
 import { ArtifactKind, ArtifactMeta, ArtifactUse, ArtifactVersion } from './artifacts.js';
 import { AgentEvent } from './events.js';
 import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
-import { CommitInfo, FileDiff, FileNode, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
+import { CommitInfo, FileDiff, FileNode, MergePrediction, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
 import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settings.js';
 import { UpdateStatus } from './updates.js';
 import { FindByNameInput, FindByNameOutput, ReplaceInput, ReplaceOutput, SearchContentInput, SearchResultsEvent } from './search.js';
+import { TelemetryConsentInput, TelemetryStatus, TelemetryTrackInput } from './telemetry.js';
 
 /**
  * The IPC contract. Every renderer → main command is a request/response pair, validated with Zod
@@ -53,6 +54,15 @@ export const Commands = {
   'app.openLogsFolder': cmd(Void, Ok),
   /** A screen's error boundary caught an error; main writes it (redacted) to the main log. No props, state, prompts or code. */
   'app.reportError': cmd(z.object({ screen: z.string().max(60), name: z.string().max(120), message: z.string().max(2000), stack: z.string().max(8000).optional(), componentStack: z.string().max(8000).optional() }), Ok),
+  /**
+   * Opt-in telemetry (ADR 0011). `track`: the renderer reports a screen view, a renderer catalogue event,
+   * an error or web vitals; main validates it against the catalogue (packages/protocol/src/telemetry.ts),
+   * applies consent and may drop it. Always answers ok, sent or not.
+   */
+  'telemetry.track': cmd(TelemetryTrackInput, Ok),
+  'telemetry.status': cmd(Void, TelemetryStatus),
+  /** The first-run question: `shown` when it appears, then `accept` / `decline` / `later` (closed without a choice). */
+  'telemetry.consent': cmd(TelemetryConsentInput, TelemetryStatus),
   'cli.detect': cmd(Void, CliInfo),
   'cli.openSignIn': cmd(Void, z.object({ terminalId: Id })),
 
@@ -67,7 +77,8 @@ export const Commands = {
   // Agents
   'agents.list': cmd(Void, z.array(AgentSummary)),
   'agents.spawn': cmd(AgentSpec, z.array(AgentSummary)),
-  'agents.send': cmd(z.object({ agentId: Id, message: UserMessage }), Ok),
+  /** `merge-conflicts` messages come from main only (`git.askToResolve`): the renderer cannot send one. */
+  'agents.send': cmd(z.object({ agentId: Id, message: UserMessage.refine((m) => m.kind !== 'merge-conflicts', { message: 'merge-conflicts messages are sent by oIDE only' }) }), Ok),
   'agents.answerPermission': cmd(z.object({ agentId: Id, answer: PermissionAnswer }), Ok),
   'agents.setMode': cmd(z.object({ agentId: Id, mode: PermissionMode }), Ok),
   'agents.stop': cmd(z.object({ agentId: Id }), Ok),
@@ -80,6 +91,25 @@ export const Commands = {
     z.array(AgentEvent),
   ),
   'agents.stopSubagent': cmd(z.object({ agentId: Id, subagentId: Id }), Ok),
+  // Archived agents: finished, merged, discarded or archived by hand. Row, summary and transcript stay.
+  /** Archive a finished or stopped agent (Wall tile, Focus header). Refused while it works (`conflict`). */
+  'agents.archive': cmd(z.object({ agentId: Id }), AgentSummary),
+  /** Back to the Wall; resumable when its session and worktree still exist (else `resumeBlocked`). */
+  'agents.unarchive': cmd(z.object({ agentId: Id }), AgentSummary),
+  /** Archived agents, most recently archived first, paged with `cursor` (the last item's `archived.at` and id). */
+  'agents.listArchived': cmd(
+    z.object({
+      projectId: Id.optional(),
+      query: z.string().max(200).optional(),
+      limit: z.number().int().min(1).max(200).default(50),
+      cursor: z.object({ at: z.number(), id: Id }).optional(),
+    }),
+    z.object({ items: z.array(AgentSummary), total: z.number().int().nonnegative(), nextCursor: z.object({ at: z.number(), id: Id }).optional() }),
+  ),
+  /** One archived agent (Focus opens it read-only, transcript from `agents.events`). */
+  'agents.getArchived': cmd(z.object({ agentId: Id }), AgentSummary),
+  /** Delete the agent's row and events after a native confirmation in main; `deleted: false` when the user cancels. */
+  'agents.deletePermanently': cmd(z.object({ agentId: Id }), z.object({ deleted: z.boolean() })),
 
   // Git / source control
   'git.sync': cmd(z.object({ projectId: Id }), SyncState),
@@ -92,7 +122,24 @@ export const Commands = {
   'git.overlaps': cmd(z.object({ projectId: Id }), z.array(OverlapWarning)),
   'git.diff': cmd(z.object({ agentId: Id }), z.array(FileDiff)),
   'git.mergeLocal': cmd(z.object({ agentId: Id }), z.object({ ok: z.boolean(), conflicts: z.array(z.string()).default([]) })),
-  'git.openPr': cmd(z.object({ agentId: Id, title: z.string(), body: z.string().default('') }), z.object({ url: z.string() })),
+  /**
+   * Would merging the agent branch into the main checkout conflict? `git merge-tree`, no checkout touched;
+   * cached per (HEAD, branch) commits unless `refresh`. `withMainStatus` adds the main checkout's uncommitted files.
+   */
+  'git.predictMerge': cmd(z.object({ agentId: Id, refresh: z.boolean().default(false), withMainStatus: z.boolean().default(false) }), MergePrediction),
+  /**
+   * "Ask <agent> to resolve": sends the agent its merge conflicts (target branch and commit, files, what
+   * to do) as a message from oIDE, unarchiving or resuming it first (queued under Max running). Never merges.
+   */
+  'git.askToResolve': cmd(
+    z.object({ agentId: Id, source: z.enum(['prediction', 'merge']).default('prediction') }),
+    z.object({ status: AgentStatus, files: z.number().int().nonnegative(), unarchived: z.boolean(), resumed: z.boolean() }),
+  ),
+  /** Idempotent: when the branch already has a pull request, it is returned instead of opening another one (`existing: true`). */
+  'git.openPr': cmd(
+    z.object({ agentId: Id, title: z.string(), body: z.string().default('') }),
+    z.object({ url: z.string(), number: z.number().int().optional(), state: z.enum(['open', 'draft', 'merged', 'closed']).optional(), existing: z.boolean().optional() }),
+  ),
   'git.reconcile': cmd(z.object({ projectId: Id, agentIds: z.tuple([Id, Id]) }), z.array(AgentSummary)),
   'git.pruneOrphans': cmd(z.object({ projectId: Id }), z.object({ removed: z.array(z.string()) })),
   /** Whether PRs can be opened for this project (gh installed and signed in). Source control hides PR state and Review disables Open pull request when false. */
@@ -247,6 +294,8 @@ export const Events = {
   'agents.batch': z.object({ events: z.array(AgentEvent) }),
   'agents.summary': AgentSummary,
   'agents.removed': z.object({ agentId: Id }),
+  /** An agent moved to (or changed in) the Archived view. It is no longer on the Wall. */
+  'agents.archived': AgentSummary,
   'projects.changed': z.array(Project),
   'scope.changed': Scope,
   'git.changed': z.object({ projectId: Id }),

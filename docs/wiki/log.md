@@ -563,6 +563,67 @@ refuses files whose hash changed since the search. Protocol additions: `files.fi
 search 2.0 s. Pages: [screen-files](pages/screen-files.md), [desktop-shell](pages/desktop-shell.md),
 [security](pages/security.md), [git-worktrees](pages/git-worktrees.md).
 
+## [2026-11-25] build | Archived agents and reload rehydration
+
+Bug: a live agent vanished from the Wall in a dev session ("No agents yet", "0 sessions · 0
+worktrees") while main kept running it. Reproduced against `electron-vite dev` with fake-claude: a
+Vite hot update that re-runs a store module (an edit to `packages/protocol`, which every store
+imports) gives the components a new, empty agents store, while `startStores()` ran once and keeps
+loading and feeding the old one. `lib/boot.ts` is now the HMR boundary for the stores it wires and
+reloads the page. Hardening: `agents.load()` retries with backoff and the Wall shows the error with
+Retry; `repairAgentSummary` (protocol) repairs or drops a summary that fails the contract instead of
+failing `agents.list`; `AgentsRepo.list()` skips unreadable rows. Archived agents: merge, a PR merged
+on GitHub, discard, `done` and a new Archive action move agents to Wall › Archived (migration 3,
+`agents.archive` / `unarchive` / `listArchived` / `getArchived` / `deletePermanently`, event
+`agents.archived`), read-only Focus, Interrupted tiles after a restart or crash, archived transcripts
+compacted (not deleted) after 30 days. Pull requests: `summary.pr`, "View PR #N" with state,
+idempotent `git.openPr`, `PrWatcher` (open/draft only, after fetch and on focus, backoff). ADR
+[0010](../adr/0010-archive-agents-instead-of-deleting.md). Pages:
+[screen-wall](pages/screen-wall.md#archived-agents), [agent-supervisor](pages/agent-supervisor.md),
+[storage](pages/storage.md).
+
+## [2026-11-25] build | Opt-in telemetry (Umami)
+
+The product owner asked for Umami analytics, crash reports, performance and events, with a first-run
+question and a Settings switch. Research: `data.frostlogic.se` runs Umami v3.5.0 (`/api/scripts/telemetry`);
+its `script.js` has the `event`, `identify`, `performance` (web vitals) and `error` collectors, and the
+v3.5.0 server schemas (`api/send/request-schema.ts`, `lib/errors/schema.ts`) were copied into a unit
+test. Decisions ([ADR 0011](../adr/0011-telemetry.md)): opt-in, two switches (`settings.privacy`), no
+remote script in any window (main sends to `/api/batch` and `/api/send` through the in-memory
+session `oide-telemetry` that can reach only that origin), no session recording (`recorder.js`
+would capture code and prompts). One catalogue in `packages/protocol/src/telemetry.ts` (23 events,
+each with its product question; unknown events and values dropped, unknown properties stripped);
+most events observed in main from IPC commands, agent events and emitted events, so screens are
+untouched. Errors scrubbed beyond the log redactor (paths, URLs, emails, quoted text, ids, tokens,
+user and machine names; app-bundle frames only), fuzz-tested. In-memory queues, batches of 20,
+backoff, `Retry-After`, offline-aware, dropped on quit. `ui.telemetry` (0.1.x) stays unread and is not
+consent. Live check: one batch (identify, pageview, event, performance) and one error with hostname
+`oide-dev` and `test: true` were accepted (4/4 processed, error issue created). Pages:
+[telemetry](pages/telemetry.md), [security](pages/security.md), [screen-settings](pages/screen-settings.md),
+[review-publication](pages/review-publication.md), [reliability](pages/reliability.md); README Privacy,
+PRIVACY.md, docs site [privacy](../site/guide/privacy.md), CLAUDE.md "Analytics and telemetry (every task)".
+
+## [2026-11-25] build | Merge conflicts go back to the agent
+
+User request: "If there's a conflict, it blocks me from merging it. I would like if there's conflict, to be sent
+back to the agent to solve it and then users manually clicks merge again." Built: `predictMerge` in
+`packages/git` (`git merge-tree --write-tree -z` between the main checkout's HEAD and the agent branch, binary
+and submodule conflicts called out, behind/ahead counts, `supported: false` on git older than 2.38) and a clear
+"commit or stash" refusal when uncommitted main files would be overwritten. IPC `git.predictMerge` (cached in
+main per commit pair) and `git.askToResolve`, which re-predicts and sends a `merge-conflicts` message (built in
+main only; `agents.send` refuses it) shown in the transcript as "Sent by oIDE": target branch and commit, files,
+`git merge <target>` in its own worktree, resolve keeping both sides, checks, commit, `submit_for_review`; never
+rebase, force-push, touch the main checkout or abort silently. Stopped agents are resumed (queued under Max
+running), archived ones unarchived; no action when the worktree is gone or the agent works in the project folder.
+`AgentSummary.mergeConflict` drives a "Resolving merge conflicts" badge until the next submit_for_review; nothing
+merges on its own. The merge dialog leads with "Ask <agent> to resolve" and keeps "Merge anyway"; a merge that
+stops anyway offers the same action. Freshness lines ("Behind main by 2 commits, would conflict in 1 file") on
+Review, Ready-for-review tiles and Source control from a renderer store refreshed on `git.changed`. Telemetry:
+`merge_conflict_predicted`, `merge_conflict_sent_to_agent`, `merge_conflict_resolved`. fake-claude gained
+`resolve-conflicts`. Pages: [screen-review](pages/screen-review.md#merge-conflicts),
+[git-worktrees](pages/git-worktrees.md), [screen-wall](pages/screen-wall.md), [protocol](pages/protocol.md),
+[telemetry](pages/telemetry.md), [testing](pages/testing.md).
+
 ## [2026-11-25] build | Resizable sidebars
 
 Every sidebar can be resized by dragging its inner edge, within a per-panel min (where the content

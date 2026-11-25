@@ -70,6 +70,9 @@ agents/<agentId>.log     per-agent supervisor log: status changes, exit codes, e
 
 ## Crash reports (opt-in, local only)
 
+These are the local summaries. Sending scrubbed error reports to Umami is a separate opt-in
+(`privacy.errorReports`, see [telemetry](telemetry.md)); it reuses this page's redactor.
+
 Settings › Privacy › Crash reports (`settings.ui.crashReports`, default **off**). v1 never uploads
 anything; there is no crash server. When on:
 

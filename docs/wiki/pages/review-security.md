@@ -803,6 +803,7 @@ the job on.
   - agent env comes from an allow-list;
   - custom model keys never cross IPC (`hasKey` only);
   - no `api.anthropic.com` calls, and `testCustomModel` refuses Anthropic hosts;
-  - telemetry defaults to `false` and nothing sends any.
+  - telemetry defaults to `false` and nothing sends any. (Since 2026-11-25 telemetry is opt-in and
+    sent from main only, through a session limited to the Umami host; see [telemetry](telemetry.md).)
 - **Agent output:** stream-json lines are Zod-parsed, and unknown control requests are answered
   with an error, never auto-allowed.

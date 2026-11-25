@@ -22,7 +22,7 @@ and the Security and Settings screen pages once written.
   store-only shapes). Events that no longer validate read back as `{ type: 'unknown', rawType }`
   so a timeline never breaks.
 
-## Tables (migration 1, plus 2: `review_comments.side`)
+## Tables (migration 1, plus 2: `review_comments.side`, 3: archived agents)
 
 | Table | Contents | Repository |
 | --- | --- | --- |
@@ -46,7 +46,18 @@ and the Security and Settings screen pages once written.
 `page(agentId, { beforeSeq | afterSeq, limit≤5000 })` → `{ events (ascending), hasMore }`, `list()`
 (for `agents.events`), `raw(agentId, seq)`, `nextSeq`, `count`. `partial` deltas are never stored.
 `compactOlderThan(days=30, now)` turns each agent's older events into one `event_summaries` row and
-deletes them; seq stays monotonic across compaction.
+deletes them; seq stays monotonic across compaction. Archived agents (Wall › Archived) are compacted,
+not deleted: only bookkeeping events (`usage`, `context-usage`, `background-tasks`, `plan-usage`,
+`stderr`, `unknown`) go into a summary row; the rest stay without their raw JSON, tool output cut to
+4,000 characters, so Focus can still show the transcript read-only.
+
+Migration 3 adds `agents.archived_at`, `archive_reason` (CHECK: `merged`, `discarded`, `completed`,
+`archived-by-user`) and `merge_commit`, mirrored from `summary.archived` by `saveSummary`.
+`AgentsRepo.list({ archived })`, `listArchived({ projectId?, query?, limit, cursor? })` (newest
+first, LIKE-escaped title search, total count) and `archivedWorktrees(projectId)`. `list()` reads rows
+one by one: an unreadable row is skipped (`skipped`) and a stale summary repaired (`repaired`,
+`repairAgentSummary` in protocol) instead of failing the whole list. See
+[screen-wall](screen-wall.md#archived-agents).
 
 ## Settings (`settings.ts`)
 

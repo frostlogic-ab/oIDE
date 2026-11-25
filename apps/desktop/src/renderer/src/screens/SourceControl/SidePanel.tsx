@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react';
 import { Button } from '@oide/ui';
 import type { AgentSummary, OverlapWarning, Project } from '@oide/protocol';
+import { freshnessText, useMergePrediction } from '../../stores/mergePrediction';
 import { navigate } from '../../stores/router';
 import { reconcile, runSync } from './actions';
 import type { ProjectGit } from './gitStore';
@@ -52,6 +53,7 @@ export function SidePanel({
             <span className="text-[11.5px] text-ink-3">
               {[names[a.projectId] ?? a.projectId, files !== undefined ? `${files} ${files === 1 ? 'file' : 'files'}` : undefined, checks].filter(Boolean).join(' · ')}
             </span>
+            <ReadyFreshness agent={a} />
           </a>
         );
       })}
@@ -82,6 +84,15 @@ export function SidePanel({
       <span className="text-[12px] text-ink-3 leading-normal">Project scope is shared: picking a project here also scopes the agent wall and Files.</span>
     </ResizableAside>
   );
+}
+
+/** "Up to date with main" / "Behind main by 2 commits, would conflict in 1 file", or "Resolving merge conflicts". */
+function ReadyFreshness({ agent }: { agent: AgentSummary }) {
+  const { prediction } = useMergePrediction(agent.id, agent.projectId, Boolean(agent.branch));
+  if (agent.mergeConflict) return <span className="text-[11.5px] text-warn">Resolving merge conflicts</span>;
+  const text = freshnessText(prediction);
+  if (!text) return null;
+  return <span className={`text-[11.5px] ${prediction?.status === 'conflicts' ? 'text-warn' : 'text-ink-3'}`}>{text}</span>;
 }
 
 function OverlapCard({ o, projectName, byId }: { o: OverlapWarning; projectName: string; byId: Record<string, AgentSummary> }) {

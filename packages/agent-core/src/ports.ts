@@ -32,8 +32,11 @@ export interface WorktreeProvider {
   create(input: { agentId: string; slug: string; spec: AgentSpec }): Promise<WorktreeResult>;
   /** Run `.oide/setup` (only for trusted projects; the provider decides). Output lines go to the tile. */
   runSetup?(input: { agentId: string; path: string; spec: AgentSpec; onStart?: () => void; onOutput?: (line: string) => void }): Promise<{ ok: boolean; output?: string }>;
-  /** `git worktree remove` + branch delete, used by `remove(agentId, { deleteWorktree: true })`. */
-  remove?(input: { agentId: string; path: string; branch?: string; projectId: string }): Promise<void>;
+  /**
+   * `git worktree remove` + branch delete, used by `remove(agentId, { deleteWorktree: true })` and
+   * `archive`. Resolves `false` when it left the folder alone (the project folder itself).
+   */
+  remove?(input: { agentId: string; path: string; branch?: string; projectId: string }): Promise<void | boolean>;
 }
 
 export interface EventSink {

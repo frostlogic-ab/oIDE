@@ -175,4 +175,16 @@ CREATE TABLE secrets (
     // Which side of the diff a comment's line number refers to; existing comments were all new-side.
     up: `ALTER TABLE review_comments ADD COLUMN side TEXT NOT NULL DEFAULT 'new' CHECK (side IN ('old', 'new'));`,
   },
+  {
+    version: 3,
+    name: 'archived agents',
+    // Merged, discarded, completed and hand-archived agents keep their row, summary and events.
+    // NULL archived_at = on the Wall. The summary's `archived` field mirrors these columns.
+    up: `
+ALTER TABLE agents ADD COLUMN archived_at INTEGER;
+ALTER TABLE agents ADD COLUMN archive_reason TEXT CHECK (archive_reason IN ('merged', 'discarded', 'completed', 'archived-by-user'));
+ALTER TABLE agents ADD COLUMN merge_commit TEXT;
+CREATE INDEX agents_archived ON agents(archived_at DESC, id DESC) WHERE archived_at IS NOT NULL;
+`,
+  },
 ];

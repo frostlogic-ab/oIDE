@@ -42,7 +42,7 @@ export const SECTIONS: Array<{ id: SectionId; label: string; keywords: string }>
   { id: 'ext', label: 'Extensions', keywords: 'extensions extension settings secret token keychain browser preview default url marketplace index url' },
   { id: 'keys', label: 'Keyboard shortcuts', keywords: 'keyboard shortcuts keys bindings' },
   { id: 'look', label: 'Appearance', keywords: 'appearance accent colour color theme sidebar width resize' },
-  { id: 'privacy', label: 'Privacy', keywords: 'privacy telemetry crash reports' },
+  { id: 'privacy', label: 'Privacy', keywords: 'privacy telemetry analytics usage statistics crash error reports send share' },
   { id: 'updates', label: 'Updates', keywords: 'updates version upgrade channel stable beta check now release download install' },
   { id: 'diag', label: 'Diagnostics', keywords: 'diagnostics logs log folder git version gh node keychain database mcp port report troubleshooting' },
 ];

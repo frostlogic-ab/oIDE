@@ -69,6 +69,7 @@ export default defineConfig({
             { text: 'Agents and permissions', link: '/guide/agents-and-permissions' },
             { text: 'Worktrees and review', link: '/guide/worktrees-and-review' },
             { text: 'Security model', link: '/guide/security-model' },
+            { text: 'Privacy and telemetry', link: '/guide/privacy' },
           ],
         },
       ],

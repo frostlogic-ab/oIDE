@@ -1,5 +1,8 @@
 import type { AgentSummary, SubagentInfo } from '@oide/protocol';
-import { Button, ContextRing, ContextRingButton, Icon, Tooltip, contextFraction, contextPercent, contextTooltip, modelFamily, subagentStatusMeta } from '@oide/ui';
+import { Badge, Button, ContextRing, ContextRingButton, Icon, Tooltip, contextFraction, contextPercent, contextTooltip, modelFamily, subagentStatusMeta } from '@oide/ui';
+import { ARCHIVE_REASON_LABEL, formatEnded } from '../../../stores/archive';
+import { canArchive } from '../../Wall/logic';
+import { PrLink } from '../../../components/PrLink';
 import { formatTokens } from '../../../lib/format';
 import { MODE_LABEL, isSubagentActive, modelEffort, routeLabel, runningText, subagentStatusText, tokenCount } from '../model/focus';
 
@@ -34,14 +37,20 @@ export interface LeadHeaderProps {
   onPause(): void;
   onResume(): void;
   onStop(): void;
+  /** Finished or stopped agents: move to Wall › Archived. */
+  onArchive?(): void;
+  /** Archived agent (read-only): back to the Wall, or delete permanently. */
+  onUnarchive?(): void;
+  onDelete?(): void;
 }
 
 const RESUMABLE = new Set(['paused', 'stopped', 'error', 'rate-limited']);
 const STOPPABLE = new Set(['running', 'starting', 'needs-permission', 'queued']);
 
-export function LeadHeader({ agent, project, now, warnAt, dangerAt, modeShortcut, onCycleMode, onCompact, onRawTerminal, onPause, onResume, onStop }: LeadHeaderProps) {
+export function LeadHeader({ agent, project, now, warnAt, dangerAt, modeShortcut, onCycleMode, onCompact, onRawTerminal, onPause, onResume, onStop, onArchive, onUnarchive, onDelete }: LeadHeaderProps) {
   const worktree = agent.branch ? agent.branch.split('/').pop() : undefined;
-  const resumable = RESUMABLE.has(agent.status);
+  const resumable = RESUMABLE.has(agent.status) && !agent.resumeBlocked;
+  if (agent.archived) return <ArchivedHeader agent={agent} project={project} worktree={worktree} onUnarchive={onUnarchive} onDelete={onDelete} />;
   return (
     <div className={ROW}>
       <div className="flex flex-col gap-[3px] flex-1 min-w-0">
@@ -100,8 +109,63 @@ export function LeadHeader({ agent, project, now, warnAt, dangerAt, modeShortcut
           <span className={NARROW_LABEL}>Pause</span>
         </Button>
       )}
+      {agent.pr && <PrLink pr={agent.pr} className="shrink-0 @max-[700px]:hidden" />}
+      {onArchive && canArchive(agent) && (
+        <Button size={28} className={ACTION} icon="archive" onClick={onArchive} title="Archive">
+          <span className={NARROW_LABEL}>Archive</span>
+        </Button>
+      )}
       <Button size={28} variant="danger" className={ACTION} onClick={onStop} disabled={!STOPPABLE.has(agent.status)}>
         Stop
+      </Button>
+    </div>
+  );
+}
+
+/** Focus header of an archived agent: read-only (transcript from the database), Unarchive or Delete permanently. */
+function ArchivedHeader({ agent, project, worktree, onUnarchive, onDelete }: { agent: AgentSummary; project: string; worktree?: string; onUnarchive?(): void; onDelete?(): void }) {
+  const info = agent.archived!;
+  return (
+    <div className={ROW}>
+      <div className="flex flex-col gap-[3px] flex-1 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <h1 className="m-0 text-[17px] font-semibold tracking-[-0.01em] truncate" title={agent.title}>
+            {agent.title}
+          </h1>
+          <Badge tone={info.reason === 'merged' ? 'ok' : info.reason === 'completed' ? 'review' : 'neutral'} icon="archive" className="shrink-0">
+            {ARCHIVE_REASON_LABEL[info.reason]}
+          </Badge>
+        </div>
+        <span className={META}>
+          <span className="shrink-0">{project}</span>
+          {worktree && (
+            <>
+              {SEP}
+              <span className="font-mono truncate min-w-[3ch]">{worktree}</span>
+            </>
+          )}
+          {SEP}
+          <span className="shrink-0">Ended {formatEnded(info.at)}</span>
+          {info.mergeCommit && (
+            <>
+              {SEP}
+              <span className="font-mono shrink-0" title={`Merge commit ${info.mergeCommit}`}>
+                {info.mergeCommit.slice(0, 7)}
+              </span>
+            </>
+          )}
+          <span className="contents @max-[700px]:hidden">
+            {SEP}
+            <span className="shrink-0">Read only</span>
+          </span>
+        </span>
+      </div>
+      {agent.pr && <PrLink pr={agent.pr} className="shrink-0" />}
+      <Button size={28} className={ACTION} icon="archive" onClick={onUnarchive}>
+        Unarchive
+      </Button>
+      <Button size={28} variant="danger" className={ACTION} icon="trash" onClick={onDelete}>
+        <span className={NARROW_LABEL}>Delete permanently</span>
       </Button>
     </div>
   );

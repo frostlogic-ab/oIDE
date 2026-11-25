@@ -1,4 +1,5 @@
 import { mkdirSync } from 'node:fs';
+import { TELEMETRY_SCREENS } from '@oide/protocol';
 import { join } from 'node:path';
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
@@ -53,6 +54,9 @@ export function registerAppHandlers(router: IpcRouter, services: Services, ctx: 
     if (++budget.n > REPORTS_PER_MINUTE) return { ok: true as const };
     const log = ctx.reliability?.logs.channel('renderer') ?? ctx.log;
     log.error(`screen "${screen}" crashed`, { name, message, ...(stack ? { stack } : {}), ...(componentStack ? { componentStack } : {}) });
+    // Opt-in error reports (scrubbed in main; dropped unless "Send crash and error reports" is on).
+    const tags = (TELEMETRY_SCREENS as readonly string[]).includes(screen) ? { screen } : undefined;
+    ctx.telemetry?.service.error({ name, message, stack }, { source: 'boundary', process: 'renderer', handled: true, ...(tags ? { tags } : {}) });
     return { ok: true as const };
   });
 }

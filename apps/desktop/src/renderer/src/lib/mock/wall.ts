@@ -99,6 +99,19 @@ export function seedAgents(base: AgentSummary[], mode: WallMockMode): AgentSumma
   return mode === 'states' ? [...base, ...stateAgents] : base;
 }
 
+/** Wall › Archived in dev:web: three finished agents built from the canvas agents' projects. */
+export function seedArchived(base: AgentSummary[], now = Date.now()): AgentSummary[] {
+  const p0 = base[0]?.projectId ?? 'oide';
+  const p1 = base.find((a) => a.projectId !== p0)?.projectId ?? p0;
+  const mk = (id: string, projectId: string, title: string, ago: number, archived: NonNullable<AgentSummary['archived']>, extra: Partial<AgentSummary> = {}) =>
+    AgentSummary.parse({ id, projectId, title, status: 'ready-for-review', mode: 'acceptEdits', model: 'claude-sonnet-5-5', branch: `oide/${id.slice(4)}`, worktreePath: `/mock/worktrees/${id}`, createdAt: now - ago - 3_600_000, updatedAt: now - ago, archived: { ...archived, at: now - ago }, ...extra });
+  return [
+    mk('arc-status-bar', p0, 'Status bar usage meters', 2 * 3_600_000, { at: 0, reason: 'merged', mergeCommit: '4f9c2a1e7b3d', worktreeRemoved: true }, { diff: { files: 4, additions: 182, deletions: 37 }, costUsd: 1.84, pr: { number: 42, url: 'https://github.com/you/oide/pull/42', state: 'merged' } }),
+    mk('arc-retry-spike', p1, 'Spike: retry webhook deliveries', 26 * 3_600_000, { at: 0, reason: 'discarded', worktreeRemoved: true }, { diff: { files: 2, additions: 64, deletions: 5 }, costUsd: 0.31, status: 'has-question' }),
+    mk('arc-docs-pass', p0, 'Docs pass on the extension API', 5 * 24 * 3_600_000, { at: 0, reason: 'archived-by-user', worktreeRemoved: false }, { costUsd: 0.07, status: 'stopped' }),
+  ];
+}
+
 export function seedProjects(base: Project[], mode: WallMockMode): Project[] {
   return mode === 'no-projects' ? [] : base;
 }

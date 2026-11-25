@@ -1,7 +1,8 @@
-import { useMemo, useRef, useState } from 'react';
-import type { Project, Settings } from '@oide/protocol';
-import { ACCENT_OPTIONS, cn } from '@oide/ui';
-import { ipcErrorMessage, oide } from '../../lib/bridge';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { TELEMETRY_EVENT_NAMES, TELEMETRY_EVENTS, type Project, type Settings, type TelemetryStatus } from '@oide/protocol';
+import { ACCENT_OPTIONS, Toggle, cn } from '@oide/ui';
+import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
+import { INCLUDED, NEVER_SENT } from '../../components/TelemetryConsent';
 import { useProjects } from '../../stores/projects';
 import { navigate } from '../../stores/router';
 import { toast } from '../../stores/ui';
@@ -176,17 +177,74 @@ function SidebarWidthsRow({ settings }: { settings: Settings }) {
 
 /* ----------------------------------------------------------------------- Privacy */
 
+const UNAVAILABLE: Record<string, string> = {
+  'compiled-out': 'This build of oIDE has no telemetry endpoint, so it never sends anything.',
+  'do-not-track': 'DO_NOT_TRACK is set in your environment, so oIDE sends nothing and the switches stay off.',
+  env: 'OIDE_TELEMETRY=0 is set in your environment, so oIDE sends nothing and the switches stay off.',
+  test: 'Telemetry is off in test runs.',
+};
+
 export function PrivacySection({ settings }: { settings: Settings }) {
   const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState<TelemetryStatus | null>(null);
+  const [showSent, setShowSent] = useState(false);
+  useEffect(() => {
+    void invokeOr('telemetry.status', undefined, null).then(setStatus, () => undefined);
+  }, [settings.privacy.usageAnalytics, settings.privacy.errorReports]);
+  const available = status?.available ?? false;
+  const save = async (patch: Record<string, unknown>) => {
+    setBusy(true);
+    await savePatch(patch);
+    setBusy(false);
+  };
+  // Changing a switch here answers the first-run question too: it is not asked again.
+  const setPrivacy = (key: 'usageAnalytics' | 'errorReports', on: boolean) => void save({ privacy: { [key]: on, consentAnswered: true } });
   return (
     <>
       <H1>Privacy</H1>
-      <Rd>oIDE never reads, stores or sends your Claude credentials. Prompts, code and paths stay on this computer.</Rd>
-      <Sec>Telemetry</Sec>
-      <Rd className="mt-2 block">oIDE has no telemetry: it collects no usage statistics and sends nothing about how you use it.</Rd>
+      <Rd>oIDE never reads, stores or sends your Claude credentials. Your code, prompts and paths stay on this computer.</Rd>
+      <Sec>Usage and crash reports</Sec>
+      <Rd className="mt-2 block">
+        Both are off unless you turn them on. Sharing them helps us make oIDE better for you. Only how the app is used is sent, never your code, prompts or project information. Turning a switch off
+        stops sending at once.
+      </Rd>
+      {status && !available && status.reason && (
+        <Rd className="mt-2 block text-warn" id="telemetry-unavailable">
+          {UNAVAILABLE[status.reason]}
+        </Rd>
+      )}
+      <Row title="Share anonymous usage analytics" desc="Screens you open, features you use, counts, timings and performance, with a random install id. Never names, paths or content.">
+        {({ titleId, descId }) => (
+          <Toggle
+            aria-labelledby={titleId}
+            aria-describedby={descId}
+            disabled={busy || !available}
+            checked={available && settings.privacy.usageAnalytics}
+            onChange={(on) => setPrivacy('usageAnalytics', on)}
+          />
+        )}
+      </Row>
+      <Row title="Send crash and error reports" desc="The kind of error, its message with paths, names, links and tokens removed, and where it happened in oIDE’s own code.">
+        {({ titleId, descId }) => (
+          <Toggle
+            aria-labelledby={titleId}
+            aria-describedby={descId}
+            disabled={busy || !available}
+            checked={available && settings.privacy.errorReports}
+            onChange={(on) => setPrivacy('errorReports', on)}
+          />
+        )}
+      </Row>
+      <div className="py-3">
+        <button type="button" className={outlineBtn} aria-expanded={showSent} aria-controls="telemetry-sent" onClick={() => setShowSent((v) => !v)}>
+          {showSent ? 'Hide what’s sent' : 'See what’s sent'}
+        </button>
+        {showSent && <WhatIsSent />}
+      </div>
+      <Sec>On this computer</Sec>
       <Row
-        title="Crash reports"
-        desc="Off by default. When on, oIDE saves crash reports on this computer only, with paths, prompts and code removed. Nothing is uploaded; you can copy one into a bug report yourself. Turning this off deletes them."
+        title="Save crash reports on this computer"
+        desc="Off by default. When on, oIDE keeps crash summaries on this computer only, with paths, prompts and code removed, for you to copy into a bug report. Nothing is uploaded by this switch. Turning it off deletes them."
       >
         {({ titleId, descId }) => (
           <label className="flex items-center gap-2 cursor-pointer">
@@ -197,16 +255,45 @@ export function PrivacySection({ settings }: { settings: Settings }) {
               aria-describedby={descId}
               disabled={busy}
               checked={settings.ui.crashReports}
-              onChange={async (e) => {
-                setBusy(true);
-                await savePatch({ ui: { crashReports: e.target.checked } });
-                setBusy(false);
-              }}
+              onChange={(e) => void save({ ui: { crashReports: e.target.checked } })}
             />
             Save
           </label>
         )}
       </Row>
     </>
+  );
+}
+
+/** Everything telemetry can send, generated from the catalogue in packages/protocol/src/telemetry.ts. */
+function WhatIsSent() {
+  return (
+    <div id="telemetry-sent" className="mt-3 p-3.5 rounded-lg border border-line-2 bg-panel flex flex-col gap-3 text-[12.5px] text-ink-2">
+      <ul className="m-0 pl-4 flex flex-col gap-1.5">
+        {INCLUDED.map((i) => (
+          <li key={i.title}>
+            <span className="text-ink">{i.title}:</span> {i.detail}
+          </li>
+        ))}
+      </ul>
+      <p className="m-0 text-ink-3">{NEVER_SENT}</p>
+      <p className="m-0 text-ink-3">
+        Screen views are sent as names such as <span className="font-mono">/wall</span> or <span className="font-mono">/settings/privacy</span>. These are all the events oIDE can send, with the only
+        values they may carry:
+      </p>
+      <dl className="m-0 flex flex-col gap-2">
+        {TELEMETRY_EVENT_NAMES.map((name) => (
+          <div key={name}>
+            <dt className="font-mono text-[12px] text-ink">{name}</dt>
+            <dd className="m-0 text-ink-3">
+              {TELEMETRY_EVENTS[name].question}
+              {Object.keys(TELEMETRY_EVENTS[name].props.shape).length > 0 && (
+                <span className="block font-mono text-[11.5px]">{Object.keys(TELEMETRY_EVENTS[name].props.shape).join(', ')}</span>
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }

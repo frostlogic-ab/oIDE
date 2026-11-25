@@ -11,25 +11,57 @@ import {
   gitPush,
   log as gitLog,
   mergeLocal as gitMergeLocal,
+  predictMerge as gitPredictMerge,
   isInside,
   samePath,
   syncState,
   type LiveWorktree,
+  type MergeForecast,
   type PrInfo,
   type WorktreeManager,
 } from '@oide/git';
-import { sensitivePathReason, type AgentSummary, type CommitInfo, type FileDiff, type OverlapWarning, type Project, type SyncState, type WorktreeInfo } from '@oide/protocol';
+import {
+  sensitivePathReason,
+  type AgentStatus,
+  type AgentSummary,
+  type CommitInfo,
+  type FileDiff,
+  type MergeConflictsMessage,
+  type MergePrediction,
+  type OverlapWarning,
+  type Project,
+  type SyncState,
+  type UserMessage,
+  type WorktreeInfo,
+} from '@oide/protocol';
 import type { SettingsService, Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
 import type { ProjectsService } from './projects.js';
+import { PrWatcher, toAgentPr } from './pr-watch.js';
 
 /** Minimal view of the agents the git service needs (avoids a cycle with AgentsService). */
 export interface AgentLookup {
   list(): AgentSummary[];
   get(agentId: string): AgentSummary | undefined;
   setDiff(agentId: string, diff: AgentSummary['diff']): void;
+  /** The branch's pull request (tile "View PR", PR-merged archive). */
+  setPr?(agentId: string, pr: AgentSummary['pr']): void;
+  /** "Resolving merge conflicts" on the tile (set after the conflicts were sent). */
+  setMergeConflict?(agentId: string, info: AgentSummary['mergeConflict']): void;
+  /** An archived agent's summary (Archived view), or undefined. */
+  archived?(agentId: string): AgentSummary | undefined;
+  /** Back to the Wall (resumable when its session and worktree exist). */
+  unarchive?(agentId: string): Promise<AgentSummary>;
+  /** Deliver a message; a stopped agent is resumed with `--resume` (queued under Max running). */
+  send?(agentId: string, msg: UserMessage): void | Promise<void>;
+  /** Resume a paused agent so a held message is delivered. */
+  resume?(agentId: string): Promise<void>;
 }
+
+const LIVE: ReadonlySet<AgentStatus> = new Set(['starting', 'running', 'needs-permission']);
+const PROJECT_FOLDER = 'This agent works in the project folder; there is no branch to merge.';
+const WORKTREE_DELETED = "Its worktree was deleted, so the agent can't resolve conflicts there. Resolve them by hand, or hand them to a new agent.";
 
 interface Subscription {
   unsubscribe(): Promise<void>;
@@ -61,6 +93,8 @@ const DAY = 24 * 60 * 60 * 1000;
  */
 export class GitService {
   readonly gh: GhCli;
+  /** Polls open/draft PRs; a merged one archives its agent (pr-watch.ts). */
+  readonly prs: PrWatcher;
   private readonly lastFetchAt = new Map<string, number>();
   private readonly prCache = new Map<string, { at: number; pr: PrInfo | undefined }>();
   private readonly watchers = new Map<string, { projectId: string; sub: Promise<Subscription | undefined> }>();
@@ -70,6 +104,10 @@ export class GitService {
   private closed = false;
   /** Background git work (diff refreshes, periodic fetch) that dispose() waits for. */
   private readonly inflight = new Set<Promise<unknown>>();
+  /** Merge predictions per agent, valid while the main checkout's HEAD and the branch stay on the same commits. */
+  private readonly predictions = new Map<string, { key: string; forecast: MergeForecast }>();
+  /** Files the last real merge of each agent stopped on (prediction missed it, or git is too old to predict). */
+  private readonly mergeConflicts = new Map<string, string[]>();
 
   constructor(
     private readonly o: {
@@ -79,11 +117,18 @@ export class GitService {
       worktrees: WorktreeManager;
       projects: ProjectsService;
       agents: AgentLookup;
-      /** Remove an agent (and its worktree); used by cleanup after merge. */
-      removeAgent(agentId: string): Promise<void>;
+      /**
+       * After a full merge: archive the agent (reason `merged`, with the merge commit); its worktree is
+       * deleted now when Settings › Agents › Clean up is "Right away".
+       */
+      archiveMerged(agentId: string, opts: { mergeCommit?: string; deleteWorktree: boolean }): Promise<void>;
+      /** Clean up "After 7 days": delete a merged agent's worktree (archived or not). True when removed. */
+      removeWorktreeOf(agentId: string): Promise<boolean>;
       watch?: WatchFn | undefined;
       background?: boolean | undefined;
       gh?: GhCli;
+      /** False while the machine is offline (Electron's net.isOnline): no PR polling then. */
+      isOnline?: () => boolean;
       debounceMs?: number;
       /** Test seam for the tile diff counts. */
       diffStat?: typeof diffStat;
@@ -92,6 +137,15 @@ export class GitService {
     },
   ) {
     this.gh = o.gh ?? new GhCli();
+    this.prs = new PrWatcher({
+      gh: this.gh,
+      agents: { list: () => this.o.agents.list(), setPr: (id, pr) => this.o.agents.setPr?.(id, pr) },
+      trusted: (projectId) => this.o.projects.get(projectId)?.trusted ?? false,
+      intervalMinutes: () => this.o.settings.get().agents.fetchIntervalMinutes,
+      ...(o.isOnline ? { isOnline: o.isOnline } : {}),
+      onMerged: (a, pr) => this.archiveForMergedPr(a, pr),
+      log: o.ctx.log,
+    });
     if (o.background) {
       this.armFetchTimer();
       o.settings.onChange(() => this.armFetchTimer());
@@ -188,10 +242,15 @@ export class GitService {
       agents.map(async (a) => {
         const info = await this.o.worktrees.info({ projectId, path: a.worktreePath, branch: a.branch, baseRef: a.baseRef, agentId: a.id });
         const pr = prOk && !info.orphaned ? await this.prFor(a.worktreePath, a.branch) : undefined;
+        // The same lookup puts the PR on the agent (tile "View PR #12"), also for PRs opened outside oIDE.
+        const agentPr = toAgentPr(pr, Date.now());
+        if (agentPr && agentPr.state !== 'merged') this.o.agents.setPr?.(a.id, agentPr);
         return pr ? { ...info, pr: { state: pr.state, ...(pr.number !== undefined ? { number: pr.number } : {}), ...(pr.url ? { url: pr.url } : {}) } } : info;
       }),
     );
-    const orphans = await this.o.worktrees.orphans(p.path, p.id, agents.map((a) => a.worktreePath)).catch(() => []);
+    // Archived agents' kept worktrees are not orphans: Unarchive can resume them.
+    const known = [...agents.map((a) => a.worktreePath), ...this.o.store.agents.archivedWorktrees(projectId)];
+    const orphans = await this.o.worktrees.orphans(p.path, p.id, known).catch(() => []);
     for (const o of orphans) out.push({ projectId, path: o.path, branch: o.branch ?? '', baseRef: '', ahead: 0, behind: 0, changedFiles: [], orphaned: true });
     return out;
   }
@@ -225,8 +284,10 @@ export class GitService {
 
   /** The agent's changes; files that configure agents, git or MCP are marked `sensitive` (SEC-12). */
   async diff(agentId: string): Promise<FileDiff[]> {
-    const a = this.agent(agentId);
-    if (!a.worktreePath || !a.baseRef) return [];
+    // An archived agent (Focus, read-only) shows its changes while its worktree still exists.
+    const a = this.o.agents.get(agentId) ?? this.o.store.agents.get(agentId)?.summary;
+    if (!a) throw new IpcError(`Unknown agent ${agentId}`, 'not_found');
+    if (!a.worktreePath || !a.baseRef || (a.archived && !existsSync(a.worktreePath))) return [];
     const diffs = await fileDiffs(a.worktreePath, a.baseRef);
     return diffs.map((d) => {
       const why = sensitivePathReason(d.path) ?? (d.oldPath ? sensitivePathReason(d.oldPath) : undefined);
@@ -250,14 +311,130 @@ export class GitService {
       }
     }
     const r = await gitMergeLocal(p.path, a.branch, { message: `Merge ${a.branch} (${a.title})` });
-    if (r.error && !r.conflicts.length) throw new IpcError(r.error, 'git_failed');
+    if (r.error && !r.conflicts.length) throw new IpcError(r.error, r.blockedBy ? 'conflict' : 'git_failed');
+    // Remembered for "Ask <agent> to resolve" when the prediction could not see these conflicts.
+    if (r.conflicts.length) this.mergeConflicts.set(agentId, r.conflicts);
+    else this.mergeConflicts.delete(agentId);
     this.changed(p.id);
     if (r.ok && (await this.fullyMerged(p.path, a.worktreePath, a.branch))) {
+      // Merged agents move to the Archived view (row, summary and transcript stay); worktree cleanup follows Settings.
       const cleanup = this.o.settings.get().agents.cleanup;
-      if (cleanup === 'right-away') await this.o.removeAgent(agentId);
-      else if (cleanup === 'after-7-days') this.o.store.ui.kv.set(MERGED_KEY(agentId), Date.now());
+      if (cleanup === 'after-7-days') this.o.store.ui.kv.set(MERGED_KEY(agentId), Date.now());
+      await this.o.archiveMerged(agentId, { ...(r.sha ? { mergeCommit: r.sha } : {}), deleteWorktree: cleanup === 'right-away' });
     }
     return { ok: r.ok, conflicts: r.conflicts };
+  }
+
+  // ---------------------------------------------------------------- merge conflicts
+
+  /** A live agent, or an archived one (its record), with its project. */
+  private mergeSubject(agentId: string): { a: AgentSummary; p: Project; archived: boolean } {
+    const live = this.o.agents.get(agentId);
+    const a = live ?? this.o.agents.archived?.(agentId);
+    if (!a) throw new IpcError(`Unknown agent ${agentId}`, 'not_found');
+    return { a, p: this.project(a.projectId), archived: !live };
+  }
+
+  /**
+   * "Merge into main?" before merging: would the agent branch conflict with the main checkout's HEAD?
+   * `git merge-tree --write-tree` (no checkout touched), cached until either commit moves.
+   * Prediction sees commits only; Merge first commits the worktree's pending changes.
+   */
+  async predictMerge(agentId: string, opts: { refresh?: boolean; withMainStatus?: boolean } = {}): Promise<MergePrediction> {
+    const { a, p, archived } = this.mergeSubject(agentId);
+    const computedAt = Date.now();
+    const none = (reason: string): MergePrediction => ({ agentId, status: 'unavailable', reason, files: [], binary: [], submodules: [], behind: 0, ahead: 0, canAsk: false, askBlocked: reason, computedAt });
+    if (!a.branch || !a.worktreePath || samePath(a.worktreePath, p.path)) return none(PROJECT_FOLDER);
+    const git = new Git({ cwd: p.path });
+    const [head, branchSha] = await Promise.all([git.revParse('HEAD'), git.revParse(a.branch)]);
+    if (!head) return none('The main checkout has no commits yet.');
+    if (!branchSha) return none(`Its branch ${a.branch} no longer exists.`);
+    const key = `${head}:${branchSha}`;
+    let forecast = opts.refresh ? undefined : this.predictions.get(agentId);
+    if (forecast?.key !== key) {
+      try {
+        forecast = { key, forecast: await gitPredictMerge(git, a.branch) };
+      } catch (err) {
+        return none((err as Error).message);
+      }
+      this.predictions.set(agentId, forecast);
+      if (this.predictions.size > 500) this.predictions.delete(this.predictions.keys().next().value!);
+    }
+    const f = forecast.forecast;
+    const gone = Boolean(a.archived?.worktreeRemoved) || !existsSync(a.worktreePath);
+    const askBlocked = gone ? WORKTREE_DELETED : a.resumeBlocked && !(LIVE.has(a.status) && !archived) ? a.resumeBlocked : undefined;
+    let mainDirty: string[] | undefined;
+    if (opts.withMainStatus) {
+      const out = await git.out(['status', '--porcelain', '-z', '--untracked-files=no'], { env: { GIT_OPTIONAL_LOCKS: '0' } }).catch(() => '');
+      mainDirty = out
+        .split('\0')
+        .filter((e) => e.length > 3)
+        .map((e) => e.slice(3))
+        .slice(0, 200);
+    }
+    return {
+      agentId,
+      status: !f.supported ? 'unknown' : f.conflicts ? 'conflicts' : 'clean',
+      ...(f.supported ? {} : { reason: `oIDE could not predict conflicts: ${f.error ?? 'git merge-tree failed'} (git 2.38 or newer is needed).` }),
+      target: { ...(f.target.branch ? { branch: f.target.branch } : {}), sha: f.target.sha },
+      branchSha: f.branchSha,
+      files: f.files,
+      binary: f.binary,
+      submodules: f.submodules,
+      behind: f.behind,
+      ahead: f.ahead,
+      ...(mainDirty ? { mainDirty } : {}),
+      canAsk: !askBlocked,
+      ...(askBlocked ? { askBlocked } : {}),
+      computedAt,
+    };
+  }
+
+  /**
+   * "Ask <agent> to resolve": send the agent the merge conflicts as a message from oIDE (target
+   * branch and commit, files, what to do and what never to do). An archived agent is unarchived
+   * first; a stopped one is resumed with `--resume` (queued under Max running). Never merges: the
+   * agent submits for review again and the user clicks Merge.
+   */
+  async askToResolve(agentId: string, source: 'prediction' | 'merge' = 'prediction'): Promise<{ status: AgentStatus; files: number; unarchived: boolean; resumed: boolean }> {
+    const { a, archived } = this.mergeSubject(agentId);
+    const pred = await this.predictMerge(agentId, { refresh: true });
+    if (pred.status === 'unavailable') throw new IpcError(pred.reason ?? PROJECT_FOLDER, 'conflict');
+    if (!pred.canAsk) throw new IpcError(pred.askBlocked ?? WORKTREE_DELETED, 'conflict');
+    const recorded = this.mergeConflicts.get(agentId) ?? [];
+    let files: string[] = [];
+    if (pred.status === 'conflicts') files = pred.files;
+    else if (recorded.length) files = recorded;
+    else if (pred.status === 'clean') throw new IpcError('Merging this branch would not conflict any more, so there is nothing to resolve. Merge it again.', 'conflict');
+    const send = this.o.agents.send;
+    if (!send) throw new IpcError('Agents cannot be messaged right now.', 'unavailable');
+    let unarchived = false;
+    if (archived) {
+      if (!this.o.agents.unarchive) throw new IpcError('Archived agents cannot be brought back right now.', 'unavailable');
+      await this.o.agents.unarchive(agentId);
+      unarchived = true;
+    }
+    const before = this.o.agents.get(agentId) ?? a;
+    const target = pred.target!;
+    const ref = target.branch ?? target.sha;
+    const msg: MergeConflictsMessage = {
+      kind: 'merge-conflicts',
+      target: ref,
+      targetSha: target.sha,
+      mergeRef: ref,
+      fetchFirst: false,
+      files,
+      binary: pred.binary.filter((f) => files.includes(f)),
+      submodules: pred.submodules.filter((f) => files.includes(f)),
+    };
+    await send(agentId, msg);
+    if (before.status === 'paused') await this.o.agents.resume?.(agentId);
+    this.o.agents.setMergeConflict?.(agentId, { target: ref, targetSha: target.sha, files, sentAt: Date.now() });
+    this.mergeConflicts.delete(agentId);
+    const after = this.o.agents.get(agentId) ?? before;
+    this.o.ctx.log.debug('merge conflicts sent to the agent', { agent: agentId, source, files: files.length });
+    // Delivered to a live process: running now. Otherwise it waits in the queue for a --resume launch.
+    return { status: after.status, files: files.length, unarchived, resumed: unarchived || after.status === 'queued' || after.status === 'starting' };
   }
 
   private async hasLocalChanges(worktree: string): Promise<boolean> {
@@ -284,35 +461,87 @@ export class GitService {
       const agentId = key.slice('merged:'.length);
       if (typeof at === 'number' && now - at < 7 * DAY) continue;
       this.o.store.ui.kv.delete(key);
-      if (this.o.agents.get(agentId)) {
-        await this.o.removeAgent(agentId).catch((err) => this.o.ctx.log.warn('cleanup failed', err));
-        removed.push(agentId);
-      }
+      const done = await this.o.removeWorktreeOf(agentId).catch((err) => {
+        this.o.ctx.log.warn('cleanup failed', err);
+        return false;
+      });
+      if (done) removed.push(agentId);
     }
     return removed;
   }
 
-  async openPr(agentId: string, title: string, body: string): Promise<{ url: string }> {
+  /**
+   * Push the branch and open a PR. Idempotent: when the branch already has an open or draft PR
+   * (opened before, or outside oIDE), that one is returned (`existing: true`) instead of failing.
+   */
+  async openPr(agentId: string, title: string, body: string): Promise<{ url: string; number?: number; state?: 'open' | 'draft' | 'merged' | 'closed'; existing?: boolean }> {
     const a = this.agent(agentId);
     if (!a.branch || !a.worktreePath) throw new IpcError('This agent has no branch to open a pull request for.', 'conflict');
     if (!(await this.gh.available())) throw new IpcError('The GitHub CLI (gh) is not installed or not signed in.', 'unavailable');
-    await this.remote(() => gitPush(a.worktreePath!, { branch: a.branch!, setUpstream: true }));
+    const cwd = a.worktreePath;
+    const branch = a.branch;
+    const existing = async () => {
+      const r = await this.gh.prLookup(cwd, branch);
+      const pr = toAgentPr(r.pr, Date.now());
+      return pr && (pr.state === 'open' || pr.state === 'draft') ? pr : undefined;
+    };
+    const known = await existing();
+    // New commits still go up, so the existing PR shows them.
+    await this.remote(() => gitPush(cwd, { branch, setUpstream: true }));
+    if (known) return this.notePr(a, known, true);
     const base = a.baseRef && !/^[0-9a-f]{40}$/.test(a.baseRef) ? a.baseRef.replace(/^origin\//, '') : undefined;
-    const r = await this.gh.prCreate(a.worktreePath, { title, body, head: a.branch, ...(base ? { base } : {}) }).catch((err: Error) => {
-      throw new IpcError(err.message, 'git_failed');
-    });
-    if (!r) throw new IpcError('The GitHub CLI (gh) is not available.', 'unavailable');
-    this.prCache.delete(a.branch);
+    let created: { url: string } | undefined;
+    try {
+      created = await this.gh.prCreate(cwd, { title, body, head: branch, ...(base ? { base } : {}) });
+    } catch (err) {
+      // A PR appeared in between (or gh's lookup missed it): "a pull request for branch … already exists".
+      const again = /already exists/i.test((err as Error).message) ? await existing() : undefined;
+      if (again) return this.notePr(a, again, true);
+      throw new IpcError((err as Error).message, 'git_failed');
+    }
+    if (!created) throw new IpcError('The GitHub CLI (gh) is not available.', 'unavailable');
+    const number = Number(/\/pull\/(\d+)/.exec(created.url)?.[1]);
+    const pr = (await existing()) ?? (number > 0 ? { number, url: created.url, state: 'open' as const, checkedAt: Date.now() } : undefined);
+    if (!pr) {
+      this.prCache.delete(branch);
+      this.changed(a.projectId);
+      return created;
+    }
+    return this.notePr(a, pr, false);
+  }
+
+  private notePr(a: AgentSummary, pr: NonNullable<AgentSummary['pr']>, existing: boolean) {
+    this.o.agents.setPr?.(a.id, pr);
+    this.prs.noteKnown(a.id);
+    if (a.branch) this.prCache.delete(a.branch);
     this.changed(a.projectId);
-    return r;
+    return { url: pr.url, number: pr.number, state: pr.state, existing };
+  }
+
+  /**
+   * The agent's PR was merged on the forge: archive it (reason `merged`, the PR's merge commit), as a
+   * merge inside oIDE does. Worktree cleanup follows Settings, but never deletes uncommitted work.
+   */
+  private async archiveForMergedPr(a: AgentSummary, pr: NonNullable<AgentSummary['pr']>): Promise<void> {
+    if (!this.o.agents.get(a.id)) return;
+    const cleanup = this.o.settings.get().agents.cleanup;
+    const dirty = a.worktreePath && existsSync(a.worktreePath) ? await this.hasLocalChanges(a.worktreePath).catch(() => true) : false;
+    if (dirty) this.o.ctx.log.warn('merged PR: worktree has uncommitted changes, so it is kept', { agent: a.id });
+    if (cleanup === 'after-7-days' && !dirty) this.o.store.ui.kv.set(MERGED_KEY(a.id), Date.now());
+    await this.o.archiveMerged(a.id, { ...(pr.mergeCommit ? { mergeCommit: pr.mergeCommit } : {}), deleteWorktree: cleanup === 'right-away' && !dirty });
+    this.o.ctx.emit('notify', { level: 'info', message: `PR #${pr.number} merged · ${a.title} archived`, agentId: a.id });
+    this.changed(a.projectId);
   }
 
   async pruneOrphans(projectId: string): Promise<{ removed: string[] }> {
     const p = this.project(projectId);
-    const known = this.o.agents
-      .list()
-      .filter((a) => a.projectId === projectId && a.worktreePath)
-      .map((a) => a.worktreePath!);
+    const known = [
+      ...this.o.agents
+        .list()
+        .filter((a) => a.projectId === projectId && a.worktreePath)
+        .map((a) => a.worktreePath!),
+      ...this.o.store.agents.archivedWorktrees(projectId),
+    ];
     const orphans = await this.o.worktrees.orphans(p.path, p.id, known);
     const removed: string[] = [];
     for (const o of orphans) {
@@ -440,6 +669,14 @@ export class GitService {
   async fetchAll(): Promise<void> {
     if (this.closed) return;
     await this.track(() => this.fetchAllNow());
+    // Then the PR states (open/draft PRs only; backs off on gh errors).
+    if (!this.closed) await this.track(() => this.prs.poll('timer'));
+  }
+
+  /** The window got focus: look at open PRs again (throttled in PrWatcher). */
+  onWindowFocus(): void {
+    if (this.closed || !this.o.background) return;
+    void this.track(() => this.prs.poll('focus'));
   }
 
   private async fetchAllNow(): Promise<void> {

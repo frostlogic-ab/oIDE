@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AgentSpec, AgentStatus, AgentSummary, Id, SubagentInfo, type AgentSpecInput } from '@oide/protocol';
+import { AgentSpec, AgentStatus, AgentSummary, ArchiveReason, Id, SubagentInfo, repairAgentSummary, type AgentSpecInput } from '@oide/protocol';
 import { fromJson, toJson, type Database } from '../db.js';
 import { num, opt, type Row } from '../util.js';
 
@@ -19,6 +19,10 @@ export const AgentRecord = z.object({
   createdAt: z.number(),
   updatedAt: z.number(),
   endedAt: z.number().optional(),
+  /** Set while the agent is in the Archived view (migration 3). */
+  archivedAt: z.number().optional(),
+  archiveReason: ArchiveReason.optional(),
+  mergeCommit: z.string().optional(),
 });
 export type AgentRecord = z.infer<typeof AgentRecord>;
 export type NewAgent = Omit<z.input<typeof AgentRecord>, 'spec' | 'createdAt' | 'updatedAt' | 'title'> & {
@@ -31,7 +35,27 @@ export type AgentPatch = Partial<Omit<AgentRecord, 'id' | 'projectId' | 'created
 
 const ENDED: ReadonlySet<AgentStatus> = new Set(['stopped', 'error', 'done']);
 
-function toRecord(r: Row): AgentRecord {
+/** A row that could not be read (bad spec JSON, a spec from a newer build, …); `list()` skips it. */
+export interface SkippedAgentRow {
+  id: string;
+  error: string;
+}
+
+/** A row whose stored summary no longer matched the contract and was repaired on read. */
+export interface RepairedAgentRow {
+  id: string;
+  dropped: string[];
+  issues: string[];
+}
+
+function toRecord(r: Row, onRepair?: (rep: RepairedAgentRow) => void): AgentRecord {
+  let summary: unknown = fromJson(r.summary);
+  if (summary !== undefined) {
+    const rep = repairAgentSummary(summary);
+    if (rep.issues.length) onRepair?.({ id: String(r.id), dropped: rep.dropped, issues: rep.issues });
+    // Unrepairable: keep the row (spec and columns) without its summary rather than lose the agent.
+    summary = rep.summary;
+  }
   return AgentRecord.parse({
     id: r.id,
     projectId: r.project_id,
@@ -43,10 +67,13 @@ function toRecord(r: Row): AgentRecord {
     baseRef: opt(r.base_ref),
     sessionId: opt(r.session_id),
     attemptGroup: opt(r.attempt_group),
-    summary: fromJson(r.summary),
+    summary,
     createdAt: num(r.created_at),
     updatedAt: num(r.updated_at),
     endedAt: opt(num(r.ended_at)),
+    archivedAt: opt(num(r.archived_at)),
+    archiveReason: opt(r.archive_reason),
+    mergeCommit: opt(r.merge_commit),
   });
 }
 
@@ -61,10 +88,44 @@ const COLS: Record<keyof AgentPatch, string> = {
   summary: 'summary',
   updatedAt: 'updated_at',
   endedAt: 'ended_at',
+  archivedAt: 'archived_at',
+  archiveReason: 'archive_reason',
+  mergeCommit: 'merge_commit',
 };
 
+/** Escape `%`, `_` and `!` for a LIKE pattern with ESCAPE '!'. */
+function likeEscape(s: string): string {
+  return s.replace(/[!%_]/g, (c) => `!${c}`);
+}
+
+export interface ArchivedPage {
+  records: AgentRecord[];
+  /** Matching archived agents in all pages. */
+  total: number;
+  nextCursor?: { at: number; id: string };
+}
+
 export class AgentsRepo {
+  /** Rows the last `list()` / `listArchived()` could not read, and summaries it had to repair. */
+  skipped: SkippedAgentRow[] = [];
+  repaired: RepairedAgentRow[] = [];
+
   constructor(private readonly d: Database) {}
+
+  /** Read rows one by one: one unreadable agent must never hide the others (2026-11-25). */
+  private readRows(rows: Row[]): AgentRecord[] {
+    this.skipped = [];
+    this.repaired = [];
+    const out: AgentRecord[] = [];
+    for (const r of rows) {
+      try {
+        out.push(toRecord(r, (rep) => this.repaired.push(rep)));
+      } catch (err) {
+        this.skipped.push({ id: String(r.id), error: err instanceof z.ZodError ? err.issues.slice(0, 5).map((i) => `${i.path.join('.')}: ${i.message}`).join('; ') : (err as Error).message });
+      }
+    }
+    return out;
+  }
 
   insert(input: NewAgent): AgentRecord {
     const now = Date.now();
@@ -96,12 +157,19 @@ export class AgentsRepo {
 
   get(id: string): AgentRecord | undefined {
     const r = this.d.db.prepare('SELECT * FROM agents WHERE id = ?').get(id) as Row | undefined;
-    return r ? toRecord(r) : undefined;
+    if (!r) return undefined;
+    try {
+      return toRecord(r);
+    } catch {
+      return undefined;
+    }
   }
 
-  list(filter: { projectId?: string; statuses?: AgentStatus[]; attemptGroup?: string } = {}): AgentRecord[] {
+  /** `archived`: true = only archived agents, false = only those on the Wall, unset = both. */
+  list(filter: { projectId?: string; statuses?: AgentStatus[]; attemptGroup?: string; archived?: boolean } = {}): AgentRecord[] {
     const where: string[] = [];
     const args: Array<string | number> = [];
+    if (filter.archived !== undefined) where.push(filter.archived ? 'archived_at IS NOT NULL' : 'archived_at IS NULL');
     if (filter.projectId) {
       where.push('project_id = ?');
       args.push(filter.projectId);
@@ -115,7 +183,43 @@ export class AgentsRepo {
       args.push(...filter.statuses);
     }
     const sql = `SELECT * FROM agents ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY created_at ASC`;
-    return (this.d.db.prepare(sql).all(...args) as Row[]).map(toRecord);
+    return this.readRows(this.d.db.prepare(sql).all(...args) as Row[]);
+  }
+
+  /**
+   * Archived agents, most recently archived first. `query` matches the title (case-insensitive for
+   * ASCII); `cursor` is the last item of the previous page.
+   */
+  listArchived(opts: { projectId?: string; query?: string; limit?: number; cursor?: { at: number; id: string } } = {}): ArchivedPage {
+    const where = ['archived_at IS NOT NULL'];
+    const args: Array<string | number> = [];
+    if (opts.projectId) {
+      where.push('project_id = ?');
+      args.push(opts.projectId);
+    }
+    const q = opts.query?.trim();
+    if (q) {
+      where.push("title LIKE ? ESCAPE '!'");
+      args.push(`%${likeEscape(q)}%`);
+    }
+    const total = num((this.d.db.prepare(`SELECT COUNT(*) AS n FROM agents WHERE ${where.join(' AND ')}`).get(...args) as Row).n) ?? 0;
+    const pageWhere = [...where];
+    const pageArgs = [...args];
+    if (opts.cursor) {
+      pageWhere.push('(archived_at < ? OR (archived_at = ? AND id < ?))');
+      pageArgs.push(opts.cursor.at, opts.cursor.at, opts.cursor.id);
+    }
+    const limit = Math.max(1, Math.min(opts.limit ?? 50, 200));
+    const rows = this.d.db.prepare(`SELECT * FROM agents WHERE ${pageWhere.join(' AND ')} ORDER BY archived_at DESC, id DESC LIMIT ?`).all(...pageArgs, limit + 1) as Row[];
+    const records = this.readRows(rows.slice(0, limit));
+    const last = rows.length > limit ? rows[limit - 1] : undefined;
+    return { records, total, ...(last ? { nextCursor: { at: num(last.archived_at)!, id: String(last.id) } } : {}) };
+  }
+
+  /** Worktree folders still held by archived agents of a project (not orphans: they can be unarchived). */
+  archivedWorktrees(projectId: string): string[] {
+    const rows = this.d.db.prepare('SELECT worktree_path FROM agents WHERE project_id = ? AND archived_at IS NOT NULL AND worktree_path IS NOT NULL').all(projectId) as Row[];
+    return rows.map((r) => String(r.worktree_path));
   }
 
   update(id: string, patch: AgentPatch): AgentRecord {
@@ -139,7 +243,8 @@ export class AgentsRepo {
   /** Persist the reduced tile state; also mirrors status, session, branch and worktree into columns. */
   saveSummary(summary: z.input<typeof AgentSummary>): AgentRecord {
     const s = AgentSummary.parse(summary);
-    const patch: AgentPatch = { summary: s, status: s.status, updatedAt: s.updatedAt };
+    // The archive columns follow the summary: set while archived, cleared (NULL) once it is back on the Wall.
+    const patch: AgentPatch = { summary: s, status: s.status, updatedAt: s.updatedAt, archivedAt: s.archived?.at, archiveReason: s.archived?.reason, mergeCommit: s.archived?.mergeCommit };
     // Only overwrite columns the summary knows about.
     if (s.sessionId !== undefined) patch.sessionId = s.sessionId;
     if (s.branch !== undefined) patch.branch = s.branch;

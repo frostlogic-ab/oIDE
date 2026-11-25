@@ -249,6 +249,62 @@ export const DiffStat = z.object({
 });
 export type DiffStat = z.infer<typeof DiffStat>;
 
+/**
+ * Why an agent left the Wall for the Archived view: its branch was merged, it was discarded (Source
+ * control › Remove worktree), it finished (`done`), or the user archived it by hand.
+ */
+export const ArchiveReason = z.enum(['merged', 'discarded', 'completed', 'archived-by-user']);
+export type ArchiveReason = z.infer<typeof ArchiveReason>;
+
+/** Set on an archived agent's summary. Its row, summary and transcript stay in the database. */
+export const AgentArchiveInfo = z.object({
+  at: z.number(),
+  reason: ArchiveReason,
+  /** The merge commit in the main checkout (reason `merged`). */
+  mergeCommit: z.string().optional(),
+  /** The worktree folder was deleted (Settings › Agents › Clean up, or Remove worktree). */
+  worktreeRemoved: z.boolean().default(false),
+});
+export type AgentArchiveInfo = z.infer<typeof AgentArchiveInfo>;
+
+/**
+ * An agent whose process was gone after oIDE restarted while it was working: a normal quit
+ * (`restart`), a crash of oIDE (`crash`), or not resumed because oIDE's MCP server was down
+ * (`mcp-down`). Shown on the Wall as "Interrupted" with Resume; cleared once it runs again.
+ */
+export const AgentInterruption = z.object({ at: z.number(), reason: z.enum(['restart', 'crash', 'mcp-down']) });
+export type AgentInterruption = z.infer<typeof AgentInterruption>;
+
+/**
+ * The pull request for an agent's branch (opened from oIDE or anywhere else), from the user's own
+ * `gh`. An open or draft PR is polled; once merged the agent is archived (reason `merged`).
+ */
+export const AgentPrInfo = z.object({
+  number: z.number().int().positive(),
+  url: z.string().url(),
+  state: z.enum(['open', 'draft', 'merged', 'closed']),
+  /** The merge commit on the base branch, when gh reports it (merged PRs). */
+  mergeCommit: z.string().optional(),
+  /** When oIDE last saw this state. */
+  checkedAt: z.number().optional(),
+});
+export type AgentPrInfo = z.infer<typeof AgentPrInfo>;
+
+/**
+ * Set while the agent is resolving merge conflicts that oIDE sent it ("Ask <agent> to resolve" in
+ * Review's merge dialog). Cleared when it submits for review again; the user then merges by hand.
+ */
+export const AgentMergeConflict = z.object({
+  /** The branch it merges in (the main checkout's branch), or the commit on a detached HEAD. */
+  target: z.string().min(1).max(255),
+  /** The target's commit when the conflicts were sent. */
+  targetSha: z.string().regex(/^[0-9a-f]{7,64}$/),
+  /** Conflicted paths (as predicted, or as the merge reported them). */
+  files: z.array(z.string()).max(1000).default([]),
+  sentAt: z.number(),
+});
+export type AgentMergeConflict = z.infer<typeof AgentMergeConflict>;
+
 /** Compact per-agent state the Wall renders. Reduced from the event stream in main. */
 export const AgentSummary = z.object({
   id: Id,
@@ -290,6 +346,18 @@ export const AgentSummary = z.object({
   interruptedPermission: z.object({ toolName: z.string(), summary: z.string().optional(), at: z.number() }).optional(),
   /** Background subagent tasks still running after the lead's turn ended (`system/background_tasks_changed`). */
   backgroundTasks: z.number().int().nonnegative().default(0),
+  /** Archived agents only (Archived view); never set on the Wall. */
+  archived: AgentArchiveInfo.optional(),
+  /** Stopped by an oIDE restart or crash while working (see AgentInterruption). */
+  interrupted: AgentInterruption.optional(),
+  /** Why Resume cannot work, e.g. the worktree was deleted. Resume is hidden while this is set. */
+  resumeBlocked: z.string().optional(),
+  /** The branch's pull request, when there is one (tile "View PR #12", Focus, Review). */
+  pr: AgentPrInfo.optional(),
+  /** Resolving merge conflicts oIDE sent it (tile badge "Resolving merge conflicts"). */
+  mergeConflict: AgentMergeConflict.optional(),
+  /** Cost the CLI reported (`total_cost_usd`), summed over the agent's processes. */
+  costUsd: z.number().nonnegative().optional(),
   /** Latest plan usage window from the CLI's `rate_limit_event` (utilization is 0..1 when reported). */
   planUsage: z
     .object({
@@ -304,6 +372,85 @@ export const AgentSummary = z.object({
 });
 export type AgentSummary = z.infer<typeof AgentSummary>;
 
+export interface SummaryRepair {
+  /** The summary, valid against the current contract, or undefined when it cannot be repaired. */
+  summary?: AgentSummary;
+  /** Top-level fields or list items that were dropped to make it valid ("diff", "activity[3]"). */
+  dropped: string[];
+  /** The contract issues of the original value (empty when it was valid). */
+  issues: string[];
+}
+
+/**
+ * Parse a stored or live summary that may not match the current contract (written by an older
+ * build, or a reducer bug). Drops what is invalid where the contract allows it: optional and
+ * defaulted fields, and single bad items of the activity, subagents and todos lists. Required
+ * fields (id, projectId, title, status, mode, model, createdAt, updatedAt) cannot be dropped.
+ * One bad agent must never hide the others (2026-11-25).
+ */
+export function repairAgentSummary(value: unknown): SummaryRepair {
+  const first = AgentSummary.safeParse(value);
+  if (first.success) return { summary: first.data, dropped: [], issues: [] };
+  const issues = first.error.issues.slice(0, 10).map((i) => `${i.path.join('.') || '(summary)'}: ${i.message}`);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { dropped: [], issues };
+  const shape = AgentSummary.shape as Record<string, z.ZodType>;
+  const draft: Record<string, unknown> = { ...(value as Record<string, unknown>) };
+  const dropped: string[] = [];
+  let last = first.error;
+  for (let pass = 0; pass < 5; pass++) {
+    let changed = false;
+    // Delete list items from the end so earlier indexes stay valid.
+    const items = last.issues
+      .filter((i) => i.path.length >= 2 && typeof i.path[1] === 'number' && Array.isArray(draft[i.path[0] as string]))
+      .map((i) => ({ key: String(i.path[0]), index: i.path[1] as number }))
+      .sort((a, b) => b.index - a.index);
+    const seen = new Set<string>();
+    for (const { key, index } of items) {
+      if (seen.has(`${key}[${index}]`)) continue;
+      seen.add(`${key}[${index}]`);
+      draft[key] = (draft[key] as unknown[]).filter((_, i) => i !== index);
+      dropped.push(`${key}[${index}]`);
+      changed = true;
+    }
+    for (const i of last.issues) {
+      const key = i.path[0];
+      if (typeof key !== 'string' || !(key in draft) || seen.has(key)) continue;
+      if (i.path.length >= 2 && typeof i.path[1] === 'number' && Array.isArray(draft[key])) continue;
+      const field = shape[key];
+      if (!field || !field.safeParse(undefined).success) continue;
+      delete draft[key];
+      seen.add(key);
+      dropped.push(key);
+      changed = true;
+    }
+    const next = AgentSummary.safeParse(draft);
+    if (next.success) return { summary: next.data, dropped, issues };
+    if (!changed) break;
+    last = next.error;
+  }
+  return { dropped, issues };
+}
+
+/**
+ * Merge conflicts oIDE hands back to the agent (Review › Merge › "Ask <agent> to resolve"). Built in
+ * main only: `agents.send` refuses this kind, so the transcript's "Sent by oIDE" is always true.
+ */
+export const MergeConflictsMessage = z.object({
+  kind: z.literal('merge-conflicts'),
+  /** The main checkout's branch (e.g. `main`), or the commit on a detached HEAD. */
+  target: z.string().min(1).max(255),
+  targetSha: z.string().regex(/^[0-9a-f]{7,64}$/),
+  /** What the agent passes to `git merge` (the branch name, or the commit). */
+  mergeRef: z.string().min(1).max(255),
+  /** The target is a remote-tracking ref: fetch before merging. */
+  fetchFirst: z.boolean().default(false),
+  /** Conflicted paths; empty when they could not be predicted. */
+  files: z.array(z.string()).max(1000).default([]),
+  binary: z.array(z.string()).max(1000).default([]),
+  submodules: z.array(z.string()).max(1000).default([]),
+});
+export type MergeConflictsMessage = z.infer<typeof MergeConflictsMessage>;
+
 /** User → agent messages, delivered as stream-json user messages. */
 export const UserMessage = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('text'), text: z.string().min(1), attachments: MessageAttachments.optional() }),
@@ -314,5 +461,6 @@ export const UserMessage = z.discriminatedUnion('kind', [
     note: z.string().optional(),
   }),
   z.object({ kind: z.literal('artifact'), artifactId: Id, note: z.string().optional(), attachments: MessageAttachments.optional() }),
+  MergeConflictsMessage,
 ]);
 export type UserMessage = z.infer<typeof UserMessage>;
