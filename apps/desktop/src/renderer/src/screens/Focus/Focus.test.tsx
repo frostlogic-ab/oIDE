@@ -105,6 +105,14 @@ describe('PermissionPrompt', () => {
     expect(calls('agents.answerPermission')[2]).toEqual({ agentId: 'a-bridge', answer: { requestId: 'perm-44', behavior: 'deny', message: 'Denied by user' } });
   });
 
+  it('offers no "Always" when the request carries no rule to save', () => {
+    const { suggestedRule: _none, ...noRule } = request;
+    render(<PermissionPrompt agentId="a-bridge" request={noRule} projectName="oide" />);
+    const always = screen.getByRole('button', { name: 'Always in oide' }) as HTMLButtonElement;
+    expect(always.disabled).toBe(true);
+    expect(always.title).toMatch(/No rule can be saved/);
+  });
+
   it('answers with Y / D once per request, even when pressed twice', async () => {
     render(<PermissionPrompt agentId="a-bridge" request={request} projectName="oide" />);
     fireEvent.keyDown(window, { key: 'y' });

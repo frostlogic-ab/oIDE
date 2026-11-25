@@ -64,6 +64,11 @@ export interface LaunchPlan {
   /** What was passed to `--model` and `--permission-mode`. */
   model: string;
   mode: string;
+  /**
+   * Tools and rules that always ask (extension tools marked "asks first", the project's ask rules).
+   * An "Always" answer never pre-allows them, not even for the rest of the session.
+   */
+  askRules: string[];
   warnings: string[];
 }
 
@@ -533,6 +538,40 @@ export function targetsProtectedPath(rule: string): boolean {
   return !!m && /(^|[\\/])\.(oide|claude)([\\/]|$)|(^|[\\/])\.mcp\.json$/i.test(m[1]!.replace(/\*+/g, 'x'));
 }
 
+const EDIT_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
+/**
+ * True when a tool call edits one of the protected paths (SEC-12): the CLI always asks for these,
+ * and oIDE must never answer them on the user's behalf (an earlier "Always" for `Edit` included).
+ */
+export function requestTargetsProtectedPath(toolName: string, input: unknown): boolean {
+  if (!EDIT_TOOLS.has(toolName)) return false;
+  const rec = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+  const paths = [rec.file_path, rec.notebook_path, rec.path].filter((v): v is string => typeof v === 'string');
+  // No path we can check: treat it as protected, so it is always asked.
+  if (!paths.length) return true;
+  return paths.some((p) => targetsProtectedPath(`${toolName}(${p})`));
+}
+
+/**
+ * True when an "always ask" rule may cover this tool call, so an "Always" answer must not.
+ * Conservative: `Tool` and `mcp__server` cover every call of it; `Bash(git push:*)` covers commands
+ * starting with `git push`; any other specifier on the same tool counts as covering it.
+ */
+export function askRuleCovers(rule: string, toolName: string, input: unknown): boolean {
+  const m = /^([^()]+)(?:\((.*)\))?$/s.exec(rule.trim());
+  if (!m) return false;
+  const [, tool, spec] = m;
+  if (tool !== toolName && !(tool!.startsWith('mcp__') && !tool!.slice(5).includes('__') && toolName.startsWith(`${tool}__`))) return false;
+  if (spec === undefined || spec.trim() === '' || spec.trim() === '*') return true;
+  if ((toolName === 'Bash' || toolName === 'PowerShell') && spec.endsWith(':*')) {
+    const cmd = input && typeof input === 'object' ? (input as Record<string, unknown>).command : undefined;
+    if (typeof cmd !== 'string') return true;
+    return cmd.trim().startsWith(spec.slice(0, -2).trim());
+  }
+  return true;
+}
+
 export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
   const warnings: string[] = [];
   const { cli, settings } = ctx;
@@ -657,6 +696,7 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
     appendSystemPrompt,
     model,
     mode,
+    askRules: [...askTools],
     warnings,
   };
 }

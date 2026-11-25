@@ -680,3 +680,11 @@ integer 120-1600 px, at most 64 entries; bad entries are dropped so a stale one 
 rest of `ui`), so they survive restarts; Settings › Appearance has Reset
 sidebar widths. Pages: [design-system](pages/design-system.md), [desktop-shell](pages/desktop-shell.md),
 [screen-settings](pages/screen-settings.md).
+
+## [2026-11-25] build | "Always in <project>" now applies to running agents
+
+"Always" saved the rule to `.oide/permissions.json`, but running CLIs only read `--allowedTools` at
+launch, so the same agent asked again for the rest of its session. The supervisor now keeps the
+session's "Always" rules per project and allows matching requests (and waiting prompts) without a
+prompt, except protected-path edits and always-ask rules; the button is greyed out when no rule can
+be saved. Pages: [agent-supervisor](pages/agent-supervisor.md), [screen-wall](pages/screen-wall.md).

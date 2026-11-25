@@ -11,7 +11,7 @@ Permission prompts and review: [mcp-server](mcp-server.md). Tests: [testing](tes
 | --- | --- |
 | `parser.ts` | `parseLine(line, log?) → { json, events: AgentEventDraft[], control?, controlRequest? }`. Loose Zod schemas of the verified raw shapes; unknown types → `unknown` event + log; never throws. `parseTranscript(text)` for fixtures. |
 | `messages.ts` | `toStreamJson(UserMessage)`: text, `/command` (plain string content), review feedback (bundled `path:line: comment` list plus "call submit_for_review again"), artifact (MCP id + path). |
-| `args.ts` | `buildLaunch(spec, ctx) → LaunchPlan { command, args, env, firstMessage, mcpConfig, agentsJson, appendSystemPrompt, model, mode, warnings }`. Env allow-list, custom model env, routed `--agents`, techniques, allowed/disallowed tools, extra flags (`shellSplit`, reserved flags removed), the oIDE system-prompt contract. |
+| `args.ts` | `buildLaunch(spec, ctx) → LaunchPlan { command, args, env, firstMessage, mcpConfig, agentsJson, appendSystemPrompt, model, mode, askRules, warnings }`. Env allow-list, custom model env, routed `--agents`, techniques, allowed/disallowed tools, extra flags (`shellSplit`, reserved flags removed), the oIDE system-prompt contract. |
 | `cli.ts` | `detectCli(path?) → CliInfo` (`--version`, `--help` → `features`), `findOnPath` (PATHEXT, prefers `.exe`), `resolveSpawn` (`.cmd` through `cmd.exe /d /s /c` with escaped args). |
 | `driver.ts` | `ClaudeCliDriver implements AgentDriver`; `AgentHandle` with `events`, `send`, `interrupt` (control request, SIGINT fallback), `setMode` (control request), `dispose` (end stdin, then `taskkill /T /F` or process-group kill). `rawJsonOf(event)` gives the stdout line. |
 | `reducer.ts` | `AgentReducer.apply(event) → { summary, changed, subagents }`, `createSummary`, `describeToolUse`. |
@@ -43,7 +43,7 @@ const sup = new Supervisor({ worktrees, sink, settings, secrets?, broker, driver
 sup.on('event' | 'summary' | 'removed', fn) → unsubscribe
 await sup.spawn(spec)            // N attempts (spec.attempts) sharing attemptGroup; each starts 'queued'
 sup.send(agentId, userMessage)   // held while paused/queued; respawns a dead process with --resume
-await sup.answerPermission(agentId, answer)  // exact pending id only; "Always" → settings.addAllowRule
+await sup.answerPermission(agentId, answer)  // exact pending id only; "Always" → settings.addAllowRule + session rule
 await sup.setMode(agentId, mode) // control request, fallback interrupt + --resume
 await sup.stop / pause / resume(agentId); sup.compact(agentId); await sup.remove(agentId, { deleteWorktree })
 sup.stopSubagent(agentId, subagentId)
@@ -128,3 +128,16 @@ really 15%) and 184k (92%, really 18%) before any result arrived. Token counting
 - A permission prompt from a subagent that arrives before its `tool_use` line is attributed to the lead.
 - The env var for the "separate subagent model" strategy (`CLAUDE_CODE_SUBAGENT_MODEL`) was not verified in a session.
 - `signedIn` stays `unknown` until an init or an auth error; there is no auth probe (by design).
+
+## "Always" for running agents
+
+The CLI reads `--allowedTools` only at launch, so a rule saved by "Always in <project>" would only
+reach agents spawned later. The supervisor also keeps the rules approved this app session per
+project (`alwaysAllowed`): a new request whose `suggestedRule` is one of them is answered `allow`
+without a prompt, and when the rule is added every waiting prompt in the project it covers is
+allowed. Never for requests "Always" cannot cover (`canAlwaysAllow`): edits of `.oide/`, `.claude/`
+or `.mcp.json` (`requestTargetsProtectedPath`, SEC-12) and tools covered by the launch's always-ask
+rules (`LaunchPlan.askRules`: extension tools marked "asks first" and project ask rules, matched
+conservatively by `askRuleCovers`). For those the supervisor strips `suggestedRule` from the
+request, and the tile and Focus grey out the button.
+

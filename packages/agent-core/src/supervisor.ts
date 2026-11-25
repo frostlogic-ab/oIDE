@@ -14,7 +14,7 @@ import {
   type PermissionRequest,
   type UserMessage,
 } from '@oide/protocol';
-import { buildLaunch, cliPermissionMode, subagentTiers, LaunchError } from './args.js';
+import { askRuleCovers, buildLaunch, cliPermissionMode, requestTargetsProtectedPath, subagentTiers, LaunchError } from './args.js';
 import { ClaudeCliDriver, rawJsonOf, type AgentDriver, type AgentHandle } from './driver.js';
 import { ContextWindowBook } from './context-window.js';
 import { AgentReducer, createSummary } from './reducer.js';
@@ -83,6 +83,8 @@ interface AgentRecord {
   /** Messages held while paused or while the process is (re)starting. */
   held: UserMessage[];
   pendingPermissions: Map<string, PermissionRequest>;
+  /** Rules this agent's launch marked "always ask" (never answered by an "Always"). */
+  askRules: string[];
   /** Status to show after a resume spawn that has nothing to send. */
   idleStatus: AgentStatus;
   /** Spawn's attachments for the first message. Kept in memory only (never in the stored spec), dropped once sent. */
@@ -115,6 +117,12 @@ export class Supervisor {
   private readonly driver: AgentDriver;
   /** Context windows the CLI reported, shared so one agent's result fixes the next agent's first turn. */
   private readonly contextWindows = new ContextWindowBook();
+  /**
+   * Rules the user approved with "Always in <project>", per project. The CLI reads `--allowedTools`
+   * only at launch, so a rule saved to .oide/permissions.json reaches running agents through this:
+   * their next matching request is allowed without a prompt.
+   */
+  private readonly alwaysAllowed = new Map<string, Set<string>>();
   private pumping = false;
   private pumpAgain = false;
   private closed = false;
@@ -227,6 +235,7 @@ export class Supervisor {
       ...(summary.worktreePath ? { worktree: { path: summary.worktreePath, ...(summary.branch ? { branch: summary.branch } : {}), ...(summary.baseRef ? { baseRef: summary.baseRef } : {}) } } : {}),
       held: [],
       pendingPermissions: new Map(),
+      askRules: [],
       idleStatus: IDLE_AFTER_RESUME,
     };
   }
@@ -330,6 +339,7 @@ export class Supervisor {
         ...(this.deps.settings.resolveArtifact ? { resolveArtifact: this.deps.settings.resolveArtifact } : {}),
         ...(firstAttachments ? { firstAttachments } : {}),
       });
+      rec.askRules = plan.askRules;
       for (const w of plan.warnings) this.emitDraft(rec, { type: 'stderr', text: `[oide] ${w}` });
       const handle = await this.driver.start(rec.spec, {
         agentId: rec.id,
@@ -422,8 +432,14 @@ export class Supervisor {
   private onPermissionRequest(rec: AgentRecord, req: PermissionRequest): void {
     const subagentId = req.subagentId ?? rec.reducer.tracker.ownerOfToolUse(req.toolUseId);
     const request: PermissionRequest = { ...req, agentId: rec.id, ...(subagentId ? { subagentId } : {}) };
+    // No rule to offer when "Always" could not cover this request: the tile then offers no "Always".
+    if (request.suggestedRule && !this.canAlwaysAllow(rec, request)) delete request.suggestedRule;
     if (subagentId && rec.reducer.tracker.isStopRequested(subagentId)) {
       this.deps.broker.answer(req.requestId, { requestId: req.requestId, behavior: 'deny', message: 'Stopped by the user. Do not continue; report back to the lead agent now.' });
+      return;
+    }
+    if (this.alwaysAllows(rec, request)) {
+      this.deps.broker.answer(req.requestId, { requestId: req.requestId, behavior: 'allow', always: false });
       return;
     }
     const first = rec.pendingPermissions.size === 0;
@@ -444,14 +460,42 @@ export class Supervisor {
     const pending = rec.pendingPermissions.get(answer.requestId);
     if (!pending) return false;
     const ok = this.deps.broker.answer(answer.requestId, answer);
-    if (ok && answer.behavior === 'allow' && answer.always && pending.suggestedRule) {
+    const rule = pending.suggestedRule;
+    if (ok && answer.behavior === 'allow' && answer.always && rule && this.canAlwaysAllow(rec, pending)) {
+      const projectId = rec.spec.projectId;
+      let rules = this.alwaysAllowed.get(projectId);
+      if (!rules) this.alwaysAllowed.set(projectId, (rules = new Set()));
+      rules.add(rule);
+      this.allowWaiting(projectId);
       try {
-        await this.deps.settings.addAllowRule?.(rec.spec.projectId, pending.suggestedRule);
+        await this.deps.settings.addAllowRule?.(projectId, rule);
       } catch (err) {
         this.deps.log?.('saving always-allow rule failed', err);
       }
     }
     return ok;
+  }
+
+  /** A request "Always" may cover: not an always-ask tool or rule, not an edit of .oide/, .claude/ or .mcp.json. */
+  private canAlwaysAllow(rec: AgentRecord, req: PermissionRequest): boolean {
+    if (!req.suggestedRule || requestTargetsProtectedPath(req.toolName, req.input)) return false;
+    for (const r of rec.askRules) if (askRuleCovers(r, req.toolName, req.input)) return false;
+    return true;
+  }
+
+  private alwaysAllows(rec: AgentRecord, req: PermissionRequest): boolean {
+    const rules = this.alwaysAllowed.get(rec.spec.projectId);
+    return !!req.suggestedRule && !!rules?.has(req.suggestedRule) && this.canAlwaysAllow(rec, req);
+  }
+
+  /** After a new "Always" rule: allow every waiting prompt in the project it covers. */
+  private allowWaiting(projectId: string): void {
+    for (const rec of this.agents.values()) {
+      if (rec.spec.projectId !== projectId) continue;
+      for (const req of [...rec.pendingPermissions.values()]) {
+        if (this.alwaysAllows(rec, req)) this.deps.broker.answer(req.requestId, { requestId: req.requestId, behavior: 'allow', always: false });
+      }
+    }
   }
 
   // ------------------------------------------------------------------ tile controls

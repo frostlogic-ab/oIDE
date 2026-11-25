@@ -355,6 +355,8 @@ function OpenPrButton({ agent }: { agent: AgentSummary }) {
   );
 }
 
+const NO_ALWAYS_RULE = 'No rule can be saved for this request: allow it once or deny it';
+
 function PermissionActions({ agent, projectName, focused, open }: { agent: AgentSummary; projectName: string; focused: boolean; open: ReactNode }) {
   const [busy, setBusy] = useState(false);
   const allowKey = useShortcutLabel('permission.allow');
@@ -366,7 +368,7 @@ function PermissionActions({ agent, projectName, focused, open }: { agent: Agent
     setBusy(false);
   };
   const always = (
-    <Button variant="warn-outline" disabled={busy} onClick={() => void answer('always')}>
+    <Button variant="warn-outline" disabled={busy || !req.suggestedRule} onClick={() => void answer('always')}>
       Always in {projectName}
     </Button>
   );
@@ -375,7 +377,7 @@ function PermissionActions({ agent, projectName, focused, open }: { agent: Agent
       <Button variant="warn" disabled={busy} kbd={focused ? allowKey : undefined} onClick={() => void answer('allow')}>
         Allow once
       </Button>
-      {req.suggestedRule ? <Tooltip content={`Allow and save ${req.suggestedRule} for ${projectName}`}>{always}</Tooltip> : always}
+      <Tooltip content={req.suggestedRule ? `Allow and save ${req.suggestedRule} for ${projectName}` : NO_ALWAYS_RULE}>{always}</Tooltip>
       <Button variant="warn-outline" disabled={busy} kbd={focused ? denyKey : undefined} onClick={() => void answer('deny')}>
         Deny
       </Button>
