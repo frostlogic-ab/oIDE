@@ -54,6 +54,26 @@ describe('Source control while git state loads (m2)', () => {
     expect(screen.getByText('Agent worktrees · 0')).toBeTruthy();
     expect(screen.queryByText('Loading agent worktrees…')).toBeNull();
   });
+
+  it('shows "0 files" without a dangling separator when a worktree has no changes', () => {
+    const project = { id: 'p1', name: 'oide', path: '/r/oide', trusted: true, createdAt: 0 };
+    const wt = (branch: string, diff: { files: number; additions: number; deletions: number }) => ({
+      projectId: 'p1', path: `/w/${branch}`, branch, baseRef: 'main', ahead: 0, behind: 0, diff, changedFiles: [], orphaned: false,
+    });
+    render(
+      <ProjectCard
+        project={project}
+        agents={{}}
+        open
+        onToggle={() => {}}
+        logOpen={false}
+        onToggleLog={() => {}}
+        git={{ worktrees: [wt('oide/empty', { files: 0, additions: 0, deletions: 0 }), wt('oide/one', { files: 1, additions: 2, deletions: 0 })], log: [], overlaps: [], loading: false, loadedAt: 1 }}
+      />,
+    );
+    const counts = screen.getAllByText(/\bfiles?\b/, { selector: 'span.font-mono' }).map((e) => e.textContent?.replace(/\s+/g, ' ').trim());
+    expect(counts).toEqual(['0 files', '1 file · +2']);
+  });
 });
 
 describe('Source control labels', () => {

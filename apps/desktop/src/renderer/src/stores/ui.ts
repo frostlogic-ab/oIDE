@@ -118,9 +118,31 @@ export const useUi = create<UiState>()((set, get) => {
 export const toast = (message: string, level: ToastLevel = 'info', extra: Partial<Omit<Toast, 'id' | 'message' | 'level' | 'count'>> = {}) =>
   useUi.getState().pushToast({ message, level, ...extra });
 
-/** Render main's `notify` events as toasts. One needs-permission toast per agent (a newer prompt replaces it). */
-export function connectNotifications(): () => void {
+/** Where the user is looking, for `promptOnScreen`. */
+export interface ToastView {
+  route: { screen: string; params?: { agentId?: string } };
+  scope: string;
+  /** The agent's project, when the agent is known. */
+  projectId?: string;
+}
+
+/**
+ * True when the agent's permission prompt is already on screen: its tile on the Wall (in scope) or
+ * its own Focus view. A toast would only repeat it, and at small sizes it covered the tile's buttons.
+ */
+export function promptOnScreen(agentId: string, v: ToastView): boolean {
+  if (v.route.screen === 'focus') return v.route.params?.agentId === agentId;
+  if (v.route.screen === 'wall') return v.scope === 'all' || (v.projectId !== undefined && v.scope === v.projectId);
+  return false;
+}
+
+/**
+ * Render main's `notify` events as toasts. One needs-permission toast per agent (a newer prompt
+ * replaces it); none while that prompt is already on screen (`onScreen`).
+ */
+export function connectNotifications(onScreen: (agentId: string) => boolean = () => false): () => void {
   return oide.on('notify', ({ level, message, agentId, kind, requestId }) => {
+    if (kind === 'needs-permission' && agentId && onScreen(agentId)) return;
     useUi.getState().pushToast({
       level,
       message,

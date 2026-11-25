@@ -76,6 +76,8 @@ describe('main services (plain Node, fake-claude)', () => {
     expect(h.eventsOf('notify').find((n) => n.kind === 'needs-permission')).toMatchObject({ agentId: a!.id, requestId: asking.pendingPermission!.requestId });
     // A repo without a remote cannot open a pull request (m6).
     expect(await h.call('git.prAvailable', { projectId: project.id })).toMatchObject({ available: false, reason: expect.stringMatching(/no git remote/) });
+    // …and Push ("Not on a remote yet") says so instead of git's "Could not read from remote repository".
+    await expect(h.call('git.push', { projectId: project.id })).rejects.toThrow(/has no git remote to push to/);
 
     // Only the exact pending id is accepted.
     expect(await h.fails('agents.answerPermission', { agentId: a!.id, answer: { requestId: 'perm-bogus', behavior: 'allow' } })).toBe('not_found');

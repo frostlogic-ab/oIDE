@@ -480,6 +480,10 @@ IPC.
 names, `KEY=value`, token-shaped values (`sk-…`, `ghp_…`, …), URL passwords and every query value,
 and `display` is built from the masked config. Test in
 `packages/extension-host/test/import-scan.test.ts` ("SEC-24").
+**Follow-up (2026-11-25, final conformance pass):** header values passed as args
+(`--header "Authorization: Bearer …"`, `-H "X-Api-Key: …"`, as `mcp-remote` configs do) reached
+Add custom › Found on this computer in clear; they now come back as `Authorization: ***`
+(`redactArgs`, test "masks secret headers passed as args").
 
 ### SEC-25 Electron fuse `grantFileProtocolExtraPrivileges` is left on
 

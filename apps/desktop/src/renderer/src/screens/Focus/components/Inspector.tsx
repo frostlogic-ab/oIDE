@@ -58,8 +58,9 @@ export function Inspector({ agent, events, subEvents, tab, onTab, now, stopReque
           onChange={onTab}
           label="Inspector"
           idPrefix={ID}
-          // Extension panels add tabs: tighter padding, and the row scrolls without a scrollbar.
-          className="[scrollbar-width:none]"
+          // Extension panels add tabs: tighter padding, and the row wraps so every tab stays visible
+          // (a hidden-scrollbar row clipped "Preview" past the panel edge at 1440 and 1100).
+          className={extTabs.length ? 'flex-wrap' : '[scrollbar-width:none]'}
           tabClassName={extTabs.length ? 'px-1' : '@max-[339px]:px-1'}
         />
       </div>

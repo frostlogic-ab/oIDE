@@ -73,6 +73,15 @@ export function NewArtifactDialog({ open, onClose, projects, defaultProjectId, o
     setError(null);
   };
 
+  // The dialog stays mounted between uses: start each one from the current scope, so the last
+  // artifact's project and "Personal" choice do not carry over to the next.
+  useEffect(() => {
+    if (!open) return;
+    setKind('doc');
+    setProjectId(defaultProjectId ?? '');
+    setLocation(defaultProjectId ? 'repo' : 'app-data');
+  }, [open, defaultProjectId]);
+
   const create = async () => {
     setTouched(true);
     if (!title.trim()) {
@@ -134,8 +143,10 @@ export function NewArtifactDialog({ open, onClose, projects, defaultProjectId, o
           options={projectOptions(projects, true)}
           value={projectId}
           onChange={(e) => {
-            setProjectId(e.target.value);
+            // No project: personal only. Picking one after "No project" defaults to the repo again.
             if (!e.target.value) setLocation('app-data');
+            else if (!projectId) setLocation('repo');
+            setProjectId(e.target.value);
           }}
         />
         <LocationField value={projectId ? location : 'app-data'} onChange={setLocation} hasProject={Boolean(projectId)} />

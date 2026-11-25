@@ -110,6 +110,7 @@ exercised end to end.
 | `commit-all` | Bash `git add -A && git commit` (prompted, real), then a question |
 | `mcp-tool` | `ToolSearch select:<tool>` then the tool from `[fake-tool:mcp__srv__tool]` with `[fake-args:{…}]` (default: first tool of the first stdio server); "No MCP tool is available." without one |
 | `artifacts` | `mcp__oide__artifacts_read` of the `{"id":"…"}` in the message (else the first design from `artifacts_list`), then `artifacts_create` of a doc "Notes on <title>" listing its headings |
+| `artifact-update` | `mcp__oide__artifacts_read` of the `{"id":"…"}` in the message, then `artifacts_write` of a new version (a design gets an `<h2>`, a doc a list item): an agent-written update of an artifact the user may have open |
 | any + `/compact` | compacting status, `compact_boundary`, local-command stdout, result `local_command:"compact"` |
 
 A user message containing `[fake-scenario:<name>]` runs that scenario for its turn, whatever the list says

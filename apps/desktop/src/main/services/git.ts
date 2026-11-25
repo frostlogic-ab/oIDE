@@ -146,6 +146,9 @@ export class GitService {
 
   async push(projectId: string): Promise<SyncState> {
     const p = this.project(projectId);
+    // "Not on a remote yet" offers Push; with no remote at all git only says "Could not read from remote repository".
+    const remotes = (await new Git({ cwd: p.path }).out(['remote']).catch(() => '')).trim();
+    if (!remotes) throw new IpcError(`${p.name} has no git remote to push to. Add one with "git remote add origin <url>", then push again.`, 'git_failed');
     await this.remote(() => gitPush(p.path));
     this.changed(projectId);
     return this.sync(projectId);

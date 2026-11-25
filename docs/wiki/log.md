@@ -452,3 +452,18 @@ can relay to its own panels), SEC-42 (opt-in compat recordings list the runner's
 round-1 PoCs still pass; spot checks of SEC-01/02/03/05/08/16/28 found no merge damage. PoCs:
 `test/security/round2-*.test.ts`. Pages updated: [security](pages/security.md),
 [reliability](pages/reliability.md), [packaging](pages/packaging.md).
+
+## [2026-11-25] review | Final conformance pass
+
+Walked every screen of the merged app (built `out/main`, Playwright, fake-claude, 3 temp repos, one
+with a committed `.oide/`) at 1440×900 and 1100×700 and compared each with the canvas. All screens
+pass; 0 console errors in the full second session. Real CLI M1 smoke still passes (2.1.325, haiku,
+16 s). Fixed: F1 parallel attempts with long titles raced on the same branch name (worktree creates
+are now one at a time per project), F2 `--header "Authorization: Bearer …"` args reached the import
+list unmasked (SEC-24 follow-up), F3 the New artifact dialog carried "Personal" over to the next
+artifact, F4 the extension Preview tab was clipped in Focus's inspector, F5 needs-permission toasts
+covered tile buttons and repeated prompts already on screen, F6 Push with no remote gave git's raw
+error, F7 Settings claimed "signed in" before the CLI said so, F8 "0 files ·". fake-claude gained an
+`artifact-update` scenario. Remaining: minor and cosmetic items only. Details in
+[review-conformance](pages/review-conformance.md#final-pass-2026-11-25); gate status in
+[milestones](pages/milestones.md).

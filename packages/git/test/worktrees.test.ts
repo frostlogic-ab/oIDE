@@ -135,6 +135,16 @@ describe('WorktreeManager', () => {
     expect(await wm.list(repo)).toHaveLength(2);
   });
 
+  it('gives parallel creates with the same slug distinct branches (parallel attempts)', async () => {
+    const repo = makeRepo({ 'a.txt': 'a\n' });
+    const wm = new WorktreeManager({ appDataDir: tempDir('oide-appdata-'), sleep: async () => {} });
+    const made = await Promise.all(
+      [1, 2, 3].map(() => wm.create({ projectPath: repo, projectId: 'p1', agentSlug: 'map-the-routes-with-helpers', base: 'main' })),
+    );
+    expect(new Set(made.map((w) => w.branch)).size).toBe(3);
+    expect(made.map((w) => w.slug).sort()).toEqual(['map-the-routes-with-helpers', 'map-the-routes-with-helpers-2', 'map-the-routes-with-helpers-3']);
+  });
+
   it('runs a setup command with streamed output', async () => {
     const repo = makeRepo();
     const wm = new WorktreeManager({ appDataDir: tempDir() });

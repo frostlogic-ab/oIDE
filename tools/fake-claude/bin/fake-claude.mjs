@@ -6,6 +6,7 @@
 // Scenario: --fake-scenario <name[,name…]> or FAKE_CLAUDE_SCENARIO. One name per user turn; the last repeats.
 //   basic | tools | permission | review | subagents | rate-limit | crash | slow | auth | replay:<fixture.jsonl>
 //   commit-work | address-feedback | commit-all | mcp-tool | artifacts   (milestone gate tests, test/gates)
+//   artifact-update (reads the {"id":"…"} artifact in the message and writes a new version)
 // A user message containing `[fake-scenario:<name>]` runs that scenario for its turn (overrides the list).
 // `/compact` (and other slash commands) work in every scenario. `--resume <id>` echoes the session id.
 // MCP servers from --mcp-config are reached over HTTP (`url`) or started over stdio (`command`).
@@ -621,6 +622,21 @@ const SCENARIOS = {
     const created = await useTool('mcp__oide__artifacts_create', { title: `Notes on ${title}`, kind: 'doc', content: doc });
     const newId = created.ok ? safeJson(created.text)?.id : undefined;
     const text = newId ? `Read "${title}" and wrote the doc artifact ${newId}.` : `Could not write the doc: ${created.text}`;
+    await assistant([{ type: 'text', text }]);
+    await result(text);
+  },
+
+  // An agent updates an existing artifact: read the `{"id":"…"}` in the message, then write a new
+  // version with a line appended (a design gets an <h2>, a doc a list item).
+  async 'artifact-update'(userText) {
+    const id = /\{"id":"([^"]+)"\}/.exec(userText)?.[1] ?? 'none';
+    const read = await useTool('mcp__oide__artifacts_read', { id });
+    const got = read.ok ? safeJson(read.text) : undefined;
+    const before = String(got?.content ?? '');
+    const content = got?.meta?.kind === 'design' ? `${before}\n<h2>Added by the agent</h2>\n` : `${before}\n- Added by the agent\n`;
+    const wrote = await useTool('mcp__oide__artifacts_write', { id, content, note: 'Added a section' });
+    const version = wrote.ok ? safeJson(wrote.text)?.version : undefined;
+    const text = version ? `Updated "${got?.meta?.title ?? id}" to v${version}.` : `Could not update the artifact: ${wrote.text}`;
     await assistant([{ type: 'text', text }]);
     await result(text);
   },

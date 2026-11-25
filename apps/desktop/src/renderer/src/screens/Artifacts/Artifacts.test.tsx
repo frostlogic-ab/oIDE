@@ -110,3 +110,29 @@ describe('Artifacts screen', () => {
     expect(document.querySelector('.oide-md script')).toBeNull();
   });
 });
+
+describe('New artifact dialog', () => {
+  const projects = ['oide', 'billing-api'].map((id) => Project.parse({ id, name: id, path: `/code/${id}`, trusted: true, createdAt: now }));
+  const repo = () => screen.getByRole('radio', { name: /In the project's repo/ }) as HTMLInputElement;
+  const personal = () => screen.getByRole('radio', { name: /Personal/ }) as HTMLInputElement;
+
+  it('starts each use from the scope: a previous "Personal" choice does not carry over', async () => {
+    const { NewArtifactDialog } = await import('./Dialogs');
+    const props = { onClose: () => {}, projects, defaultProjectId: 'oide', onCreated: () => {} };
+    const { rerender } = render(<NewArtifactDialog open {...props} />);
+    expect(repo().checked).toBe(true);
+    fireEvent.click(personal());
+    expect(personal().checked).toBe(true);
+    rerender(<NewArtifactDialog open={false} {...props} />);
+    rerender(<NewArtifactDialog open {...props} />);
+    await waitFor(() => expect(repo().checked).toBe(true));
+  });
+
+  it('defaults to the repo when a project is picked after "No project"', async () => {
+    const { NewArtifactDialog } = await import('./Dialogs');
+    render(<NewArtifactDialog open onClose={() => {}} projects={projects} onCreated={() => {}} />);
+    expect(personal().checked).toBe(true);
+    fireEvent.change(screen.getByRole('combobox', { name: 'Project' }), { target: { value: 'billing-api' } });
+    expect(repo().checked).toBe(true);
+  });
+});

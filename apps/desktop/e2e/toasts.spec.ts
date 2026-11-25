@@ -44,6 +44,9 @@ test('needs-permission toast: bottom-left above the status bar, removed when the
 
   await invoke('settings.update', { patch: { claude: { extraFlags: '--fake-scenario review' } } });
   const project = (await invoke('projects.open', { path: repo })) as { id: string };
+  // The toast is for when the prompt is not on screen: on the Wall the tile already shows it.
+  const rail = page.getByRole('navigation', { name: 'Primary' });
+  await rail.getByRole('button', { name: 'Artifacts' }).click();
   await invoke('agents.spawn', {
     projectId: project.id,
     title: 'Toast check',
@@ -63,6 +66,7 @@ test('needs-permission toast: bottom-left above the status bar, removed when the
   expect(box.x).toBeLessThan(viewport.width / 2);
   expect(box.y + box.height).toBeLessThanOrEqual(status.y);
 
+  await rail.getByRole('button', { name: 'Agents' }).click();
   await page.getByRole('group', { name: 'Permission: Run npm test' }).getByRole('button', { name: /Allow once/ }).click();
   await expect(toasts.getByText(/Toast check needs permission/)).toHaveCount(0, { timeout: 10_000 });
 });

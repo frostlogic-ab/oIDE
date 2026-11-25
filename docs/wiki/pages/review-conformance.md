@@ -296,3 +296,80 @@ Also done in that change (UX items outside the numbered list): Settings › Keyb
 conflict warning, reset; saved in Settings `keybindings`), Focus's `/` menu from the CLI's `init.slash_commands`,
 a note on the tile and in Focus when a prompt was cut off by quitting (`permission-resolved.reason: 'quit'` →
 `AgentSummary.interruptedPermission`), and review comments that keep their diff side (`ReviewComment.side`).
+
+## Final pass (2026-11-25)
+
+The last adversarial check after every wave-4 branch was merged (main at `b285e95`, plus the fixes
+below). Method: `pnpm --filter @oide/desktop build`, then the real Electron app (`out/main/index.js`)
+driven by Playwright with a temp userData, `OIDE_CLAUDE_PATH` = fake-claude, `OIDE_E2E_TRUST=trust`,
+`OIDE_E2E_CONFIRM=accept` and `OIDE_E2E_OPEN_PATHS` listing three temp repos: `web-app`; `api-server`
+with committed `.oide/config.json` (Plan, Cheap), `techniques.json` and `permissions.json`; and
+`docs-site`. Every screen was shot at 1440×900 and the main ones at 1100×700, read back, and compared
+with the canvas renders from [review-design](review-design.md). The screenshots are in the session
+scratchpad (`scratchpad\final\*.png`), not in the repo.
+
+### What was verified, per screen
+
+| Screen | Verdict | Checked |
+| --- | --- | --- |
+| Wall | pass | 8 agents across 3 projects: permission, ready for review, has a question, routed subagents with a subagent prompt, and an error. Filter chips. J/K/N move focus, and N skips to the agents that need you. Inline Allow once, Y on a focused tile, the reply box, subagent chips with "1 needs you", and live counts in the status bar and header. Matches `Main.dc.html` |
+| Spawn | pass | Project defaults come from `.oide/`: Plan, Cheap, and the repo's technique shown and on. Switching to another project goes back to Auto and Balanced and drops that technique. Presets, Advanced techniques, Parallel attempts (the button reads "Spawn 2 agents") and Ctrl+Enter work. Matches `Spawn.dc.html` |
+| Focus | pass (fixed) | Transcript with subagent cards and the agent tree. The subagent view shows task, model, route, its own context ring and Stop subagent. The pinned subagent prompt was answered with Y. Inspector tabs: Plan, Subagents (timeline, 43% token share), Changes, Artifacts, Terminal (a pty in the worktree) and **Preview** (the Browser preview panel in a `sandbox="allow-scripts"` `oide-ext://` iframe). Also checked: the `/` menu built from the CLI's slash commands, and the `/compact` confirm and compact lifecycle. Matches `Focus.dc.html` |
+| Source control | pass (fixed) | Cards per project, the scope switcher, and agent worktrees with status and +/−. The overlap heads-up said "Add feature flag and Rework feature flag both edit feature.txt" and offered Ask an agent to reconcile. Ready to review panel, the Commit on main dialog and Push. Matches `SourceControl.dc.html` |
+| Review | pass | Changed files, unified diff, Viewed, the agent's summary and checks. An inline comment went through Add to feedback and Send feedback; the agent got it and the comment was marked sent. Open pull request is disabled with the no-remote reason. Merge confirm put `Merge oide/add-feature-flag` on main, **and the user's uncommitted README edit stayed in the main checkout**. Matches `Review.dc.html` |
+| Files | pass | Per-project tree with the worktree menu and agent dots, Monaco, history with agent attribution, and the agent banner ("You're viewing the worktree of Write output, which is changing this file"). Typing `jknyd` in Monaco, or J/N in Excalidraw, fires no shortcut |
+| Artifacts | pass (fixed) | Created a design (repo), a doc (personal) and a whiteboard. Excalidraw draw and Save made v2; Compare showed v1→v2. A doc edit in Monaco with Ctrl+S made v2, and Preview rendered it. Rename and Delete (with confirm) work. An agent's `artifacts_write` on an open design showed "Updated by Update landing agent · v2" live; History lists `2:agent`, and Agents using it shows read and write |
+| Marketplace | pass (fixed) | The 3 built-ins show under Installed, Agent tools, Themes and Views & panels (from the bundled index). Add custom: the URL route reports "Could not reach it", and Found on this computer lists the real configs on this machine (read only). Local command → Test it lists `echo` (read only) and `wipe` (asks first) from the server's own hints; Add tool, after the confirmation, puts it in the Custom list with "not reviewed". The bundled index holds only built-ins, so third-party install consent is covered by `test/gates/m5-extension-tool.test.ts`, not by this walk |
+| Settings | pass (fixed) | All 13 sections render real values: Claude Code, Models, Agents, Techniques, Permissions (project rules from `.oide/`), Projects, Artifacts & claude.ai, Extensions (Browser preview default URL), Keyboard shortcuts, Appearance (accent from Accent themes), Privacy, Updates (off in dev builds) and Diagnostics (CLI, git, gh, Node, keychain, database, MCP port, logs) |
+
+Console: 0 errors and 0 warnings across the second full session. The first session's only errors were
+`Failed to fetch dynamically imported module`, after another agent rebuilt `apps/desktop/out` under
+the running app and the lazy chunks got new hashes. That is not a product bug; the walk was rerun from a
+private copy of the build. No mock or canvas sample data is in the production bundle: `lib/mock` is
+behind `import.meta.env.DEV && !window.oide`, and the only matches for sample names are code comments.
+
+**Real CLI (M1):** `OIDE_REAL_CLI=1 vitest run test/conformance/real-cli.test.ts` with Claude Code
+2.1.325 and `haiku` passed 1 of 1 in 16 s: spawn, prompt answered in oIDE, stop, restart, `--resume`.
+
+### Fixed in this pass
+
+| # | Severity | Finding | Fix and test |
+| --- | --- | --- | --- |
+| F1 | major | Parallel attempts with a long title failed. The slug is cut at 40 characters, so `#1` and `#2` produce the same slug, and two concurrent `git worktree add -b` calls raced. One attempt failed with "cannot lock ref … reference already exists" | `WorktreeManager.create` now runs one at a time per project (`packages/git/src/worktrees.ts`), so the free-name check sees the other attempt's branch and picks `-2`, `-3`. Test: `packages/git/test/worktrees.test.ts` "parallel creates". Checked again in the app: 3 attempts got 3 branches |
+| F2 | major | SEC-24 gap: `--header "Authorization: Bearer …"` args (mcp-remote style, from a real config on this machine) reached Add custom › Found on this computer unmasked | `redactArgs` masks header-shaped args whose name looks secret (`packages/extension-host/src/import-scan.ts`). Test in `import-scan.test.ts`; noted under SEC-24 in [review-security](review-security.md) |
+| F3 | minor | The New artifact dialog kept the previous "Personal" choice and project, because it stays mounted. Picking a project after "No project" also left it on Personal. Either way a repo artifact was silently saved to app data | The dialog resets from the current scope each time it opens, and picking a project defaults to the repo (`screens/Artifacts/Dialogs.tsx`). Tests in `Artifacts.test.tsx` |
+| F4 | minor | Focus inspector: the extension "Preview" tab sat past the panel edge. The tab row needs 361 px, the panel is 300–320 px, and the scrollbar was hidden | The tab row wraps when extension panels add tabs (`Inspector.tsx`). Checked at 1440 and 1100 |
+| F5 | minor | Needs-permission toasts repeated prompts already on screen. At 1100×700, three of them covered the third tile's Allow and Deny buttons | No needs-permission toast while the Wall (in scope) or that agent's Focus is showing (`promptOnScreen` in `stores/ui.ts`, wired in `lib/boot.ts`). Test in `stores/ui.test.tsx`. `e2e/toasts.spec.ts` now spawns from Artifacts and answers on the Wall |
+| F6 | minor | Push on a repo with no remote ("Not on a remote yet") failed with git's "Could not read from remote repository" | `GitService.push` now says "<project> has no git remote to push to…". Integration test in `main-services.test.ts` |
+| F7 | minor | Settings › Claude Code said "CLI found and signed in" while sign-in was still unknown | It says "CLI found" until the CLI reports a sign-in. Test in `Settings.test.tsx` |
+| F8 | cosmetic | Source control rows with no changes read "0 files ·" | The separator shows only with +/− counts. Test in `SourceControl.test.tsx` |
+
+Tooling: fake-claude has a new `artifact-update` scenario that reads the `{"id":"…"}` artifact and
+writes a new version, to drive the agent-written update flow ([testing](testing.md#fake-claude-toolsfake-claude)).
+
+### What remains
+
+- **Minor.** Unpackaged launches (dev, e2e) show Electron's version (45.4.1) as oIDE's in Settings ›
+  Updates and Diagnostics, because `app.getVersion()` finds no `package.json` next to `out/main`.
+  Packaged builds show the right version.
+- **Minor.** An agent that errors before its worktree exists shows "project folder" in the tile's
+  meta line, though it never had one.
+- **Minor.** Clicking the current rail item while an artifact is open does not go back to the grid
+  (the viewer's own "Artifacts" button does).
+- **Cosmetic.** The Focus header cuts the worktree name first ("worktree …") when the status text
+  is long; the full name is in its tooltip.
+- **Cosmetic.** The artifact viewer is a named `<section>` (a region landmark), where other screens use
+  `<main>`.
+- **Not exercised here.** Third-party install consent from a remote index (only the bundled index of
+  built-ins exists; the M5 gate test covers it), OAuth for remote MCP servers, Open pull request
+  against a real GitHub remote, and the M1 flow clicked through the Electron UI with the real CLI
+  (the services-layer gate passes).
+
+### Gates at the end of the pass
+
+`pnpm typecheck` (13 of 13) and `pnpm lint` pass with no warnings, `pnpm wiki:lint` reports ok, and
+`pnpm --filter @oide/desktop e2e` builds the app and passes 25 of 25. Full vitest passes 693 of 698,
+with 2 skipped. The 3 failures (`test/gates/m4-oide-portable.test.ts` ×2 and
+`m5-extension-tool.test.ts`) say "No marketplace index: none is bundled and no index URL is set". They
+come from another agent's uncommitted `indexUrl` / `distribution.ts` change, which was in the working
+tree at the time; committed code does not cause them.

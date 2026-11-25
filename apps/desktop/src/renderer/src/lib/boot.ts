@@ -4,7 +4,8 @@ import { connectExtensionHosts } from '../stores/extensionHosts';
 import { connectProjects, useProjects } from '../stores/projects';
 import { connectScope, useScope } from '../stores/scope';
 import { connectSettings, useSettings } from '../stores/settings';
-import { connectNotifications, retireStaleToasts } from '../stores/ui';
+import { connectNotifications, promptOnScreen, retireStaleToasts } from '../stores/ui';
+import { useRouter } from '../stores/router';
 import { isNotImplemented, oide } from './bridge';
 import { connectCommands, registerCoreCommands } from './coreCommands';
 import { connectExtensions } from '../extensions/store';
@@ -65,7 +66,13 @@ export function startStores(): () => void {
     connectSettings(),
     connectCli(),
     connectExtensionHosts(),
-    connectNotifications(),
+    connectNotifications((agentId) =>
+      promptOnScreen(agentId, {
+        route: useRouter.getState().route as { screen: string; params?: { agentId?: string } },
+        scope: useScope.getState().scope,
+        projectId: useAgents.getState().byId[agentId]?.projectId,
+      }),
+    ),
     connectKeybindings(),
     connectUsage(() => quiet(useCli.getState().refreshUsage())),
     // A needs-permission toast goes as soon as its prompt is answered (here, on the tile, or in Focus).

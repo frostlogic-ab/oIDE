@@ -6,6 +6,7 @@ import { installFallbackBridge } from '../../lib/bridge';
 import { builtInPresets, builtInTechniques, seedLibrarySettings } from '../../lib/mock/library';
 import { useRouter } from '../../stores/router';
 import { useSettings } from '../../stores/settings';
+import { useCli } from '../../stores/cli';
 import SettingsScreen from './index';
 
 function deepMerge(base: unknown, patch: unknown): unknown {
@@ -65,6 +66,17 @@ describe('Settings screen', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: new RegExp(first.name) }).getAttribute('aria-expanded')).toBe('true'));
     const others = builtInTechniques.slice(1).map((t) => screen.getByRole('button', { name: new RegExp(t.name) }).getAttribute('aria-expanded'));
     expect(others.every((x) => x === 'false')).toBe(true);
+  });
+
+  it('Claude Code says "signed in" only once the CLI has reported it', () => {
+    const cli = (signedIn: 'yes' | 'no' | 'unknown') =>
+      act(() => useCli.setState({ detected: true, info: { found: true, path: '/bin/claude', version: '2.1.325', inTestedRange: true, signedIn, features: {} } }));
+    cli('unknown');
+    open('cli');
+    expect(screen.getByText('CLI found')).toBeTruthy();
+    expect(screen.queryByText('CLI found and signed in')).toBeNull();
+    cli('yes');
+    expect(screen.getByText('CLI found and signed in')).toBeTruthy();
   });
 
   it('Allow Bypass toggle saves { claude: { allowBypass } }', async () => {

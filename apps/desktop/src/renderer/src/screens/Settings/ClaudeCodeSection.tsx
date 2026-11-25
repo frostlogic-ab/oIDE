@@ -40,7 +40,10 @@ export function ClaudeCodeSection({ settings, goModels }: { settings: Settings; 
   const tone = health === 'connected' || health === 'untested' ? 'ok' : health === 'missing' ? 'bad' : 'warn';
   const title =
     health === 'connected'
-      ? 'CLI found and signed in'
+      ? // Sign-in is learned from the first agent's init or an auth error; until then do not claim it.
+        info?.signedIn === 'yes'
+        ? 'CLI found and signed in'
+        : 'CLI found'
       : health === 'untested'
         ? 'CLI found, version not tested with oIDE'
         : health === 'sign-in'

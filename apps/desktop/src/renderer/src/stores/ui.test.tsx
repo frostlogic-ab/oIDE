@@ -85,3 +85,15 @@ describe('toasts', () => {
     expect(messages()).toEqual([]);
   });
 });
+
+describe('needs-permission toasts only when the prompt is not on screen', () => {
+  it('promptOnScreen: the Wall in scope and the agent’s own Focus show the prompt already', async () => {
+    const { promptOnScreen } = await import('./ui');
+    expect(promptOnScreen('a1', { route: { screen: 'wall', params: {} }, scope: 'all', projectId: 'p1' })).toBe(true);
+    expect(promptOnScreen('a1', { route: { screen: 'wall', params: {} }, scope: 'p1', projectId: 'p1' })).toBe(true);
+    expect(promptOnScreen('a1', { route: { screen: 'wall', params: {} }, scope: 'p2', projectId: 'p1' })).toBe(false);
+    expect(promptOnScreen('a1', { route: { screen: 'focus', params: { agentId: 'a1' } }, scope: 'all' })).toBe(true);
+    expect(promptOnScreen('a1', { route: { screen: 'focus', params: { agentId: 'a2' } }, scope: 'all' })).toBe(false);
+    expect(promptOnScreen('a1', { route: { screen: 'review', params: { agentId: 'a1' } }, scope: 'all' })).toBe(false);
+  });
+});

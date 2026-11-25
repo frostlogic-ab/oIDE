@@ -203,7 +203,7 @@ export function redactUrl(url: string): string {
   return out;
 }
 
-/** `--api-key=…`, `--token …`, `API_KEY=…`, URL credentials and token-shaped values come back masked. */
+/** `--api-key=…`, `--token …`, `API_KEY=…`, `Authorization: …` headers, URL credentials and token-shaped values come back masked. */
 export function redactArgs(args: string[]): string[] {
   const out: string[] = [];
   for (let i = 0; i < args.length; i++) {
@@ -213,6 +213,8 @@ export function redactArgs(args: string[]): string[] {
     if (eq && SECRET_NAME.test(eq[1] as string)) out.push(`${eq[1]}=${REDACTED}`);
     else if (/^--?[A-Za-z0-9_.-]+$/.test(prev) && !prev.includes('=') && SECRET_NAME.test(prev) && !a.startsWith('-')) out.push(REDACTED);
     else if (TOKEN_SHAPE.test(a) || /^bearer\s+\S+/i.test(a)) out.push(REDACTED);
+    // HTTP header values passed as args (`--header "Authorization: Bearer …"`, `-H "X-Api-Key: …"`).
+    else if (/^[A-Za-z0-9_-]+\s*:\s*\S/.test(a) && !/:\/\//.test(a) && SECRET_NAME.test(a.slice(0, a.indexOf(':')))) out.push(`${a.slice(0, a.indexOf(':')).trim()}: ${REDACTED}`);
     else out.push(/:\/\//.test(a) ? redactUrl(a) : a);
   }
   return out;

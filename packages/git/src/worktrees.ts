@@ -109,6 +109,12 @@ export class WorktreeManager {
   private readonly timeoutMs: number | undefined;
   private readonly defaultLocation: 'app-data' | 'sibling';
   private readonly sleep: (ms: number) => Promise<void>;
+  /**
+   * One `create` at a time per project: picking a free slug and `git worktree add` are not atomic, so
+   * parallel attempts whose titles slug the same (long titles cut the `#1` / `#2` suffix) raced and
+   * the loser failed with "cannot lock ref … reference already exists".
+   */
+  private readonly createLocks = new Map<string, Promise<unknown>>();
 
   constructor(opts: WorktreeManagerOptions) {
     this.appDataDir = opts.appDataDir;
@@ -133,6 +139,18 @@ export class WorktreeManager {
   }
 
   async create(opts: CreateWorktreeOptions): Promise<CreatedWorktree> {
+    const key = pathKey(opts.projectPath);
+    const prev = this.createLocks.get(key) ?? Promise.resolve();
+    const run = prev.catch(() => undefined).then(() => this.createUnlocked(opts));
+    this.createLocks.set(key, run);
+    try {
+      return await run;
+    } finally {
+      if (this.createLocks.get(key) === run) this.createLocks.delete(key);
+    }
+  }
+
+  private async createUnlocked(opts: CreateWorktreeOptions): Promise<CreatedWorktree> {
     const git = this.git(opts.projectPath);
     if (!(await git.revParse('HEAD'))) throw new Error('The project has no commits yet. Make a first commit before starting an agent in a worktree.');
     const baseRef = await this.resolveBase(git, opts.base);

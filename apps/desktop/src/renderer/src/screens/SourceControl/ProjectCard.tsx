@@ -229,7 +229,9 @@ function WorktreeRow({
       <span className="font-mono text-[11.5px] text-ink-3 whitespace-nowrap overflow-hidden">
         {diff ? (
           <>
-            {diff.files} {diff.files === 1 ? 'file' : 'files'} · {diff.additions > 0 && <span className="text-ok">+{diff.additions}</span>}{' '}
+            {diff.files} {diff.files === 1 ? 'file' : 'files'}
+            {(diff.additions > 0 || diff.deletions > 0) && ' · '}
+            {diff.additions > 0 && <span className="text-ok">+{diff.additions}</span>}{' '}
             {diff.deletions > 0 && (
               <span className="text-bad">
                 {MINUS}

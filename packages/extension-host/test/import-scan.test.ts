@@ -97,6 +97,12 @@ describe('import scanner', () => {
     expect(stripJsonc('{"a": "// not a comment", /* c */ "b": [1,],}')).toBe('{"a": "// not a comment",  "b": [1]}');
   });
 
+  it('SEC-24: masks secret headers passed as args (mcp-remote --header "Authorization: Bearer …")', () => {
+    expect(
+      redactArgs(['/c', 'npx', '-y', 'mcp-remote', 'https://mcp.example.com/mcp', '--header', 'Authorization: Bearer abcDEF123456789xyz', '-H', 'X-Api-Key:k123', '--header', 'Accept: text/event-stream', 'C:\\tools\\x']),
+    ).toEqual(['/c', 'npx', '-y', 'mcp-remote', 'https://mcp.example.com/mcp', '--header', 'Authorization: ***', '-H', 'X-Api-Key: ***', '--header', 'Accept: text/event-stream', 'C:\\tools\\x']);
+  });
+
   it('SEC-24: masks secret-looking args and URL parts in what goes to the renderer', () => {
     expect(redactArgs(['-y', 'pkg', '--api-key=sk-live-1234567890', '--token', 'abc123', 'API_KEY=xyz', 'ghp_abcdefghijklmnop', 'postgresql://me:pw@db/x', '--root', '.'])).toEqual([
       '-y',
