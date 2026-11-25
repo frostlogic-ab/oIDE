@@ -52,6 +52,10 @@ describe('artifact import helpers', () => {
     expect(titleFromContent('doc', '---\ntitle: "From front matter"\n---\n\n# Heading\n')).toBe('From front matter');
     expect(titleFromContent('doc', '---\nno close\n# Real\n')).toBe('Real');
     expect(titleFromContent('doc', '```sh\n# a shell comment\n```\n\n# Setup\n')).toBe('Setup');
+    expect(titleFromContent('doc', '```\n```js\n# still code\n```\n# After\n')).toBe('After');
+    expect(titleFromContent('doc', '---\ntitle: ""\n---\n\n# Heading\n')).toBe('Heading');
+    expect(titleFromContent('doc', '---\ntitle: "Say \\"hi\\""\n---\n')).toBe('Say "hi"');
+    expect(titleFromContent('doc', "---\ntitle: 'It''s'\n---\n")).toBe("It's");
     expect(titleFromContent('doc', 'No heading')).toBeUndefined();
     expect(titleFromContent('whiteboard', '# x')).toBeUndefined();
     expect(titleFromContent('doc', `# ${'a'.repeat(300)}`)?.length).toBe(200);

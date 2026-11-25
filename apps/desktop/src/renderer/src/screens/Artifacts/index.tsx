@@ -19,7 +19,7 @@ import { toast } from '../../stores/ui';
 import { DeleteDialog, ImportDialog, NewArtifactDialog, RenameDialog } from './Dialogs';
 import { ArtifactPreview, KindThumb } from './Preview';
 import { Viewer, type CompareSide, type ViewerMode } from './Viewer';
-import { KIND_LABEL, KIND_TABS, agentsUsing, filterArtifacts, isClaudeLink, usageLine, versionLabel, type KindTab } from './model';
+import { KIND_LABEL, KIND_TABS, agentsUsing, canOpenClaudeLink, filterArtifacts, usageLine, versionLabel, type KindTab } from './model';
 import './artifacts.css';
 
 type Detail = CommandOutput<'artifacts.get'>;
@@ -323,7 +323,7 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
 
   const { meta, versions } = detail;
   const users = agentsUsing(detail.uses);
-  const claude = isClaudeLink(meta.importedFrom) ? meta.importedFrom : undefined;
+  const claude = canOpenClaudeLink(meta.importedFrom) ? meta.importedFrom : undefined;
   const origin = meta.importedFrom ? (claude ? 'imported from claude.ai' : 'imported') : meta.location === 'repo' ? 'in the repo' : 'personal';
 
   const viewVersion = async (v: ArtifactVersion) => {

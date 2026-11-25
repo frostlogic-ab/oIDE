@@ -133,8 +133,17 @@ function markdownTitle(text: string): string | undefined {
       const m = /^title:[ \t]*(\S.*)$/.exec(line);
       if (!m) continue;
       const v = m[1]!.trim();
-      const unquoted = /^"(.*)"$|^'(.*)'$/.exec(v);
-      return unquoted ? (unquoted[1] ?? unquoted[2]) : v;
+      let title = v;
+      if (/^".*"$/.test(v)) {
+        // oIDE writes front matter with JSON.stringify; fall back to the raw text when it isn't JSON.
+        try {
+          title = String(JSON.parse(v));
+        } catch {
+          title = v.slice(1, -1);
+        }
+      } else if (/^'.*'$/.test(v)) title = v.slice(1, -1).replace(/''/g, "'");
+      if (title.trim()) return title;
+      break; // an empty title: use the first heading instead
     }
     i = close + 1;
   }
@@ -143,8 +152,9 @@ function markdownTitle(text: string): string | undefined {
     const line = lines[i]!;
     const f = /^[ ]{0,3}(`{3,}|~{3,})/.exec(line);
     if (f) {
+      // A closing fence uses the same character, is at least as long and carries no info string.
       if (!fence) fence = f[1]!;
-      else if (f[1]!.startsWith(fence)) fence = null;
+      else if (f[1]![0] === fence[0] && f[1]!.length >= fence.length && !line.slice(line.indexOf(f[1]!) + f[1]!.length).trim()) fence = null;
       continue;
     }
     if (fence) continue;

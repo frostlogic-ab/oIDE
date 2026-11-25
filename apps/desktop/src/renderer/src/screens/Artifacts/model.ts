@@ -96,7 +96,7 @@ export function versionLabel(v: ArtifactVersion, agentTitle: (id: string) => str
 
 const CLAUDE_HOSTS = ['claude.ai', 'claude.site'];
 
-/** True for https links on claude.ai / claude.site (the only hosts "Open in claude.ai" opens). */
+/** True for https links on claude.ai / claude.site (the hosts an import may come from). */
 export function isClaudeLink(url: string | undefined): url is string {
   if (!url) return false;
   try {
@@ -105,6 +105,16 @@ export function isClaudeLink(url: string | undefined): url is string {
   } catch {
     return false;
   }
+}
+
+/**
+ * True for claude.ai links oIDE can open in the system browser ("Open in claude.ai", the import
+ * dialog's Open). claude.site is not on main's external-link allow-list: anyone can publish there.
+ */
+export function canOpenClaudeLink(url: string | undefined): url is string {
+  if (!isClaudeLink(url)) return false;
+  const host = new URL(url).hostname.toLowerCase();
+  return host === 'claude.ai' || host.endsWith('.claude.ai');
 }
 
 /** Removes a leading `---` front-matter block from Markdown. */

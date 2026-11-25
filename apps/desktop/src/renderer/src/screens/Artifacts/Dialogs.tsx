@@ -6,7 +6,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'rea
 import { inferKindFromContent, looksLikeHtml, type ArtifactKind, type ArtifactMeta, type Project } from '@oide/protocol';
 import { Button, Dialog, SegmentedControl, Select, Tabs, TextArea, TextField, tabPanelProps } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
-import { KIND_LABEL, isClaudeLink, kindFromFileName, validateContent, validateTitle } from './model';
+import { KIND_LABEL, canOpenClaudeLink, isClaudeLink, kindFromFileName, validateContent, validateTitle } from './model';
 
 type Location = 'repo' | 'app-data';
 
@@ -230,7 +230,7 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
   };
 
   const openLink = () => {
-    if (!canOpenLink(link)) {
+    if (!canOpenClaudeLink(link)) {
       setTouched(true);
       return;
     }
@@ -303,14 +303,14 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
         hint={
           tab === 'file'
             ? 'Where the file came from, for Open in claude.ai.'
-            : isClaudeLink(link) && !canOpenLink(link)
+            : isClaudeLink(link) && !canOpenClaudeLink(link)
               ? 'oIDE opens only claude.ai links in your browser; open this one yourself to copy its code.'
               : undefined
         }
         containerClassName="flex-1 min-w-0"
       />
       {tab === 'link' && (
-        <Button size={32} icon="external-link" onClick={openLink} disabled={!canOpenLink(link)} aria-label="Open the link on claude.ai" className="mt-[22px] shrink-0">
+        <Button size={32} icon="external-link" onClick={openLink} disabled={!canOpenClaudeLink(link)} aria-label="Open the link on claude.ai" className="mt-[22px] shrink-0">
           Open
         </Button>
       )}
@@ -427,13 +427,6 @@ function importContentError(kind: ArtifactKind, content: string): string | undef
   }
   if (kind === 'whiteboard') return validateContent('whiteboard', content.charCodeAt(0) === 0xfeff ? content.slice(1) : content) ?? undefined;
   return undefined;
-}
-
-/** Links the Open button can hand to the system browser (main's allow-list has claude.ai, not claude.site). */
-function canOpenLink(link: string): boolean {
-  if (!isClaudeLink(link)) return false;
-  const host = new URL(link).hostname.toLowerCase();
-  return host === 'claude.ai' || host.endsWith('.claude.ai');
 }
 
 export interface RenameDialogProps {

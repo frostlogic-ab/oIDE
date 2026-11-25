@@ -636,3 +636,13 @@ saying why. "Pick a file" can keep the claude.ai link as the origin. An empty pa
 stub ("Import link only"). Links carrying a user name or password are refused, and repo imports register
 their artifact root like `create`. New telemetry event: `artifact_imported` (source, kind, linked). Pages:
 [artifacts](pages/artifacts.md), [screen-artifacts](pages/screen-artifacts.md), [telemetry](pages/telemetry.md).
+
+## [2026-11-25] review | Import from claude.ai: review fixes
+
+Two reviewer passes on the import change. Fixed: an exponential-backtracking comment pattern in `looksLikeHtml`
+(now an `indexOf` loop) and quadratic title patterns; Markdown that opens with an HTML banner stays a doc; SVG
+files with a doctype count as pages; doc titles prefer front-matter `title:` (JSON-unescaped) and skip fenced
+code; the dialog memoises its content check, keeps the instructions visible with a `role="alert"` refusal, and
+gives Open a full accessible name. Open and "Open in claude.ai" only appear for claude.ai links
+(`canOpenClaudeLink`): claude.site stays off the external-link allow-list, since anyone can publish there. The dev mock
+mirrors the store. Pages: [artifacts](pages/artifacts.md), [screen-artifacts](pages/screen-artifacts.md).
