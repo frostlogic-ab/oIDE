@@ -760,3 +760,8 @@ and the `fable` alias as 1M; and when a lead request is larger than a window tha
 reported by the CLI), the reducer lifts the window to 1M until the CLI reports one. Tests in
 `packages/agent-core/src/context.test.ts`. Pages: [cli-integration](pages/cli-integration.md),
 [agent-supervisor](pages/agent-supervisor.md).
+
+## [2026-11-25] build | Merge dialog: fixed "Ask agent to resolve" label
+The merge dialog's primary button read "Ask <agent title> to resolve", so long titles pushed the footer
+out of the 480px dialog. The label is now fixed; the note above the buttons and the button tooltip name
+the agent. Dialog footers wrap and descriptions break long unbroken text (paths) instead of overflowing.

@@ -131,7 +131,7 @@ export function Dialog({
                   {title}
                 </h2>
                 {description && (
-                  <span id={descId} className="text-[12.5px] text-ink-3">
+                  <span id={descId} className="text-[12.5px] text-ink-3 wrap-anywhere">
                     {description}
                   </span>
                 )}
@@ -139,7 +139,7 @@ export function Dialog({
               {close && <IconButton icon="close" aria-label="Close" size={32} onClick={onClose} />}
             </div>
             {children}
-            {footer && <div className="flex justify-end gap-2">{footer}</div>}
+            {footer && <div className="flex flex-wrap justify-end gap-2">{footer}</div>}
           </>
         ) : (
           <>
@@ -151,12 +151,12 @@ export function Dialog({
               {close && <IconButton icon="close" aria-label="Close" size={32} onClick={onClose} />}
             </div>
             {description && (
-              <p id={descId} className="m-0 px-5 pt-3 text-[12.5px] text-ink-3">
+              <p id={descId} className="m-0 px-5 pt-3 text-[12.5px] text-ink-3 wrap-anywhere">
                 {description}
               </p>
             )}
             <div className="flex-1 min-h-0 overflow-auto">{children}</div>
-            {footer && <div className="flex justify-end gap-2 px-5 py-4 border-t border-line">{footer}</div>}
+            {footer && <div className="flex flex-wrap justify-end gap-2 px-5 py-4 border-t border-line">{footer}</div>}
           </>
         )}
       </div>

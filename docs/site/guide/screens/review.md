@@ -26,7 +26,7 @@ agent revises and submits again. Unsent comments can be deleted.
   `git merge-tree`, nothing is touched) and lists any uncommitted files in the main checkout. If it
   merges cleanly, Merge commits any uncommitted changes in the worktree on the agent's behalf, then
   runs `git merge --no-ff`. If it would conflict, the dialog names the files and its main action is
-  **Ask <agent> to resolve**: oIDE sends the agent a message (marked "Sent by oIDE" in the transcript)
+  **Ask agent to resolve**: oIDE sends the agent a message (marked "Sent by oIDE" in the transcript)
   to merge main into its own worktree, resolve the conflicts, commit and submit for review again. A
   stopped or archived agent is brought back first. The tile shows "Resolving merge conflicts" until it
   submits; then you click Merge again. **Merge anyway** still tries, and a merge that stops on
