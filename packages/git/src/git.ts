@@ -291,6 +291,64 @@ export class Git {
     });
   }
 
+  /**
+   * Like `run`, but streams stdout to `onStdout` instead of buffering it (no size cap), and stops
+   * git when `signal` aborts (on Windows the whole process tree: `git.exe` from `cmd/` is a
+   * launcher). Same binary, env, config overrides and safety flags as `run`. Resolves with stderr
+   * and the exit code (`null` when killed); rejects only when git cannot start or exits with a code
+   * outside `okExitCodes`.
+   */
+  async stream(
+    args: readonly string[],
+    opts: Omit<GitRunOptions, 'input' | 'timeoutMs'> & { onStdout: (chunk: Buffer) => void; signal?: AbortSignal },
+  ): Promise<{ stderr: string; exitCode: number | null; aborted: boolean }> {
+    const cwd = opts.cwd ?? this.cwd;
+    const overrides = this.isTrusted(cwd) ? [] : await this.overridesFor(cwd);
+    const env = buildEnv(NO_PROMPT_ENV, this.env, opts.env);
+    if (overrides.length) Object.assign(env, configEnv(overrides, env));
+    const fullArgs = [...baseConfigArgs(), ...withSafeDiffFlags(args)];
+    const ok = opts.okExitCodes ?? [0];
+    if (opts.signal?.aborted) return { stderr: '', exitCode: null, aborted: true };
+    return new Promise((resolve, reject) => {
+      const child = spawn(this.gitBinary, fullArgs, { cwd, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+      let stderr = '';
+      let aborted = false;
+      const kill = () => {
+        aborted = true;
+        if (child.exitCode !== null) return;
+        if (process.platform === 'win32' && child.pid !== undefined) {
+          try {
+            const tk = spawn(windowsTaskkill(), ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
+            tk.on('error', () => child.kill());
+            return;
+          } catch {}
+        }
+        child.kill();
+      };
+      opts.signal?.addEventListener('abort', kill, { once: true });
+      child.stdout.on('data', (d: Buffer) => {
+        if (!aborted) opts.onStdout(d);
+      });
+      child.stderr.setEncoding('utf8');
+      child.stderr.on('data', (d: string) => {
+        if (stderr.length < 64 * 1024) stderr += d;
+      });
+      child.on('error', (err: NodeJS.ErrnoException) => {
+        opts.signal?.removeEventListener('abort', kill);
+        reject(err.code === 'ENOENT' ? new GitError(`git not found (${this.gitBinary}). Install git and make sure it is on PATH.`, args, null, stderr, '') : err);
+      });
+      child.on('close', (code) => {
+        opts.signal?.removeEventListener('abort', kill);
+        if (aborted) return resolve({ stderr, exitCode: code, aborted: true });
+        if (code !== null && !ok.includes(code)) {
+          const first = stderr.trim().split(/\r?\n/).filter(Boolean).slice(-3).join(' ') || `exit ${code}`;
+          return reject(new GitError(`git ${args[0] ?? ''} failed: ${first}`, args, code, stderr, ''));
+        }
+        resolve({ stderr, exitCode: code, aborted: false });
+      });
+    });
+  }
+
   /** Runs and returns stdout. */
   async out(args: readonly string[], opts?: GitRunOptions): Promise<string> {
     return (await this.run(args, opts)).stdout;

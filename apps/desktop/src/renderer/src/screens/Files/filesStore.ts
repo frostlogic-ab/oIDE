@@ -17,6 +17,43 @@ export interface FileTab {
 
 type PerRoot<T> = Record<string, Record<string, T>>;
 
+/** A file to open (quick open, a search result): the Files screen resolves the project and consumes it. */
+export interface OpenRequest {
+  root: string;
+  path: string;
+  line?: number;
+  column?: number;
+  /** Characters to select from `column` (a search match). */
+  length?: number;
+  nonce: number;
+}
+
+export interface RecentFile {
+  root: string;
+  path: string;
+}
+
+const RECENT_KEY = 'oide.files.recent';
+const RECENT_MAX = 50;
+
+function loadRecent(): RecentFile[] {
+  try {
+    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(RECENT_KEY) : null;
+    const list = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(list) ? list.filter((r): r is RecentFile => typeof r?.root === 'string' && typeof r?.path === 'string').slice(0, RECENT_MAX) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecent(list: RecentFile[]): void {
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list));
+  } catch {
+    /* private window or blocked storage: recents stay in memory */
+  }
+}
+
 interface FilesState {
   openProjects: Record<string, boolean>;
   /** projectId → root shown (project.path or a worktree path). */
@@ -29,6 +66,12 @@ interface FilesState {
   active?: string;
   /** Projects whose agent-touched folders were auto-expanded once. */
   revealed: Record<string, boolean>;
+  /** Recently opened files, most recent first (quick open ranks them first). */
+  recent: RecentFile[];
+  /** Waiting to be opened by the Files screen. */
+  pending?: OpenRequest;
+  /** Row the tree should scroll to and focus once it is visible. */
+  revealTarget?: { root: string; path: string; nonce: number };
 
   setProjectOpen(projectId: string, open: boolean): void;
   setCheckout(projectId: string, root: string): void;
@@ -39,6 +82,17 @@ interface FilesState {
   closeTab(id: string): void;
   setActive(id: string): void;
   markRevealed(key: string): void;
+  /** Open a file (and reveal it in the tree) from anywhere; switch to Files separately. */
+  requestOpen(req: Omit<OpenRequest, 'nonce'>): void;
+  clearPending(nonce: number): void;
+  /** Expand the folders above `path` and scroll the tree to it. */
+  revealPath(root: string, path: string): void;
+  clearRevealTarget(nonce: number): void;
+  collapseAll(root: string): void;
+  /** Expand every folder whose contents are already loaded. */
+  expandLoaded(root: string): void;
+  /** Load and expand folders down to `depth` levels (1 = the top folders), at most `cap` folders. */
+  expandToDepth(root: string, depth: number, cap?: number): Promise<void>;
 }
 
 export const tabId = (root: string, path: string) => `${root}::${path}`;
@@ -62,6 +116,9 @@ export const useFiles = create<FilesState>()((set, get) => ({
   tabs: [],
   active: undefined,
   revealed: {},
+  recent: loadRecent(),
+  pending: undefined,
+  revealTarget: undefined,
 
   setProjectOpen: (projectId, open) => set({ openProjects: { ...get().openProjects, [projectId]: open } }),
   setCheckout: (projectId, root) => set({ checkout: { ...get().checkout, [projectId]: root } }),
@@ -107,7 +164,9 @@ export const useFiles = create<FilesState>()((set, get) => ({
   openFile: (projectId, root, path) => {
     const id = tabId(root, path);
     const tabs = get().tabs.some((t) => t.id === id) ? get().tabs : [...get().tabs, { id, projectId, root, path }];
-    set({ tabs, active: id });
+    const recent = [{ root, path }, ...get().recent.filter((r) => r.root !== root || r.path !== path)].slice(0, RECENT_MAX);
+    saveRecent(recent);
+    set({ tabs, active: id, recent });
   },
   closeTab: (id) => {
     const tabs = get().tabs;
@@ -118,6 +177,44 @@ export const useFiles = create<FilesState>()((set, get) => ({
   },
   setActive: (id) => set({ active: id }),
   markRevealed: (key) => set({ revealed: { ...get().revealed, [key]: true } }),
+
+  requestOpen: (req) => set({ pending: { ...req, nonce: Date.now() + Math.random() } }),
+  clearPending: (nonce) => {
+    if (get().pending?.nonce === nonce) set({ pending: undefined });
+  },
+  revealPath: (root, path) => {
+    const dirs = ancestorDirs([path]);
+    if (dirs.length) get().expandMany(root, dirs);
+    set({ revealTarget: { root, path, nonce: Date.now() + Math.random() } });
+  },
+  clearRevealTarget: (nonce) => {
+    if (get().revealTarget?.nonce === nonce) set({ revealTarget: undefined });
+  },
+  collapseAll: (root) => set({ expanded: { ...get().expanded, [root]: {} } }),
+  expandLoaded: (root) => {
+    const nodes = get().nodes[root] ?? {};
+    const dirs: string[] = [];
+    for (const list of Object.values(nodes)) for (const n of list) if (n.kind === 'dir' && nodes[n.path]) dirs.push(n.path);
+    let expanded = get().expanded;
+    for (const d of dirs) expanded = put(expanded, root, d, true);
+    set({ expanded });
+  },
+  expandToDepth: async (root, depth, cap = 300) => {
+    let level = [''];
+    let opened = 0;
+    for (let d = 0; d < depth && level.length && opened < cap; d++) {
+      const lists = await Promise.all(level.map((dir) => get().loadDir(root, dir)));
+      const next: string[] = [];
+      for (const list of lists) for (const n of list ?? []) if (n.kind === 'dir' && opened + next.length < cap) next.push(n.path);
+      let expanded = get().expanded;
+      for (const dir of next) expanded = put(expanded, root, dir, true);
+      set({ expanded });
+      opened += next.length;
+      // Compacted chains ("main/cli") count as one level: descend into their last folder.
+      level = next;
+    }
+    await Promise.all(level.map((dir) => get().loadDir(root, dir)));
+  },
 }));
 
 export interface TreeRow {

@@ -38,6 +38,7 @@ export const DEFAULT_BINDINGS: Readonly<Record<string, readonly string[]>> = {
   'agent.cycleMode': ['Shift+Tab'],
   'nav.back': ['Alt+ArrowLeft'],
   'nav.forward': ['Alt+ArrowRight'],
+  'files.search': ['Mod+Shift+F'],
 };
 
 export const ACTION_LABELS: Readonly<Record<string, string>> = {
@@ -52,6 +53,7 @@ export const ACTION_LABELS: Readonly<Record<string, string>> = {
   'agent.cycleMode': 'Switch permission mode',
   'nav.back': 'Go back',
   'nav.forward': 'Go forward',
+  'files.search': 'Files: search in files',
   'review.nextFile': 'Review: next file',
   'review.prevFile': 'Review: previous file',
   'review.nextHunk': 'Review: next change',

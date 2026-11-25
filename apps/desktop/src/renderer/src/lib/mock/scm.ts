@@ -6,7 +6,14 @@
  */
 import {
   AgentSummary,
+  applyReplacements,
+  buildSearchRegExp,
+  findMatches,
+  pathFilter,
+  scorePath,
   type ArtifactMeta,
+  type ContentFileResult,
+  type FileNameMatch,
   CommitInfo,
   FileDiff,
   OverlapWarning,
@@ -479,6 +486,17 @@ export function fileHistory(path: string, root: string): CommitInfo[] {
 
 export const mentions: Record<string, ArtifactMeta[]> = {};
 
+/** 64 hex chars from a string (stand-in for main's sha256: changes whenever the content does). */
+export function mockHash(text: string): string {
+  let out = '';
+  for (let seed = 0; out.length < 64; seed++) {
+    let h = 0x811c9dc5 ^ seed;
+    for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+    out += (h >>> 0).toString(16).padStart(8, '0');
+  }
+  return out.slice(0, 64);
+}
+
 // ---------------------------------------------------------------- handlers
 
 type Handlers = { [K in CommandName]?: (input: CommandInput<K>) => CommandOutput<K> | Promise<CommandOutput<K>> };
@@ -619,6 +637,61 @@ export function createScmHandlers({ agents, emit, fallbackDiffs = {}, artifacts 
       return { ok: true as const };
     },
     'files.history': ({ root, path }) => fileHistory(path, root),
+    'files.findByName': ({ roots, query, limit = 50, recent = [] }) => {
+      const rank = new Map(recent.map((r, i) => [`${r.root}
+${r.path}`, i]));
+      const out: FileNameMatch[] = [];
+      let total = 0;
+      for (const root of roots) {
+        const tree = need(files.get(root), `[forbidden_path] ${root}`);
+        total += tree.size;
+        for (const path of tree.keys()) {
+          const s = scorePath(query, path);
+          if (!s || !query.trim()) continue;
+          const r = rank.get(`${root}
+${path}`);
+          out.push({ root, path, score: r !== undefined ? 1_000_000 - r * 1000 + s.score / 100 : s.score, positions: s.positions, recent: r !== undefined });
+        }
+      }
+      return { results: out.sort((a, b) => b.score - a.score).slice(0, limit), total, stale: false };
+    },
+    'files.searchContent': ({ searchId, roots, query, isRegex = false, matchCase = false, wholeWord = false, include = '', exclude = '', maxResults = 2000 }) => {
+      const re = buildSearchRegExp({ query, isRegex, matchCase, wholeWord });
+      const keep = pathFilter(include, exclude);
+      const found: ContentFileResult[] = [];
+      let count = 0;
+      for (const root of roots) {
+        const tree = need(files.get(root), `[forbidden_path] ${root}`);
+        for (const [path, content] of [...tree].sort((a, b) => a[0].localeCompare(b[0]))) {
+          if (!keep(path) || count >= maxResults) continue;
+          const matches = findMatches(content, re, maxResults - count);
+          if (!matches.length) continue;
+          count += matches.length;
+          found.push({ root, path, hash: mockHash(content), mtimeMs: now, matches });
+        }
+      }
+      // Two batches, like main's streaming.
+      const half = Math.ceil(found.length / 2);
+      setTimeout(() => emit('files.searchResults', { searchId, files: found.slice(0, half), done: false, truncated: false }), 0);
+      setTimeout(() => emit('files.searchResults', { searchId, files: found.slice(half), done: true, truncated: count >= maxResults, stats: { files: found.length, matches: count, ms: 3, engine: 'git-grep' } }), 5);
+      return { ok: true as const };
+    },
+    'files.cancelSearch': () => ({ ok: true as const }),
+    'files.replace': ({ files: list, query, isRegex = false, matchCase = false, wholeWord = false, replacement }) => {
+      const o = { query, isRegex, matchCase, wholeWord };
+      return {
+        results: list.map((f) => {
+          const tree = need(files.get(f.root), `[forbidden_path] ${f.root}`);
+          const content = tree.get(f.path);
+          if (content === undefined) return { root: f.root, path: f.path, status: 'stale' as const, replaced: 0, message: 'The file is gone.' };
+          if (mockHash(content) !== f.hash) return { root: f.root, path: f.path, status: 'stale' as const, replaced: 0, message: 'The file changed since the search. Search again.' };
+          const r = applyReplacements(content, o, replacement, f.matches);
+          if (r.missing) return { root: f.root, path: f.path, status: 'stale' as const, replaced: 0, message: 'A match moved.' };
+          tree.set(f.path, r.content);
+          return { root: f.root, path: f.path, status: 'replaced' as const, replaced: r.replaced };
+        }),
+      };
+    },
     'files.editingAgents': ({ path }) => {
       const root = rootOf(path);
       const rel = root ? path.slice(root.length + 1) : path;

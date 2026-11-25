@@ -7,6 +7,7 @@ import { invokeOr, ipcErrorMessage, oide } from './bridge';
 import { commands, type Command } from './commands';
 import { keymap } from './keymap';
 import { extensionUiCommands } from '../extensions/commands';
+import { useSearch } from '../screens/Files/searchStore';
 import { isOnSomewhere } from '../extensions/model';
 
 /** Core commands. Registered once at boot; returns an unregister. */
@@ -47,6 +48,17 @@ export function registerCoreCommands(): () => void {
     { id: 'oide.go.wall', title: 'Go to Agents', group: 'Go to', keywords: ['wall', 'mission control', 'home'], run: () => navigate('wall') },
     { id: 'oide.go.artifacts', title: 'Go to Artifacts', group: 'Go to', keywords: ['designs', 'docs', 'whiteboards'], run: () => navigate('artifacts', {}) },
     { id: 'oide.go.files', title: 'Go to Files', group: 'Go to', keywords: ['editor', 'tree'], run: () => navigate('files', {}) },
+    {
+      id: 'oide.files.search',
+      title: 'Search in files',
+      group: 'Search',
+      keywords: ['find', 'grep', 'replace', 'content'],
+      hint: keymap.label('files.search'),
+      run: () => {
+        useSearch.getState().show();
+        if (useRouter.getState().route.screen !== 'files') navigate('files', {});
+      },
+    },
     { id: 'oide.go.sourceControl', title: 'Go to Source control', group: 'Go to', keywords: ['git', 'worktrees', 'commit'], run: () => navigate('source-control') },
     { id: 'oide.go.marketplace', title: 'Go to Marketplace', group: 'Go to', keywords: ['extensions', 'tools', 'mcp'], run: () => navigate('marketplace', {}) },
     { id: 'oide.go.settings', title: 'Go to Settings', group: 'Go to', keywords: ['preferences', 'options', 'models'], run: () => navigate('settings', {}) },

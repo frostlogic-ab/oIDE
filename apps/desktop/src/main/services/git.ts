@@ -11,6 +11,7 @@ import {
   gitPush,
   log as gitLog,
   mergeLocal as gitMergeLocal,
+  isInside,
   samePath,
   syncState,
   type LiveWorktree,
@@ -376,10 +377,25 @@ export class GitService {
     return this.inflight.size;
   }
 
+  private readonly checkoutListeners = new Set<(path: string, projectId: string) => void>();
+
+  /** Called (undebounced) on every watcher change of a checkout, e.g. so the quick-open index refreshes. */
+  onCheckoutChange(fn: (path: string, projectId: string) => void): () => void {
+    this.checkoutListeners.add(fn);
+    return () => this.checkoutListeners.delete(fn);
+  }
+
+  /** True when a watcher covers `path` (a watched checkout or a folder inside one). */
+  isWatching(path: string): boolean {
+    for (const p of this.watchers.keys()) if (samePath(p, path) || isInside(p, path)) return true;
+    return false;
+  }
+
   /** Watch a checkout; changes refresh the diff of the agents working there and emit `git.changed`. */
   watch(path: string, projectId: string): void {
     if (!this.o.watch || this.closed || this.watchers.has(path) || !existsSync(path)) return;
     const onChange = () => {
+      for (const fn of this.checkoutListeners) fn(path, projectId);
       for (const a of this.o.agents.list()) if (a.worktreePath && samePath(a.worktreePath, path)) this.scheduleDiff(a.id);
       const key = `project:${projectId}`;
       if (this.timers.has(key)) return;
