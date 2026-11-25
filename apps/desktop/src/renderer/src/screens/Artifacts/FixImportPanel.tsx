@@ -57,12 +57,13 @@ export function FixImportPanel({ meta, autoFocus, onSaved, onReplaced, onDelete 
         // Only while it is still the empty import this panel showed: an agent may have written the
         // real content into it meanwhile (artifacts_write), and that must not be deleted.
         const now = await oide.invoke('artifacts.get', { id: meta.id });
-        if (now.meta.brokenImport && now.meta.version === meta.version) await oide.invoke('artifacts.delete', { id: meta.id });
-        else toast(`Kept ${meta.title}: it changed while you were importing.`, 'info');
+        if (now.meta.brokenImport && now.meta.version === meta.version) {
+          await oide.invoke('artifacts.delete', { id: meta.id });
+          toast(`Imported ${next.title}`, 'success');
+        } else toast(`Imported ${next.title}. Kept ${meta.title}: it changed while you were importing.`, 'info');
       } catch (err) {
         toast(`Imported ${next.title}, but couldn't delete the empty import: ${ipcErrorMessage(err)}`, 'error');
       }
-      toast(`Imported ${next.title}`, 'success');
       onReplaced(next);
     } catch (err) {
       setError(ipcErrorMessage(err));

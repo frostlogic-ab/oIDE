@@ -20,6 +20,11 @@ describe('artifact import helpers', () => {
     expect(looksLikeHtml('<div class="card"><p>Hi</p></div>')).toBe(true);
     expect(looksLikeHtml('<svg viewBox="0 0 10 10"><rect/></svg>')).toBe(true);
     expect(looksLikeHtml('<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"></svg>')).toBe(true);
+    // Inkscape / Illustrator exports: a comment (and a doctype) after the XML header.
+    expect(looksLikeHtml('<?xml version="1.0" encoding="UTF-8"?>\n<!-- Created with Inkscape (http://www.inkscape.org/) -->\n<svg width="10"></svg>')).toBe(true);
+    expect(looksLikeHtml('<?xml version="1.0"?>\n<!-- Generator: Adobe Illustrator -->\n<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "x.dtd">\n<svg></svg>')).toBe(true);
+    expect(looksLikeHtml('<?xml version="1.0"?>\n<!-- c -->\n<notsvg/>')).toBe(false);
+    expect(looksLikeHtml('<?xml version="1.0"?>' + '<!---->'.repeat(2000) + '<svg>')).toBe(false);
     expect(looksLikeHtml("import React from 'react';\nexport default () => <div/>;")).toBe(false);
     expect(looksLikeHtml('# Heading\n\n<b>bold</b>')).toBe(false);
     expect(looksLikeHtml('a < b')).toBe(false);
@@ -89,6 +94,7 @@ describe('artifact import helpers', () => {
     expect(inferKindFromContent(md)).toBe('doc');
     expect(looksLikeReact("Intro text\nimport React from 'react';\nexport default () => <p/>;")).toBe(false);
     // Leading comments and directives, multi-line imports.
+    expect(looksLikeReact("import React from 'react';\nfunction App({ ok }) {\n  return ok ? (<Card/>) : null;\n}\nexport { App as default };\n")).toBe(true);
     expect(looksLikeReact("// Pricing page\n/* v2 */\n'use client';\nimport {\n  useState,\n  useEffect,\n} from 'react';\nexport default function P() { return <p/>; }")).toBe(true);
     expect(inferKindFromContent(app)).toBe('design');
     expect(designEntryFor(app)).toBe('App.jsx');
@@ -109,6 +115,10 @@ describe('artifact import helpers', () => {
   it('knows the placeholder older versions stored for link-only imports', () => {
     expect(isImportStubContent('<p>Imported from https://claude.ai/artifact/x. oIDE cannot fetch claude.ai artifacts: open the link…</p>')).toBe(true);
     expect(isImportStubContent('<h1>Real page</h1>')).toBe(false);
+    // The first wording (2026-11-24), as a doc and as an HTML-escaped design page.
+    const first = 'Imported from https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T. oIDE cannot fetch claude.ai artifacts; paste or drop the exported content here to keep a local copy.';
+    expect(isImportStubContent(first + '\n')).toBe(true);
+    expect(isImportStubContent(`<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8"><title>Site</title></head>\n<body>\n<p>${first}</p>\n</body>\n</html>\n`)).toBe(true);
     // A real artifact that only mentions the phrase, or a big one, is not the placeholder.
     expect(isImportStubContent('# Changelog\n\nRemoved "oIDE cannot fetch claude.ai artifacts: open the link".')).toBe(false);
     expect(isImportStubContent('Imported from x. oIDE cannot fetch claude.ai artifacts: open the link' + 'x'.repeat(9000))).toBe(false);
@@ -153,6 +163,8 @@ describe('artifact import helpers', () => {
     expect(input.safeParse({}).success).toBe(false);
     expect(input.safeParse({ url: 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T', content: '<p>x</p>' }).success).toBe(true);
     expect(input.safeParse({ filePath: 'C:\\x\\a.html' }).success).toBe(true);
+    // Pasted content without a link (replacing an old import whose link is no longer accepted).
+    expect(input.safeParse({ content: '<p>x</p>' }).success).toBe(true);
     const refused = input.safeParse({ url: 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T' });
     expect(refused.success ? '' : refused.error.issues[0]?.message).toMatch(/Paste the artifact's code/);
   });

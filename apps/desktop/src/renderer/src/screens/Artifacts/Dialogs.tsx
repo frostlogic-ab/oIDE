@@ -298,8 +298,12 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
     else setKind(filePath ? kindFromFileName(filePath) : 'doc');
   };
 
+  // Only an artifact or Claude Design link can be a Claude Doc or a design project; a published
+  // (public / claude.site) artifact is a chat artifact, which no agent can read.
+  const agentCanFetch = !!linkInfo?.ok && (linkInfo.type === 'artifact' || linkInfo.type === 'design');
+
   const fetchWithAgent = () => {
-    if (!linkInfo?.ok) return;
+    if (!agentCanFetch) return;
     const name = title.trim() || 'Imported from claude.ai';
     trackFetchWithAgent();
     const goal =
@@ -435,7 +439,7 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
                   </span>
                 )}
               </div>
-              {linkInfo?.ok && (
+              {agentCanFetch && (
                 <div className="flex flex-col gap-1.5 rounded-lg border border-line-2 bg-card px-3 py-2.5">
                   <div className="flex items-center gap-2 flex-wrap">
                     <Button size={28} icon="agents" onClick={fetchWithAgent}>

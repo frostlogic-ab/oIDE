@@ -53,8 +53,8 @@ export function registerArtifactHandlers(router: IpcRouter, s: Services, ctx: Ma
     if (filePath) {
       if (!wasPicked(s, filePath)) throw new IpcError('Pick the file with the file dialog first.', 'forbidden_path');
       meta = await wrap(a.importFile({ filePath, ...(url ? { url } : {}), ...where }));
-    } else if (url) {
-      meta = await wrap(a.importUrl({ url, ...(content !== undefined ? { content } : {}), ...where }));
+    } else if (url || content !== undefined) {
+      meta = await wrap(a.importUrl({ ...(url ? { url } : {}), ...(content !== undefined ? { content } : {}), ...where }));
     } else {
       throw new IpcError("Paste the artifact's code or pick the file you downloaded.", 'invalid_input', 'no_content');
     }

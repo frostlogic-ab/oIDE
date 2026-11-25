@@ -99,10 +99,20 @@ function boot(): void {
   };
   const script = document.createElement('script');
   script.textContent = wrapForScript(code, HOOK);
+  // A script the browser can't parse reports through the window error event, not the hook.
+  let parseError: unknown;
+  const onParse = (e: ErrorEvent) => {
+    parseError = e.error ?? e.message;
+  };
+  window.addEventListener('error', onParse);
   document.head.appendChild(script);
+  window.removeEventListener('error', onParse);
   delete w[HOOK];
   if (!ran) {
-    showProblem('The design could not be started.', 'The preview blocked its script.');
+    if (parseError !== undefined) {
+      const [t, d] = problemOf(parseError);
+      showProblem(t, d);
+    } else showProblem('The design could not be started.', 'The preview blocked its script.');
     return;
   }
   if (failure !== undefined) {

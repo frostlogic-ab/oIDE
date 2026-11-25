@@ -585,17 +585,18 @@ export class ArtifactStore {
    * created: a link alone, a link that is not an artifact link, or content that does not fit is refused.
    */
   async importUrl(
-    input: { url: string; content?: string; title?: string; kind?: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data' },
+    input: { url?: string; content?: string; title?: string; kind?: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data' },
     author = 'user',
   ): Promise<ArtifactMeta> {
-    const url = claudeImportUrl(input.url);
+    // Without a link the pasted code is imported with no origin (an old import's link may no longer pass).
+    const url = input.url !== undefined ? claudeImportUrl(input.url) : undefined;
     if (input.content === undefined || !input.content.trim()) throw new ArtifactError(IMPORT_NEEDS_CONTENT, 'invalid_input', 'no_content');
     const pasted = stripBom(input.content);
     checkImportSize(pasted);
     const kind = input.kind ?? inferKindFromContent(pasted);
     checkImportContent(kind, pasted);
     const title = input.title?.trim() || titleFromContent(kind, pasted) || 'Imported from claude.ai';
-    return this.create({ title, kind, content: pasted, projectId: input.projectId, location: input.location, importedFrom: url }, author);
+    return this.create({ title, kind, content: pasted, projectId: input.projectId, location: input.location, ...(url ? { importedFrom: url } : {}) }, author);
   }
 
   /**

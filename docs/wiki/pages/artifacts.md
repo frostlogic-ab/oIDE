@@ -71,7 +71,7 @@ for MCP uses), so an open editor can say "Updated by <agent>" without a refetch.
   non-React file picked as a design is refused); an `.html` file is otherwise taken as a page.
 - `brokenImport` (derived on `read`/`get`/`list`/`rename`, never stored): an artifact with `importedFrom`, still at
   version 1, whose content is the old link-only placeholder ("Imported from <link>. oIDE cannot fetch claude.ai
-  artifacts: open the link…", at most 8 KB; `list` doesn't read bigger files) or, for a whiteboard, oIDE's own empty
+  artifacts: open the link…", or the first wording "…artifacts; paste or drop the exported content…", at most 8 KB; `list` doesn't read bigger files) or, for a whiteboard, oIDE's own empty
   board (older versions stored that for a link-only whiteboard import). The Artifacts screen asks for the real content; the MCP
   `artifacts_read` answers `content: null`, `status: 'import-has-no-content'` so agents don't build from the notice.
   Saving real content (v2) clears it.

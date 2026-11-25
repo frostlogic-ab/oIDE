@@ -97,9 +97,40 @@ function htmlStart(content: string): 'document' | 'fragment' | null {
     while (start < text.length && /\s/.test(text[start]!)) start++;
   }
   const head = text.slice(start, start + 4096);
-  if (/^(?:<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>]|<\?xml\s[^>]*\?>\s*(?:<!doctype\s+svg[^>]*>\s*)?<svg[\s>]|<!doctype\s+svg[^>]*>\s*<svg[\s>])/i.test(head)) return 'document';
+  if (/^(?:<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>])/i.test(head)) return 'document';
+  if (/^<\?xml\s|^<!doctype\s+svg/i.test(head) && isSvgDocument(head)) return 'document';
   // JSX source starts with `import` / `export`, so it is not a fragment.
   return /^<[a-z][\w-]*[\s/>]/i.test(head) && /<\/[a-z][\w-]*\s*>|\/>/i.test(text) ? 'fragment' : null;
+}
+
+/**
+ * An SVG file: an optional `<?xml …?>` header, then comments and an optional SVG doctype in any order
+ * (Inkscape and Illustrator put a comment after the header), then `<svg`. Only the first 4 KB are
+ * looked at, with indexOf, so it stays linear.
+ */
+function isSvgDocument(head: string): boolean {
+  let i = 0;
+  const skipSpace = () => {
+    while (i < head.length && /\s/.test(head[i]!)) i++;
+  };
+  const xml = /^<\?xml\s[^>]{0,400}\?>/i.exec(head);
+  if (xml) i = xml[0].length;
+  for (let n = 0; n < 50; n++) {
+    skipSpace();
+    if (head.startsWith('<!--', i)) {
+      const end = head.indexOf('-->', i + 4);
+      if (end < 0) return false;
+      i = end + 3;
+      continue;
+    }
+    const doctype = /^<!doctype\s+svg[^>]{0,600}>/i.exec(head.slice(i, i + 700));
+    if (doctype) {
+      i += doctype[0].length;
+      continue;
+    }
+    break;
+  }
+  return /^<svg[\s>]/i.test(head.slice(i, i + 5));
 }
 
 /** True for an HTML page or fragment (what a design's `index.html` must hold). */
@@ -126,8 +157,10 @@ export function looksLikeReact(content: string): boolean {
   if (/^[ \t]{0,3}(?:```|~~~)/m.test(text)) return false;
   // `[^;]` spans lines, so a multi-line `import {\n a,\n b\n} from 'react'` counts; bounded to 400 characters.
   const importsReact = /^[ \t]*import[ \t][^;]{0,400}?from[ \t]*['"]react['"]/m.test(text);
-  const exportsDefault = /^[ \t]*export[ \t]+default[ \t]/m.test(text);
-  const hasJsx = /(?:return|=>)[ \t\r\n]{0,40}\(?[ \t\r\n]{0,40}<[A-Za-z>]/.test(text);
+  const exportsDefault = /^[ \t]*export[ \t]+default[ \t]/m.test(text) || /^[ \t]*export[ \t]*\{[^}]{0,200}\bas[ \t]+default\b/m.test(text);
+  // JSX: an element right after `return` / `=>`, a component element (`<Card`), or a closing tag.
+  const hasJsx =
+    /(?:return|=>)[ \t\r\n]{0,40}\(?[ \t\r\n]{0,40}<[A-Za-z>]/.test(text) || /<[A-Z][\w.]{0,60}[\s/>]/.test(text) || /<\/[a-z][\w-]{0,30}>/.test(text);
   return (importsReact && (exportsDefault || hasJsx)) || (exportsDefault && hasJsx);
 }
 
@@ -163,12 +196,17 @@ export function isDesignContent(content: string): boolean {
  * oIDE cannot fetch claude.ai artifacts: open the link, copy …"). Content holding it is not an
  * artifact: it is refused on import, and stored artifacts holding it are `brokenImport`.
  */
-export const LEGACY_IMPORT_STUB_MARKER = 'oIDE cannot fetch claude.ai artifacts: open the link';
+export const LEGACY_IMPORT_STUB_MARKER = 'oIDE cannot fetch claude.ai artifacts';
+/**
+ * The two wordings older versions wrote: "…artifacts; paste or drop the exported content here…"
+ * (first link-only imports) and "…artifacts: open the link, copy the artifact's code…" (later).
+ */
+const LEGACY_IMPORT_STUB_SENTENCE = /oIDE cannot fetch claude\.ai artifacts(?:: open the link|; paste or drop the exported content)/;
 /** The placeholder page was small (a link of at most 2 KB and a title); anything bigger is real content. */
 export const LEGACY_IMPORT_STUB_MAX_BYTES = 8 * 1024;
 
 export function isImportStubContent(content: string): boolean {
-  return content.length <= LEGACY_IMPORT_STUB_MAX_BYTES && content.includes('Imported from ') && content.includes(LEGACY_IMPORT_STUB_MARKER);
+  return content.length <= LEGACY_IMPORT_STUB_MAX_BYTES && content.includes('Imported from ') && LEGACY_IMPORT_STUB_SENTENCE.test(content);
 }
 
 /**

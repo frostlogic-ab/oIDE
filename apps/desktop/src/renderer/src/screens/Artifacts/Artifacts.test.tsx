@@ -263,6 +263,13 @@ describe('Import from claude.ai dialog', () => {
     expect(invoke).not.toHaveBeenCalledWith('artifacts.import', expect.anything());
   });
 
+  it('does not offer Fetch with an agent for published artifacts, which no agent can read', async () => {
+    await open();
+    fireEvent.change(linkField(), { target: { value: 'https://claude.ai/public/artifacts/0f8fad5b-d9cb-469f-a165-70867728950e' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Fetch with an agent' })).toBeNull();
+  });
+
   it('keeps the paste and a picked kind across tabs; Pick a file sends the optional link', async () => {
     const { onImported } = await open();
     fireEvent.change(linkField(), { target: { value: url } });

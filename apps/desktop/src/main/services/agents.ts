@@ -4,7 +4,7 @@ import { LaunchError, Supervisor, WORKTREE_GONE, type AgentDriver, type EventSin
 import { Git, isInside, pathKey, samePath, type WorktreeManager } from '@oide/git';
 import type { OideMcpServer } from '@oide/mcp-server';
 import { ENTRY_FILES, entryFileOf, readOideFile, type SecretStore, type SettingsService, type Store } from '@oide/store';
-import { isImportStubContent, LEGACY_IMPORT_STUB_MAX_BYTES, repairAgentSummary, type AgentEvent, type AgentSpecInput, type AgentStatus, type AgentSummary, type ArchiveReason, type ArtifactKind, type PermissionAnswer, type PermissionMode, type UserMessage } from '@oide/protocol';
+import { isEmptyOideBoard, isImportStubContent, LEGACY_IMPORT_STUB_MAX_BYTES, repairAgentSummary, type AgentEvent, type AgentSpecInput, type AgentStatus, type AgentSummary, type ArchiveReason, type ArtifactKind, type PermissionAnswer, type PermissionMode, type UserMessage } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
 import { boundModelKey } from '../security/model-keys.js';
@@ -394,7 +394,8 @@ export class AgentsService {
         // placeholder file as if it were the artifact.
         if (path && stored.importedFrom && stored.version === 1) {
           try {
-            if (statSync(path).size <= LEGACY_IMPORT_STUB_MAX_BYTES && isImportStubContent(readFileSync(path, 'utf8'))) {
+            const text = statSync(path).size <= LEGACY_IMPORT_STUB_MAX_BYTES ? readFileSync(path, 'utf8') : undefined;
+            if (text !== undefined && (r.kind === 'whiteboard' ? isEmptyOideBoard(text) : isImportStubContent(text))) {
               return { id, title: `${r.title} (imported from claude.ai without its content: ask the user to paste the artifact's code in oIDE)` };
             }
           } catch {

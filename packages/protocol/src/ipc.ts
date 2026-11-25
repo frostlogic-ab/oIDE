@@ -288,7 +288,9 @@ export const Commands = {
    * Import from claude.ai. `url` + `content` stores the content the user copied on claude.ai (main
    * cannot fetch it: no public content API, and oIDE never uses the claude.ai sign-in); `filePath`
    * (picked with dialog.pickFile or dropped) imports a downloaded file, with `url` kept as its origin.
-   * A link alone is refused: nothing is created without the artifact's real content.
+   * A link alone is refused: nothing is created without the artifact's real content. `content`
+   * without `url` imports the pasted code with no origin (replacing an old import whose link is no
+   * longer accepted).
    */
   'artifacts.import': cmd(
     z
@@ -301,7 +303,7 @@ export const Commands = {
         projectId: Id.optional(),
         location: z.enum(['repo', 'app-data']).optional(),
       })
-      .refine((i) => !!i.filePath || (!!i.url && !!i.content?.trim()), { message: IMPORT_NEEDS_CONTENT }),
+      .refine((i) => !!i.filePath || !!i.content?.trim(), { message: IMPORT_NEEDS_CONTENT }),
     ArtifactMeta,
   ),
   /** Uses log for several artifacts at once (the grid's "Read by 2 agents" lines), keyed by artifact id. */
