@@ -680,3 +680,9 @@ integer 120-1600 px, at most 64 entries; bad entries are dropped so a stale one 
 rest of `ui`), so they survive restarts; Settings › Appearance has Reset
 sidebar widths. Pages: [design-system](pages/design-system.md), [desktop-shell](pages/desktop-shell.md),
 [screen-settings](pages/screen-settings.md).
+
+## [2026-11-25] build | Windows dev taskbar showed Electron's logo
+Cause: Electron writes a Start Menu shortcut (`Electron.lnk` → `electron.exe`, AUMID `dev.oide.app`, no icon)
+for toast notifications, and Windows draws windows with that AUMID with the shortcut's icon. Unpackaged
+Windows runs now set `build/icon.ico` on that shortcut (`brandAppShortcuts` in `apps/desktop/src/main/app-icon.ts`).
+See [packaging](pages/packaging.md).

@@ -3,11 +3,11 @@ import './security/early-env.js';
 // Must stay before the rest: silences the node:sqlite ExperimentalWarning before anything loads it.
 import './warnings.js';
 
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { hostname, release, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, screen, shell } from 'electron';
+import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, Notification, screen, shell } from 'electron';
 import { openStore, type Store } from '@oide/store';
 import { AppVersion, cliVersionBucket, countBucket, screenBucket, telemetryTarget, type AgentEvent } from '@oide/protocol';
 import type { MainContext } from './context.js';
@@ -20,7 +20,7 @@ import { registerArtifactScheme } from './services/electron-platform.js';
 import { hardenApp } from './security/hardening.js';
 import { AllowedRoots } from './security/roots.js';
 import { loadWindowState, MIN_HEIGHT, MIN_WIDTH, trackWindowState } from './window-state.js';
-import { APP_USER_MODEL_ID, resolveAppIcon } from './app-icon.js';
+import { APP_USER_MODEL_ID, brandAppShortcuts, resolveAppIcon } from './app-icon.js';
 import { CrashReports, LogManager, openWithRecovery, parseLevel, readCrashReportsPref, Redactor, runShutdown, watchRenderer, writeCrashReportsPref, type ReliabilityContext } from './reliability/index.js';
 import { electronTransport, fileSinkTransport, isOnline } from './telemetry/electron.js';
 import { TelemetryObservers } from './telemetry/observers.js';
@@ -214,6 +214,7 @@ async function start(): Promise<void> {
 
   await app.whenReady();
   if (appIcon.dock) app.dock?.setIcon(appIcon.dock);
+  if (process.platform === 'win32' && !app.isPackaged && appIcon.window) brandDevShortcut(appIcon.window);
 
   await hardenApp({ isAppUrl, dev: Boolean(devServerUrl) });
   setMenu();
@@ -383,6 +384,37 @@ async function start(): Promise<void> {
       void loadApp(mainWindow);
     }
   });
+}
+
+/**
+ * Unpackaged Windows runs: give Electron's notification shortcut (Start Menu `Electron.lnk`, our AUMID,
+ * target electron.exe) the oIDE icon, or the taskbar shows Electron's logo (main/app-icon.ts). Asking
+ * for notification support makes Electron write or refresh that shortcut now; it does so off-thread, so
+ * the pass runs again a moment later.
+ */
+function brandDevShortcut(icon: string): void {
+  const programs = join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+  const run = (): void => {
+    try {
+      const updated = brandAppShortcuts(
+        {
+          list: () => readdirSync(programs).filter((n) => n.toLowerCase().endsWith('.lnk')).map((n) => join(programs, n)),
+          read: (path) => shell.readShortcutLink(path),
+          // 'update' only rewrites the given fields; `target` is required by the type and kept as is.
+          setIcon: (path, ico, target) => shell.writeShortcutLink(path, 'update', { target, icon: ico, iconIndex: 0 }),
+        },
+        { execPath: process.execPath, appId: APP_USER_MODEL_ID, icon },
+      );
+      if (updated.length > 0) log.info('set the oIDE icon on the notification shortcut', { count: updated.length });
+    } catch (err) {
+      log.warn('could not set the oIDE icon on the notification shortcut', { error: String(err) });
+    }
+  };
+  // Creates Electron's notification presenter, which writes/refreshes the shortcut (once per process).
+  void Notification.isSupported();
+  // Off the startup path; Electron's write is off-thread and can be slow on a cold start, so a few
+  // idempotent passes follow.
+  for (const ms of [0, 1000, 3000, 10_000, 30_000]) setTimeout(run, ms).unref();
 }
 
 function createWindow(userDataDir: string): BrowserWindow {
