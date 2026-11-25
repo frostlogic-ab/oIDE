@@ -161,7 +161,7 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   writes such a shortcut itself for toast notifications (`<exe ProductName>.lnk`, so `Electron.lnk` →
   `electron.exe` in dev, with no icon), which made the dev taskbar show Electron's logo. Unpackaged Windows
   runs therefore set `build/icon.ico` on every Start Menu shortcut that targets the running exe with our
-  AUMID (`brandAppShortcuts`, at ready and again 3 s later). Electron's rewrite check ignores the icon, so
+  AUMID (`brandAppShortcuts`, at ready and again after 1, 3, 10 and 30 s, since Electron writes it off-thread). Electron's rewrite check ignores the icon, so
   it sticks. Packaged builds skip this: that shortcut targets `oide.exe`, which carries the oIDE icon.
 - Licences: `pnpm licenses:notices` (`tools/licenses/notices.mjs`) writes `THIRD_PARTY_NOTICES.md` for
   everything a packaged build ships (desktop `dependencies`, libraries bundled into `out/`, Electron);

@@ -400,7 +400,8 @@ function brandDevShortcut(icon: string): void {
         {
           list: () => readdirSync(programs).filter((n) => n.toLowerCase().endsWith('.lnk')).map((n) => join(programs, n)),
           read: (path) => shell.readShortcutLink(path),
-          setIcon: (path, ico) => shell.writeShortcutLink(path, 'update', { icon: ico, iconIndex: 0 }),
+          // 'update' only rewrites the given fields; `target` is required by the type and kept as is.
+          setIcon: (path, ico, target) => shell.writeShortcutLink(path, 'update', { target, icon: ico, iconIndex: 0 }),
         },
         { execPath: process.execPath, appId: APP_USER_MODEL_ID, icon },
       );
@@ -411,7 +412,8 @@ function brandDevShortcut(icon: string): void {
   };
   Notification.isSupported();
   run();
-  setTimeout(run, 3000).unref();
+  // Electron's write is off-thread and can be slow on a cold start; passes are cheap and idempotent.
+  for (const ms of [1000, 3000, 10_000, 30_000]) setTimeout(run, ms).unref();
 }
 
 function createWindow(userDataDir: string): BrowserWindow {

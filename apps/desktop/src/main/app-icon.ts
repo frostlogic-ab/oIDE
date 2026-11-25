@@ -55,8 +55,8 @@ export interface ShortcutIconDeps {
   list: () => string[];
   /** Throws when the file is not a readable shortcut. */
   read: (path: string) => ShortcutInfo;
-  /** Sets only the icon on an existing shortcut; false when Windows refused. */
-  setIcon: (path: string, icon: string) => boolean;
+  /** Sets the icon on an existing shortcut, keeping `target`; false when Windows refused. */
+  setIcon: (path: string, icon: string, target: string) => boolean;
 }
 
 const samePath = (a: string, b: string): boolean => win32.resolve(a).toLowerCase() === win32.resolve(b).toLowerCase();
@@ -82,7 +82,7 @@ export function brandAppShortcuts(deps: ShortcutIconDeps, o: { execPath: string;
     if (info.appUserModelId !== o.appId || !info.target || !samePath(info.target, o.execPath)) continue;
     if (info.icon && samePath(info.icon, o.icon) && (info.iconIndex ?? 0) === 0) continue;
     try {
-      if (deps.setIcon(path, o.icon)) updated.push(path);
+      if (deps.setIcon(path, o.icon, info.target)) updated.push(path);
     } catch {
       // Best effort: a locked or read-only shortcut only costs the taskbar icon.
     }

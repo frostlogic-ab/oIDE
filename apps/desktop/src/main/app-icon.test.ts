@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, win32 } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { brandAppShortcuts, resolveAppIcon, type ShortcutInfo } from './app-icon.js';
 
@@ -34,23 +34,25 @@ describe('resolveAppIcon', () => {
 });
 
 describe('brandAppShortcuts', () => {
-  const programs = 'C:\Users\u\AppData\Roaming\Microsoft\Windows\Start Menu\Programs';
-  const exe = 'C:\repo\node_modules\electron\dist\electron.exe';
-  const icon = 'C:\repo\apps\desktop\build\icon.ico';
+  const programs = win32.join('C:/', 'Users', 'u', 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+  const exe = win32.join('C:/', 'repo', 'node_modules', 'electron', 'dist', 'electron.exe');
+  const icon = win32.join('C:/', 'repo', 'apps', 'desktop', 'build', 'icon.ico');
+  const lnk = (name: string): string => win32.join(programs, name);
   const o = { execPath: exe, appId: 'dev.oide.app', icon };
 
   function run(shortcuts: Record<string, ShortcutInfo | Error>, setIcon: (p: string) => boolean = () => true) {
     const set: string[] = [];
     const updated = brandAppShortcuts(
       {
-        list: () => Object.keys(shortcuts).map((n) => `${programs}\${n}`),
+        list: () => Object.keys(shortcuts).map(lnk),
         read: (p) => {
           const s = shortcuts[p.slice(programs.length + 1)]!;
           if (s instanceof Error) throw s;
           return s;
         },
-        setIcon: (p, i) => {
+        setIcon: (p, i, target) => {
           expect(i).toBe(icon);
+          expect(target).toBe((shortcuts[p.slice(programs.length + 1)] as ShortcutInfo).target);
           set.push(p);
           return setIcon(p);
         },
@@ -62,7 +64,7 @@ describe('brandAppShortcuts', () => {
 
   it("gives Electron's notification shortcut for this exe and AUMID the oIDE icon", () => {
     const { updated } = run({ 'Electron.lnk': { target: exe, appUserModelId: 'dev.oide.app', icon: '', iconIndex: 0 } });
-    expect(updated).toEqual([`${programs}\Electron.lnk`]);
+    expect(updated).toEqual([lnk('Electron.lnk')]);
   });
 
   it('matches paths case-insensitively and skips a shortcut that already has the icon', () => {
@@ -72,7 +74,7 @@ describe('brandAppShortcuts', () => {
 
   it('fixes a stale icon path or index', () => {
     const { updated } = run({
-      'a.lnk': { target: exe, appUserModelId: 'dev.oide.app', icon: 'C:\old\worktree\icon.ico', iconIndex: 0 },
+      'a.lnk': { target: exe, appUserModelId: 'dev.oide.app', icon: win32.join('C:/', 'old', 'worktree', 'icon.ico'), iconIndex: 0 },
       'b.lnk': { target: exe, appUserModelId: 'dev.oide.app', icon, iconIndex: 3 },
     });
     expect(updated).toHaveLength(2);
@@ -83,14 +85,14 @@ describe('brandAppShortcuts', () => {
       {
         'Other.lnk': { target: exe, appUserModelId: 'electron.app.Other' },
         'NoId.lnk': { target: exe },
-        'Installed.lnk': { target: 'C:\Program Files\oIDE\oide.exe', appUserModelId: 'dev.oide.app' },
+        'Installed.lnk': { target: win32.join('C:/', 'Program Files', 'oIDE', 'oide.exe'), appUserModelId: 'dev.oide.app' },
         'NoTarget.lnk': { target: '', appUserModelId: 'dev.oide.app' },
         'Broken.lnk': new Error('not a shortcut'),
         'Locked.lnk': { target: exe, appUserModelId: 'dev.oide.app' },
       },
       () => false,
     );
-    expect(set).toEqual([`${programs}\Locked.lnk`]);
+    expect(set).toEqual([lnk('Locked.lnk')]);
     expect(updated).toEqual([]);
   });
 
