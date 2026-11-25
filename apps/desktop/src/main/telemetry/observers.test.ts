@@ -168,6 +168,7 @@ describe('commands', () => {
   it('merge, discard, PR and compact', () => {
     const { o, events } = make();
     o.command('git.mergeLocal', { agentId: 'a1' }, { ok: false, conflicts: ['src/x.ts'] });
+    o.command('git.mergeLocal', { agentId: 'a1' }, { ok: true, conflicts: [], autoStash: { files: ['README.md'], restored: false, note: 'kept' } });
     o.command('agents.remove', { agentId: 'a1', deleteWorktree: true }, { ok: true });
     o.command(
       'git.openPr',
@@ -176,7 +177,8 @@ describe('commands', () => {
     );
     o.command('agents.compact', { agentId: 'a1' }, { ok: true });
     expect(events).toEqual([
-      { name: 'agent_merged', props: { result: 'conflicts' } },
+      { name: 'agent_merged', props: { result: 'conflicts', local_changes: 'none' } },
+      { name: 'agent_merged', props: { result: 'merged', local_changes: 'stashed_kept' } },
       { name: 'agent_discarded', props: { worktree_deleted: true } },
       { name: 'pr_opened', props: { existing: false } },
       { name: 'compact_requested', props: {} },
@@ -388,6 +390,31 @@ describe('archived agents and the PR lifecycle', () => {
     o.commandFailed('artifacts.save', { code: 'conflict' });
     expect(events.map((e) => e.props.reason)).toEqual(['no_content', 'bad_link', 'too_large', 'stub_content', 'wrong_kind', 'other', 'other']);
     expect(events.every((e) => e.name === 'artifact_import_refused')).toBe(true);
+  });
+
+  it('artifact_imported for picked files and folders: source, kind, entry format and a file count only', () => {
+    const { o, events } = make();
+    o.command('artifacts.importFiles', { filePaths: ['C:\\ACME\\a.html', 'C:\\ACME\\b.png'], url: 'https://claude.ai/artifact/SecretId' }, { kind: 'design', entry: 'a.html', fileCount: 2, title: 'Secret' });
+    o.command('artifacts.importFiles', { filePaths: [], folderPath: 'C:\\ACME\\site' }, { kind: 'design', entry: 'project/Main.jsx', fileCount: 30 });
+    o.command('artifacts.importFiles', { filePaths: [], folderPath: 'C:\\ACME\\notes' }, { kind: 'doc', entry: 'notes/Secret.md', fileCount: 1 });
+    o.command('artifacts.importFiles', { filePaths: ['C:\\ACME\\x'] }, { kind: 'bogus' });
+    expect(events).toEqual([
+      { name: 'artifact_imported', props: { source: 'files', kind: 'design', linked: true, format: 'html', files: '2-5' } },
+      { name: 'artifact_imported', props: { source: 'folder', kind: 'design', linked: false, format: 'react', files: '21-100' } },
+      { name: 'artifact_imported', props: { source: 'folder', kind: 'doc', linked: false, format: 'markdown', files: '1' } },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/ACME|Secret|claude|Main/);
+  });
+
+  it('artifact_import_refused covers file and link imports (bad paths, bad links)', () => {
+    const { o, events } = make();
+    o.commandFailed('artifacts.importFiles', { code: 'invalid_input', reason: 'bad_path' });
+    o.commandFailed('artifacts.importFiles', { code: 'invalid_input', issues: [{ path: 'entry', code: 'custom' }] });
+    o.commandFailed('artifacts.importFiles', { code: 'forbidden_path' });
+    o.commandFailed('artifacts.importLink', { code: 'invalid_input', reason: 'bad_link' });
+    o.commandFailed('artifacts.importLink', { code: 'invalid_input', issues: [{ path: 'url', code: 'invalid_format' }] });
+    o.commandFailed('artifacts.refresh', { code: 'busy' });
+    expect(events.map((e) => e.props.reason)).toEqual(['bad_path', 'bad_path', 'other', 'bad_link', 'bad_link']);
   });
 
   it('pr_merged_detected when a known PR turns merged, once', () => {

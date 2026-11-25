@@ -4,6 +4,82 @@ import { Id } from './agent.js';
 export const ArtifactKind = z.enum(['design', 'doc', 'whiteboard']);
 export type ArtifactKind = z.infer<typeof ArtifactKind>;
 
+/* ---------------------------------------------------------------- multi-file artifacts (ADR 0014) */
+
+/** Limits for one artifact (every version is a full snapshot of its files). */
+export const ARTIFACT_LIMITS = {
+  files: 500,
+  fileBytes: 10 * 1024 * 1024,
+  totalBytes: 100 * 1024 * 1024,
+  pathLength: 260,
+  depth: 16,
+} as const;
+
+/** Names oIDE keeps for itself at the top of an artifact folder (case-folded). */
+const RESERVED_TOP = new Set(['artifact.json', '.versions', '.staging', '__oide']);
+const WINDOWS_RESERVED = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?$/i;
+
+/**
+ * A file path inside an artifact folder: relative, forward slashes only, no empty, `.` or `..`
+ * segments, no drive letter, no control characters or `<>:"|?*\`, no segment ending in a dot or
+ * space or named like a Windows device, at most 16 deep and 260 characters, and not one of oIDE's own
+ * names at the top (`artifact.json`, `.versions`, `.staging`, `__oide`), and no `~<digit>` (a Windows 8.3
+ * short name such as `ARTIFA~1.JSO` reaches a reserved file). Main and the renderer share it;
+ * main still resolves every path and checks it sits inside the artifact folder.
+ */
+export function isSafeArtifactPath(p: string): boolean {
+  if (typeof p !== 'string' || p.length === 0 || p.length > ARTIFACT_LIMITS.pathLength) return false;
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f<>:"|?*\\]/.test(p)) return false;
+  if (p.startsWith('/')) return false;
+  const parts = p.split('/');
+  if (parts.length > ARTIFACT_LIMITS.depth) return false;
+  for (const s of parts) {
+    // `~<digit>` is how Windows spells 8.3 short names (`ARTIFA~1.JSO` is artifact.json): never accepted.
+    if (!s || s === '.' || s === '..' || /[. ]$/.test(s) || WINDOWS_RESERVED.test(s) || /~\d/.test(s)) return false;
+  }
+  return !RESERVED_TOP.has(parts[0]!.toLowerCase());
+}
+
+export const ArtifactPath = z.string().refine(isSafeArtifactPath, 'Not a valid file path inside an artifact');
+export type ArtifactPath = z.infer<typeof ArtifactPath>;
+
+/** One file of an artifact version, as listed by `artifacts.files` and the MCP `artifacts_read`. */
+export const ArtifactFile = z.object({
+  path: ArtifactPath,
+  size: z.number().int().nonnegative(),
+  /** Text files are read and written as UTF-8, everything else as base64. */
+  text: z.boolean(),
+});
+export type ArtifactFile = z.infer<typeof ArtifactFile>;
+
+/** File content crossing IPC or MCP: UTF-8 text, or base64 for anything binary (images, fonts). */
+export const ArtifactFileContent = z.object({ encoding: z.enum(['utf8', 'base64']), data: z.string() });
+export type ArtifactFileContent = z.infer<typeof ArtifactFileContent>;
+
+/**
+ * Retrieval of a linked artifact by an agent (ADR 0014). oIDE never downloads claude.ai content: it
+ * starts an agent (the user's own `claude` CLI) that reads the link with the claude.ai tools the CLI
+ * has and hands the files back through oIDE's MCP tools. A finished retrieval becomes a new version.
+ */
+export const ArtifactRetrievalStatus = z.enum(['retrieving', 'ready', 'failed']);
+export type ArtifactRetrievalStatus = z.infer<typeof ArtifactRetrievalStatus>;
+
+export const ArtifactRetrieval = z.object({
+  status: ArtifactRetrievalStatus,
+  /** The agent retrieving it (while `retrieving`), or the one that last tried. */
+  agentId: Id.optional(),
+  /** `import` the first retrieval, `update` the Update button, `retry` after a failure. */
+  trigger: z.enum(['import', 'update', 'retry']),
+  startedAt: z.number(),
+  finishedAt: z.number().optional(),
+  /** Why the last retrieval failed, in the agent's or oIDE's words (shown to the user, never sent anywhere). */
+  error: z.string().max(2000).optional(),
+  /** When a retrieval last succeeded. */
+  retrievedAt: z.number().optional(),
+});
+export type ArtifactRetrieval = z.infer<typeof ArtifactRetrieval>;
+
 /** `artifact.json` next to the content. */
 export const ArtifactMeta = z.object({
   id: Id,
@@ -12,10 +88,20 @@ export const ArtifactMeta = z.object({
   kind: ArtifactKind,
   projectId: Id.optional(),
   location: z.enum(['repo', 'app-data']),
-  version: z.number().int().positive(),
-  /** Entry file relative to the artifact folder (index.html or App.jsx, doc.md, board.excalidraw). */
+  /** Current version; 0 while a linked artifact waits for its first retrieval (no files yet). */
+  version: z.number().int().nonnegative(),
+  /**
+   * Entry file relative to the artifact folder: the page a design previews from, the doc's Markdown,
+   * the board's JSON. Defaults: index.html or App.jsx, doc.md, board.excalidraw. Any `ArtifactPath`
+   * of the current version (a multi-file design can open on `project/Main.html`).
+   */
   entry: z.string(),
+  /** Number of files in the current version (1 for a single-file artifact, 0 before the first retrieval). */
+  fileCount: z.number().int().nonnegative().optional(),
+  /** The link the artifact came from (a claude.ai link): "Open in claude.ai" and Update use it. */
   importedFrom: z.string().url().optional(),
+  /** State of the agent retrieval from `importedFrom`, when there has been one. */
+  retrieval: ArtifactRetrieval.optional(),
   /**
    * Derived when read, never stored: a link-only import made by an older oIDE, whose only version
    * holds the "cannot fetch" placeholder instead of the artifact. The UI asks for the real content.
@@ -62,7 +148,34 @@ export interface ArtifactsBackend {
   read(id: string, agentId?: string): Promise<ArtifactContent>;
   write(id: string, content: string, agentId: string): Promise<ArtifactMeta>;
   create(input: { title: string; kind: ArtifactKind; content?: string; projectId?: string }, agentId: string): Promise<ArtifactMeta>;
+  /** Files of the current version (multi-file artifacts). */
+  files?(id: string, agentId?: string): Promise<ArtifactFile[]>;
+  /** One file of the current version. */
+  readFile?(id: string, path: string, agentId?: string): Promise<ArtifactFileContent>;
+  /**
+   * Writes and deletes files as one new version. `fromFile` entries are resolved by main against the
+   * calling agent's own folder before they reach the store, so the store only sees bytes.
+   */
+  writeFiles?(
+    id: string,
+    change: { files: Array<{ path: string } & ArtifactFileContent>; deletes?: string[]; entry?: string; note?: string },
+    agentId: string,
+  ): Promise<ArtifactMeta>;
 }
+
+/** Bytes an agent hands to `artifacts_write` / `artifact_retrieval_add_files`, one of three ways. */
+export const AgentArtifactFileInput = z
+  .object({
+    path: ArtifactPath,
+    /** UTF-8 text. */
+    content: z.string().optional(),
+    /** Binary content, base64. */
+    base64: z.string().optional(),
+    /** A file the agent saved in its own working folder (relative to it, or absolute inside it). */
+    fromFile: z.string().min(1).max(4096).optional(),
+  })
+  .refine((f) => [f.content, f.base64, f.fromFile].filter((x) => x !== undefined).length === 1, 'Give exactly one of content, base64 or fromFile');
+export type AgentArtifactFileInput = z.infer<typeof AgentArtifactFileInput>;
 
 /**
  * Future sync source (claude.ai or another service). Not implemented in v1: there is no public
@@ -266,7 +379,7 @@ export function classifyClaudeLink(raw: string): ClaudeLinkInfo {
   if (parts[0] === 'public' && parts[1] === 'artifacts' && idAt(2)) return { ok: true, url, type: 'public-artifact' };
   if (parts[0] === 'design' && parts.length >= 2) return { ok: true, url, type: 'design' };
   if (parts[0] === 'chat') {
-    return { ok: false, reason: 'This is a chat link, not an artifact link. Open the artifact in the chat and copy its own link, or paste its code.' };
+    return { ok: false, reason: 'This is a chat link, not an artifact link. Open the artifact in the chat and copy its own link, or download its files and use New artifact › Files.' };
   }
   return { ok: false, reason: "This isn't a claude.ai artifact link." };
 }

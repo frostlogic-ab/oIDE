@@ -203,7 +203,7 @@ describe('merge conflicts go back to the agent (main services, fake-claude)', ()
     expect(await h.fails('git.askToResolve', { agentId: pf!.id })).toBe('conflict');
   }, 90_000);
 
-  it('main checkout with uncommitted changes: listed up front, and Merge refuses with a clear message', async () => {
+  it('main checkout with uncommitted changes: listed up front; Merge stashes them, merges, and keeps them in the stash when they clash', async () => {
     const h = await harness();
     const { repo, project } = await setup(h);
     const a = await readyAgent(h, project.id);
@@ -211,8 +211,11 @@ describe('merge conflicts go back to the agent (main services, fake-claude)', ()
     git(repo, 'add', 'committed.txt');
     const p = await h.call('git.predictMerge', { agentId: a.id, withMainStatus: true });
     expect(p.mainDirty).toEqual(['committed.txt']);
-    const err = await h.call('git.mergeLocal', { agentId: a.id }).catch((e: Error & { code?: string }) => e);
-    expect((err as { code?: string }).code).toBe('conflict');
-    expect((err as Error).message).toMatch(/uncommitted changes .*committed\.txt.*Commit or stash them/);
+    const merged = await h.call('git.mergeLocal', { agentId: a.id });
+    // The agent added the same file, so putting the local version back clashes: it stays in the stash.
+    expect(merged).toMatchObject({ ok: true, autoStash: { files: ['committed.txt'], restored: false, note: expect.stringMatching(/kept in the stash/) } });
+    expect(git(repo, 'status', '--porcelain')).toBe('');
+    expect(git(repo, 'stash', 'list', '--format=%gs')).toMatch(/oide: local changes set aside to merge/);
+    expect(git(repo, 'show', 'stash@{0}:committed.txt')).toMatch(/uncommitted in main/);
   }, 60_000);
 });

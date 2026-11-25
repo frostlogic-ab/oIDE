@@ -11,3 +11,4 @@ export * from './secrets.js';
 export * from './artifacts.js';
 export { pathKey } from './util.js';
 export * from './schemas.js';
+export * from './artifact-files.js';

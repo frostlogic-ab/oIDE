@@ -77,8 +77,8 @@ export function ArtifactsSection() {
       </Row>
       <Sec>claude.ai</Sec>
       <Row
-        title="Import from claude.ai"
-        desc="Paste a claude.ai artifact link with the code you copied from it, or pick a downloaded file. oIDE stores a copy, marked as imported. It is not synced: changes on either side stay there."
+        title="New artifact from a claude.ai link"
+        desc="Paste the link in Artifacts › New artifact. An agent opens it with your Claude Code CLI and copies its files into oIDE; Update gets the latest version later. oIDE never downloads from claude.ai itself, and nothing syncs on its own."
       >
         {() => (
           <button type="button" className={outlineBtn} onClick={() => navigate('artifacts', {})}>
@@ -86,7 +86,7 @@ export function ArtifactsSection() {
           </button>
         )}
       </Row>
-      <Row title="Open in claude.ai" desc="Artifacts that came from claude.ai keep their link and open it in your browser. There is no public API for live sync yet.">
+      <Row title="Open in claude.ai" desc="Artifacts that came from claude.ai keep their link and open it in your browser.">
         {() => null}
       </Row>
     </>

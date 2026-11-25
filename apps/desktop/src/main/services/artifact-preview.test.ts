@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { ArtifactMeta } from '@oide/protocol';
 import type { ArtifactStore } from '@oide/store';
-import { reactPreviewPage, resolveArtifactRequest, REACT_RUNTIME_PATH } from './artifact-preview.js';
+import { previewUrlOf, reactPreviewPage, resolveArtifactRequest, REACT_RUNTIME_PATH } from './artifact-preview.js';
 
 const root = mkdtempSync(join(tmpdir(), 'oide-preview-'));
 const reactDir = join(root, 'react');
@@ -77,5 +77,56 @@ describe('resolveArtifactRequest', () => {
     expect(await resolveArtifactRequest(store, 'oide-artifact://r1/../html/index.html', runtime)).toBeNull();
     expect(await resolveArtifactRequest(store, 'oide-artifact://r1/artifact.json', runtime)).toBeNull();
     expect(await resolveArtifactRequest(store, 'https://r1/index.html', runtime)).toBeNull();
+  });
+});
+
+describe('multi-file previews (ADR 0014)', () => {
+  const siteDir = join(root, 'site');
+  mkdirSync(join(siteDir, 'project', 'shots'), { recursive: true });
+  mkdirSync(join(siteDir, '.versions', '1'), { recursive: true });
+  writeFileSync(join(siteDir, 'project', 'Main page.html'), '<link rel="stylesheet" href="site.css"><img src="shots/a.png">');
+  writeFileSync(join(siteDir, 'project', 'site.css'), 'a{}');
+  writeFileSync(join(siteDir, 'project', 'shots', 'a.png'), 'png');
+  writeFileSync(join(siteDir, '.versions', '1', 'old.html'), 'old');
+  const pendingDir = join(root, 'pending');
+  mkdirSync(pendingDir, { recursive: true });
+  writeFileSync(join(pendingDir, 'index.html'), 'leftover');
+  const tsxDir = join(root, 'tsx');
+  mkdirSync(join(tsxDir, 'src'), { recursive: true });
+  writeFileSync(join(tsxDir, 'src', 'Board.tsx'), SOURCE);
+  const m: Record<string, ArtifactMeta> = {
+    s1: { ...meta('s1', 'project/Main page.html'), fileCount: 3 },
+    p0: { ...meta('p0', 'index.html'), version: 0, fileCount: 0 },
+    t1: meta('t1', 'src/Board.tsx'),
+  };
+  const d: Record<string, string> = { s1: siteDir, p0: pendingDir, t1: tsxDir };
+  const multi = {
+    metaOf: (id: string) => m[id] ?? (() => { throw new Error('Unknown artifact'); })(),
+    dirOf: (id: string) => d[id] ?? (() => { throw new Error('Unknown artifact'); })(),
+    read: async (id: string) => ({ meta: m[id]!, content: SOURCE }),
+  } as unknown as ArtifactStore;
+
+  it('previewUrlOf encodes each segment of the entry; a React entry opens on the generated page', () => {
+    expect(previewUrlOf(m.s1!)).toBe('oide-artifact://s1/project/Main%20page.html');
+    expect(previewUrlOf(meta('r1', 'App.jsx'))).toBe('oide-artifact://r1/index.html');
+    expect(previewUrlOf(m.t1!)).toBe('oide-artifact://t1/index.html');
+  });
+
+  it('serves any file of the current version, so relative links work', async () => {
+    expect(await resolveArtifactRequest(multi, 'oide-artifact://s1/project/Main%20page.html', runtime)).toMatchObject({ mime: expect.stringMatching(/text\/html/) });
+    expect(await resolveArtifactRequest(multi, 'oide-artifact://s1/project/site.css', runtime)).toMatchObject({ mime: expect.stringMatching(/text\/css/) });
+    expect(await resolveArtifactRequest(multi, 'oide-artifact://s1/project/shots/a.png', runtime)).toMatchObject({ mime: 'image/png' });
+  });
+
+  it('never serves .versions, artifact.json, .staging or a version-0 artifact', async () => {
+    for (const p of ['.versions/1/old.html', '.VERSIONS/1/old.html', 'VERSIO~1/1/old.html', 'artifact.json', '.staging/x', 'project/../.versions/1/old.html']) {
+      expect(await resolveArtifactRequest(multi, `oide-artifact://s1/${p}`, runtime), p).toBeNull();
+    }
+    expect(await resolveArtifactRequest(multi, 'oide-artifact://p0/index.html', runtime)).toBeNull();
+  });
+
+  it('a .tsx entry gets the generated React page at index.html', async () => {
+    const hit = await resolveArtifactRequest(multi, 'oide-artifact://t1/index.html', runtime);
+    expect(hit && 'body' in hit && hit.body).toContain('id="oide-src"');
   });
 });

@@ -174,7 +174,13 @@ export class TelemetryObservers {
         });
         return;
       case 'git.mergeLocal':
-        this.sink.track('agent_merged', { result: (output as { ok?: boolean }).ok ? 'merged' : 'conflicts' });
+      {
+        const o = output as { ok?: boolean; autoStash?: { restored: boolean } };
+        this.sink.track('agent_merged', {
+          result: o.ok ? 'merged' : 'conflicts',
+          local_changes: !o.autoStash ? 'none' : o.autoStash.restored ? 'stashed_restored' : 'stashed_kept',
+        });
+      }
         return;
       case 'git.predictMerge': {
         const o = output as { agentId: string; status: string; files?: string[]; binary?: string[]; submodules?: string[]; target?: { sha: string }; branchSha?: string };
@@ -255,6 +261,23 @@ export class TelemetryObservers {
         this.sink.track('artifact_imported', { source, kind, linked: !!i.url, format });
         return;
       }
+      case 'artifacts.importFiles': {
+        // Never the paths, title or content: files or a folder, the kind, the entry's format, a file count.
+        const i = input as { filePaths?: string[]; folderPath?: string; url?: string };
+        const out = output as { kind?: unknown; entry?: unknown; fileCount?: unknown };
+        const kind = out.kind;
+        if (kind !== 'design' && kind !== 'doc' && kind !== 'whiteboard') return;
+        const entry = typeof out.entry === 'string' ? out.entry : '';
+        const format = kind === 'doc' ? 'markdown' : kind === 'whiteboard' ? 'excalidraw' : /\.(?:jsx|tsx)$/i.test(entry) ? 'react' : /\.svg$/i.test(entry) ? 'svg' : 'html';
+        this.sink.track('artifact_imported', {
+          source: i.folderPath ? 'folder' : 'files',
+          kind,
+          linked: !!i.url,
+          format,
+          ...(typeof out.fileCount === 'number' ? { files: countBucket(out.fileCount) } : {}),
+        });
+        return;
+      }
       case 'extensions.install': {
         const ext = output as InstalledExtension;
         if (
@@ -300,14 +323,15 @@ export class TelemetryObservers {
    * input. Used for claude.ai imports refused before anything was created.
    */
   commandFailed(name: CommandName, failure: { code: string; reason?: string; issues?: Array<{ path: string; code: string }> }): void {
-    if (name !== 'artifacts.import') return;
-    const reasons = ['no_content', 'bad_link', 'wrong_kind', 'too_large', 'stub_content'] as const;
+    if (name !== 'artifacts.import' && name !== 'artifacts.importFiles' && name !== 'artifacts.importLink') return;
+    const reasons = ['no_content', 'bad_link', 'wrong_kind', 'too_large', 'stub_content', 'bad_path'] as const;
     type Reason = (typeof reasons)[number] | 'other';
     let reason: Reason = 'other';
     if (failure.reason && (reasons as readonly string[]).includes(failure.reason)) reason = failure.reason as Reason;
     else if (failure.issues?.length) {
       const first = failure.issues[0]!;
       if (first.path === 'url') reason = 'bad_link';
+      else if (first.path === 'entry' || first.path.startsWith('filePaths')) reason = 'bad_path';
       else if (first.path === 'content' && first.code === 'too_big') reason = 'too_large';
       else if (first.path === '' && first.code === 'custom') reason = 'no_content';
     }

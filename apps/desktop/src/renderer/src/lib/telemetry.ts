@@ -92,12 +92,6 @@ export function trackCommand(id: string, source: 'core' | 'extension' | undefine
   send({ type: 'event', name: 'command_palette_used', props: { command: id } });
 }
 
-/** "Fetch with an agent" was chosen in the Import from claude.ai dialog (no link or title is sent). */
-export function trackFetchWithAgent(): void {
-  if (!usageOn()) return;
-  send({ type: 'event', name: 'artifact_fetch_with_agent_started', props: {} });
-}
-
 // ----------------------------------------------------------------------------- vitals
 
 interface Visit {

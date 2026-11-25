@@ -4,7 +4,7 @@ import { LaunchError, Supervisor, WORKTREE_GONE, type AgentDriver, type EventSin
 import { Git, isInside, pathKey, samePath, type WorktreeManager } from '@oide/git';
 import type { OideMcpServer } from '@oide/mcp-server';
 import { ENTRY_FILES, entryFileOf, readOideFile, type SecretStore, type SettingsService, type Store } from '@oide/store';
-import { isEmptyOideBoard, isImportStubContent, LEGACY_IMPORT_STUB_MAX_BYTES, repairAgentSummary, type AgentEvent, type AgentSpecInput, type AgentStatus, type AgentSummary, type ArchiveReason, type ArtifactKind, type PermissionAnswer, type PermissionMode, type UserMessage } from '@oide/protocol';
+import { isEmptyOideBoard, isImportStubContent, isSafeArtifactPath, LEGACY_IMPORT_STUB_MAX_BYTES, repairAgentSummary, type AgentEvent, type AgentSpecInput, type AgentStatus, type AgentSummary, type ArchiveReason, type ArtifactKind, type PermissionAnswer, type PermissionMode, type UserMessage } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
 import { boundModelKey } from '../security/model-keys.js';
@@ -389,21 +389,27 @@ export class AgentsService {
       resolveArtifact: (id) => {
         const r = o.store.database.db.prepare('SELECT title, kind, dir, meta FROM artifacts WHERE id = ?').get(id) as { title: string; kind: string; dir: string; meta: string } | undefined;
         if (!r) return undefined;
-        let stored: { entry?: unknown; importedFrom?: unknown; version?: unknown } = {};
+        let stored: { entry?: unknown; importedFrom?: unknown; version?: unknown; fileCount?: unknown } = {};
         try {
           stored = JSON.parse(r.meta) as typeof stored;
         } catch {
           stored = {};
         }
-        const entry = ENTRY_FILES[r.kind as ArtifactKind] ? entryFileOf(r.kind as ArtifactKind, typeof stored.entry === 'string' ? stored.entry : undefined) : undefined;
-        const path = entry ? resolve(r.dir, entry) : undefined;
+        // A linked artifact still waiting for its first retrieval (ADR 0014) has no files to point at.
+        if (stored.version === 0) return { id, title: `${r.title} (not retrieved from claude.ai yet: it has no files)` };
+        const kind = ENTRY_FILES[r.kind as ArtifactKind] ? (r.kind as ArtifactKind) : undefined;
+        const entry = kind ? (typeof stored.entry === 'string' && isSafeArtifactPath(stored.entry) ? stored.entry : entryFileOf(kind)) : undefined;
+        const path = entry ? resolve(r.dir, ...entry.split('/')) : undefined;
+        if (path && typeof stored.fileCount === 'number' && stored.fileCount > 1) {
+          return { id, title: `${r.title} (${stored.fileCount} files; this is its entry file, the others are in the same folder)`, path };
+        }
         // A claude.ai import from an older oIDE that never got its content: don't hand the agent the
         // placeholder file as if it were the artifact.
         if (path && stored.importedFrom && stored.version === 1) {
           try {
             const text = statSync(path).size <= LEGACY_IMPORT_STUB_MAX_BYTES ? readFileSync(path, 'utf8') : undefined;
             if (text !== undefined && (r.kind === 'whiteboard' ? isEmptyOideBoard(text) : isImportStubContent(text))) {
-              return { id, title: `${r.title} (imported from claude.ai without its content: ask the user to paste the artifact's code in oIDE)` };
+              return { id, title: `${r.title} (imported from claude.ai without its content: ask the user to press Update on it in oIDE)` };
             }
           } catch {
             /* unreadable: fall through with the path */
