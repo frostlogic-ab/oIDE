@@ -486,3 +486,13 @@ resolved from npm, `publish: null` in electron-builder.yml and the updater is of
 `OIDE_PUBLISH_OWNER` / `OIDE_PUBLISH_REPO`. Pages: [packaging](pages/packaging.md),
 [marketplace](pages/marketplace.md), [screen-settings](pages/screen-settings.md),
 [security](pages/security.md).
+
+## [2026-11-25] build | Build session complete
+All phases built in parallel waves and merged on `main`: M0 foundations, M1 single agent end to end
+(verified with the real CLI), M2 Mission Control, M3 source control / review / files, M4 settings and
+trust, M5 extensions and marketplace, M6 artifacts, and the M7 work that needs no accounts (updater,
+release CI, docs site, OSS hygiene). Two adversarial security rounds (SEC-01..42), a design review,
+a brief-conformance review, a publication-readiness review and a final end-to-end pass are recorded
+under Reviews in the index. Final gate on `main`: 700 unit/integration/gate tests, 25 Playwright e2e,
+typecheck, lint, wiki lint and licence check all green. What remains needs the maintainer: see
+[pages/review-publication.md](pages/review-publication.md) and [pages/open-questions.md](pages/open-questions.md).
