@@ -125,6 +125,9 @@ export function toolCategoryOf(toolName: string | undefined): ToolCategory {
   return 'other';
 }
 
+/** What kind of program held a worktree folder that could not be deleted (never its name or path). */
+export const HOLDER_CATEGORIES = ['docker', 'editor', 'terminal', 'node', 'unknown'] as const;
+
 /** Built-in command bar commands (renderer `lib/coreCommands.ts`). Extension commands are never sent. */
 export const BUILTIN_COMMAND_IDS = [
   'oide.spawn',
@@ -415,6 +418,17 @@ export const TELEMETRY_EVENTS = {
     from: 'main',
     question: 'How often does oIDE see the pull request of an agent merged (and archive the agent)?',
     props: z.object({}),
+  }),
+  worktree_delete_failed: def({
+    from: 'main',
+    question:
+      'How often can a worktree folder not be deleted, and what kind of program holds it (Docker Desktop, an editor, a terminal, a Node process)?',
+    props: z.object({ holder: z.enum(HOLDER_CATEGORIES) }),
+  }),
+  worktree_delete_retried_ok: def({
+    from: 'main',
+    question: 'Does the background retry finish removing worktree folders, and after how many tries?',
+    props: z.object({ attempts: CountBucket }),
   }),
   compact_requested: def({
     from: 'main',

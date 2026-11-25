@@ -35,6 +35,29 @@ export type DiagnosticCheck = z.infer<typeof DiagnosticCheck>;
 export const Diagnostics = z.object({ generatedAt: z.string(), checks: z.array(DiagnosticCheck), report: z.string() });
 export type Diagnostics = z.infer<typeof Diagnostics>;
 
+/** A worktree folder oIDE could not delete yet and keeps retrying (Settings › Diagnostics). */
+export const PendingCleanupInfo = z.object({
+  path: z.string(),
+  /** The folder's own name. */
+  name: z.string(),
+  addedAt: z.number(),
+  attempts: z.number().int(),
+  nextAttemptAt: z.number().optional(),
+  lastError: z.enum(['locked', 'denied']).optional(),
+  /** Friendly names of the programs last seen holding it. */
+  holders: z.array(z.string()).default([]),
+});
+export type PendingCleanupInfo = z.infer<typeof PendingCleanupInfo>;
+
+/** A program that holds a folder open (executable names only, never paths). */
+export const FolderHolderInfo = z.object({
+  label: z.string(),
+  category: z.enum(['docker', 'editor', 'terminal', 'node', 'unknown']),
+  exes: z.array(z.string()),
+  pids: z.array(z.number().int()),
+});
+export type FolderHolderInfo = z.infer<typeof FolderHolderInfo>;
+
 /** Files picked in `dialog.pickFiles` or dropped on an input (`OideBridge.attachDropped`). */
 export const PickedAttachments = z.object({
   attachments: MessageAttachments,
@@ -52,6 +75,12 @@ export const Commands = {
   'app.diagnostics': cmd(Void, Diagnostics),
   /** Settings › Diagnostics › Open logs folder (`<userData>/logs`). */
   'app.openLogsFolder': cmd(Void, Ok),
+  /** Settings › Diagnostics › Folders waiting to be removed (worktrees a program held open). */
+  'app.pendingCleanups': cmd(Void, z.array(PendingCleanupInfo)),
+  /** "Retry now": one queued folder (`path` must be in the queue), or all of them. */
+  'app.retryCleanup': cmd(z.object({ path: z.string().max(4096).optional() }), z.object({ removed: z.array(z.string()), stillPending: z.array(z.string()), gaveUp: z.array(z.string()) })),
+  /** "Show holders": which programs hold a queued folder open (`path` must be in the queue). */
+  'app.cleanupHolders': cmd(z.object({ path: z.string().max(4096) }), z.object({ supported: z.boolean(), holders: z.array(FolderHolderInfo), error: z.string().optional() })),
   /** A screen's error boundary caught an error; main writes it (redacted) to the main log. No props, state, prompts or code. */
   'app.reportError': cmd(z.object({ screen: z.string().max(60), name: z.string().max(120), message: z.string().max(2000), stack: z.string().max(8000).optional(), componentStack: z.string().max(8000).optional() }), Ok),
   /**

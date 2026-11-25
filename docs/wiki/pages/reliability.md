@@ -107,12 +107,21 @@ anything; there is no crash server. When on:
 
 ## Windows
 
-- **Locked worktree folders**: `WorktreeManager.remove` retries with backoff. If a program still has a
-  file open, `services/agents.ts` removes the agent anyway, tells the user "Close programs using this
-  folder (editors, terminals, dev servers, file explorers); oIDE will finish removing it the next time it
-  starts", and records the path in `<userData>/pending-cleanup.json` (`CleanupQueue`). Each start
-  retries pending folders (then `git worktree prune`) before agents restore; still-locked ones get a
-  notice, and after 20 starts (or a non-lock error) oIDE gives up and says so.
+- **Worktree folders a program holds open** (the full story: [git-worktrees, "Why a worktree can't
+  be deleted on Windows"](git-worktrees.md#why-a-worktree-cant-be-deleted-on-windows)):
+  `WorktreeManager.remove` deletes the folder with `fs.rm` and a few whole-tree retries. If a program
+  still holds it (`EBUSY`) or Windows denies a file (`EPERM`/`EACCES`/`ENOTEMPTY` after the retries),
+  `services/agents.ts` removes the agent anyway, records the path in `<userData>/pending-cleanup.json`
+  (`CleanupQueue`), and runs the holder scan (`reliability/folder-holders.ts`, only on failure,
+  10 s timeout, same-user processes, executable names only): "Docker Desktop
+  (com.docker.backend.exe) still has this folder open. Quit it, and oIDE will finish removing the
+  folder." Without holders the notice stays generic. `CleanupScheduler` retries every 5 minutes
+  (per-folder backoff 5 min × 2ⁿ, at most 2 h) and at every start (then `git worktree prune`); a
+  success says "Finished removing <name>"; after 20 tries (or another error) oIDE gives up and says so.
+  Settings › Diagnostics › Folders waiting to be removed lists them with **Retry now** and **Show
+  holders** (`app.pendingCleanups`, `app.retryCleanup`, `app.cleanupHolders`; main accepts only paths
+  already in the queue). After an agent stops or is archived, the same scan warns in the agent's log
+  when another program still holds its worktree; oIDE never ends programs it did not start.
 - **Long paths**: git runs with `core.longpaths=true` on Windows (packages/git).
 - **Non-ASCII and spaces**: Node 24.11's `fs.rmSync` silently does nothing for paths with non-ASCII
   characters on Windows (no error). `reliability/fs-safe.ts` `removeSync` checks and falls back to

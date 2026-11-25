@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { WorktreeManager, defaultBranch, parseWorktreeList, slugify } from '../src/worktrees.js';
+import { WorktreeManager, defaultBranch, isLockError, parseWorktreeList, removeTree, slugify } from '../src/worktrees.js';
 import { detectOverlaps, intersectChangedFiles } from '../src/overlaps.js';
 import { isInside, samePath } from '../src/paths.js';
 import { parsePrView, GhCli } from '../src/gh.js';
@@ -164,6 +165,101 @@ describe('WorktreeManager', () => {
     mkdirSync(empty);
     sh(empty, 'init', '-q', '-b', 'main');
     await expect(wm.create({ projectPath: empty, projectId: 'p', agentSlug: 'x', base: 'main' })).rejects.toThrow(/no commits/);
+  });
+
+  /** A pnpm-like `node_modules` (ignored): paths over 260 characters, a junction inside the tree and one to a folder outside it. */
+  function pnpmLike(wt: string, outside: string): void {
+    let deep = join(wt, 'node_modules', '.pnpm');
+    while (deep.length < 300) deep = join(deep, '@scope+some-long-package-name@1.2.3');
+    mkdirSync(deep, { recursive: true });
+    writeFileSync(join(deep, 'index.js'), 'x');
+    write(wt, 'node_modules/.pnpm/store-pkg/i.js', 'x');
+    mkdirSync(join(wt, 'node_modules', 'linked'), { recursive: true });
+    symlinkSync(join(wt, 'node_modules', '.pnpm', 'store-pkg'), join(wt, 'node_modules', 'linked', 'pkg'), 'junction');
+    symlinkSync(outside, join(wt, 'node_modules', 'external'), 'junction');
+  }
+
+  it('removes a worktree with long paths and junctions at once, without following junctions out of it', async () => {
+    const repo = makeRepo({ '.gitignore': 'node_modules/\n', 'a.txt': 'a\n' });
+    const outside = join(tempDir(), 'outside');
+    write(outside, 'keep.txt', 'keep');
+    const sleeps: number[] = [];
+    const wm = new WorktreeManager({ appDataDir: tempDir('oide-appdata-'), sleep: async (ms) => void sleeps.push(ms) });
+    const wt = await wm.create({ projectPath: repo, projectId: 'p1', agentSlug: 'x'.repeat(48), base: 'main' });
+    pnpmLike(wt.path, outside);
+
+    const started = Date.now();
+    await wm.remove(repo, wt.path, { force: true, deleteBranch: true });
+    expect(existsSync(wt.path)).toBe(false);
+    expect(sleeps).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(8000);
+    // `git worktree remove` would have deleted this through the junction.
+    expect(existsSync(join(outside, 'keep.txt'))).toBe(true);
+    expect(await wm.list(repo)).toHaveLength(1);
+    expect(sh(repo, 'branch', '--list', wt.branch).trim()).toBe('');
+  });
+
+  it('without force removes a clean worktree whose ignored files git cannot delete, and still refuses a dirty one', async () => {
+    const repo = makeRepo({ '.gitignore': 'node_modules/\n', 'a.txt': 'a\n' });
+    const outside = join(tempDir(), 'outside');
+    write(outside, 'keep.txt', 'keep');
+    const wm = new WorktreeManager({ appDataDir: tempDir('oide-appdata-'), sleep: async () => {} });
+
+    const clean = await wm.create({ projectPath: repo, projectId: 'p1', agentSlug: 'clean', base: 'main' });
+    pnpmLike(clean.path, outside);
+    await wm.remove(repo, clean.path);
+    expect(existsSync(clean.path)).toBe(false);
+    expect(existsSync(join(outside, 'keep.txt'))).toBe(true);
+
+    const dirty = await wm.create({ projectPath: repo, projectId: 'p1', agentSlug: 'dirty', base: 'main' });
+    pnpmLike(dirty.path, outside);
+    write(dirty.path, 'new-file.txt', 'untracked\n');
+    await expect(wm.remove(repo, dirty.path)).rejects.toThrow(/contains modified or untracked files/);
+    expect(existsSync(join(dirty.path, 'new-file.txt'))).toBe(true);
+    expect(existsSync(join(dirty.path, 'node_modules', '.pnpm', 'store-pkg', 'i.js'))).toBe(true);
+    write(dirty.path, 'new-file.txt', '');
+    sh(dirty.path, 'add', 'new-file.txt');
+    await expect(wm.remove(repo, dirty.path)).rejects.toThrow(/contains modified or untracked files/);
+
+    sh(repo, 'worktree', 'lock', dirty.path);
+    sh(dirty.path, 'reset', '-q', '--hard');
+    rmSync(join(dirty.path, 'new-file.txt'), { force: true });
+    await expect(wm.remove(repo, dirty.path)).rejects.toThrow(/locked/);
+    await wm.remove(repo, dirty.path, { force: true });
+    expect(existsSync(dirty.path)).toBe(false);
+    expect(await wm.list(repo)).toHaveLength(1);
+  });
+
+  it.skipIf(process.platform !== 'win32')('gives up quickly on a folder another process holds as its current directory (no compounding retries)', async () => {
+    const root = join(tempDir(), 'wt');
+    const inner = join(root, 'node_modules', 'a', 'b', 'pkg');
+    mkdirSync(inner, { recursive: true });
+    write(root, 'x.txt', 'x');
+    const child = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { cwd: inner, stdio: 'ignore', windowsHide: true });
+    try {
+      await new Promise((r) => setTimeout(r, 300));
+      const sleeps: number[] = [];
+      const started = Date.now();
+      const err = await removeTree(root, { retries: 3, delayMs: 300, sleep: async (ms) => void sleeps.push(ms) }).catch((e: unknown) => e);
+      expect(isLockError(err)).toBe(true);
+      expect(sleeps).toEqual([300, 600, 900]);
+      expect(Date.now() - started).toBeLessThan(5000);
+      expect(existsSync(join(root, 'x.txt'))).toBe(false);
+    } finally {
+      child.kill();
+      await new Promise((r) => (child.exitCode !== null ? r(null) : child.once('exit', r)));
+    }
+    await removeTree(root);
+    expect(existsSync(root)).toBe(false);
+  }, 20_000);
+
+  it('tells a held file from other delete errors', () => {
+    expect(isLockError(Object.assign(new Error('EBUSY: resource busy or locked, rmdir'), { code: 'EBUSY' }))).toBe(true);
+    expect(isLockError(new Error('The process cannot access the file because it is being used by another process'))).toBe(true);
+    expect(isLockError(Object.assign(new Error('ENOTEMPTY: directory not empty'), { code: 'ENOTEMPTY' }))).toBe(false);
+    expect(isLockError(Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' }))).toBe(false);
+    expect(isLockError(new Error("error: unable to delete 'x': Filename too long"))).toBe(false);
+    expect(isLockError(new Error('fatal: failed to delete: Directory not empty'))).toBe(false);
   });
 
   it('detects the default branch from origin HEAD and master', async () => {
