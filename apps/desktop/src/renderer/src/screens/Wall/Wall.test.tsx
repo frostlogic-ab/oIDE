@@ -7,6 +7,7 @@ import { keymap } from '../../lib/keymap';
 import { agents, projects, settings } from '../../lib/mock/fixtures';
 import { useAgents } from '../../stores/agents';
 import { useProjects } from '../../stores/projects';
+import { useNewProject } from '../../stores/newProject';
 import { useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useSettings } from '../../stores/settings';
@@ -98,13 +99,20 @@ describe('Wall tiles', () => {
     expect(within(tile('a-q')).getByText('Edit automatically')).toBeTruthy();
   });
 
-  it('with no project open, offers Open project and no Spawn agent (Spawn needs a project)', () => {
+  it('with no project open, offers the New project options and no Spawn agent (Spawn needs a project)', () => {
     useAgents.setState({ byId: {}, order: [] });
     useProjects.setState({ list: [], loaded: true });
+    useNewProject.setState({ open: false, tab: 'open' });
     render(<WallScreen />);
-    expect(screen.getByText('Open a project to get started')).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'Open project' }).length).toBeGreaterThan(0);
+    expect(screen.getByText('Start a project')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'New project' })).toBeTruthy(); // sidebar +
     expect(screen.queryByRole('button', { name: 'Spawn agent' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Clone repository' }));
+    expect(useNewProject.getState()).toMatchObject({ open: true, tab: 'clone' });
+    fireEvent.click(screen.getByRole('button', { name: 'New repository' }));
+    expect(useNewProject.getState().tab).toBe('create');
+    fireEvent.click(screen.getByRole('button', { name: 'Open folder' }));
+    expect(useNewProject.getState().tab).toBe('open');
   });
 
   it('filters with the chips', () => {

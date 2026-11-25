@@ -5,7 +5,7 @@ The main screen: one tile per agent across every open project.
 ## Layout
 
 - **Projects sidebar.** "All projects" and each open project with its agent count, then one row per
-  agent with a status dot (click to select its tile). The + opens a project. Clicking a project sets
+  agent with a status dot (click to select its tile). The + opens the **New project** dialog (open a folder, clone a repository, or create a new one). Clicking a project sets
   the shared scope.
 - **Header row.** Filter chips **All / Needs you / Running / Review** with counts, **Next that needs
   you**, and **Spawn agent**.

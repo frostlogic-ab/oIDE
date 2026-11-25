@@ -41,6 +41,7 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 
 - [pages/screen-wall.md](pages/screen-wall.md): Mission Control wall (Main): tiles per status, inline permission / reply / review, subagent chips, compact confirm, J/K/N/Y/D keys; Archived agents, Interrupted, pull request lifecycle, reload rehydration.
 - [pages/screen-focus.md](pages/screen-focus.md): Focus: virtualized paged transcript, subagent views by parentToolUseId, pinned permission prompt, composer with / commands and artifacts, inspector (Plan, Subagents, Changes, Artifacts, Terminal).
+- [pages/new-project.md](pages/new-project.md): New project dialog: open a folder (git init a plain one), clone (URL, owner/repo, your GitHub repos via gh; progress, cancel), new repository; SEC-08 locations, clone URL rules, first commit.
 - [pages/screen-spawn.md](pages/screen-spawn.md): Spawn agent: fields → AgentSpec, presets and model slots, Bypass rules, CLI feature gating.
 - [pages/screen-source-control.md](pages/screen-source-control.md): Source control: project cards (sync, Commit…, agent worktrees, PR state, recent commits), Ready to review, overlap heads-up, unpushed notice; shared git store.
 - [pages/screen-review.md](pages/screen-review.md): Review changes: custom unified diff with inline comments, Monaco split view, Viewed, summary and checks, Send feedback / Open PR / Merge locally (predicts conflicts first; "Ask <agent> to resolve" sends them back to the agent), J/K and ]/[ keys.

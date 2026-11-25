@@ -10,7 +10,7 @@ Data: [agent-supervisor](agent-supervisor.md) (statuses, activity, context), [su
 
 | Part | What it shows | Source |
 | --- | --- | --- |
-| Projects sidebar (248px) | "All projects" + each project with its agent count; agent rows with status dot (click selects the tile); Open project (+); Legend | `useProjects`, `useAgents`; "All projects" and project headers set the shared scope (`useScope.setScope`), so they double as the project scope switcher for Files and Source control |
+| Projects sidebar (248px) | "All projects" + each project with its agent count; agent rows with status dot (click selects the tile); New project (+, opens the [New project](new-project.md) dialog); Legend | `useProjects`, `useAgents`; "All projects" and project headers set the shared scope (`useScope.setScope`), so they double as the project scope switcher for Files and Source control |
 | Header row | "All agents" or the project name; filter chips All / Needs you / Running / Review with counts; "Next that needs you N"; Spawn agent | counts from `filterCounts()` over agents in scope |
 | Tile grid | `repeat(auto-fill, minmax(300px, 1fr))`, gap 12 | one `AgentTile` per visible id |
 | Artifacts aside (280px, hidden under 1280px) | three newest artifacts in scope with kind thumbnails, "used by N agents" / "being written now"; Marketplace teaser | `artifacts.list`, `artifacts.uses` (reloads on `artifacts.changed`) |
@@ -76,8 +76,9 @@ The compact confirm pushes a modal scope so J/K/N/Y/D do nothing while it is ope
 
 ## Empty states
 
-No projects: "Open a project to get started" with Open project and Spawn agent. Projects but no
-agents: "No agents yet" with Spawn agent and Open project. A filter with no match: "No agents match
+No projects: "Start a project" with Open folder, Clone repository and New repository (each opens
+the [New project](new-project.md) dialog on that tab). Projects but no agents: "No agents yet" with
+Spawn agent and New project. A filter with no match: "No agents match
 this filter" + Show all.
 
 ## Decisions

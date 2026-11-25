@@ -188,7 +188,7 @@ export default function WallScreen() {
             </span>
             <Kbd tone="warn">{nKey}</Kbd>
           </button>
-          {/* Spawn needs a project: with none open, the empty state offers "Open project" instead. */}
+          {/* Spawn needs a project: with none open, the empty state offers the New project options instead. */}
           {!noProjects && (
             <Button variant="primary" size={32} icon="plus" className="text-[13px]! px-3.5! rounded-md! shrink-0" onClick={() => navigate('spawn', scope === 'all' ? {} : { projectId: scope })}>
               Spawn agent

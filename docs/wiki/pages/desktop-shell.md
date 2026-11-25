@@ -146,6 +146,8 @@ Behaviour worth knowing:
 
 - `projects.open({ path? })`: no path → native picker (null on cancel); not a repo → `not_a_repo`;
   a subfolder opens its repo's top level; first open asks trust natively (default "Not now").
+  `projects.initFolder`, `projects.create`, `projects.clone` / `cancelClone` and
+  `projects.githubRepos` back the New project dialog: see [new-project](new-project.md).
 - `agents.answerPermission`: wrong or stale id → `not_found`. Bypass refusals → `forbidden`; a second
   project-folder agent → `conflict`. A lead slot `custom:<id>` maps to `spec.customModel`.
 - `review.sendFeedback`: unsent comments → one `review-feedback` message with `path:line` refs,

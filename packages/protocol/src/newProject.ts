@@ -51,9 +51,9 @@ export function cloneUrlProblem(url: string): string | undefined {
   if (!u) return 'Enter the repository URL.';
   if (u.length > 2048) return 'That URL is too long.';
   if (u.startsWith('-')) return 'That is not a repository URL.';
+  if (/^[A-Za-z][A-Za-z0-9+.-]*::/.test(u)) return 'Remote helpers (like ext::) are not supported. Use an https or ssh URL.';
   // eslint-disable-next-line no-control-regex
   if (/[\s\x00-\x1f\\]/.test(u)) return 'A repository URL cannot contain spaces or backslashes.';
-  if (/^[A-Za-z][A-Za-z0-9+.-]*::/.test(u)) return 'Remote helpers (like ext::) are not supported. Use an https or ssh URL.';
   if (URL_FORMS.some((re) => re.test(u))) return undefined;
   return 'Use an https or ssh URL, like https://github.com/owner/repo.git or git@github.com:owner/repo.git.';
 }

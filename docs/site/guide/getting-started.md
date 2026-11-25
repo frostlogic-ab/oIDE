@@ -85,8 +85,19 @@ oIDE has no login screen. Signing in always happens in Anthropic's own flow, ins
 
 ## Open your first project
 
-1. On the Wall, click **Open project** (the + in the Projects sidebar) and pick a git repository.
-2. oIDE asks whether you **trust** the project. Trust only repositories you know: an untrusted
+1. On the Wall, click the **+** in the Projects sidebar (or **Open folder**, **Clone repository** or
+   **New repository** on the empty Wall). The **New project** dialog has three tabs:
+   - **Open folder**: pick a git repository on your computer. A folder without git can be
+     initialized right there (optionally committing its files as the first commit).
+   - **Clone repository**: paste an https or ssh URL (or `owner/repo` for GitHub), or pick one of
+     your GitHub repositories when the GitHub CLI (`gh`) is signed in. Choose where it goes; oIDE
+     shows git's progress and you can cancel. Your own git sign-in is used (credential manager, SSH
+     keys, `gh auth setup-git`); oIDE never asks for passwords.
+   - **New repository**: a name and a location. oIDE runs `git init` on `main` and makes a first
+     commit (with a README, or empty), so agents have a base to branch from. Git needs your name and
+     email set (`git config --global user.name` / `user.email`).
+2. For an opened, initialized or cloned project, oIDE asks whether you **trust** it (a repository you
+   just created is trusted). Trust only repositories you know. Trust only repositories you know: an untrusted
    project cannot run its `.oide/setup` command, pre-approve tools through `.oide/permissions.json`,
    start project MCP servers or turn on extensions. You can change this later in
    **Settings > Projects**.

@@ -796,3 +796,16 @@ load a version into the editor and save through `save` / `writeFiles`, so they n
 docs site Artifacts guide, FAQ and Settings text now describe the link flow (an agent retrieves it with the
 user's CLI), Update, the Files panel and history. Pages: [artifacts.md](pages/artifacts.md),
 [screen-artifacts.md](pages/screen-artifacts.md).
+
+## [2026-11-25] build | New project: open folder (with git init), clone, new repository
+"Open project" was a bare folder picker that refused anything but a git repository. It is now one
+**New project** dialog with three tabs: Open folder (a plain folder can be initialized with a first
+commit), Clone repository (https / ssh URL, `owner/repo`, a github.com link, or one of the user's
+GitHub repositories through their own `gh`; git's progress, Cancel) and New repository (`git init` on
+`main` with a README or empty first commit, opened trusted). New commands `projects.initFolder`,
+`projects.create`, `projects.clone`, `projects.cancelClone`, `projects.githubRepos` and the
+`projects.cloneProgress` event. Clone URLs refuse remote helpers, options, local paths and `file://`;
+target folders must sit in a picked location or next to an open project (SEC-08), and never be `.git`.
+Telemetry `project_added` / `project_add_failed`. Pages: [new-project.md](pages/new-project.md) (new),
+[desktop-shell.md](pages/desktop-shell.md), [screen-wall.md](pages/screen-wall.md),
+[telemetry.md](pages/telemetry.md); user guide getting-started and Wall.
