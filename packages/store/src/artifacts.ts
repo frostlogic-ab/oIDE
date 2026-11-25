@@ -47,7 +47,7 @@ import { newId, num, pathKey, type Row } from './util.js';
 
 export const ENTRY_FILES: Record<ArtifactKind, string> = { design: 'index.html', doc: 'doc.md', whiteboard: 'board.excalidraw' };
 const MAX_IMPORT_BYTES = ARTIFACT_LIMITS.fileBytes;
-const VERSIONS_DIR = '.versions';
+const VERSIONS_DIR = '.versions' as const;
 /** Written while the folder's root is being brought in line with a new snapshot; rescan finishes the job. */
 const SYNC_MARKER = '.sync';
 /** Biggest file `files()` reads to tell text from binary (the rest of a big file is not read). */
@@ -284,14 +284,21 @@ function checkImportContent(kind: ArtifactKind, content: string): void {
 
 async function writeAtomic(path: string, content: string | Buffer): Promise<void> {
   const tmp = `${path}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
-  await writeFile(tmp, content, typeof content === 'string' ? 'utf8' : undefined);
+  await writeFile(tmp, content, { flag: 'wx', ...(typeof content === 'string' ? { encoding: 'utf8' as const } : {}) });
   await rename(tmp, path);
+}
+
+/** A small file of oIDE's own (artifact.json, versions.json), refused when it is a link or not a regular file. */
+async function readRegular(path: string): Promise<string> {
+  const st = await lstat(path);
+  if (!st.isFile()) throw new Error(`${path} is not a regular file`);
+  return readFile(path, 'utf8');
 }
 
 /** Atomic copy (tmp + rename), as a clone where the file system can (copy-on-write). */
 async function copyAtomic(from: string, to: string): Promise<void> {
   const tmp = `${to}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
-  await copyFile(from, tmp, constants.COPYFILE_FICLONE);
+  await copyFile(from, tmp, constants.COPYFILE_FICLONE | constants.COPYFILE_EXCL);
   await rename(tmp, to);
 }
 
@@ -423,7 +430,7 @@ export class ArtifactStore {
   private async filePath(id: string, rel: string, version?: number): Promise<string> {
     if (!isSafeArtifactPath(rel)) throw new ArtifactError(`"${rel}" is not a valid file path inside an artifact.`, 'invalid_input', 'bad_path');
     const parts = rel.split('/');
-    return this.guard(() => resolveInside(this.dirOf(id), version === undefined ? parts : [VERSIONS_DIR, String(version), ...parts]));
+    return this.guard(() => resolveInside(this.dirOf(id), version === undefined ? parts : [VERSIONS_DIR, String(version), ...parts], version === undefined ? {} : { reservedTop: VERSIONS_DIR }));
   }
 
   /** Path errors (a symbolic link, an escape) keep their message; nothing else is wrapped. */
@@ -471,7 +478,7 @@ export class ArtifactStore {
 
   private async readInternal(dir: string): Promise<Internal> {
     try {
-      const raw = JSON.parse(await readFile(join(dir, 'artifact.json'), 'utf8')) as Record<string, unknown>;
+      const raw = JSON.parse(await readRegular(join(dir, 'artifact.json'))) as Record<string, unknown>;
       const r = InternalSchema.safeParse(raw[INTERNAL_KEY]);
       return r.success ? r.data : {};
     } catch {
@@ -498,7 +505,7 @@ export class ArtifactStore {
       for (const name of names) {
         const dir = join(root, name);
         try {
-          const parsed = ArtifactMeta.safeParse(JSON.parse(await readFile(join(dir, 'artifact.json'), 'utf8')));
+          const parsed = ArtifactMeta.safeParse(JSON.parse(await readRegular(join(dir, 'artifact.json'))));
           if (!parsed.success) continue;
           // `brokenImport` is derived when read, so a value on disk is dropped.
           const { brokenImport: _derived, ...onDisk } = parsed.data;
@@ -510,7 +517,11 @@ export class ArtifactStore {
           // An interrupted write: the snapshot is complete, the root may not be.
           const marker = join(dir, VERSIONS_DIR, SYNC_MARKER);
           // (Not while this store is writing it: the marker is then the write in progress.)
-          if (onDisk.version > 0 && existsSync(marker) && !this.locks.has(onDisk.id)) {
+          const versionsStat = await lstat(join(dir, VERSIONS_DIR)).catch(() => undefined);
+          const markerStat = versionsStat?.isDirectory() ? await lstat(marker).catch(() => undefined) : undefined;
+          // A marker that is a link (planted in a cloned repo) is removed (the link, never its target) and ignored.
+          if (markerStat?.isSymbolicLink()) await rm(marker, { force: true }).catch(() => undefined);
+          else if (onDisk.version > 0 && markerStat?.isFile() && !this.locks.has(onDisk.id)) {
             await this.syncRoot(dir, onDisk.version)
               .then(() => rm(marker, { force: true }))
               .catch(() => undefined);
@@ -618,7 +629,7 @@ export class ArtifactStore {
 
   private async storedVersions(id: string): Promise<StoredVersion[]> {
     try {
-      const raw = JSON.parse(await readFile(join(this.dirOf(id), VERSIONS_DIR, 'versions.json'), 'utf8'));
+      const raw = JSON.parse(await readRegular(join(this.dirOf(id), VERSIONS_DIR, 'versions.json')));
       const r = VersionsFile.safeParse(raw);
       return r.success ? r.data : [];
     } catch {
@@ -658,7 +669,7 @@ export class ArtifactStore {
     if (version !== undefined && (!Number.isInteger(version) || version < 1 || version > meta.version)) throw new Error('Bad version');
     if (meta.version === 0) return [];
     const dir = this.dirOf(id);
-    const base = version === undefined ? dir : await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(version)]));
+    const base = version === undefined ? dir : await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(version)], { reservedTop: VERSIONS_DIR }));
     const list = version === undefined ? await this.rootFiles(dir) : await walkFolder(base, { unsafe: 'skip' });
     const out: ArtifactFile[] = [];
     for (const f of list.slice(0, ARTIFACT_LIMITS.files * 4)) out.push({ path: f.path, size: f.size, text: await this.sniffText(f) });
@@ -912,9 +923,9 @@ export class ArtifactStore {
     const ts = this.now();
     // Every file the root will get must resolve inside the folder (no link on the way) before anything is written.
     for (const f of plan.values()) if (!f.unchanged) await this.guard(() => resolveInside(dir, f.path.split('/')));
-    const versionsDir = await this.guard(() => resolveInside(dir, [VERSIONS_DIR]));
+    const versionsDir = await this.guard(() => resolveInside(dir, [VERSIONS_DIR], { reservedTop: VERSIONS_DIR }));
     await mkdir(versionsDir, { recursive: true });
-    const final = await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(version)]));
+    const final = await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(version)], { reservedTop: VERSIONS_DIR }));
     // A folder for this number can only be a leftover of an attempt that never committed.
     await rm(final, { recursive: true, force: true });
     const tmp = join(versionsDir, `.tmp-${version}-${process.pid}-${Math.random().toString(36).slice(2)}`);
@@ -923,8 +934,9 @@ export class ArtifactStore {
       for (const f of plan.values()) {
         const dest = join(tmp, ...f.path.split('/'));
         await mkdir(dirname(dest), { recursive: true });
-        if (f.bytes) await writeFile(dest, f.bytes);
-        else await copyFile(f.from!, dest, constants.COPYFILE_FICLONE);
+        // A fresh folder of ours, but still exclusive: nothing already there is ever written through.
+        if (f.bytes) await writeFile(dest, f.bytes, { flag: 'wx' });
+        else await copyFile(f.from!, dest, constants.COPYFILE_FICLONE | constants.COPYFILE_EXCL);
       }
       await rename(tmp, final);
     } catch (e) {
@@ -935,7 +947,7 @@ export class ArtifactStore {
     versions.push(StoredVersion.parse({ version, ts, author: o.author, ...(o.note ? { note: o.note } : {}), entry }));
     versions.sort((a, b) => a.version - b.version);
     await writeAtomic(join(versionsDir, 'versions.json'), JSON.stringify(versions, null, 2) + '\n');
-    await writeFile(join(versionsDir, SYNC_MARKER), String(version));
+    await writeAtomic(join(versionsDir, SYNC_MARKER), String(version));
     const { brokenImport: _derived, ...base } = cur;
     void _derived;
     const meta = ArtifactMeta.parse({ ...base, ...o.patch, kind, title: o.title ?? cur.title, entry, version, fileCount: plan.size, updatedAt: ts });
@@ -953,7 +965,7 @@ export class ArtifactStore {
    * changed files are copied in atomically. `plan` says which files are already there unchanged.
    */
   private async syncRoot(dir: string, version: number, plan?: Plan): Promise<void> {
-    const snap = await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(version)]));
+    const snap = await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(version)], { reservedTop: VERSIONS_DIR }));
     const want = plan ?? this.planOf(await walkFolder(snap, { unsafe: 'skip' }));
     const have = await this.rootFiles(dir);
     const touched = new Set<string>();

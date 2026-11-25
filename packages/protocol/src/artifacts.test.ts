@@ -6,6 +6,7 @@ import {
   isDesignContent,
   isEmptyOideBoard,
   isImportStubContent,
+  isSafeArtifactPath,
   looksLikeHtml,
   looksLikeReact,
   titleFromContent,
@@ -170,5 +171,20 @@ describe('artifact import helpers', () => {
     expect(input.safeParse({ content: '<p>x</p>' }).success).toBe(true);
     const refused = input.safeParse({ url: 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T' });
     expect(refused.success ? '' : refused.error.issues[0]?.message).toMatch(/Paste the artifact's code/);
+  });
+});
+
+describe('isSafeArtifactPath (ADR 0014)', () => {
+  it('accepts relative forward-slash paths', () => {
+    for (const p of ['index.html', 'shots/home.png', 'project/Main.html', '.well-known/x.json', 'a b/c-d_e.css', 'site~a.css']) expect(isSafeArtifactPath(p), p).toBe(true);
+  });
+  it('refuses escapes, absolute paths, backslashes, devices, reserved names and 8.3 short names', () => {
+    for (const p of [
+      '', '../x', 'a/../x', './x', 'a//b', '/abs', 'C:/x', 'C:x', 'a\b', 'x\u0000', 'dots.', 'space ',
+      'CON', 'nul.txt', 'com1', 'artifact.json', 'ARTIFACT.JSON', '.versions/1/index.html', '.Staging', '__OIDE/x',
+      // Windows 8.3 aliases of reserved names, and any other short name
+      'ARTIFA~1.JSO', 'VERSIO~1', 'VERSIO~1/1/index.html', 'shots/SCREEN~1.PNG',
+      'x'.repeat(261), Array.from({ length: 17 }, () => 'a').join('/'),
+    ]) expect(isSafeArtifactPath(p), p).toBe(false);
   });
 });

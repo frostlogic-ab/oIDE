@@ -1,5 +1,5 @@
 import { lstat, readdir, realpath } from 'node:fs/promises';
-import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { ARTIFACT_LIMITS, isSafeArtifactPath, type ArtifactKind } from '@oide/protocol';
 
 /**
@@ -53,17 +53,35 @@ export class ArtifactPathError extends Error {
   }
 }
 
+/** A name as Windows and macOS compare it: case-folded, trailing dots and spaces dropped. */
+const foldSegment = (s: string) => s.normalize('NFC').toLowerCase().replace(/[. ]+$/, '');
+
+export interface ResolveOptions {
+  /**
+   * The one reserved top-level name this call may reach (the store's own `.versions`). Every other
+   * reserved name (`artifact.json`, `.versions`, `.staging`, `__oide`) is refused, by its spelling and
+   * by where it really lands.
+   */
+  reservedTop?: '.versions';
+}
+
 /**
  * Absolute path of `parts` under `root`, refused when it leaves the folder lexically, when the root
- * or any existing component below it is a symbolic link (a cloned repo can commit them), or when the
- * real parent folder is outside the real root. Callers check `isSafeArtifactPath` first; this is the
- * file-system half.
+ * or any existing component below it is a symbolic link (a cloned repo can commit them), when the
+ * real path (or its real parent) is outside the real root, or when it really lands on a reserved
+ * top-level name, whatever it was spelled as (a Windows 8.3 short name such as `ARTIFA~1.JSO` is
+ * `artifact.json`; the real path's first segment must be the one asked for). Callers check
+ * `isSafeArtifactPath` first; this is the file-system half and does not rely on the input string.
  */
-export async function resolveInside(root: string, parts: string[]): Promise<string> {
+export async function resolveInside(root: string, parts: string[], opts: ResolveOptions = {}): Promise<string> {
   const base = resolve(root);
   const file = resolve(base, ...parts);
   const lex = relative(base, file);
   if (!lex || lex.startsWith('..') || isAbsolute(lex)) throw new ArtifactPathError('Path escapes the artifact folder');
+  const allowed = opts.reservedTop ? foldSegment(opts.reservedTop) : undefined;
+  const reserved = (seg: string) => RESERVED_TOP.has(foldSegment(seg)) && foldSegment(seg) !== allowed;
+  const top = lex.split(sep)[0]!;
+  if (reserved(top) || /~\d/.test(top)) throw new ArtifactPathError('Path reaches a name oIDE keeps for itself');
   if ((await lstat(base)).isSymbolicLink()) throw new ArtifactPathError('Artifact folder is a symbolic link');
   const realBase = await realpath(base);
   let cur = base;
@@ -73,10 +91,13 @@ export async function resolveInside(root: string, parts: string[]): Promise<stri
     if (!st) break; // not created yet; the components checked so far are real
     if (st.isSymbolicLink()) throw new ArtifactPathError('Artifact path contains a symbolic link');
   }
-  const parentReal = await realpath(dirname(file)).catch(() => undefined);
-  if (parentReal) {
-    const r = relative(realBase, parentReal);
+  // Where it really is: the file when it exists, else its parent folder (the last segment is then new).
+  const real = (await realpath(file).catch(() => undefined)) ?? (await realpath(dirname(file)).catch(() => undefined));
+  if (real) {
+    const r = relative(realBase, real);
     if (r.startsWith('..') || isAbsolute(r)) throw new ArtifactPathError('Path escapes the artifact folder');
+    const realTop = r.split(sep)[0];
+    if (realTop && (reserved(realTop) || foldSegment(realTop) !== foldSegment(top))) throw new ArtifactPathError('Path reaches a name oIDE keeps for itself');
   }
   return file;
 }

@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { ARTIFACT_LIMITS } from '@oide/protocol';
-import { ArtifactStore, isTextFile, openStore, pickEntry, type ArtifactChange } from '../src/index.js';
+import { ARTIFACT_LIMITS, isSafeArtifactPath } from '@oide/protocol';
+import { ArtifactStore, isTextFile, openStore, pickEntry, resolveInside, type ArtifactChange } from '../src/index.js';
 import { cleanup, tempDir } from './helpers.js';
 
 afterAll(cleanup);
@@ -291,5 +292,80 @@ describe('file helpers', () => {
     expect(pickEntry('doc', ['z.md', 'doc.md'])).toBe('doc.md');
     expect(pickEntry('whiteboard', ['canvas.json', 'b.excalidraw'])).toBe('b.excalidraw');
     expect(pickEntry('design', ['a.css'])).toBeUndefined();
+  });
+});
+
+describe('security: reserved names and planted links', () => {
+  /** An artifact folder with oIDE's own files in it. */
+  function folder() {
+    const dir = tempDir('oide-resv-');
+    mkdirSync(join(dir, '.versions', '1'), { recursive: true });
+    writeFileSync(join(dir, 'artifact.json'), '{"id":"x"}');
+    writeFileSync(join(dir, 'index.html'), '<p>x</p>');
+    return dir;
+  }
+
+  it('resolveInside refuses reserved names however they are spelled, and only allows .versions when asked', async () => {
+    const dir = folder();
+    for (const parts of [['artifact.json'], ['Artifact.JSON'], ['artifact.json.'], ['.VERSIONS', '1'], ['.staging', 'x'], ['__oide', 'x'], ['ARTIFA~1.JSO'], ['VERSIO~1', '1']]) {
+      await expect(resolveInside(dir, parts), parts.join('/')).rejects.toThrow(/keeps for itself/);
+    }
+    await expect(resolveInside(dir, ['.versions', '1'], { reservedTop: '.versions' })).resolves.toBe(join(dir, '.versions', '1'));
+    await expect(resolveInside(dir, ['artifact.json'], { reservedTop: '.versions' })).rejects.toThrow(/keeps for itself/);
+    await expect(resolveInside(dir, ['index.html'])).resolves.toBe(join(dir, 'index.html'));
+    await expect(resolveInside(dir, ['new', 'page.html'])).resolves.toBe(join(dir, 'new', 'page.html'));
+  });
+
+  it.skipIf(process.platform !== 'win32')('refuses the real 8.3 short names of artifact.json and .versions', async () => {
+    const dir = folder();
+    const short = (name: string) => {
+      try {
+        return execFileSync('cmd', ['/d', '/s', '/c', `"for %I in ("${name}") do @echo %~snxI"`], { cwd: dir, encoding: 'utf8', windowsVerbatimArguments: true }).trim();
+      } catch {
+        return '';
+      }
+    };
+    for (const name of ['artifact.json', '.versions']) {
+      const alias = short(name);
+      if (!/~\d/.test(alias)) continue; // 8.3 names are off on this volume
+      await expect(resolveInside(dir, [alias]), alias).rejects.toThrow(/keeps for itself/);
+      expect(isSafeArtifactPath(alias), alias).toBe(false);
+    }
+  });
+
+  it('never writes through a planted .versions/.sync link, and rescan drops it without touching its target', async () => {
+    const { store, appData, s, p, repo } = setup();
+    const art = await store.create({ title: 'Marker', kind: 'design', content: '<p>x</p>' });
+    const victim = join(tempDir('oide-victim-'), 'victim.txt');
+    writeFileSync(victim, 'KEEP');
+    const marker = join(appData, 'artifacts', 'marker', '.versions', '.sync');
+    try {
+      symlinkSync(victim, marker, 'file');
+    } catch {
+      return; // file links need Developer Mode or admin on Windows
+    }
+    await store.writeFiles(art.id, { files: [text('a.css', 'x')] });
+    expect(readFileSync(victim, 'utf8')).toBe('KEEP');
+    expect(existsSync(marker)).toBe(false);
+
+    symlinkSync(victim, marker, 'file');
+    await store.rescan([{ id: p.id, path: repo }]);
+    expect(readFileSync(victim, 'utf8')).toBe('KEEP');
+    expect(lstatSync(marker, { throwIfNoEntry: false })).toBeUndefined();
+    void s;
+  });
+
+  it('refuses a planted link where the next snapshot goes', async () => {
+    const { store, appData } = setup();
+    const art = await store.create({ title: 'Snap', kind: 'design', content: '<p>x</p>' });
+    const outside = tempDir('oide-out-');
+    try {
+      symlinkSync(outside, join(appData, 'artifacts', 'snap', '.versions', '2'), 'junction');
+    } catch {
+      return;
+    }
+    await expect(store.writeFiles(art.id, { files: [text('a.css', 'x')] })).rejects.toThrow(/symbolic link/);
+    expect(readdirSync(outside)).toEqual([]);
+    expect(store.metaOf(art.id).version).toBe(1);
   });
 });

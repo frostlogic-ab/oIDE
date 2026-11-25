@@ -23,7 +23,8 @@ const WINDOWS_RESERVED = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?$/i;
  * A file path inside an artifact folder: relative, forward slashes only, no empty, `.` or `..`
  * segments, no drive letter, no control characters or `<>:"|?*\`, no segment ending in a dot or
  * space or named like a Windows device, at most 16 deep and 260 characters, and not one of oIDE's own
- * names at the top (`artifact.json`, `.versions`, `.staging`, `__oide`). Main and the renderer share it;
+ * names at the top (`artifact.json`, `.versions`, `.staging`, `__oide`), and no `~<digit>` (a Windows 8.3
+ * short name such as `ARTIFA~1.JSO` reaches a reserved file). Main and the renderer share it;
  * main still resolves every path and checks it sits inside the artifact folder.
  */
 export function isSafeArtifactPath(p: string): boolean {
@@ -34,7 +35,8 @@ export function isSafeArtifactPath(p: string): boolean {
   const parts = p.split('/');
   if (parts.length > ARTIFACT_LIMITS.depth) return false;
   for (const s of parts) {
-    if (!s || s === '.' || s === '..' || /[. ]$/.test(s) || WINDOWS_RESERVED.test(s)) return false;
+    // `~<digit>` is how Windows spells 8.3 short names (`ARTIFA~1.JSO` is artifact.json): never accepted.
+    if (!s || s === '.' || s === '..' || /[. ]$/.test(s) || WINDOWS_RESERVED.test(s) || /~\d/.test(s)) return false;
   }
   return !RESERVED_TOP.has(parts[0]!.toLowerCase());
 }
