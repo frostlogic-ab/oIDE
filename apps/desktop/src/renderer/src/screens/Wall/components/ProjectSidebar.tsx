@@ -2,22 +2,18 @@ import { memo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Project } from '@oide/protocol';
 import { Icon, IconButton, SectionLabel, StatusDot, cn } from '@oide/ui';
-import { ipcErrorMessage } from '../../../lib/bridge';
 import { useAgents } from '../../../stores/agents';
 import { useProjects } from '../../../stores/projects';
+import { openNewProject } from '../../../stores/newProject';
 import { useScope } from '../../../stores/scope';
-import { toast } from '../../../stores/ui';
 import { useWall } from '../wallState';
 import { tileDomId } from './AgentTile';
 import { ResizableAside } from '../../../components/ResizableAside';
 import { PANELS } from '../../../lib/panels';
 
-export async function openProject(): Promise<void> {
-  try {
-    await useProjects.getState().open();
-  } catch (err) {
-    toast(`Could not open the project: ${ipcErrorMessage(err)}`, 'error');
-  }
+/** Opens the New project dialog (open a folder, clone a repository, or create one). */
+export function openProject(): void {
+  openNewProject('open');
 }
 
 /**
@@ -33,7 +29,7 @@ export function ProjectSidebar() {
     <ResizableAside panel={PANELS.wallProjects} aria-label="Projects" className="flex flex-col gap-1 px-2.5 py-3.5 bg-panel border-r border-line box-border overflow-y-auto">
       <div className="flex items-center justify-between px-1.5 pb-2">
         <SectionLabel as="h2">Projects</SectionLabel>
-        <IconButton icon="plus" aria-label="Open project" onClick={() => void openProject()} />
+        <IconButton icon="plus" aria-label="New project" title="New project: open a folder, clone or create a repository" onClick={openProject} />
       </div>
 
       <button

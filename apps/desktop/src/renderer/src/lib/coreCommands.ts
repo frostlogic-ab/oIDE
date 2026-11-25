@@ -10,6 +10,7 @@ import { keymap } from './keymap';
 import { extensionUiCommands } from '../extensions/commands';
 import { useSearch } from '../screens/Files/searchStore';
 import { isOnSomewhere } from '../extensions/model';
+import { openNewProject } from '../stores/newProject';
 
 /** Core commands. Registered once at boot; returns an unregister. */
 export function registerCoreCommands(): () => void {
@@ -91,16 +92,24 @@ export function registerCoreCommands(): () => void {
     },
     {
       id: 'oide.openProject',
-      title: 'Open project…',
+      title: 'Open project folder…',
       group: 'Projects',
-      keywords: ['folder', 'repo', 'add'],
-      run: async () => {
-        try {
-          await oide.invoke('projects.open', {});
-        } catch (err) {
-          toast(ipcErrorMessage(err), 'error');
-        }
-      },
+      keywords: ['folder', 'repo', 'add', 'new', 'init', 'git'],
+      run: () => openNewProject('open'),
+    },
+    {
+      id: 'oide.cloneProject',
+      title: 'Clone repository…',
+      group: 'Projects',
+      keywords: ['git', 'clone', 'url', 'github', 'new', 'project', 'remote'],
+      run: () => openNewProject('clone'),
+    },
+    {
+      id: 'oide.newRepository',
+      title: 'New repository…',
+      group: 'Projects',
+      keywords: ['git', 'init', 'create', 'new', 'project'],
+      run: () => openNewProject('create'),
     },
   ];
   for (const c of core) c.source = 'core';

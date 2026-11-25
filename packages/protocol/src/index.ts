@@ -1,6 +1,7 @@
 export * from './agent.js';
 export * from './events.js';
 export * from './project.js';
+export * from './newProject.js';
 export * from './settings.js';
 export * from './extensions.js';
 export * from './artifacts.js';

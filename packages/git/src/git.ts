@@ -300,7 +300,7 @@ export class Git {
    */
   async stream(
     args: readonly string[],
-    opts: Omit<GitRunOptions, 'input' | 'timeoutMs'> & { onStdout: (chunk: Buffer) => void; signal?: AbortSignal },
+    opts: Omit<GitRunOptions, 'input' | 'timeoutMs'> & { onStdout: (chunk: Buffer) => void; /** Each stderr chunk as it arrives (progress lines). */ onStderr?: (chunk: string) => void; signal?: AbortSignal },
   ): Promise<{ stderr: string; exitCode: number | null; aborted: boolean }> {
     const cwd = opts.cwd ?? this.cwd;
     const overrides = this.isTrusted(cwd) ? [] : await this.overridesFor(cwd);
@@ -332,6 +332,7 @@ export class Git {
       child.stderr.setEncoding('utf8');
       child.stderr.on('data', (d: string) => {
         if (stderr.length < 64 * 1024) stderr += d;
+        if (!aborted) opts.onStderr?.(d);
       });
       child.on('error', (err: NodeJS.ErrnoException) => {
         opts.signal?.removeEventListener('abort', kill);

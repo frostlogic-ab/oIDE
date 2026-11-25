@@ -392,6 +392,44 @@ describe('archived agents and the PR lifecycle', () => {
     expect(events.every((e) => e.name === 'artifact_import_refused')).toBe(true);
   });
 
+  it('project_added says how a project started, never its path, URL or name', () => {
+    const { o, events } = make();
+    const project = { id: 'p1', name: 'acme-secret', path: 'C:\\ACME\\acme-secret', trusted: false, createdAt: 1 };
+    o.command('projects.open', { path: 'C:\\ACME\\acme-secret' }, project);
+    o.command('projects.open', {}, null); // picker cancelled
+    o.command('projects.initFolder', { path: 'C:\\ACME\\plain', commitFiles: true }, project);
+    o.command('projects.create', { parent: 'C:\\ACME', name: 'acme-secret', readme: true }, project);
+    o.command('projects.clone', { url: 'https://github.com/acme/secret.git', parent: 'C:\\ACME', name: 'secret', source: 'github' }, project);
+    o.command('projects.clone', { url: 'git@github.com:acme/secret.git', parent: 'C:\\ACME', name: 'secret', source: 'url' }, project);
+    o.command('projects.clone', { url: 'https://github.com/acme/secret.git', parent: 'C:\\ACME', name: 'secret', source: 'url' }, null); // cancelled
+    expect(events).toEqual([
+      { name: 'project_added', props: { method: 'open' } },
+      { name: 'project_added', props: { method: 'init' } },
+      { name: 'project_added', props: { method: 'create' } },
+      { name: 'project_added', props: { method: 'clone', source: 'github' } },
+      { name: 'project_added', props: { method: 'clone', source: 'url' } },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/ACME|acme|secret|github\.com/);
+  });
+
+  it('project_add_failed gives the method and a known reason only', () => {
+    const { o, events } = make();
+    o.commandFailed('projects.open', { code: 'not_a_repo', reason: 'not_a_repo' });
+    o.commandFailed('projects.clone', { code: 'clone_failed', reason: 'auth' });
+    o.commandFailed('projects.clone', { code: 'invalid_input', issues: [{ path: 'url', code: 'custom' }] });
+    o.commandFailed('projects.create', { code: 'unavailable', reason: 'no_identity' });
+    o.commandFailed('projects.initFolder', { code: 'forbidden_path', reason: 'forbidden_path' });
+    o.commandFailed('projects.create', { code: 'internal', reason: 'C:\\ACME\\x' });
+    expect(events).toEqual([
+      { name: 'project_add_failed', props: { method: 'open', reason: 'not_a_repo' } },
+      { name: 'project_add_failed', props: { method: 'clone', reason: 'auth' } },
+      { name: 'project_add_failed', props: { method: 'clone', reason: 'other' } },
+      { name: 'project_add_failed', props: { method: 'create', reason: 'no_identity' } },
+      { name: 'project_add_failed', props: { method: 'init', reason: 'forbidden_path' } },
+      { name: 'project_add_failed', props: { method: 'create', reason: 'other' } },
+    ]);
+  });
+
   it('artifact_imported for picked files and folders: source, kind, entry format and a file count only', () => {
     const { o, events } = make();
     o.command('artifacts.importFiles', { filePaths: ['C:\\ACME\\a.html', 'C:\\ACME\\b.png'], url: 'https://claude.ai/artifact/SecretId' }, { kind: 'design', entry: 'a.html', fileCount: 2, title: 'Secret' });

@@ -61,6 +61,13 @@ interface Run {
   errorCode?: string;
 }
 
+const PROJECT_METHOD = {
+  'projects.open': 'open',
+  'projects.initFolder': 'init',
+  'projects.create': 'create',
+  'projects.clone': 'clone',
+} as const;
+
 const TERMINAL = new Set(['ready-for-review', 'done', 'error', 'stopped']);
 const OUTPUT_EVENTS = new Set(['partial', 'assistant-text', 'thinking', 'tool-use']);
 const ERROR_CODES = new Set(['auth', 'model_not_found', 'api_error', 'spawn', 'protocol']);
@@ -246,6 +253,17 @@ export class TelemetryObservers {
         });
         return;
       }
+      // New project: how it came in only (never the path, URL or name). A cancelled clone or picker is null.
+      case 'projects.open':
+      case 'projects.initFolder':
+      case 'projects.create':
+      case 'projects.clone': {
+        if (!output) return;
+        const method = PROJECT_METHOD[name];
+        const source = (input as { source?: unknown }).source;
+        this.sink.track('project_added', { method, ...(name === 'projects.clone' ? { source: source === 'github' ? 'github' : 'url' } : {}) });
+        return;
+      }
       case 'artifacts.import': {
         // Never the link, title or content: how it came in, the kind and the format only.
         const i = input as { url?: string; content?: string; filePath?: string };
@@ -323,6 +341,12 @@ export class TelemetryObservers {
    * input. Used for claude.ai imports refused before anything was created.
    */
   commandFailed(name: CommandName, failure: { code: string; reason?: string; issues?: Array<{ path: string; code: string }> }): void {
+    if (name === 'projects.open' || name === 'projects.initFolder' || name === 'projects.create' || name === 'projects.clone') {
+      const reasons = ['not_a_repo', 'auth', 'not_found', 'network', 'exists', 'no_identity', 'forbidden_path'] as const;
+      const reason = failure.reason && (reasons as readonly string[]).includes(failure.reason) ? (failure.reason as (typeof reasons)[number]) : 'other';
+      this.sink.track('project_add_failed', { method: PROJECT_METHOD[name], reason });
+      return;
+    }
     if (name !== 'artifacts.import' && name !== 'artifacts.importFiles' && name !== 'artifacts.importLink') return;
     const reasons = ['no_content', 'bad_link', 'wrong_kind', 'too_large', 'stub_content', 'bad_path'] as const;
     type Reason = (typeof reasons)[number] | 'other';

@@ -138,7 +138,7 @@ function slug(title: string): string {
   );
 }
 
-/** `agents.spawn` and `projects.open` for the mock bridge. */
+/** `agents.spawn`, `projects.open` and the New project dialog's GitHub list for the mock bridge. */
 export function wallHandlers({ agents, emit, getSettings }: WallMockDeps): Handlers {
   let seq = 0;
   const set = (a: AgentSummary) => {
@@ -197,5 +197,14 @@ export function wallHandlers({ agents, emit, getSettings }: WallMockDeps): Handl
       return created;
     },
     'projects.open': () => null,
+    // New project in dev:web: no git or folder picker in a browser; the GitHub list shows sample rows.
+    'projects.githubRepos': () => ({
+      available: true,
+      repos: [
+        { nameWithOwner: 'octo-org/web-app', description: 'Customer-facing web app', isPrivate: true, cloneUrl: 'https://github.com/octo-org/web-app.git', updatedAt: '2026-11-20T10:00:00Z' },
+        { nameWithOwner: 'octo-org/api', description: 'Public API', isPrivate: false, cloneUrl: 'https://github.com/octo-org/api.git', updatedAt: '2026-11-18T10:00:00Z' },
+      ],
+    }),
+    'projects.cancelClone': () => ({ ok: true as const }),
   };
 }

@@ -26,6 +26,7 @@ import { ArchivedList } from './components/ArchivedList';
 import { ArtifactsAside } from './components/ArtifactsAside';
 import { CompactDialog } from './components/CompactDialog';
 import { ProjectSidebar, openProject } from './components/ProjectSidebar';
+import { openNewProject } from '../../stores/newProject';
 import { filterCounts, matchesFilter } from './logic';
 import { useWall, type WallFilter, type WallView } from './wallState';
 
@@ -187,7 +188,7 @@ export default function WallScreen() {
             </span>
             <Kbd tone="warn">{nKey}</Kbd>
           </button>
-          {/* Spawn needs a project: with none open, the empty state offers "Open project" instead. */}
+          {/* Spawn needs a project: with none open, the empty state offers the New project options instead. */}
           {!noProjects && (
             <Button variant="primary" size={32} icon="plus" className="text-[13px]! px-3.5! rounded-md! shrink-0" onClick={() => navigate('spawn', scope === 'all' ? {} : { projectId: scope })}>
               Spawn agent
@@ -213,13 +214,21 @@ export default function WallScreen() {
         ) : noProjects && counts.all === 0 ? (
           <EmptyState
             icon="folder"
-            title="Open a project to get started"
-            description="A project is a git repository. Every agent you spawn in it gets its own worktree and branch, so agents never edit the same files on disk."
+            title="Start a project"
+            description="A project is a git repository. Open one you have, clone one, or create a new one. Every agent you spawn in it gets its own worktree and branch, so agents never edit the same files on disk."
             className="flex-1"
             action={
-              <Button variant="primary" size={32} icon="plus" onClick={() => void openProject()}>
-                Open project
-              </Button>
+              <div className="flex gap-2 flex-wrap justify-center">
+                <Button variant="primary" size={32} icon="folder" onClick={() => openNewProject('open')}>
+                  Open folder
+                </Button>
+                <Button size={32} icon="branch" onClick={() => openNewProject('clone')}>
+                  Clone repository
+                </Button>
+                <Button size={32} icon="plus" onClick={() => openNewProject('create')}>
+                  New repository
+                </Button>
+              </div>
             }
           />
         ) : counts.all === 0 && loadError ? null : counts.all === 0 ? (
@@ -233,8 +242,8 @@ export default function WallScreen() {
                 <Button variant="primary" size={32} icon="plus" onClick={() => navigate('spawn', scope === 'all' ? {} : { projectId: scope })}>
                   Spawn agent
                 </Button>
-                <Button size={32} onClick={() => void openProject()}>
-                  Open project
+                <Button size={32} onClick={openProject}>
+                  New project
                 </Button>
               </div>
             }

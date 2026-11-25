@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { AppFrame } from './components/frame/AppFrame';
 import { TelemetryConsent } from './components/TelemetryConsent';
+import { NewProjectDialog } from './components/NewProjectDialog';
 import { startStores } from './lib/boot';
 import { useKeymapScope } from './lib/useKeymap';
 import { commands } from './lib/commands';
@@ -22,6 +23,7 @@ export function App() {
     <>
       <AppFrame />
       <TelemetryConsent />
+      <NewProjectDialog />
     </>
   );
 }

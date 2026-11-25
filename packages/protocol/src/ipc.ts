@@ -3,6 +3,7 @@ import { AgentSpec, AgentStatus, AgentSummary, GitRef, Id, MessageAttachments, P
 import { ArtifactFile, ArtifactFileContent, ArtifactKind, ArtifactMeta, ArtifactPath, ArtifactUse, ArtifactVersion, ARTIFACT_LIMITS, IMPORT_NEEDS_CONTENT } from './artifacts.js';
 import { AgentEvent } from './events.js';
 import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
+import { CloneProgress, CloneUrl, FolderName, GithubRepo } from './newProject.js';
 import { CommitInfo, FileDiff, FileNode, MergePrediction, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
 import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settings.js';
 import { UpdateStatus } from './updates.js';
@@ -100,6 +101,27 @@ export const Commands = {
   'projects.open': cmd(z.object({ path: z.string().optional() }), Project.nullable()),
   'projects.remove': cmd(z.object({ projectId: Id }), Ok),
   'projects.trust': cmd(z.object({ projectId: Id, trusted: z.boolean() }), Project),
+  /**
+   * Initialise git in a folder that is not a repository yet (Open folder › "Initialize git"), with
+   * a first commit so agents have a base: the folder's files (`commitFiles`) or an empty commit.
+   * `path` must be a folder the user picked this session (SEC-08). Asks for trust like an open.
+   */
+  'projects.initFolder': cmd(z.object({ path: z.string().min(1).max(4096), commitFiles: z.boolean().default(true) }), Project),
+  /**
+   * New repository: `<parent>/<name>` (must not exist, or be empty), `git init` on `main`, a README
+   * (or an empty first commit), then opened and trusted (the user made it). `parent` must be picked
+   * this session or hold an open project.
+   */
+  'projects.create': cmd(z.object({ parent: z.string().min(1).max(4096), name: FolderName, readme: z.boolean().default(true) }), Project),
+  /**
+   * Clone `url` into `<parent>/<name>` and open it (asks for trust: it is someone else's code).
+   * Streams `projects.cloneProgress`; one clone at a time (`conflict` while one runs). Resolves null
+   * when cancelled (`projects.cancelClone`); a failed or cancelled clone leaves no folder behind.
+   */
+  'projects.clone': cmd(z.object({ url: CloneUrl, parent: z.string().min(1).max(4096), name: FolderName, source: z.enum(['url', 'github']).default('url') }), Project.nullable()),
+  'projects.cancelClone': cmd(Void, Ok),
+  /** The user's GitHub repositories through their own `gh` login (never its token). `available: false` when gh is missing or signed out. */
+  'projects.githubRepos': cmd(Void, z.object({ available: z.boolean(), reason: z.string().optional(), repos: z.array(GithubRepo) })),
   'scope.get': cmd(Void, Scope),
   'scope.set': cmd(z.object({ scope: Scope }), Scope),
 
@@ -433,6 +455,8 @@ export const Events = {
   /** An agent moved to (or changed in) the Archived view. It is no longer on the Wall. */
   'agents.archived': AgentSummary,
   'projects.changed': z.array(Project),
+  /** Progress of the running `projects.clone`. */
+  'projects.cloneProgress': CloneProgress,
   'scope.changed': Scope,
   'git.changed': z.object({ projectId: Id }),
   'settings.changed': Settings,
