@@ -104,6 +104,14 @@ describe('AgentReducer', () => {
     expect(r.summary.interruptedPermission).toBeUndefined();
   });
 
+  it('title-changed renames the lead; a subagent event does not', () => {
+    const r = new AgentReducer(fresh());
+    r.apply(ev({ type: 'title-changed', title: 'Sub name', parentToolUseId: 'task-1' }));
+    expect(r.summary.title).not.toBe('Sub name');
+    expect(r.apply(ev({ type: 'title-changed', title: 'Fix flaky invoice test' })).changed).toBe(true);
+    expect(r.summary.title).toBe('Fix flaky invoice test');
+  });
+
   it('merge conflicts from oIDE: activity says so; the next submit_for_review clears "Resolving merge conflicts"', () => {
     const r = new AgentReducer({ ...fresh(), mergeConflict: { target: 'main', targetSha: 'abc1234', files: ['a.ts'], sentAt: 1 } });
     r.apply(ev({ type: 'user-text', text: '[Sent by oIDE] Merge conflicts: …', origin: 'oide' }));

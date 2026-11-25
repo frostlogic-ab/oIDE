@@ -385,6 +385,8 @@ export function buildSpec(form: SpawnForm, ctx: BuildContext): BuildResult {
   const parsed = AgentSpec.safeParse({
     projectId: form.projectId,
     title: titleFromGoal(goal) || 'Untitled agent',
+    // A stand-in: the agent names the task itself (mcp__oide__set_title) once it starts.
+    autoTitle: true,
     goal,
     context: form.context,
     workIn: form.workIn,

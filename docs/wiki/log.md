@@ -796,3 +796,15 @@ load a version into the editor and save through `save` / `writeFiles`, so they n
 docs site Artifacts guide, FAQ and Settings text now describe the link flow (an agent retrieves it with the
 user's CLI), Update, the Files panel and history. Pages: [artifacts.md](pages/artifacts.md),
 [screen-artifacts.md](pages/screen-artifacts.md).
+
+## [2026-11-25] build | Agents name their own task (set_title)
+- Spawn's title was the start of the user's prompt. Spawn now marks it `autoTitle`; the oIDE contract asks the
+  agent to call the new MCP tool `mcp__oide__set_title` once, first thing, with a short title. The supervisor
+  cleans it (`cleanAgentTitle` in protocol), keeps attempt `#n` suffixes, updates the spec and emits
+  `title-changed` (reducer → `summary.title`; store mirrors the `title` column). Titles the caller gave
+  (reconcile, extensions) are kept: `set_title` is refused for them and after the first call.
+- The CLI emits no title of its own in stream-json, so nothing is taken from it.
+- fake-claude gained a `name-task` scenario. Focus shows "Named the task …" as a notice.
+- Telemetry: `agent_spawned.auto_title`, new `agent_titled { after }` (duration bucket only, never the title).
+Pages: [agent-supervisor](pages/agent-supervisor.md#agent-named-titles), [mcp-server](pages/mcp-server.md),
+[screen-spawn](pages/screen-spawn.md), [telemetry](pages/telemetry.md).

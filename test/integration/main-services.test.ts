@@ -225,6 +225,33 @@ describe('main services (plain Node, fake-claude)', () => {
     expect((await h2.call('agents.events', { agentId: a!.id, limit: 50 })).length).toBeGreaterThan(0);
   });
 
+  it('an agent names its task (set_title); the name is stored and it is not asked again after a restart', async () => {
+    const repo = makeRepo();
+    dirs.push(repo);
+    const h1 = await harness();
+    await h1.call('settings.update', { patch: { claude: { extraFlags: '--fake-scenario name-task' } } });
+    h1.allowOpen(repo);
+    const project = (await h1.call('projects.open', { path: repo }))!;
+    const [a] = await h1.call('agents.spawn', { projectId: project.id, title: 'Can we name this', goal: 'Can we name this task please', autoTitle: true, mode: 'acceptEdits', strategy });
+    const named = await waitFor(async () => {
+      const s = await agent(h1, a!.id);
+      return s?.status === 'has-question' && s;
+    }, 'named and idle');
+    expect(named.title).toBe('Name the task');
+    expect(named.lastMessage).toMatch(/^first: ok/);
+    open.splice(open.indexOf(h1), 1);
+    await h1.close();
+
+    const h2 = await harness({ userData: h1.userData });
+    expect((await agent(h2, a!.id))?.title).toBe('Name the task');
+    await h2.call('agents.send', { agentId: a!.id, message: { kind: 'text', text: 'carry on' } });
+    const again = await waitFor(async () => {
+      const s = await agent(h2, a!.id);
+      return s?.lastMessage === 'No title was asked for.' && s;
+    }, 'resumed without a title request');
+    expect(again.title).toBe('Name the task');
+  });
+
   it('does not resume or spawn agents while the MCP server is down; they resume on the next good start', async () => {
     const repo = makeRepo();
     dirs.push(repo);

@@ -6,6 +6,7 @@
 // Scenario: --fake-scenario <name[,name…]> or FAKE_CLAUDE_SCENARIO. One name per user turn; the last repeats.
 //   basic | exit-plan | tools | permission | review | subagents | rate-limit | crash | slow | auth | replay:<fixture.jsonl>
 //   commit-work | address-feedback | commit-all | mcp-tool | artifacts   (milestone gate tests, test/gates)
+//   name-task (calls mcp__oide__set_title twice when the contract asks for a title; replies with both results)
 //   artifact-update (reads the {"id":"…"} artifact in the message and writes a new version)
 //   resolve-conflicts (runs the `git merge <ref>` an oIDE merge-conflicts message names, keeps both sides, commits,
 //   submits; picked automatically for a message starting "[Sent by oIDE] Merge conflicts")
@@ -174,7 +175,7 @@ async function emit(obj, delay = DELAY) {
 }
 
 function initEvent() {
-  const tools = ['Agent', 'Bash', 'Edit', 'Glob', 'Grep', 'Read', 'Write', 'TodoWrite', 'ToolSearch', 'WebFetch', 'mcp__oide__submit_for_review'];
+  const tools = ['Agent', 'Bash', 'Edit', 'Glob', 'Grep', 'Read', 'Write', 'TodoWrite', 'ToolSearch', 'WebFetch', 'mcp__oide__submit_for_review', 'mcp__oide__set_title'];
   return {
     type: 'system',
     subtype: 'init',
@@ -497,6 +498,18 @@ const SCENARIOS = {
     const t = await useTool('Bash', { command: 'npm test', description: 'Run tests' });
     const r = await useTool('mcp__oide__submit_for_review', { summary: 'Added feature.txt.', checks: [{ name: 'npm test', status: t.ok ? 'passed' : 'skipped', detail: t.text }] });
     const text = r.ok ? 'Submitted for review.' : `Could not submit: ${r.text}`;
+    await assistant([{ type: 'text', text }]);
+    await result(text);
+  },
+
+  async 'name-task'() {
+    const p = typeof flags['--append-system-prompt'] === 'string' ? flags['--append-system-prompt'] : '';
+    let text = 'No title was asked for.';
+    if (p.includes('mcp__oide__set_title')) {
+      const first = await useTool('mcp__oide__set_title', { title: ' "Name the  task." ' });
+      const again = await useTool('mcp__oide__set_title', { title: 'Another name' });
+      text = `first: ${first.ok ? 'ok' : 'refused'} (${first.text}) | again: ${again.ok ? 'ok' : 'refused'} (${again.text})`;
+    }
     await assistant([{ type: 'text', text }]);
     await result(text);
   },
