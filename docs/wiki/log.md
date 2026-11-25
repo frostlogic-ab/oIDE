@@ -680,3 +680,18 @@ integer 120-1600 px, at most 64 entries; bad entries are dropped so a stale one 
 rest of `ui`), so they survive restarts; Settings › Appearance has Reset
 sidebar widths. Pages: [design-system](pages/design-system.md), [desktop-shell](pages/desktop-shell.md),
 [screen-settings](pages/screen-settings.md).
+
+## [2026-11-25] build | Change an agent's permission mode at any time
+
+Focus › header: the mode in the meta line is now a menu of every mode (`modeChoices` in
+`screens/Focus/model/focus.ts`; Bypass listed but disabled with its reason unless Settings › Allow
+Bypass is on and the agent is in a worktree), so an agent started in Plan that moved to Manual can go
+straight to Auto or Bypass; Shift+Tab still cycles. Real CLI 2.1.332 refuses a live switch to bypass
+(`bypass_not_launched`) unless launched with `--allow-dangerously-skip-permissions`; `buildLaunch` adds
+that flag only where bypass is allowed. The supervisor's spec now follows the CLI's own mode changes
+(plan → manual after an approved plan), so a resume relaunches in the real mode; restore and unarchive
+take the summary's mode. `Menu` (`@oide/ui`) gained `checked` (menuitemradio) and `portal`. New
+telemetry event `agent_mode_changed {from, to}`. fake-claude enforces `bypass_not_launched` and has an
+`exit-plan` scenario. Pages: [screen-focus](pages/screen-focus.md), [cli-integration](pages/cli-integration.md),
+[agent-supervisor](pages/agent-supervisor.md), [testing](pages/testing.md),
+[design-system](pages/design-system.md), [telemetry](pages/telemetry.md).

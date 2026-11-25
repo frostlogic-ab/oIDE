@@ -431,6 +431,12 @@ export const TELEMETRY_EVENTS = {
     question: 'Does the background retry finish removing worktree folders, and after how many tries?',
     props: z.object({ attempts: CountBucket }),
   }),
+  agent_mode_changed: def({
+    from: 'main',
+    question:
+      'Do people change the permission mode of an agent after it started, and between which modes (Plan, then Manual after the plan is approved, then Auto or Bypass)?',
+    props: z.object({ from: z.union([PermissionMode, z.literal('unknown')]), to: PermissionMode }),
+  }),
   compact_requested: def({
     from: 'main',
     question: 'Do people compact context by hand (the context ring, /compact)?',

@@ -67,6 +67,19 @@ describe('buildLaunch', () => {
     expect(() => buildLaunch(spec({ mode: 'bypassPermissions', workIn: 'project-folder' }), allowed)).toThrow(/worktree/);
   });
 
+  it('adds --allow-dangerously-skip-permissions only where bypass is allowed, so the mode can switch to bypass live', () => {
+    const FLAG = '--allow-dangerously-skip-permissions';
+    const withFlag = CliInfo.parse({ ...cli, features: { ...cli.features, 'allow-dangerously-skip-permissions': true } });
+    expect(buildLaunch(spec({ mode: 'plan' }), ctx({ cli: withFlag })).args).not.toContain(FLAG);
+    const allowed = ctx({ cli: withFlag, settings: testSettings({ allowBypass: true }) });
+    expect(buildLaunch(spec({ mode: 'plan' }), allowed).args).toContain(FLAG);
+    expect(buildLaunch(spec({ mode: 'plan', workIn: 'project-folder' }), allowed).args).not.toContain(FLAG);
+    // Launched in bypass, the CLI can come back to bypass on its own.
+    expect(buildLaunch(spec({ mode: 'bypassPermissions' }), allowed).args).not.toContain(FLAG);
+    const noFlag = CliInfo.parse({ ...cli, features: { ...cli.features, 'allow-dangerously-skip-permissions': false } });
+    expect(buildLaunch(spec({ mode: 'plan' }), ctx({ cli: noFlag, settings: testSettings({ allowBypass: true }) })).args).not.toContain(FLAG);
+  });
+
   it('hides effort when the CLI lacks it', () => {
     const p = buildLaunch(spec(), ctx({ cli: CliInfo.parse({ ...cli, features: { ...cli.features, effort: false } }) }));
     expect(p.args).not.toContain('--effort');

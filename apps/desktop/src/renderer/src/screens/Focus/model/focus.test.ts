@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AgentEvent, AgentSummary, type AgentEventDraft } from '@oide/protocol';
-import { agentListLine, composeMessage, nextMode, permissionCopy, sortAgentList, subagentStatusText, subagentSummary, subagentTokenShare, timeline } from './focus';
+import { agentListLine, composeMessage, modeChoices, nextMode, permissionCopy, sortAgentList, subagentStatusText, subagentSummary, subagentTokenShare, timeline } from './focus';
 import { mergeOlder, mergeTail } from './history';
 
 const agent = (over: Partial<AgentSummary> & { id: string }) =>
@@ -57,6 +57,20 @@ describe('mode cycling (Shift+Tab)', () => {
   it('skips Auto when the CLI lacks it', () => {
     expect(nextMode('plan', { hasAuto: false })).toBe('default');
     expect(nextMode('auto', { hasAuto: false })).toBe('default');
+  });
+});
+
+describe('mode menu (modeChoices)', () => {
+  it('lists every mode in cycle order; Bypass is disabled with the reason unless allowed in a worktree', () => {
+    const off = modeChoices();
+    expect(off.map((c) => c.mode)).toEqual(['auto', 'default', 'acceptEdits', 'plan', 'bypassPermissions']);
+    expect(off.filter((c) => c.disabled).map((c) => c.mode)).toEqual(['bypassPermissions']);
+    expect(off[4]!.disabled!.reason).toMatch(/Allow Bypass/);
+    expect(modeChoices({ allowBypass: true, inWorktree: false })[4]!.disabled!.hint).toBe('Worktree only');
+    expect(modeChoices({ allowBypass: true, inWorktree: true }).every((c) => !c.disabled)).toBe(true);
+  });
+  it('drops Auto when the CLI lacks it', () => {
+    expect(modeChoices({ hasAuto: false }).map((c) => c.mode)).not.toContain('auto');
   });
 });
 

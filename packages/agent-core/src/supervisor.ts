@@ -390,6 +390,11 @@ export class Supervisor {
     }
     const res = rec.reducer.apply(e);
     if (e.type === 'init' && e.sessionId) rec.sessionId = e.sessionId;
+    // The CLI changes mode on its own (plan → manual after the plan is approved). Keep the spec in
+    // step so a resume relaunches in the mode the agent is really in, not the one it was spawned with.
+    if ((e.type === 'init' || e.type === 'mode-changed') && rec.reducer.summary.mode !== rec.spec.mode) {
+      rec.spec = { ...rec.spec, mode: rec.reducer.summary.mode };
+    }
     this.fire('event', e);
     for (const sub of res.subagents) this.emitDraft(rec, { type: 'subagent', subagent: sub });
     if (res.changed) this.publishSummary(rec);
@@ -712,7 +717,7 @@ export class Supervisor {
     if (entry.resumeBlocked) s.resumeBlocked = entry.resumeBlocked;
     else delete s.resumeBlocked;
     s.updatedAt = Date.now();
-    const rec = this.newRecord(AgentSpec.parse(entry.spec), s, (entry.lastSeq ?? -1) + 1, Boolean(s.sessionId));
+    const rec = this.newRecord(AgentSpec.parse({ ...entry.spec, mode: s.mode }), s, (entry.lastSeq ?? -1) + 1, Boolean(s.sessionId));
     this.agents.set(rec.id, rec);
     this.publishSummary(rec);
     return rec.reducer.summary;
@@ -740,7 +745,8 @@ export class Supervisor {
       // on the Wall until it runs again. A clean quit already saved these as stopped.
       if (ACTIVE.has(s.status) || interruption) s.interrupted = { at: now, reason: interruption ?? 'restart' };
       if (ACTIVE.has(s.status) || s.status === 'paused') s.status = 'stopped';
-      const rec = this.newRecord(AgentSpec.parse(spec), s, (lastSeq ?? -1) + 1, started);
+      // Saved before the spec followed the CLI's own mode changes: the summary's mode is the real one.
+      const rec = this.newRecord(AgentSpec.parse({ ...spec, mode: s.mode }), s, (lastSeq ?? -1) + 1, started);
       this.agents.set(rec.id, rec);
       if (wasQueued) this.queue.push({ id: rec.id, resume: false });
     }

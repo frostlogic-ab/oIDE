@@ -246,6 +246,57 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     await waitFor(() => h.get(b!.id).lastMessage?.startsWith('Resumed session'), 10_000, 'resumed with new mode');
   }, 30_000);
 
+  it('switches to bypass live when Allow Bypass is on (launched with the allow flag), without restarting', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic' });
+    h.settings.claude.allowBypass = true;
+    const [a] = await h.sup.spawn(spec({ mode: 'plan' }));
+    await status(h, a!.id, 'has-question');
+    await h.sup.setMode(a!.id, 'bypassPermissions');
+    await waitFor(() => h.get(a!.id).mode === 'bypassPermissions', 5000, 'mode bypass');
+    expect(h.events.some((e) => e.agentId === a!.id && e.type === 'exit')).toBe(false);
+    await h.sup.setMode(a!.id, 'auto');
+    await waitFor(() => h.get(a!.id).mode === 'auto', 5000, 'mode auto');
+    expect(h.events.some((e) => e.agentId === a!.id && e.type === 'exit')).toBe(false);
+
+    // Without Allow Bypass at launch the CLI refuses the live switch: refused in the supervisor first.
+    h.settings.claude.allowBypass = false;
+    await expect(h.sup.setMode(a!.id, 'bypassPermissions')).rejects.toThrow(/not allowed/);
+    expect(h.get(a!.id).mode).toBe('auto');
+  }, 30_000);
+
+  it('Allow Bypass turned on after launch: the refused live switch falls back to --resume in bypass', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic' });
+    const [a] = await h.sup.spawn(spec({ mode: 'default' }));
+    await status(h, a!.id, 'has-question');
+    h.settings.claude.allowBypass = true;
+    await h.sup.setMode(a!.id, 'bypassPermissions');
+    await waitFor(() => h.events.some((e) => e.agentId === a!.id && e.type === 'exit'), 10_000, 'old process exited');
+    h.sup.send(a!.id, { kind: 'text', text: 'continue' });
+    await waitFor(() => h.get(a!.id).lastMessage?.startsWith('Resumed session'), 10_000, 'resumed');
+    expect(h.get(a!.id).mode).toBe('bypassPermissions');
+  }, 30_000);
+
+  it('the spec follows the CLI leaving plan mode, so a resume relaunches in Manual, not Plan', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario exit-plan,basic' });
+    const [a] = await h.sup.spawn(spec({ mode: 'plan' }));
+    await waitFor(() => h.get(a!.id).lastMessage === 'Plan approved; implementing.', 10_000, 'plan approved');
+    expect(h.get(a!.id).mode).toBe('default');
+    expect(h.sup.spec(a!.id)!.mode).toBe('default');
+    await h.sup.stop(a!.id);
+    await h.sup.resume(a!.id);
+    h.sup.send(a!.id, { kind: 'text', text: '[fake-scenario:basic] go on' });
+    await waitFor(() => h.get(a!.id).lastMessage?.startsWith('Resumed session'), 10_000, 'resumed');
+    expect(h.get(a!.id).mode).toBe('default');
+
+    // Restore: a spec saved before this fix still says plan; the summary's mode wins.
+    const h2 = await harness({ extraFlags: '--fake-scenario basic' });
+    h2.sup.restore([{ spec: { ...h.sup.spec(a!.id)!, mode: 'plan' }, summary: { ...h.get(a!.id), status: 'stopped' }, lastSeq: 500 }]);
+    expect(h2.sup.spec(a!.id)!.mode).toBe('default');
+    h2.sup.send(a!.id, { kind: 'text', text: 'hello again' });
+    await waitFor(() => h2.get(a!.id).lastMessage?.startsWith('Resumed session'), 10_000, 'restored reply');
+    expect(h2.get(a!.id).mode).toBe('default');
+  }, 30_000);
+
   it('pause holds messages until resume; compact sends /compact; remove fires removed', async () => {
     const h = await harness({ extraFlags: '--fake-scenario slow,basic' });
     const [a] = await h.sup.spawn(spec());

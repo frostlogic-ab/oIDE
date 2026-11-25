@@ -17,7 +17,7 @@ Route: `focus { agentId, subagentId? }`. Code: `apps/desktop/src/renderer/src/sc
 | --- | --- |
 | `index.tsx` | Screen: route → agent, keymap scope `focus` (J / K / N, Esc → Wall, Shift+Tab mode when nothing is focused), `FocusBody` (keyed by agent id): rows, row context, compact dialog, stop-subagent state, polite `aria-live` for new assistant text |
 | `model/transcript.ts` | Pure event → row mapping (`buildRows`), `eventsFor` / `groupByParent` (subagent filtering by `parentToolUseId`), tool labels/meta, `lineDiff` / `toolDiff`, `subagentSteps`, `subagentFiles`, `reportedSlashCommands` |
-| `model/focus.ts` | Agent list order and lines, `nextMode` (Shift+Tab cycle), `composeMessage` (composer → `UserMessage`), permission copy, subagent status text, token share, timeline geometry, routing line |
+| `model/focus.ts` | Agent list order and lines, `modeChoices` (the header mode menu: every mode in cycle order, Bypass disabled with its reason unless Settings allow it and the agent is in a worktree), `nextMode` (Shift+Tab cycle over the enabled ones), `composeMessage` (composer → `UserMessage`), permission copy, subagent status text, token share, timeline geometry, routing line |
 | `model/history.ts` | `useFocusHistory`: the transcript's own log for the agent on screen = `agents.events` pages (500, older pages on scroll-up via `beforeSeq`) merged with the store's live tail. Separate from the store because the store's tail is capped at 2000 and would drop scrolled-back history |
 | `model/ui.ts` | Expanded/collapsed state (subagent cards, tool output, thinking, long diffs) outside the rows, so it survives virtualization |
 | `components/Transcript.tsx` | `@tanstack/react-virtual` list with measured rows; sticks to the bottom until the user scrolls up ("Jump to latest"); top reach loads the previous page and keeps position |
@@ -25,7 +25,7 @@ Route: `focus { agentId, subagentId? }`. Code: `apps/desktop/src/renderer/src/sc
 | `components/Streaming.tsx` | "Writing…" from `partial` deltas: listens to `agents.batch` itself (partials are not stored), flushes once per frame, re-renders only itself |
 | `components/Markdown.tsx` | `marked` → DOMPurify (no style/iframe/img/forms) → cached HTML; links open via `shell.openExternal` (https only) |
 | `components/AgentList.tsx` | Mini wall: needs permission first, then other needs-you, review, running; current agent shows its lead + subagent tree |
-| `components/SessionHeader.tsx` | Lead header (project, worktree, mode button, model, running time, context ring → compact, Raw terminal, Pause/Resume, Stop) and subagent header (breadcrumb, model/effort/route/status/tokens, own context ring, Stop subagent) |
+| `components/SessionHeader.tsx` | Lead header (project, worktree, mode menu (any mode at any time, e.g. Plan → Manual → Auto or Bypass; portalled `Menu` so the clipping meta line does not cut it), model, running time, context ring → compact, Raw terminal, Pause/Resume, Stop) and subagent header (breadcrumb, model/effort/route/status/tokens, own context ring, Stop subagent) |
 | `components/PermissionPrompt.tsx` | Pinned prompt; Y / Always in &lt;project&gt; / D answer the exact `requestId` once (`answerPermission`) |
 | `components/Composer.tsx` | Enter or Ctrl/Cmd+Enter sends, Shift+Enter newline, Shift+Tab switches mode (as in the CLI); `/` menu (shared `components/SlashMenu.tsx`); pasted screenshots, dropped files and Attach file (paperclip) as removable chips (shared `components/Attachments.tsx`); Attach artifact picker (`artifacts.list`); disabled while queued |
 | `components/CompactDialog.tsx` | "Compact this session?" → `agents.compact`; modal keymap scope |
@@ -151,7 +151,7 @@ A pretend shell answers `terminal.*`.
 `model/transcript.test.ts` (row mapping, Read merge, subagent cards and filtering, steps, diff,
 5k events < 200 ms), `model/focus.test.ts` (composer shapes, mode cycle, list order, token share,
 timeline, history merge), `Focus.test.tsx` (jsdom: permission answers use the exact id, Y/D once,
-composer sends text / command / artifact, /compact asks, queued disables, Shift+Tab → `agents.setMode`,
+composer sends text / command / artifact, /compact asks, queued disables, Shift+Tab and the header mode menu → `agents.setMode`,
 subagent view and Stop subagent, compact confirm, J and Esc). Virtualized rows do not render in jsdom;
 the Playwright check covers them.
 
