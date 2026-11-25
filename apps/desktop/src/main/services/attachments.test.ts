@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -112,5 +112,31 @@ describe('copyAttachments', () => {
     expect(sniffImage(Buffer.from('GIF89a'))).toBe('image/gif');
     expect(sniffImage(Buffer.from('RIFF\0\0\0\0WEBPVP8 '))).toBe('image/webp');
     expect(sniffImage(Buffer.from('hello'))).toBeUndefined();
+  });
+});
+
+describe('attachments refuse links planted in the agent folder', () => {
+  it('does not copy through a .oide junction that points outside the worktree', async () => {
+    const wt = join(base, 'linked-wt');
+    const target = join(base, 'link-target');
+    mkdirSync(wt, { recursive: true });
+    mkdirSync(target, { recursive: true });
+    execFileSync('git', ['init', '-q'], { cwd: wt });
+    // A junction needs no privileges on Windows; elsewhere it is a plain directory symlink.
+    symlinkSync(target, join(wt, '.oide'), 'junction');
+    const picked = new Set([pathKey(join(outside, 'notes.txt'))]);
+    const files = await validateAttachments([{ kind: 'file', path: join(outside, 'notes.txt'), name: 'notes.txt', size: 5 }], { picked, roots: [wt] });
+    await expect(copyAttachments(wt, files)).rejects.toThrow(/link or not a folder/);
+    expect(readdirSync(target)).toEqual([]);
+  });
+
+  it('refuses a worktree file whose real path is outside the worktree', async (ctx) => {
+    const link = join(worktree, 'looks-inside.txt');
+    try {
+      symlinkSync(join(outside, 'secret.txt'), link, 'file');
+    } catch {
+      ctx.skip(); // file symlinks need Developer Mode or admin on Windows
+    }
+    await expect(validateAttachments([{ kind: 'file', path: link, name: 'looks-inside.txt', size: 1 }], { picked: new Set(), roots: [worktree] })).rejects.toThrow(/other paths are refused/);
   });
 });
