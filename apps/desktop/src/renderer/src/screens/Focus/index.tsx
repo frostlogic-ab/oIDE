@@ -14,6 +14,7 @@ import { Button, EmptyState, contextFraction } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { useKeymapScope, useShortcutLabel } from '../../lib/useKeymap';
 import { INTERRUPTED_PERMISSION_NOTE, nextNeedsYou, stepAgent, useAgent, useAgentsInScope } from '../../stores/agents';
+import { archiveAgent, deleteAgentPermanently, unarchiveAgent, useArchive } from '../../stores/archive';
 import { useCli } from '../../stores/cli';
 import { projectName as nameOf, useProjects } from '../../stores/projects';
 import { useRouter } from '../../stores/router';
@@ -48,7 +49,22 @@ export default function FocusScreen() {
   const route = useRouter((s) => s.route);
   const agentId = route.screen === 'focus' ? route.params.agentId : undefined;
   const subagentId = route.screen === 'focus' ? route.params.subagentId : undefined;
-  const agent = useAgent(agentId);
+  const live = useAgent(agentId);
+  // Not on the Wall: maybe archived (opens read-only, transcript from the database).
+  const archived = useArchive((s) => (agentId && !live ? s.byId[agentId] : undefined));
+  const [lookedUp, setLookedUp] = useState<string | null>(null);
+  useEffect(() => {
+    if (!agentId || live || archived) return;
+    let cancelled = false;
+    void useArchive
+      .getState()
+      .fetchOne(agentId)
+      .finally(() => !cancelled && setLookedUp(agentId));
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, live, archived]);
+  const agent = live ?? archived;
   // A subagent id the agent does not have (stale link, mistyped id) falls back to the lead view.
   const unknownSub = !!agent && !!subagentId && !agent.subagents.some((s) => s.id === subagentId);
   const scope = useScope((s) => s.scope);
@@ -101,6 +117,7 @@ export default function FocusScreen() {
     },
   });
 
+  if (agentId && !agent && lookedUp !== agentId) return null;
   if (!agentId || !agent) {
     return (
       <EmptyState
@@ -226,6 +243,7 @@ function FocusBody({ agent, subagentId, list, projectName, warnAt, dangerAt, lab
     );
   };
 
+  const readOnly = Boolean(agent.archived);
   const pendingSub = pending?.subagentId ? subs[pending.subagentId] : undefined;
   const queued = agent.status === 'queued';
   const placeholder = sub ? `Message the lead agent about ${sub.name}` : 'Steer this agent, or type / for commands';
@@ -263,6 +281,9 @@ function FocusBody({ agent, subagentId, list, projectName, warnAt, dangerAt, lab
             onPause={() => act('agents.pause')}
             onResume={() => act('agents.resume')}
             onStop={() => act('agents.stop')}
+            onArchive={() => void archiveAgent(agent.id, agent.title)}
+            onUnarchive={() => void unarchiveAgent(agent.id, agent.title)}
+            onDelete={() => void deleteAgentPermanently(agent.id).then((ok) => ok && onBack())}
           />
         )}
         <Transcript
@@ -298,6 +319,13 @@ function FocusBody({ agent, subagentId, list, projectName, warnAt, dangerAt, lab
                 </span>
               </div>
             )}
+            {readOnly ? (
+              <div role="note" className="flex items-center gap-3 px-3.5 py-2.5 rounded-lg border border-line bg-card text-[12.5px] text-ink-3">
+                <span className="flex-1">
+                  This agent is archived; its transcript is read-only.{agent.resumeBlocked ? ' Its worktree was deleted, so it cannot be resumed.' : ' Unarchive it to put it back on the Wall and resume it.'}
+                </span>
+              </div>
+            ) : (
             <Composer
               agentId={agent.id}
               projectId={agent.projectId}
@@ -308,6 +336,7 @@ function FocusBody({ agent, subagentId, list, projectName, warnAt, dangerAt, lab
               onCompact={() => setCompactOpen(true)}
               onCycleMode={sub ? undefined : onCycleMode}
             />
+            )}
           </div>
         </div>
       </main>

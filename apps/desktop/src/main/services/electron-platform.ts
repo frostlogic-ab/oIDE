@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { delimiter, dirname, join, resolve } from 'node:path';
-import { app, dialog, Notification, protocol, safeStorage, shell, utilityProcess } from 'electron';
+import { app, dialog, net, Notification, protocol, safeStorage, shell, utilityProcess } from 'electron';
 import { utilityProcessFork } from '@oide/extension-host';
 import type { ArtifactStore } from '@oide/store';
 import type { MainContext } from '../context.js';
@@ -101,6 +101,7 @@ export function electronPlatform(ctx: MainContext, terminals: TerminalService): 
   // E2E only (unpackaged builds): folders projects.open may open by path (SEC-08).
   const openable = !app.isPackaged && process.env.OIDE_E2E_OPEN_PATHS ? process.env.OIDE_E2E_OPEN_PATHS.split(delimiter).filter(Boolean) : undefined;
   return {
+    isOnline: () => net.isOnline(),
     cipher: {
       encrypt: (s) => safeStorage.encryptString(s),
       decrypt: (b) => safeStorage.decryptString(Buffer.from(b)),

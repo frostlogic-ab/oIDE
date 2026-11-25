@@ -1,9 +1,10 @@
+import { existsSync } from 'node:fs';
 import { isAbsolute, relative, resolve } from 'node:path';
-import { LaunchError, Supervisor, type AgentDriver, type EventSink, type PermissionBroker, type SecretProvider, type SettingsProvider, type WorktreeProvider } from '@oide/agent-core';
+import { LaunchError, Supervisor, WORKTREE_GONE, type AgentDriver, type EventSink, type PermissionBroker, type SecretProvider, type SettingsProvider, type WorktreeProvider } from '@oide/agent-core';
 import { Git, isInside, pathKey, samePath, type WorktreeManager } from '@oide/git';
 import type { OideMcpServer } from '@oide/mcp-server';
 import { ENTRY_FILES, readOideFile, type SecretStore, type SettingsService, type Store } from '@oide/store';
-import type { AgentEvent, AgentSpecInput, AgentStatus, AgentSummary, ArtifactKind, PermissionAnswer, PermissionMode, UserMessage } from '@oide/protocol';
+import { repairAgentSummary, type AgentEvent, type AgentSpecInput, type AgentStatus, type AgentSummary, type ArchiveReason, type ArtifactKind, type PermissionAnswer, type PermissionMode, type UserMessage } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
 import { boundModelKey } from '../security/model-keys.js';
@@ -21,6 +22,14 @@ const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 const ACTIVE: ReadonlySet<AgentStatus> = new Set(['starting', 'running', 'needs-permission']);
 const RESUME_KEY = 'agents:resume-on-start';
 const MCP_DOWN = "oIDE's MCP server is not running, so agents cannot ask for permission. Restart oIDE.";
+/** Statuses an agent can be archived from by hand: its process is not working on a turn. */
+const ARCHIVABLE: ReadonlySet<AgentStatus> = new Set(['has-question', 'ready-for-review', 'paused', 'stopped', 'rate-limited', 'error', 'done']);
+
+export interface ArchivedPage {
+  items: AgentSummary[];
+  total: number;
+  nextCursor?: { at: number; id: string };
+}
 
 /**
  * The broker every launch goes through (spawn, resume after restart, relaunch on a mode change):
@@ -110,6 +119,8 @@ export class AgentsService {
   readonly editing = new EditTracker();
   private readonly rows = new Set<string>();
   private readonly lastStatus = new Map<string, AgentStatus>();
+  /** Agents whose summary failed the contract (logged once each; repaired or left out of `agents.list`). */
+  private readonly contractWarned = new Set<string>();
   /** Agents restore() did not resume because the MCP server was down: still resumed on the next start. */
   private deferredResume: string[] = [];
   extensions: ExtensionsService | undefined;
@@ -139,6 +150,13 @@ export class AgentsService {
       this.editing.clear(id);
       this.extensions?.revokeAgent(id);
       o.ctx.emit('agents.removed', { agentId: id });
+    });
+    this.supervisor.on('archived', (s) => {
+      this.lastStatus.delete(s.id);
+      this.editing.clear(s.id);
+      this.extensions?.revokeAgent(s.id);
+      const safe = this.contractSafe(s);
+      if (safe) o.ctx.emit('agents.archived', safe);
     });
   }
 
@@ -188,7 +206,7 @@ export class AgentsService {
       },
       remove: async ({ path, projectId }) => {
         const p = o.projects.get(projectId);
-        if (!p || samePath(path, p.path)) return;
+        if (!p || samePath(path, p.path)) return false;
         await this.git?.unwatch(path);
         try {
           await o.worktrees.remove(p.path, path, { force: true, deleteBranch: true });
@@ -202,6 +220,7 @@ export class AgentsService {
         }
         o.ctx.roots.remove(path);
         this.git?.changed(projectId);
+        return true;
       },
     };
   }
@@ -329,9 +348,25 @@ export class AgentsService {
 
   // ---------------------------------------------------------------- summaries, notifications
 
+  /**
+   * The summary as the IPC contract accepts it. A summary that fails the contract (a reducer bug, or
+   * one restored from an older build) is repaired by dropping the invalid fields, or left out, and
+   * logged once per agent, so one bad agent never empties the Wall (`agents.list` is all-or-nothing).
+   */
+  private contractSafe(s: AgentSummary): AgentSummary | undefined {
+    const r = repairAgentSummary(s);
+    if (!r.issues.length) return s;
+    if (!this.contractWarned.has(s.id)) {
+      this.contractWarned.add(s.id);
+      this.o.ctx.log.error('agent summary does not match the IPC contract', { agent: s.id, repaired: Boolean(r.summary), dropped: r.dropped, issues: r.issues });
+    }
+    return r.summary;
+  }
+
   private onSummary(s: AgentSummary): void {
     const { o } = this;
-    o.ctx.emit('agents.summary', s);
+    const safe = this.contractSafe(s);
+    if (safe) o.ctx.emit('agents.summary', safe);
     if (s.worktreePath && !o.ctx.roots.list('worktree').some((r) => samePath(r, s.worktreePath!))) {
       const p = o.projects.get(s.projectId);
       if (p && !samePath(p.path, s.worktreePath)) o.ctx.roots.add(s.worktreePath, 'worktree');
@@ -347,6 +382,8 @@ export class AgentsService {
       (s.status === 'error' ? agentLog.warn : agentLog.info)(`status ${prev ?? '(new)'} → ${s.status}`, detail);
     }
     if (!ACTIVE.has(s.status)) this.editing.clear(s.id);
+    // Finished agents go to the Archived view (after this publish completes).
+    if (s.status === 'done' && prev !== undefined) setTimeout(() => void this.archiveAgent(s.id, { reason: 'completed' }).catch((err) => o.ctx.log.warn('auto-archive failed', s.id, err)), 0);
     if (prev === undefined && s.status !== 'needs-permission' && s.status !== 'error') return;
     this.notifyFor(s);
   }
@@ -387,8 +424,9 @@ export class AgentsService {
     return a;
   }
 
+  /** Agents on the Wall (archived ones are not in the supervisor). Each one passes the IPC contract. */
   list(): AgentSummary[] {
-    return this.supervisor.list();
+    return this.supervisor.list().flatMap((s) => this.contractSafe(s) ?? []);
   }
 
   async spawn(input: AgentSpecInput): Promise<AgentSummary[]> {
@@ -427,7 +465,23 @@ export class AgentsService {
   send(agentId: string, msg: UserMessage): void | Promise<void> {
     const a = this.require(agentId);
     if ((msg.kind === 'text' || msg.kind === 'artifact') && msg.attachments?.length) return this.sendWithAttachments(a, msg);
-    this.supervisor.send(agentId, msg);
+    try {
+      this.supervisor.send(agentId, msg);
+    } catch (err) {
+      if (err instanceof LaunchError) throw new IpcError(err.message, 'conflict');
+      throw err;
+    }
+  }
+
+  /** Resume a stopped, paused, crashed or interrupted agent (`--resume`). */
+  async resume(agentId: string): Promise<void> {
+    this.require(agentId);
+    try {
+      await this.supervisor.resume(agentId);
+    } catch (err) {
+      if (err instanceof LaunchError) throw new IpcError(err.message, 'conflict');
+      throw err;
+    }
   }
 
   private async sendWithAttachments(a: AgentSummary, msg: Extract<UserMessage, { kind: 'text' | 'artifact' }>): Promise<void> {
@@ -455,10 +509,136 @@ export class AgentsService {
     }
   }
 
+  /**
+   * Discard (Source control › Remove worktree, `agents.remove`): the agent is archived with reason
+   * `discarded`, not deleted; its transcript stays readable in the Archived view.
+   */
   async remove(agentId: string, deleteWorktree: boolean): Promise<void> {
+    this.require(agentId);
+    await this.archiveAgent(agentId, { reason: 'discarded', deleteWorktree });
+  }
+
+  /** Hard delete, no archive: the agent's project is being removed (its rows go with it). */
+  async purge(agentId: string, deleteWorktree: boolean): Promise<void> {
     const a = this.require(agentId);
     await this.supervisor.remove(agentId, { deleteWorktree });
     if (a.worktreePath && deleteWorktree) this.o.ctx.roots.remove(a.worktreePath);
+  }
+
+  // ---------------------------------------------------------------- archived agents
+
+  /** "Archive" on a tile or in Focus: only when the agent is not working on a turn. */
+  async archive(agentId: string): Promise<AgentSummary> {
+    const a = this.require(agentId);
+    if (!ARCHIVABLE.has(a.status)) throw new IpcError(`"${a.title}" is still working. Stop it first, then archive it.`, 'conflict');
+    return this.archiveAgent(agentId, { reason: a.status === 'done' ? 'completed' : 'archived-by-user' });
+  }
+
+  /** Archive for any reason (merge, discard, done, by hand). Worktree removal follows `deleteWorktree`. */
+  async archiveAgent(agentId: string, opts: { reason: ArchiveReason; mergeCommit?: string; deleteWorktree?: boolean }): Promise<AgentSummary> {
+    const a = this.require(agentId);
+    const out = await this.supervisor.archive(agentId, opts);
+    if (a.worktreePath && out.archived?.worktreeRemoved) this.o.ctx.roots.remove(a.worktreePath);
+    this.o.ctx.reliability?.logs.agent(agentId).info(`archived (${opts.reason})`, { worktreeRemoved: out.archived?.worktreeRemoved ?? false });
+    return this.contractSafe(out) ?? out;
+  }
+
+  /** The archived agent's record, or not_found. */
+  private archivedRecord(agentId: string) {
+    const r = this.o.store.agents.get(agentId);
+    if (!r || r.archivedAt === undefined || !r.summary) throw new IpcError(`No archived agent ${agentId}`, 'not_found');
+    return r;
+  }
+
+  /** Summary of a row in the Archived view; `archived` comes from the columns when the stored summary lost it. */
+  private archivedSummary(r: { summary?: AgentSummary; archivedAt?: number; archiveReason?: ArchiveReason; mergeCommit?: string }): AgentSummary | undefined {
+    if (!r.summary) return undefined;
+    const s = r.summary.archived ? r.summary : { ...r.summary, archived: { at: r.archivedAt ?? r.summary.updatedAt, reason: r.archiveReason ?? 'archived-by-user', ...(r.mergeCommit ? { mergeCommit: r.mergeCommit } : {}), worktreeRemoved: false } };
+    return this.contractSafe(s);
+  }
+
+  listArchived(input: { projectId?: string; query?: string; limit: number; cursor?: { at: number; id: string } }): ArchivedPage {
+    const page = this.o.store.agents.listArchived(input);
+    for (const sk of this.o.store.agents.skipped) this.o.ctx.log.warn('archived agent row unreadable; left out', sk);
+    const items = page.records.flatMap((r) => (this.o.projects.get(r.projectId) ? (this.archivedSummary(r) ?? []) : []));
+    return { items, total: page.total, ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}) };
+  }
+
+  getArchived(agentId: string): AgentSummary {
+    const s = this.archivedSummary(this.archivedRecord(agentId));
+    if (!s) throw new IpcError(`No archived agent ${agentId}`, 'not_found');
+    return s;
+  }
+
+  /** Back to the Wall. Resumable when its session and worktree still exist; otherwise Resume is blocked. */
+  async unarchive(agentId: string): Promise<AgentSummary> {
+    if (this.supervisor.get(agentId)) return this.require(agentId);
+    const r = this.archivedRecord(agentId);
+    const p = this.o.projects.get(r.projectId);
+    if (!p) throw new IpcError('Its project is not open in oIDE. Open the project first.', 'conflict');
+    const summary = r.summary!;
+    const wt = summary.worktreePath;
+    const gone = Boolean(summary.archived?.worktreeRemoved) || (wt !== undefined && !existsSync(wt));
+    const noSession = !summary.sessionId;
+    if (wt && !gone && !samePath(p.path, wt)) this.o.ctx.roots.add(wt, 'worktree');
+    this.rows.add(agentId);
+    const back = this.supervisor.unarchive({
+      spec: r.spec,
+      summary,
+      lastSeq: this.o.store.events.lastSeq(agentId),
+      ...(gone ? { resumeBlocked: WORKTREE_GONE } : noSession ? { resumeBlocked: 'This agent never started a session, so there is nothing to resume.' } : {}),
+    });
+    this.lastStatus.set(agentId, back.status);
+    this.o.ctx.reliability?.logs.agent(agentId).info('unarchived', { resumable: !back.resumeBlocked });
+    return this.contractSafe(back) ?? back;
+  }
+
+  /**
+   * Settings › Agents › Clean up "After 7 days": delete the worktree of a merged agent (archived by
+   * now, or still on the Wall). Returns true when a folder was removed.
+   */
+  async removeWorktreeOf(agentId: string): Promise<boolean> {
+    const live = this.supervisor.get(agentId);
+    if (live) {
+      if (!live.worktreePath) return false;
+      await this.supervisor.remove(agentId, { deleteWorktree: true });
+      this.o.ctx.roots.remove(live.worktreePath);
+      return true;
+    }
+    const r = this.o.store.agents.get(agentId);
+    const s = r?.summary;
+    if (!r || !s?.archived || s.archived.worktreeRemoved || !s.worktreePath) return false;
+    const removed = (await this.worktreeProvider().remove!({ agentId, path: s.worktreePath, projectId: r.projectId, ...(s.branch ? { branch: s.branch } : {}) })) !== false;
+    if (!removed) return false;
+    const next: AgentSummary = { ...s, archived: { ...s.archived, worktreeRemoved: true }, resumeBlocked: WORKTREE_GONE, updatedAt: Date.now() };
+    this.o.store.agents.saveSummary(next);
+    this.o.ctx.roots.remove(s.worktreePath);
+    const safe = this.contractSafe(next);
+    if (safe) this.o.ctx.emit('agents.archived', safe);
+    return true;
+  }
+
+  /**
+   * "Delete permanently" (after the native confirmation in the handler): the row and its events
+   * go, as `agents.remove` did before archiving existed. A worktree still on disk goes with it.
+   */
+  async deletePermanently(agentId: string): Promise<void> {
+    if (this.supervisor.get(agentId)) {
+      await this.purge(agentId, true);
+      return;
+    }
+    const r = this.o.store.agents.get(agentId);
+    if (!r) throw new IpcError(`Unknown agent ${agentId}`, 'not_found');
+    const s = r.summary;
+    const wt = s?.worktreePath ?? r.worktreePath;
+    if (wt && !s?.archived?.worktreeRemoved && existsSync(wt)) {
+      await this.worktreeProvider().remove!({ agentId, path: wt, projectId: r.projectId, ...((s?.branch ?? r.branch) ? { branch: (s?.branch ?? r.branch)! } : {}) }).catch((err) => this.o.ctx.log.warn('worktree removal failed on delete', agentId, err));
+      this.o.ctx.roots.remove(wt);
+    }
+    this.rows.delete(agentId);
+    this.o.store.agents.remove(agentId);
+    this.lastStatus.delete(agentId);
+    this.o.ctx.emit('agents.removed', { agentId });
   }
 
   events(agentId: string, beforeSeq: number | undefined, limit: number): AgentEvent[] {
@@ -467,12 +647,25 @@ export class AgentsService {
 
   /** Restore agents from the last run. Those that were working are resumed with `--resume`. */
   async restore(): Promise<AgentSummary[]> {
-    const records = this.o.store.agents.list();
-    const entries = records.filter((r) => r.summary && this.o.projects.get(r.projectId)).map((r) => ({ spec: r.spec, summary: r.summary!, lastSeq: this.o.store.events.lastSeq(r.id) }));
+    // Archived agents stay in the database (Archived view); only the Wall's come back to the supervisor.
+    const records = this.o.store.agents.list({ archived: false });
+    // One unreadable row never hides the others (store.agents.list reads rows one by one).
+    for (const sk of this.o.store.agents.skipped) this.o.ctx.log.error('agent row unreadable at restore; left out', sk);
+    for (const rp of this.o.store.agents.repaired) this.o.ctx.log.warn('agent summary repaired at restore', rp);
+    for (const r of records) if (!r.summary) this.o.ctx.log.warn('agent row has no usable summary; left out', { agent: r.id });
     // Working at quit (recorded by shutdown) or at a crash (status still live in the database).
     const marked = new Set(this.o.store.ui.kv.get<string[]>(RESUME_KEY) ?? []);
     this.o.store.ui.kv.delete(RESUME_KEY);
-    const wasActive = entries.filter((e) => ACTIVE.has(e.summary.status) || marked.has(e.summary.id)).map((e) => e.summary.id);
+    const mcpDown = Boolean(this.o.mcpReady && !this.o.mcpReady());
+    const entries = records
+      .filter((r) => r.summary && this.o.projects.get(r.projectId))
+      .map((r) => {
+        const s = r.summary!;
+        const working = ACTIVE.has(s.status) || marked.has(s.id);
+        const interruption = !working ? undefined : mcpDown ? ('mcp-down' as const) : marked.has(s.id) ? ('restart' as const) : ('crash' as const);
+        return { spec: r.spec, summary: s, lastSeq: this.o.store.events.lastSeq(r.id), ...(interruption ? { interruption } : {}) };
+      });
+    const wasActive = entries.filter((e) => e.interruption).map((e) => e.summary.id);
     for (const e of entries) {
       this.rows.add(e.summary.id);
       if (e.summary.worktreePath) {
@@ -482,7 +675,7 @@ export class AgentsService {
     }
     const restored = this.supervisor.restore(entries);
     for (const s of restored) this.lastStatus.set(s.id, s.status);
-    if (wasActive.length && this.o.mcpReady && !this.o.mcpReady()) {
+    if (wasActive.length && mcpDown) {
       // No permission-prompt server: leave them stopped and resumable, and resume on the next start.
       this.o.store.ui.kv.set(RESUME_KEY, wasActive);
       this.deferredResume = wasActive;
