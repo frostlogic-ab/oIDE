@@ -180,7 +180,7 @@ describe('isSafeArtifactPath (ADR 0014)', () => {
   });
   it('refuses escapes, absolute paths, backslashes, devices, reserved names and 8.3 short names', () => {
     for (const p of [
-      '', '../x', 'a/../x', './x', 'a//b', '/abs', 'C:/x', 'C:x', 'a\b', 'x\u0000', 'dots.', 'space ',
+      '', '../x', 'a/../x', './x', 'a//b', '/abs', 'C:/x', 'C:x', 'a\\b', 'a\bb', 'x\u0000', 'dots.', 'space ',
       'CON', 'nul.txt', 'com1', 'artifact.json', 'ARTIFACT.JSON', '.versions/1/index.html', '.Staging', '__OIDE/x',
       // Windows 8.3 aliases of reserved names, and any other short name
       'ARTIFA~1.JSO', 'VERSIO~1', 'VERSIO~1/1/index.html', 'shots/SCREEN~1.PNG',
