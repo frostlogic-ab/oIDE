@@ -181,9 +181,7 @@ function art(
   };
 }
 
-const LEGACY_IMPORT_STUB = `# Pricing page (imported)
-
-oIDE cannot fetch claude.ai artifacts: there is no public API for them. Paste the artifact's content here.
+const LEGACY_IMPORT_STUB = `Imported from https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T. oIDE cannot fetch claude.ai artifacts: open the link, copy the artifact's code and paste it here to keep a local copy.
 `;
 
 const artifactSeed: MockArtifact[] = [

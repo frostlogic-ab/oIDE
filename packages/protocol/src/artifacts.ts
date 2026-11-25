@@ -120,10 +120,32 @@ export const HTML_DESIGN_ENTRY = 'index.html';
 export function looksLikeReact(content: string): boolean {
   const text = stripBom(content).trimStart().slice(0, 256 * 1024);
   if (!text || htmlStart(text) !== null) return false;
-  const importsReact = /^[ \t]*import[ \t][^\n;]{0,400}from[ \t]*['"]react['"]/m.test(text);
+  // Source starts with code (after comments): Markdown that shows a React example in a fenced block
+  // (`# Title` … ```jsx … ```) is a doc, not a design.
+  if (!/^(?:(?:import|export|const|let|var|function|class|type|interface)\b|['"]use (?:client|strict)['"])/.test(skipLeadingComments(text))) return false;
+  if (/^[ \t]{0,3}(?:```|~~~)/m.test(text)) return false;
+  // `[^;]` spans lines, so a multi-line `import {\n a,\n b\n} from 'react'` counts; bounded to 400 characters.
+  const importsReact = /^[ \t]*import[ \t][^;]{0,400}?from[ \t]*['"]react['"]/m.test(text);
   const exportsDefault = /^[ \t]*export[ \t]+default[ \t]/m.test(text);
   const hasJsx = /(?:return|=>)[ \t\r\n]{0,40}\(?[ \t\r\n]{0,40}<[A-Za-z>]/.test(text);
   return (importsReact && (exportsDefault || hasJsx)) || (exportsDefault && hasJsx);
+}
+
+/** The text after leading line and block comments and whitespace (indexOf only: linear). */
+function skipLeadingComments(text: string): string {
+  let i = 0;
+  for (;;) {
+    while (i < text.length && /\s/.test(text[i]!)) i++;
+    if (text.startsWith('//', i)) {
+      const end = text.indexOf('\n', i);
+      if (end < 0) return '';
+      i = end + 1;
+    } else if (text.startsWith('/*', i)) {
+      const end = text.indexOf('*/', i + 2);
+      if (end < 0) return '';
+      i = end + 2;
+    } else return text.slice(i, i + 200);
+  }
 }
 
 /** The design entry file that fits the content: `App.jsx` for React, else `index.html`. */
@@ -137,13 +159,30 @@ export function isDesignContent(content: string): boolean {
 }
 
 /**
- * Text of the placeholder older oIDE versions stored for a link-only import. Content holding it is
- * not an artifact: it is refused on import, and stored artifacts holding it are `brokenImport`.
+ * Text of the placeholder older oIDE versions stored for a link-only import ("Imported from <link>.
+ * oIDE cannot fetch claude.ai artifacts: open the link, copy …"). Content holding it is not an
+ * artifact: it is refused on import, and stored artifacts holding it are `brokenImport`.
  */
-export const LEGACY_IMPORT_STUB_MARKER = 'oIDE cannot fetch claude.ai artifacts';
+export const LEGACY_IMPORT_STUB_MARKER = 'oIDE cannot fetch claude.ai artifacts: open the link';
+/** The placeholder page was small (a link of at most 2 KB and a title); anything bigger is real content. */
+export const LEGACY_IMPORT_STUB_MAX_BYTES = 8 * 1024;
 
 export function isImportStubContent(content: string): boolean {
-  return content.length < 64 * 1024 && content.includes(LEGACY_IMPORT_STUB_MARKER);
+  return content.length <= LEGACY_IMPORT_STUB_MAX_BYTES && content.includes('Imported from ') && content.includes(LEGACY_IMPORT_STUB_MARKER);
+}
+
+/**
+ * Older versions stored a link-only whiteboard import as oIDE's own empty board (no notice text):
+ * `source: "oide"` with no elements. Only meaningful for an import still at version 1.
+ */
+export function isEmptyOideBoard(content: string): boolean {
+  if (content.length > 4096) return false;
+  try {
+    const v = JSON.parse(content) as { type?: unknown; source?: unknown; elements?: unknown };
+    return v.type === 'excalidraw' && v.source === 'oide' && Array.isArray(v.elements) && v.elements.length === 0;
+  } catch {
+    return false;
+  }
 }
 
 /** Shown when an import has a link but no content. */

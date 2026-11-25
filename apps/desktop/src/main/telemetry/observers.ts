@@ -284,7 +284,6 @@ export class TelemetryObservers {
     (s.timer as { unref?: () => void }).unref?.();
   }
 
-  /** One `file_search_used` per run of queries (typing in quick open fires one query per keystroke). */
   /**
    * A command main refused (IpcRouter `observeFailure`): codes, reasons and issue paths only, never the
    * input. Used for claude.ai imports refused before anything was created.
@@ -304,6 +303,7 @@ export class TelemetryObservers {
     this.sink.track('artifact_import_refused', { reason });
   }
 
+  /** One `file_search_used` per run of queries (typing in quick open fires one query per keystroke). */
   closeSearch(kind: 'name' | 'content'): void {
     const s = this.search[kind];
     if (s.timer) clearTimeout(s.timer);

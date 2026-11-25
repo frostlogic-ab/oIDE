@@ -105,7 +105,7 @@ export function DesignFrame({ artifactId, title, html, forceInline, scaled, vers
   return (
     <div ref={ref} className={cn('relative overflow-hidden', className)}>
       {react ? (
-        <ReactNotice text={forceInline ? 'Save to preview React changes. Use Compare to see older versions.' : 'React designs preview in the desktop app.'} scaled={scaled} />
+        <ReactNotice text={forceInline ? 'Only the saved version of a React design can be previewed. Save your changes, or use Compare to see older versions.' : 'React designs preview in the desktop app.'} scaled={scaled} />
       ) : inline ? (
         <iframe {...common} sandbox="" srcDoc={html} />
       ) : url ? (

@@ -118,16 +118,49 @@ function boot(): void {
   const root = document.getElementById('root');
   if (!root) return;
   ReactDOMClient.createRoot(root).render(React.createElement(Boundary, null, React.createElement(Component as React.ComponentType)));
+  // After the first paint the design is up: later errors (an event handler) get a dismissible note
+  // instead of replacing it.
+  requestAnimationFrame(() => requestAnimationFrame(() => (rendered = true)));
+}
+
+let rendered = false;
+
+/** A small, dismissible note at the bottom of the frame for an error after the design rendered. */
+function showNote(title: string, detail?: string): void {
+  document.getElementById('oide-runtime-note')?.remove();
+  const note = document.createElement('div');
+  note.id = 'oide-runtime-note';
+  note.setAttribute('role', 'alert');
+  note.style.cssText =
+    'position:fixed;left:12px;right:12px;bottom:12px;z-index:2147483647;display:flex;gap:12px;align-items:flex-start;' +
+    'padding:10px 12px;border-radius:8px;background:#15181D;border:1px solid #343A44;color:#E6E8EB;' +
+    "font:12.5px/1.5 Inter,system-ui,-apple-system,'Segoe UI',sans-serif";
+  const text = document.createElement('div');
+  text.style.cssText = 'flex:1;min-width:0;white-space:pre-wrap;overflow-wrap:anywhere';
+  text.textContent = detail ? `${title} ${detail.slice(0, 600)}` : title;
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.textContent = 'Dismiss';
+  close.style.cssText = 'background:#1E2430;color:#E6E8EB;border:1px solid #343A44;border-radius:6px;padding:2px 8px;font:inherit;cursor:pointer';
+  close.addEventListener('click', () => note.remove());
+  note.append(text, close);
+  document.body.appendChild(note);
+}
+
+function onError(err: unknown): void {
+  const [t, d] = problemOf(err);
+  if (rendered) showNote(t, d);
+  else showProblem(t, d);
 }
 
 window.addEventListener('error', (e) => {
-  const [t, d] = problemOf(e.error ?? e.message);
-  showProblem(t, d);
+  // An ErrorEvent without an error object is not the design's exception: the benign
+  // "ResizeObserver loop completed with undelivered notifications" (recharts' ResponsiveContainer),
+  // or a resource that failed to load.
+  if (!e.error) return;
+  onError(e.error);
 });
-window.addEventListener('unhandledrejection', (e) => {
-  const [t, d] = problemOf(e.reason);
-  showProblem(t, d);
-});
+window.addEventListener('unhandledrejection', (e) => onError(e.reason));
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
 else boot();

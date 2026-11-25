@@ -4,6 +4,7 @@ import {
   designEntryFor,
   inferKindFromContent,
   isDesignContent,
+  isEmptyOideBoard,
   isImportStubContent,
   looksLikeHtml,
   looksLikeReact,
@@ -82,6 +83,13 @@ describe('artifact import helpers', () => {
     expect(looksLikeReact('# Notes\n\nexport default is how you export.')).toBe(false);
     expect(looksLikeReact("import x from 'react';")).toBe(false);
     expect(looksLikeReact('')).toBe(false);
+    // Markdown with a React example in a fence stays a doc.
+    const md = "# Title\n\n```jsx\nimport React from 'react';\nexport default function App() { return <div/>; }\n```\n";
+    expect(looksLikeReact(md)).toBe(false);
+    expect(inferKindFromContent(md)).toBe('doc');
+    expect(looksLikeReact("Intro text\nimport React from 'react';\nexport default () => <p/>;")).toBe(false);
+    // Leading comments and directives, multi-line imports.
+    expect(looksLikeReact("// Pricing page\n/* v2 */\n'use client';\nimport {\n  useState,\n  useEffect,\n} from 'react';\nexport default function P() { return <p/>; }")).toBe(true);
     expect(inferKindFromContent(app)).toBe('design');
     expect(designEntryFor(app)).toBe('App.jsx');
     expect(designEntryFor('<p>x</p>')).toBe('index.html');
@@ -101,7 +109,13 @@ describe('artifact import helpers', () => {
   it('knows the placeholder older versions stored for link-only imports', () => {
     expect(isImportStubContent('<p>Imported from https://claude.ai/artifact/x. oIDE cannot fetch claude.ai artifacts: open the link…</p>')).toBe(true);
     expect(isImportStubContent('<h1>Real page</h1>')).toBe(false);
-    expect(isImportStubContent('x'.repeat(70_000) + 'oIDE cannot fetch claude.ai artifacts')).toBe(false);
+    // A real artifact that only mentions the phrase, or a big one, is not the placeholder.
+    expect(isImportStubContent('# Changelog\n\nRemoved "oIDE cannot fetch claude.ai artifacts: open the link".')).toBe(false);
+    expect(isImportStubContent('Imported from x. oIDE cannot fetch claude.ai artifacts: open the link' + 'x'.repeat(9000))).toBe(false);
+    expect(isEmptyOideBoard(JSON.stringify({ type: 'excalidraw', version: 2, source: 'oide', elements: [], appState: {}, files: {} }))).toBe(true);
+    expect(isEmptyOideBoard(JSON.stringify({ type: 'excalidraw', source: 'https://excalidraw.com', elements: [] }))).toBe(false);
+    expect(isEmptyOideBoard(JSON.stringify({ type: 'excalidraw', source: 'oide', elements: [{ id: 'a' }] }))).toBe(false);
+    expect(isEmptyOideBoard('{ not json')).toBe(false);
   });
 
   it('classifies claude.ai links before anything is imported', () => {

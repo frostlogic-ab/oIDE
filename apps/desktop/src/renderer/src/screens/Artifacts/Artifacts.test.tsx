@@ -222,7 +222,7 @@ describe('Import from claude.ai dialog', () => {
     expect(screen.getByRole('alert').textContent).toMatch(/HTML page or a React component/);
     expect(importButton().disabled).toBe(true);
     fireEvent.change(screen.getByRole('combobox', { name: 'Kind' }), { target: { value: 'doc' } });
-    fireEvent.change(content(), { target: { value: "# Pricing\n\noIDE cannot fetch claude.ai artifacts: there is no public API. Paste the artifact's content here." } });
+    fireEvent.change(content(), { target: { value: "Imported from https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T. oIDE cannot fetch claude.ai artifacts: open the link, copy the artifact's code and paste it here to keep a local copy." } });
     expect(screen.getByRole('alert').textContent).toMatch(/placeholder/);
     expect(importButton().disabled).toBe(true);
     expect(invoke).not.toHaveBeenCalledWith('artifacts.import', expect.anything());
@@ -346,7 +346,7 @@ describe('Import from claude.ai on the grid', () => {
 describe('Broken imports', () => {
   const link = 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T';
   const broken = meta('a-broken', 'Pricing page', 'doc', 'oide', { importedFrom: link, brokenImport: true });
-  const stub = "# Pricing page\n\noIDE cannot fetch claude.ai artifacts: there is no public API for them.\n";
+  const stub = `Imported from ${link}. oIDE cannot fetch claude.ai artifacts: open the link, copy the artifact's code and paste it here to keep a local copy.\n`;
   const base = invoke.getMockImplementation()!;
   const paste = () => screen.getByRole('textbox', { name: "Paste the artifact's code" });
   let current = broken;
@@ -436,6 +436,33 @@ describe('Broken imports', () => {
     expect(order.indexOf('artifacts.import')).toBeLessThan(order.indexOf('artifacts.delete'));
   });
 
+  it('keeps the empty import when it changed while the file was being imported (an agent wrote it)', async () => {
+    const real = invoke.getMockImplementation()!;
+    invoke.mockImplementation(async (command: string, input: unknown) => {
+      if (command === 'artifacts.import') {
+        current = meta('a-broken', 'Pricing page', 'doc', 'oide', { importedFrom: link, version: 2 });
+        return meta('a-fixed', 'Pricing page', 'design', 'oide', { importedFrom: link });
+      }
+      if (command === 'artifacts.get' && (input as { id: string }).id === 'a-broken') return { meta: current, content: '# Real', uses: [], versions: [] };
+      return real(command, input);
+    });
+    render(<ArtifactsScreen />);
+    await screen.findByRole('heading', { name: 'This import has no content' });
+    fireEvent.click(screen.getByRole('button', { name: 'Choose downloaded file…' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('artifacts.import', expect.objectContaining({ filePath: 'C:\\Downloads\\pricing.html' })));
+    await waitFor(() => expect(invoke.mock.calls.filter((c) => c[0] === 'artifacts.get' && (c[1] as { id: string }).id === 'a-broken').length).toBeGreaterThan(1));
+    expect(invoke).not.toHaveBeenCalledWith('artifacts.delete', expect.anything());
+  });
+
+  it('does not carry an old chat link (refused by the import now) over to the replacement', async () => {
+    const chat = 'https://claude.ai/chat/0f8fad5b-d9cb-469f-a165-70867728950e';
+    current = meta('a-broken', 'Pricing page', 'doc', 'oide', { importedFrom: chat, brokenImport: true });
+    render(<ArtifactsScreen />);
+    await screen.findByRole('heading', { name: 'This import has no content' });
+    fireEvent.click(screen.getByRole('button', { name: 'Choose downloaded file…' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('artifacts.import', { filePath: 'C:\\Downloads\\pricing.html', title: 'Pricing page', projectId: 'oide', location: 'repo' }));
+  });
+
   it('opens the fix panel in the viewer with the paste box focused', async () => {
     render(<ArtifactsScreen />);
     await screen.findByRole('heading', { name: 'This import has no content' });
@@ -471,7 +498,7 @@ describe('React designs', () => {
     render(<ArtifactsScreen />);
     await waitFor(() => expect(document.querySelector('iframe')?.getAttribute('src')).toBe('oide-artifact://a-react/index.html'));
     fireEvent.click(screen.getByRole('button', { name: /^v1 ·/ }));
-    expect(await screen.findByText('Save to preview React changes. Use Compare to see older versions.')).toBeTruthy();
+    expect(await screen.findByText('Only the saved version of a React design can be previewed. Save your changes, or use Compare to see older versions.')).toBeTruthy();
     // React source never goes into srcdoc.
     expect(document.querySelector('iframe[srcdoc]')).toBeNull();
     expect(document.querySelector('iframe')).toBeNull();

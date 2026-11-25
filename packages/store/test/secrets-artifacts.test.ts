@@ -228,6 +228,36 @@ describe('ArtifactStore', () => {
     expect((await store.list()).find((m) => m.id === old.id)?.brokenImport).toBeUndefined();
   });
 
+  it('flags old link-only whiteboard imports (an empty oIDE board), and never reads big files to check', async () => {
+    const { store } = setup();
+    const url = 'https://claude.ai/artifact/NFaggV4JC9X6prTgKhobKm';
+    // Older versions stored a link-only whiteboard import as oIDE's default empty board.
+    const board = await store.create({ title: 'Board', kind: 'whiteboard', importedFrom: url });
+    expect((await store.read(board.id)).meta.brokenImport).toBe(true);
+    expect((await store.list()).find((m) => m.id === board.id)?.brokenImport).toBe(true);
+    // A real import bigger than the placeholder could be is not read by list.
+    const big = await store.importUrl({ url, content: '<!doctype html><p>' + 'x'.repeat(20_000) + '</p>' });
+    expect((await store.list()).find((m) => m.id === big.id)?.brokenImport).toBeUndefined();
+    // Renaming a broken import keeps the flag on what it returns.
+    const notice = `<p>Imported from ${url}. oIDE cannot fetch claude.ai artifacts: open the link, copy the code.</p>`;
+    const old = await store.create({ title: 'Old', kind: 'design', content: notice, importedFrom: url });
+    expect((await store.rename(old.id, 'Old site')).brokenImport).toBe(true);
+  });
+
+  it('reads a design whose entry file went missing from the other format (an interrupted switch)', async () => {
+    const { store } = setup();
+    const page = '<!doctype html><p>Plans</p>';
+    const d = await store.create({ title: 'Plans', kind: 'design', content: page });
+    // artifact.json and the index say App.jsx, but only index.html is there.
+    const dir = store.dirOf(d.id);
+    const meta = JSON.parse(readFileSync(join(dir, 'artifact.json'), 'utf8'));
+    writeFileSync(join(dir, 'artifact.json'), JSON.stringify({ ...meta, entry: 'App.jsx' }));
+    await store.rescan();
+    expect(store.metaOf(d.id).entry).toBe('index.html');
+    const r = await store.read(d.id);
+    expect(r.content).toBe(page);
+  });
+
   it('keeps the claude.ai link of an imported file, and checks non-HTML files picked as a design', async () => {
     const { store } = setup();
     const dir = tempDir();

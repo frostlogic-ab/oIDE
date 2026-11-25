@@ -45,5 +45,8 @@ they have done that, the design should show.
 - Past versions and unsaved edits of a React design are not previewed live (they would need scripts
   in a `srcdoc` frame, which the app CSP doesn't allow); the viewer says "Save to preview" and offers
   Compare.
+- A React design shared through the repo (`.oide/artifacts/`) is stored as `App.jsx`; a teammate on an
+  older oIDE, whose rescan forces `index.html`, can't open it until they update. This oIDE's rescan uses
+  whichever design entry file is present, so an interrupted format switch is still readable.
 - The app grows by the runtime's size; the libraries are permissive (MIT, ISC, Apache-2.0) and listed in
   `THIRD_PARTY_NOTICES.md`.

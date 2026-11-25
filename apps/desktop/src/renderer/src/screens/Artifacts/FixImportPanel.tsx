@@ -6,7 +6,7 @@
  * artifact replaces the empty one). Delete removes the empty import.
  */
 import { useId, useMemo, useState } from 'react';
-import type { ArtifactMeta } from '@oide/protocol';
+import { classifyClaudeLink, type ArtifactMeta } from '@oide/protocol';
 import { Badge, Button, TextArea } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
@@ -30,12 +30,16 @@ export function FixImportPanel({ meta, autoFocus, onSaved, onReplaced, onDelete 
   const [error, setError] = useState<string | null>(null);
   const hintId = useId();
   const errorId = useId();
+  const titleId = useId();
 
   const hasContent = content.trim().length > 0;
   const plan = useMemo(() => (hasContent ? fixImportPlan(meta.kind, content) : null), [hasContent, meta.kind, content]);
   // The paste is checked as the kind it will be stored as.
   const contentError = useMemo(() => (hasContent && plan ? importContentError(plan.mode === 'save' ? meta.kind : plan.kind, content) : undefined), [hasContent, plan, meta.kind, content]);
   const claude = canOpenClaudeLink(meta.importedFrom) ? meta.importedFrom : undefined;
+  // Older versions accepted any claude.ai link (a chat or share page); the import now refuses those, so
+  // such a link is not carried over to the replacement (it would block the fix).
+  const keepLink = meta.importedFrom && classifyClaudeLink(meta.importedFrom).ok ? meta.importedFrom : undefined;
 
   /** A new artifact from `source` replaces this one: import first, delete the empty one after it worked. */
   const replaceWith = async (source: { content: string } | { filePath: string }) => {
@@ -44,13 +48,17 @@ export function FixImportPanel({ meta, autoFocus, onSaved, onReplaced, onDelete 
     try {
       const next = await oide.invoke('artifacts.import', {
         ...source,
-        ...(meta.importedFrom ? { url: meta.importedFrom } : {}),
+        ...(keepLink ? { url: keepLink } : {}),
         title: meta.title,
         projectId: meta.projectId,
         location: meta.location,
       });
       try {
-        await oide.invoke('artifacts.delete', { id: meta.id });
+        // Only while it is still the empty import this panel showed: an agent may have written the
+        // real content into it meanwhile (artifacts_write), and that must not be deleted.
+        const now = await oide.invoke('artifacts.get', { id: meta.id });
+        if (now.meta.brokenImport && now.meta.version === meta.version) await oide.invoke('artifacts.delete', { id: meta.id });
+        else toast(`Kept ${meta.title}: it changed while you were importing.`, 'info');
       } catch (err) {
         toast(`Imported ${next.title}, but couldn't delete the empty import: ${ipcErrorMessage(err)}`, 'error');
       }
@@ -97,14 +105,14 @@ export function FixImportPanel({ meta, autoFocus, onSaved, onReplaced, onDelete 
   }, busy);
 
   return (
-    <section aria-labelledby="fix-import-title" {...dropProps} className="relative flex flex-col gap-3 rounded-xl border border-bad-line bg-bad-bg px-4 py-3.5 box-border">
+    <section aria-labelledby={titleId} {...dropProps} className="relative flex flex-col gap-3 rounded-xl border border-bad-line bg-bad-bg px-4 py-3.5 box-border">
       {dragging && (
         <div aria-hidden="true" className="absolute inset-0 z-10 rounded-xl border-2 border-dashed border-accent bg-panel/90 flex items-center justify-center text-[13px] text-ink pointer-events-none">
           Drop the file to replace this import
         </div>
       )}
       <div className="flex flex-col gap-1">
-        <h3 id="fix-import-title" className="m-0 text-[14px] font-semibold text-ink">
+        <h3 id={titleId} className="m-0 text-[14px] font-semibold text-ink">
           This import has no content
         </h3>
         <p className="m-0 text-[12.5px] text-ink-2 leading-[1.5]">oIDE can&apos;t download claude.ai artifacts, so the link came in without the design.</p>

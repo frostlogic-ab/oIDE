@@ -83,7 +83,7 @@ describe('artifacts model', () => {
     expect(importContentError('design', '<!doctype html><p>x</p>')).toBeUndefined();
     expect(importContentError('design', REACT_APP)).toBeUndefined();
     expect(importContentError('design', 'just words')).toMatch(/HTML page or a React component/);
-    expect(importContentError('doc', '# Notes\n\noIDE cannot fetch claude.ai artifacts. Paste.')).toMatch(/placeholder/);
+    expect(importContentError('doc', 'Imported from https://claude.ai/artifact/x. oIDE cannot fetch claude.ai artifacts: open the link, copy the code.')).toMatch(/placeholder/);
     expect(importContentError('whiteboard', 'not json')).toMatch(/JSON/);
     expect(importContentError('whiteboard', '\uFEFF{"type":"excalidraw","elements":[]}')).toBeUndefined();
   });

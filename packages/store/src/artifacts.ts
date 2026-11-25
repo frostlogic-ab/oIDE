@@ -11,7 +11,9 @@ import {
   IMPORT_NEEDS_CONTENT,
   inferKindFromContent,
   isDesignContent,
+  isEmptyOideBoard,
   isImportStubContent,
+  LEGACY_IMPORT_STUB_MAX_BYTES,
   REACT_DESIGN_ENTRY,
   titleFromContent,
   type ArtifactContent,
@@ -230,11 +232,21 @@ function mayBeBrokenImport(meta: ArtifactMeta): boolean {
   return !!meta.importedFrom && meta.version === 1;
 }
 
-/** `brokenImport` is derived from the content each time it is read, never stored. */
+/**
+ * `brokenImport` is derived from the content each time it is read, never stored: the placeholder older
+ * versions wrote for a link-only import (designs and docs), or their empty board (whiteboards).
+ */
 function withBrokenFlag(meta: ArtifactMeta, content: string): ArtifactMeta {
   const { brokenImport: _stored, ...rest } = meta;
   void _stored;
-  return mayBeBrokenImport(rest) && isImportStubContent(content) ? { ...rest, brokenImport: true } : rest;
+  if (!mayBeBrokenImport(rest)) return rest;
+  const broken = rest.kind === 'whiteboard' ? isEmptyOideBoard(content) : isImportStubContent(content);
+  return broken ? { ...rest, brokenImport: true } : rest;
+}
+
+/** The other design entry (a design is `index.html` or `App.jsx`). */
+function otherDesignEntry(entry: string): string {
+  return entry === REACT_DESIGN_ENTRY ? HTML_DESIGN_ENTRY : REACT_DESIGN_ENTRY;
 }
 
 export class ArtifactStore {
@@ -343,7 +355,11 @@ export class ArtifactStore {
           // names. `brokenImport` is derived when read, so a value on disk is dropped.
           const { brokenImport: _derived, ...onDisk } = parsed.data;
           void _derived;
-          const meta: ArtifactMeta = { ...onDisk, entry: entryFileOf(onDisk.kind, onDisk.entry), slug: name, location, projectId: location === 'repo' ? projectId : parsed.data.projectId };
+          let entry = entryFileOf(onDisk.kind, onDisk.entry);
+          // A design whose entry file is missing but has the other one (an interrupted format switch,
+          // or a teammate's oIDE that wrote the other format): use the file that is there.
+          if (onDisk.kind === 'design' && !existsSync(join(dir, entry)) && existsSync(join(dir, otherDesignEntry(entry)))) entry = otherDesignEntry(entry);
+          const meta: ArtifactMeta = { ...onDisk, entry, slug: name, location, projectId: location === 'repo' ? projectId : parsed.data.projectId };
           // An id already indexed at a different folder keeps its folder; a copied artifact.json can't hijack it.
           const sameId = this.d.db.prepare('SELECT dir_key FROM artifacts WHERE id = ?').get(meta.id) as Row | undefined;
           if (sameId && String(sameId.dir_key) !== pathKey(dir) && existsSync(join(this.dirOf(meta.id), 'artifact.json'))) continue;
@@ -382,22 +398,36 @@ export class ArtifactStore {
     }
     const rows = this.d.db.prepare(`SELECT meta FROM artifacts ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY updated_at DESC`).all(...args) as Row[];
     const metas = rows.map((r) => ArtifactMeta.parse(fromJson(r.meta)));
-    // Only a never-edited import can be a broken one, so few entry files are read.
-    return Promise.all(
-      metas.map(async (m) => {
-        if (!mayBeBrokenImport(m)) return m;
-        try {
-          return withBrokenFlag(m, await readFile(await this.contentPath(m.id, m), 'utf8'));
-        } catch {
-          return m;
-        }
-      }),
-    );
+    return Promise.all(metas.map((m) => this.flagBroken(m)));
+  }
+
+  /**
+   * `withBrokenFlag` without reading big files: only a never-edited import can be a broken one, and
+   * the placeholder was small, so a bigger entry file is real content and is not read.
+   */
+  private async flagBroken(meta: ArtifactMeta): Promise<ArtifactMeta> {
+    if (!mayBeBrokenImport(meta)) return meta;
+    try {
+      const path = await this.contentPath(meta.id, meta);
+      if ((await stat(path)).size > LEGACY_IMPORT_STUB_MAX_BYTES) return meta;
+      return withBrokenFlag(meta, await readFile(path, 'utf8'));
+    } catch {
+      return meta;
+    }
   }
 
   async read(id: string, agentId?: string): Promise<ArtifactContent> {
-    const meta = this.metaFromIndex(id);
-    const content = await readFile(await this.contentPath(id, meta), 'utf8');
+    let meta = this.metaFromIndex(id);
+    let content: string;
+    try {
+      content = await readFile(await this.contentPath(id, meta), 'utf8');
+    } catch (e) {
+      // A design whose entry is missing but has the other format's file (an interrupted switch).
+      if (meta.kind !== 'design' || (e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+      const other = otherDesignEntry(entryFileOf('design', meta.entry));
+      content = await readFile(await this.contentPath(id, meta, undefined, other), 'utf8');
+      meta = { ...meta, entry: other };
+    }
     if (agentId) this.recordUse(id, agentId, 'read');
     return { meta: withBrokenFlag(meta, content), content };
   }
@@ -496,14 +526,15 @@ export class ArtifactStore {
       await mkdir(join(dir, VERSIONS_DIR, String(version)), { recursive: true });
       await writeFile(await this.contentPath(id, meta, version), content, 'utf8');
       await writeAtomic(await this.contentPath(id, meta), content);
-      // The other format's entry file goes, so the preview never serves a stale page.
-      if (entry !== oldEntry) await rm(await this.contentPath(id, cur), { force: true });
       const versions = await this.versions(id);
       versions.push(ArtifactVersion.parse({ version, ts, author: opts.author ?? 'user', note: opts.note }));
       versions.sort((a, b) => a.version - b.version);
       await writeAtomic(join(dir, VERSIONS_DIR, 'versions.json'), JSON.stringify(versions, null, 2) + '\n');
       await writeAtomic(join(dir, 'artifact.json'), JSON.stringify(meta, null, 2) + '\n');
       this.index(meta, dir);
+      // Only once meta and index point at the new entry: the other format's file goes, so the preview
+      // never serves a stale page (a failure before this leaves both files, never neither).
+      if (entry !== oldEntry) await rm(await this.contentPath(id, cur), { force: true }).catch(() => undefined);
       this.onChange?.(id, { change: 'saved', version, author: opts.author ?? 'user' });
       return meta;
     });
@@ -519,12 +550,12 @@ export class ArtifactStore {
     if (next.length > MAX_TITLE_LENGTH) throw new ArtifactError(`Titles can be at most ${MAX_TITLE_LENGTH} characters.`, 'invalid_input');
     return this.withLock(id, async () => {
       const cur = this.metaFromIndex(id);
-      if (cur.title === next) return cur;
+      if (cur.title === next) return this.flagBroken(cur);
       const meta = ArtifactMeta.parse({ ...cur, title: next, updatedAt: this.now() });
       await writeAtomic(join(this.dirOf(id), 'artifact.json'), JSON.stringify(meta, null, 2) + '\n');
       this.index(meta, this.dirOf(id));
       this.onChange?.(id, { change: 'renamed', version: meta.version });
-      return meta;
+      return this.flagBroken(meta);
     });
   }
 
