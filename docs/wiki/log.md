@@ -775,3 +775,6 @@ strategy ort failed." for a file name (staged files are indented with two spaces
 Telemetry: `agent_merged` gains `local_changes`. Tests in `packages/git/test/merge-autostash.test.ts`
 and `test/integration/merge-conflicts.test.ts`. Pages: [git-worktrees](pages/git-worktrees.md),
 [screen-review](pages/screen-review.md), [telemetry](pages/telemetry.md).
+
+## [2026-11-25] build | Collapsed defaults; Spawn remembers extension tools
+Source control: "Recent commits on <branch>" starts collapsed on every project card. Spawn: "Advanced model settings" starts closed (opens when Custom is picked); "Tools from extensions" starts from the last spawn's picks, saved as `settings.spawn.lastExtensions` (new protocol field, defaulted so older settings parse). No telemetry change.
