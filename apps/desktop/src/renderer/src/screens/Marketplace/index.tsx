@@ -14,6 +14,8 @@ import { toast } from '../../stores/ui';
 import { AddCustomDialog, Capabilities, type AddCustomTab } from './AddCustomDialog';
 import { CheckButton, Monogram, RiskPill } from './parts';
 import { RISK_COLOR, RISK_LABEL, YOURS, buildItems, categoryLabel, customSource, enabledIn, filterItems, inCategory, isCustomLike, type CategoryId, type ListItem, type SortId } from './model';
+import { ResizableAside } from '../../components/ResizableAside';
+import { PANELS } from '../../lib/panels';
 
 interface Data {
   index: MarketplaceEntry[];
@@ -152,7 +154,7 @@ export default function MarketplaceScreen() {
   return (
     <div className="flex-1 min-w-0 flex min-h-0">
       {/* Categories */}
-      <aside aria-label="Categories" className="w-[220px] shrink-0 flex flex-col gap-0.5 px-2.5 py-3.5 bg-panel border-r border-line box-border overflow-auto">
+      <ResizableAside panel={PANELS.marketplaceCategories} aria-label="Categories" className="flex flex-col gap-0.5 px-2.5 py-3.5 bg-panel border-r border-line box-border overflow-auto">
         <h2 className="m-0 px-2.5 pb-1.5 text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3">Browse</h2>
         <nav aria-label="Browse categories" className="flex flex-col gap-0.5">
           {MARKETPLACE_CATEGORIES.map((c) => (
@@ -176,7 +178,7 @@ export default function MarketplaceScreen() {
         <p className="m-0 mt-4 p-2.5 rounded-lg border border-line-2 text-[12px] text-ink-3 leading-[1.5]">
           Extensions are open source and declare exactly which tools they hand to agents.
         </p>
-      </aside>
+      </ResizableAside>
 
       {/* List */}
       <main className="flex-[999_1_460px] min-w-0 flex flex-col gap-3.5 px-5 py-[18px] box-border overflow-auto">
@@ -264,7 +266,7 @@ export default function MarketplaceScreen() {
       </main>
 
       {/* Detail */}
-      <aside aria-label="Extension details" className="flex-[1_1_320px] max-w-[380px] min-w-[300px] flex flex-col gap-4 px-4 py-[18px] bg-panel border-l border-line box-border overflow-auto">
+      <ResizableAside panel={PANELS.marketplaceDetails} aria-label="Extension details" className="flex flex-col gap-4 px-4 py-[18px] bg-panel border-l border-line box-border overflow-auto">
         {selected ? (
           <Detail
             item={selected}
@@ -281,7 +283,7 @@ export default function MarketplaceScreen() {
         ) : (
           <span className="text-ink-3 text-[12.5px]">Pick an extension to see the tools it gives agents.</span>
         )}
-      </aside>
+      </ResizableAside>
 
       {dialog && (
         <AddCustomDialog

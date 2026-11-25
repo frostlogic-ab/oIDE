@@ -21,6 +21,8 @@ import { ArtifactPreview, KindThumb } from './Preview';
 import { Viewer, type CompareSide, type ViewerMode } from './Viewer';
 import { KIND_LABEL, KIND_TABS, agentsUsing, filterArtifacts, isClaudeLink, usageLine, versionLabel, type KindTab } from './model';
 import './artifacts.css';
+import { ResizableAside } from '../../components/ResizableAside';
+import { PANELS } from '../../lib/panels';
 
 type Detail = CommandOutput<'artifacts.get'>;
 type OpenAs = { mode?: ViewerMode; compare?: { from: CompareSide; to: CompareSide } };
@@ -315,9 +317,9 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
 
   if (!detail) {
     return (
-      <aside aria-label="Artifact details" className="flex-[1_1_320px] max-w-[380px] flex flex-col items-center justify-center gap-3 px-4 py-[18px] bg-panel border-l border-line box-border text-[12.5px] text-ink-3">
+      <ResizableAside panel={PANELS.artifactsDetails} aria-label="Artifact details" className="flex flex-col items-center justify-center gap-3 px-4 py-[18px] bg-panel border-l border-line box-border text-[12.5px] text-ink-3">
         {selected ? <Spinner /> : 'Select an artifact to see it here.'}
-      </aside>
+      </ResizableAside>
     );
   }
 
@@ -352,7 +354,7 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
   };
 
   return (
-    <aside aria-label="Artifact details" className="flex-[1_1_320px] max-w-[380px] min-h-0 overflow-auto flex flex-col gap-3.5 px-4 py-[18px] bg-panel border-l border-line box-border">
+    <ResizableAside panel={PANELS.artifactsDetails} aria-label="Artifact details" className="min-h-0 overflow-auto flex flex-col gap-3.5 px-4 py-[18px] bg-panel border-l border-line box-border">
       <div className="h-[190px] shrink-0 rounded-xl bg-raised border border-line-2 overflow-hidden box-border">
         <ArtifactPreview
           artifactId={meta.id}
@@ -477,6 +479,6 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
           })}
         </ul>
       </section>
-    </aside>
+    </ResizableAside>
   );
 }

@@ -20,6 +20,8 @@ import { PermissionsSection } from './PermissionsSection';
 import { TechniquesSection } from './TechniquesSection';
 import { UpdatesSection } from './UpdatesSection';
 import { ExtensionSettingsSection } from '../../extensions/ExtensionSettingsSection';
+import { ResizableAside } from '../../components/ResizableAside';
+import { PANELS } from '../../lib/panels';
 
 export type SectionId = 'cli' | 'models' | 'agents' | 'tech' | 'perms' | 'projects' | 'artifacts' | 'ext' | 'keys' | 'look' | 'privacy' | 'updates' | 'diag';
 export interface LoadError {
@@ -39,7 +41,7 @@ export const SECTIONS: Array<{ id: SectionId; label: string; keywords: string }>
   { id: 'artifacts', label: 'Artifacts & claude.ai', keywords: 'artifacts claude.ai import sync designs docs whiteboards' },
   { id: 'ext', label: 'Extensions', keywords: 'extensions extension settings secret token keychain browser preview default url marketplace index url' },
   { id: 'keys', label: 'Keyboard shortcuts', keywords: 'keyboard shortcuts keys bindings' },
-  { id: 'look', label: 'Appearance', keywords: 'appearance accent colour color theme' },
+  { id: 'look', label: 'Appearance', keywords: 'appearance accent colour color theme sidebar width resize' },
   { id: 'privacy', label: 'Privacy', keywords: 'privacy telemetry crash reports' },
   { id: 'updates', label: 'Updates', keywords: 'updates version upgrade channel stable beta check now release download install' },
   { id: 'diag', label: 'Diagnostics', keywords: 'diagnostics logs log folder git version gh node keychain database mcp port report troubleshooting' },
@@ -76,7 +78,7 @@ export default function SettingsScreen() {
 
   return (
     <div className="flex-1 min-w-0 flex min-h-0">
-      <aside aria-label="Settings sections" className="w-[230px] shrink-0 flex flex-col gap-0.5 px-2.5 py-3.5 bg-panel border-r border-line box-border overflow-y-auto">
+      <ResizableAside panel={PANELS.settingsSections} aria-label="Settings sections" className="flex flex-col gap-0.5 px-2.5 py-3.5 bg-panel border-r border-line box-border overflow-y-auto">
         <label htmlFor="sset" className="sr-only">
           Search settings
         </label>
@@ -112,7 +114,7 @@ export default function SettingsScreen() {
         <span className="px-2.5 py-2 text-[11.5px] text-ink-3 leading-normal">
           Settings sync with a project's <span className="font-mono">.oide/</span> folder when set per project.
         </span>
-      </aside>
+      </ResizableAside>
 
       <main className="flex-1 min-w-0 overflow-y-auto px-8 py-[22px] box-border">
         <div className="max-w-[760px] flex flex-col">

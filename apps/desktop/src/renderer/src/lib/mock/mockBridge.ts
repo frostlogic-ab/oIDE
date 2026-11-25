@@ -191,6 +191,10 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
 function deepMerge(base: unknown, patch: unknown): unknown {
   if (!patch || typeof patch !== 'object' || Array.isArray(patch) || !base || typeof base !== 'object') return patch;
   const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
-  for (const [k, v] of Object.entries(patch as Record<string, unknown>)) out[k] = deepMerge(out[k], v);
+  for (const [k, v] of Object.entries(patch as Record<string, unknown>)) {
+    // Like main's store: `null` removes the key so the default comes back.
+    if (v === null) delete out[k];
+    else out[k] = deepMerge(out[k], v);
+  }
   return out;
 }

@@ -39,6 +39,18 @@ export const CustomModel = z.object({
 });
 export type CustomModel = z.infer<typeof CustomModel>;
 
+/** Bounds every stored sidebar width must sit in; each panel narrows them further in the renderer. */
+export const PANEL_WIDTH_LIMITS = { min: 120, max: 1600, maxPanels: 64 } as const;
+
+/** `settings.ui.panelWidths`: resizable sidebar id → width in px. */
+export const PanelWidths = z
+  .record(
+    z.string().regex(/^[a-z][a-z0-9.-]{0,63}$/),
+    z.number().int().min(PANEL_WIDTH_LIMITS.min).max(PANEL_WIDTH_LIMITS.max),
+  )
+  .refine((r) => Object.keys(r).length <= PANEL_WIDTH_LIMITS.maxPanels, { message: `At most ${PANEL_WIDTH_LIMITS.maxPanels} panel widths` });
+export type PanelWidths = z.infer<typeof PanelWidths>;
+
 export const Settings = z.object({
   claude: z.object({
     cliPath: z.string().optional(),
@@ -91,6 +103,12 @@ export const Settings = z.object({
     telemetry: z.boolean().default(false),
     /** Settings › Privacy › Crash reports. Off by default; local only (never uploaded in v1). */
     crashReports: z.boolean().default(false),
+    /**
+     * Sidebar widths the user dragged, panel id (`wall.projects`, `files.tree`…) → px. Only resized
+     * panels are stored; a missing id uses the panel's default. The renderer clamps each value to
+     * that panel's own min and max (see `PANEL_WIDTH_LIMITS`), so this schema only bounds the shape.
+     */
+    panelWidths: PanelWidths.default({}),
   }),
   /** Settings › Updates (M7). Defaulted as a whole so settings saved before M7 still parse. */
   updates: z

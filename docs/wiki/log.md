@@ -562,3 +562,16 @@ refuses files whose hash changed since the search. Protocol additions: `files.fi
 (`packages/protocol/src/search.ts`). 100k-file repo: index 0.7 s, queries 50-105 ms, rare-string
 search 2.0 s. Pages: [screen-files](pages/screen-files.md), [desktop-shell](pages/desktop-shell.md),
 [security](pages/security.md), [git-worktrees](pages/git-worktrees.md).
+
+## [2026-11-25] build | Resizable sidebars
+
+Every sidebar can be resized by dragging its inner edge, within a per-panel min (where the content
+still fits) and max, and never past half the window. One component, `ResizableAside`
+(`apps/desktop/src/renderer/src/components/ResizableAside.tsx`), replaces the fixed-width `<aside>`
+on all 14 sidebars; the registry with ids, sides, defaults (the canvas widths) and limits is
+`src/lib/panels.ts`. The handle is a focusable `role="separator"` (arrows, Shift for big steps,
+Home / End; double-click resets; Escape cancels a drag). Widths are saved on release (keyboard: after
+400 ms) to the new `settings.ui.panelWidths` (protocol `PanelWidths`: id `^[a-z][a-z0-9.-]{0,63}$`,
+integer 120-1600 px, at most 64 entries), so they survive restarts; Settings › Appearance has Reset
+sidebar widths. Pages: [design-system](pages/design-system.md), [desktop-shell](pages/desktop-shell.md),
+[screen-settings](pages/screen-settings.md).

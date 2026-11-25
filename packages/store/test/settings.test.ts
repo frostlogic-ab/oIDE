@@ -104,6 +104,23 @@ describe('SettingsService', () => {
     expect(svc.update({ keybindings: null }).keybindings).toEqual({});
   });
 
+  it('keeps sidebar widths across restarts; null resets one or all, bad widths are refused', () => {
+    const db = openDatabase(':memory:');
+    const svc = new SettingsService({ db });
+    expect(svc.get().ui.panelWidths).toEqual({});
+    svc.update({ ui: { panelWidths: { 'wall.projects': 320 } } });
+    svc.update({ ui: { panelWidths: { 'focus.inspector': 420 } } });
+    // A fresh service over the same database is what the next launch sees.
+    const reopened = new SettingsService({ db }).get().ui;
+    expect(reopened.panelWidths).toEqual({ 'wall.projects': 320, 'focus.inspector': 420 });
+    expect(reopened.accent).toBe('#7AA2F7');
+    expect(svc.update({ ui: { panelWidths: { 'wall.projects': null } } }).ui.panelWidths).toEqual({ 'focus.inspector': 420 });
+    expect(() => svc.update({ ui: { panelWidths: { 'wall.projects': 10 } } })).toThrow();
+    expect(() => svc.update({ ui: { panelWidths: { 'wall.projects': 'wide' } } })).toThrow();
+    expect(svc.update({ ui: { panelWidths: null } }).ui.panelWidths).toEqual({});
+    expect(new SettingsService({ db }).get().ui.panelWidths).toEqual({});
+  });
+
   it('keeps built-ins when presets/techniques arrays are replaced, and supports reset', async () => {
     const db = openDatabase(':memory:');
     const svc = new SettingsService({ db });
