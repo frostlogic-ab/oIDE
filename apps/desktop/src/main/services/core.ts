@@ -3,10 +3,11 @@ import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { AgentDriver } from '@oide/agent-core';
 import { WorktreeManager, isInside, resolveTool, setRepoTrustResolver, type GhCli } from '@oide/git';
 import { OideMcpServer, type ArtifactsBackend as McpArtifactsBackend } from '@oide/mcp-server';
-import type { ArtifactMeta } from '@oide/protocol';
+import { countBucket, type ArtifactMeta } from '@oide/protocol';
 import { ArtifactStore, SqliteSecretStore, openStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
-import { CleanupQueue } from '../reliability/cleanup-queue.js';
+import { CleanupQueue, CleanupScheduler, folderName } from '../reliability/cleanup-queue.js';
+import { findFolderHolders, type FindHoldersOptions, type HolderResult } from '../reliability/folder-holders.js';
 import { redactSecretReads } from '../reliability/redact.js';
 import { AgentsService } from './agents.js';
 import { CliService } from './cli.js';
@@ -30,6 +31,10 @@ export interface Services {
   agents: AgentsService;
   git: GitService;
   extensions: ExtensionsService;
+  /** Worktree folders waiting to be removed, retried in the background (reliability/cleanup-queue.ts). */
+  cleanup: CleanupScheduler;
+  /** Which programs hold a folder open; unset in plain-Node runs. */
+  findHolders?: (dir: string, opts?: FindHoldersOptions) => Promise<HolderResult>;
   /** Auto-update (Electron only; set by services/index.ts, absent in plain Node). */
   updates?: UpdaterService;
   /** The oIDE MCP server's loopback port, or undefined when it could not start. */
@@ -58,6 +63,8 @@ export interface CoreOptions {
   driver?: AgentDriver;
   watch?: WatchFn;
   gh?: GhCli;
+  /** Test seam: the holder scan (default: the real one in the app, none in plain Node). */
+  findHolders?: (dir: string, opts?: FindHoldersOptions) => Promise<HolderResult>;
   /** Test seam: how the MCP server starts (default `mcp.start()`), e.g. to simulate a failed bind. */
   startMcp?: (mcp: OideMcpServer) => Promise<{ port: number }>;
 }
@@ -146,7 +153,21 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   const pickedCli = new Set<string>();
   const projects = new ProjectsService({ ctx, store, platform, picked });
   const cleanup = new CleanupQueue(ctx.userDataDir);
-  const agents = new AgentsService({ ctx, store, settings, secrets, worktrees, mcp, projects, cli, platform, cleanup, picked, mcpReady: () => mcpPort !== undefined, ...(opts.driver ? { driver: opts.driver } : {}) });
+  // The holder scan spawns PowerShell / lsof: only in the app (not in plain-Node tests), unless injected.
+  const findHolders = opts.findHolders ?? (platform.background ? findFolderHolders : undefined);
+  const agents = new AgentsService({ ctx, store, settings, secrets, worktrees, mcp, projects, cli, platform, cleanup, ...(findHolders ? { findHolders } : {}), picked, mcpReady: () => mcpPort !== undefined, ...(opts.driver ? { driver: opts.driver } : {}) });
+  const cleanupScheduler = new CleanupScheduler({
+    queue: cleanup,
+    afterRemove: async (e) => {
+      if (e.projectPath && existsSync(e.projectPath)) await worktrees.prune(e.projectPath).catch(() => undefined);
+    },
+    onRemoved: (e) => {
+      ctx.emit('notify', { level: 'info', message: `Finished removing ${folderName(e.path)}` });
+      ctx.telemetry?.service.track('worktree_delete_retried_ok', { attempts: countBucket(e.attempts) });
+    },
+    onGaveUp: (p) => ctx.emit('notify', { level: 'warning', message: `oIDE gave up deleting ${p}. Delete the folder yourself when no program is using it.` }),
+    log: ctx.log,
+  });
   const git = new GitService({
     ctx,
     store,
@@ -212,13 +233,16 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   // ---------------------------------------------------------------- startup
 
   const list = await projects.restore();
-  // Worktree folders a locked file kept us from deleting last time (Windows).
+  // Worktree folders a program kept us from deleting last time; then every 5 minutes (backoff per folder).
   const pending = await cleanup.runPending(async (e) => {
     if (e.projectPath && existsSync(e.projectPath)) await worktrees.prune(e.projectPath).catch(() => undefined);
+    ctx.telemetry?.service.track('worktree_delete_retried_ok', { attempts: countBucket(e.attempts) });
   });
   if (pending.removed.length) ctx.log.debug('finished removing worktree folders from last run', pending.removed.length);
-  for (const p of pending.stillLocked) notices.push({ level: 'warning', message: `Still could not delete ${p}: a program is using a file in it. Close programs using this folder; oIDE tries again on next start.` });
+  for (const p of pending.removed) notices.push({ level: 'info', message: `Finished removing ${folderName(p)}` });
+  for (const p of pending.stillLocked) notices.push({ level: 'warning', message: `Still could not delete ${p}: a program is using a file in it. Close programs using this folder; oIDE keeps trying in the background (Settings › Diagnostics shows which programs).` });
   for (const p of pending.gaveUp) notices.push({ level: 'warning', message: `oIDE gave up deleting ${p}. Delete the folder yourself when no program is using it.` });
+  if (platform.background) cleanupScheduler.start();
   for (const p of list) {
     if (!existsSync(p.path)) {
       notices.push({ level: 'warning', message: `Project folder not found: ${p.path}` });
@@ -255,6 +279,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     agents,
     git,
     extensions,
+    cleanup: cleanupScheduler,
+    ...(findHolders ? { findHolders } : {}),
     mcpPort: () => mcpPort,
     picked,
     pickedCli,
@@ -265,6 +291,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     async dispose() {
       if (disposed) return;
       disposed = true;
+      cleanupScheduler.stop();
       await agents.shutdown().catch((err) => ctx.log.warn('agent shutdown failed', err));
       // After agents: closes watchers and waits for in-flight git work, so nothing holds files
       // in a worktree when the process exits or the caller deletes it.

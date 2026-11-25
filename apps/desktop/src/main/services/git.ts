@@ -54,6 +54,7 @@ export const parcelWatch: WatchFn = async (dir, onChange) => {
 };
 
 const MERGED_KEY = (agentId: string) => `merged:${agentId}`;
+const REMOTE_TTL_MS = 10 * 60_000;
 const DAY = 24 * 60 * 60 * 1000;
 
 /**
@@ -68,6 +69,8 @@ export class GitService {
   readonly prs: PrWatcher;
   private readonly lastFetchAt = new Map<string, number>();
   private readonly prCache = new Map<string, { at: number; pr: PrInfo | undefined }>();
+  /** Whether each project has a git remote (`git remote`), refreshed on fetch or after REMOTE_TTL_MS. */
+  private readonly remotes = new Map<string, { at: number; has: boolean }>();
   private readonly watchers = new Map<string, { projectId: string; sub: Promise<Subscription | undefined> }>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private fetchTimer: ReturnType<typeof setInterval> | undefined;
@@ -108,6 +111,8 @@ export class GitService {
       gh: this.gh,
       agents: { list: () => this.o.agents.list(), setPr: (id, pr) => this.o.agents.setPr?.(id, pr) },
       trusted: (projectId) => this.o.projects.get(projectId)?.trusted ?? false,
+      hasRemote: (projectId) => this.hasRemote(projectId),
+      noRemote: (projectId) => this.remotes.set(projectId, { at: Date.now(), has: false }),
       intervalMinutes: () => this.o.settings.get().agents.fetchIntervalMinutes,
       ...(o.isOnline ? { isOnline: o.isOnline } : {}),
       onMerged: (a, pr) => this.archiveForMergedPr(a, pr),
@@ -142,6 +147,17 @@ export class GitService {
     this.o.ctx.emit('git.changed', { projectId });
   }
 
+  /** `git remote` of the project's main checkout, cached (a local-only repo gets no PR lookups). */
+  async hasRemote(projectId: string, refresh = false): Promise<boolean> {
+    const hit = this.remotes.get(projectId);
+    if (!refresh && hit && Date.now() - hit.at < REMOTE_TTL_MS) return hit.has;
+    const p = this.o.projects.get(projectId);
+    if (!p) return false;
+    const has = (await new Git({ cwd: p.path }).out(['remote']).catch(() => '')).trim().length > 0;
+    this.remotes.set(projectId, { at: Date.now(), has });
+    return has;
+  }
+
   // ---------------------------------------------------------------- main checkout
 
   sync(projectId: string): Promise<SyncState> {
@@ -155,6 +171,7 @@ export class GitService {
     await this.remote(() => gitFetch(p.path, { prune: true }));
     this.lastFetchAt.set(projectId, Date.now());
     this.prCache.clear();
+    await this.hasRemote(projectId, true);
     this.changed(projectId);
     return this.sync(projectId);
   }
@@ -204,7 +221,7 @@ export class GitService {
   async worktrees(projectId: string): Promise<WorktreeInfo[]> {
     const p = this.project(projectId);
     const agents = this.worktreeAgents(p);
-    const prOk = await this.gh.available().catch(() => false);
+    const prOk = agents.length > 0 && (await this.hasRemote(projectId)) && (await this.gh.available().catch(() => false));
     const out = await Promise.all(
       agents.map(async (a) => {
         const info = await this.o.worktrees.info({ projectId, path: a.worktreePath, branch: a.branch, baseRef: a.baseRef, agentId: a.id });
@@ -536,8 +553,8 @@ export class GitService {
       if (this.closed) return;
       // SEC-03: nothing runs on its own in a project the user has not trusted.
       if (!p.trusted) continue;
-      const hasRemote = (await new Git({ cwd: p.path }).out(['remote']).catch(() => '')).trim();
-      if (!hasRemote) continue;
+      // Refreshes the remote cache on every background round (a remote added since is picked up).
+      if (!(await this.hasRemote(p.id, true))) continue;
       await this.fetch(p.id).catch((err) => this.o.ctx.log.debug('background fetch failed', p.path, (err as Error).message));
     }
   }

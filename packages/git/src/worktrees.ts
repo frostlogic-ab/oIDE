@@ -56,7 +56,10 @@ export interface WorktreeManagerOptions {
   timeoutMs?: number;
   /** Default location when `create` does not say. */
   location?: 'app-data' | 'sibling';
-  /** Injected for tests. */
+  /**
+   * Injected for tests: the waits between delete retries of a held folder (`removeTree`). Long
+   * paths and junctions no longer cost any (git's errors used to be backed off for ~9 s).
+   */
   sleep?: (ms: number) => Promise<void>;
 }
 
@@ -101,7 +104,41 @@ export function slugify(input: string): string {
   return s || 'agent';
 }
 
-const LOCK_ERROR = /permission denied|resource busy|device or resource|being used by another process|access is denied|directory not empty|invalid argument|unable to (unlink|delete|remove)|failed to delete|could not (remove|delete)/i;
+/**
+ * A delete error that means "a program holds a file or folder open" (as opposed to a refusal, a
+ * permissions problem or git giving up on long paths / junctions): `EBUSY`, or the Windows
+ * sharing-violation text. Only these are worth waiting for.
+ */
+export function isLockError(err: unknown): boolean {
+  const e = err as { code?: unknown; message?: unknown; stderr?: unknown } | null;
+  if (e?.code === 'EBUSY') return true;
+  return /\bEBUSY\b|resource busy|being used by another process|sharing violation/i.test(`${String(e?.message ?? err)} ${String(e?.stderr ?? '')}`);
+}
+
+const RETRY_DELETE_CODES = new Set(['EBUSY', 'EPERM', 'EACCES', 'ENOTEMPTY', 'EMFILE', 'ENFILE']);
+
+/**
+ * `fs.rm(recursive)` of a folder tree, retried as a whole `retries` times (linear `delayMs`) on
+ * errors that may clear (a held file, a running exe, a file being written). Not `fs.rm`'s own
+ * `maxRetries`: it retries per directory level, so one held folder deep in a pnpm tree multiplied
+ * the waits and the delete hung for minutes. `fs.rm` removes junctions and symlinks without
+ * following them, and handles paths over 260 characters.
+ */
+export async function removeTree(path: string, opts: { retries?: number; delayMs?: number; sleep?: (ms: number) => Promise<void> } = {}): Promise<void> {
+  const retries = opts.retries ?? 5;
+  const delay = opts.delayMs ?? 300;
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rm(path, { recursive: true, force: true, maxRetries: 0 });
+      return;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (attempt >= retries || !code || !RETRY_DELETE_CODES.has(code)) throw err;
+      await sleep(delay * (attempt + 1));
+    }
+  }
+}
 
 export class WorktreeManager {
   private readonly appDataDir: string;
@@ -195,8 +232,20 @@ export class WorktreeManager {
   }
 
   /**
-   * `git worktree remove`, retried with backoff when Windows file locks (a dev server, an editor,
-   * an indexer) get in the way. With `force`, a last resort deletes the folder and prunes.
+   * Remove a worktree: git's own safety checks, then oIDE deletes the folder, then
+   * `git worktree prune`.
+   *
+   * The folder is not deleted with `git worktree remove`: on Windows git (2.51) follows directory
+   * junctions, so a pnpm-style `node_modules` junction to a folder outside the worktree had that
+   * folder's files deleted; and it fails on paths over 260 characters ("Filename too long") or
+   * leaves "Directory not empty" behind. `removeTree` (`fs.rm`) removes junctions without following
+   * them, handles long paths, and retries `EBUSY`/`EPERM`/`ENOTEMPTY` (`retries` × linear `delayMs`,
+   * through the injected `sleep`).
+   *
+   * Without `force`, the checks `git worktree remove` makes before it deletes anything still apply:
+   * a locked worktree, or one with modified or untracked files (`git status --porcelain
+   * --ignore-submodules=none`; ignored files such as `node_modules` do not count), is refused and
+   * left untouched. Errors are thrown as they are; `isLockError` tells a held file from the rest.
    */
   async remove(projectPath: string, worktreePath: string, opts: { force?: boolean; deleteBranch?: boolean; retries?: number; delayMs?: number } = {}): Promise<void> {
     const git = this.git(projectPath);
@@ -205,37 +254,34 @@ export class WorktreeManager {
     if (entry?.main) throw new Error('Refusing to remove the main checkout.');
     const retries = opts.retries ?? 5;
     const delay = opts.delayMs ?? 300;
+    const del = (p: string) => removeTree(p, { retries, delayMs: delay, sleep: this.sleep });
     if (entry) {
-      let lastErr: unknown;
-      for (let attempt = 0; attempt <= retries; attempt++) {
-        try {
-          const args = ['worktree', 'remove'];
-          if (opts.force) args.push('--force', '--force'); // twice: also removes locked worktrees
-          args.push(entry.path);
-          await git.run(args);
-          lastErr = undefined;
-          break;
-        } catch (err) {
-          lastErr = err;
-          const msg = err instanceof GitError ? err.stderr + err.message : String(err);
-          if (!existsSync(entry.path)) {
-            lastErr = undefined;
-            break;
-          }
-          if (!LOCK_ERROR.test(msg) || attempt === retries) break;
-          await this.sleep(delay * 2 ** attempt);
-        }
-      }
-      if (lastErr) {
-        if (!opts.force) throw lastErr;
-        await rm(entry.path, { recursive: true, force: true, maxRetries: retries, retryDelay: delay });
+      if (existsSync(entry.path)) {
+        if (!opts.force) await this.assertRemovable(entry);
+        else if (entry.locked) await git.run(['worktree', 'unlock', '--', entry.path], { okExitCodes: [0, 128] });
+        await del(entry.path);
+      } else if (entry.locked && opts.force) {
+        await git.run(['worktree', 'unlock', '--', entry.path], { okExitCodes: [0, 128] });
       }
     } else if (existsSync(worktreePath) && opts.force) {
-      await rm(worktreePath, { recursive: true, force: true, maxRetries: retries, retryDelay: delay });
+      await del(worktreePath);
     }
     await git.run(['worktree', 'prune']);
     if (opts.deleteBranch && entry?.branch) {
       await git.run(['branch', '-D', entry.branch], { okExitCodes: [0, 1] });
+    }
+  }
+
+  /** What `git worktree remove` (without `--force`) checks before it deletes anything. Throws a `GitError`. */
+  private async assertRemovable(entry: WorktreeEntry): Promise<void> {
+    const args = ['worktree', 'remove', entry.path];
+    if (entry.locked) {
+      throw new GitError(`git worktree failed: cannot remove a locked working tree; unlock it first or remove it with force`, args, 128, `fatal: cannot remove a locked working tree`, '');
+    }
+    const st = await this.git(entry.path).out(['status', '--porcelain', '-z', '--ignore-submodules=none'], { env: { GIT_OPTIONAL_LOCKS: '0' } });
+    if (st.length) {
+      const msg = `'${entry.path}' contains modified or untracked files, use --force to delete it`;
+      throw new GitError(`git worktree failed: ${msg}`, args, 128, `fatal: ${msg}`, '');
     }
   }
 
