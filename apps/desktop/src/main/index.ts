@@ -410,10 +410,11 @@ function brandDevShortcut(icon: string): void {
       log.warn('could not set the oIDE icon on the notification shortcut', { error: String(err) });
     }
   };
-  Notification.isSupported();
-  run();
-  // Electron's write is off-thread and can be slow on a cold start; passes are cheap and idempotent.
-  for (const ms of [1000, 3000, 10_000, 30_000]) setTimeout(run, ms).unref();
+  // Creates Electron's notification presenter, which writes/refreshes the shortcut (once per process).
+  void Notification.isSupported();
+  // Off the startup path; Electron's write is off-thread and can be slow on a cold start, so a few
+  // idempotent passes follow.
+  for (const ms of [0, 1000, 3000, 10_000, 30_000]) setTimeout(run, ms).unref();
 }
 
 function createWindow(userDataDir: string): BrowserWindow {
