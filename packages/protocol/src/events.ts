@@ -31,7 +31,8 @@ export const AgentEvent = z.discriminatedUnion('type', [
     slashCommands: z.array(z.string()).optional(),
   }),
   /** `attachments`: what oIDE sent with the message (images inline, files as their copies' relative paths). */
-  z.object({ ...base, type: z.literal('user-text'), text: z.string(), attachments: MessageAttachments.optional() }),
+  /** `origin: 'oide'`: oIDE wrote this message (merge conflicts sent back to the agent), not the user. */
+  z.object({ ...base, type: z.literal('user-text'), text: z.string(), attachments: MessageAttachments.optional(), origin: z.literal('oide').optional() }),
   z.object({ ...base, type: z.literal('assistant-text'), messageId: z.string().optional(), text: z.string() }),
   z.object({ ...base, type: z.literal('thinking'), messageId: z.string().optional(), text: z.string() }),
   /** Partial streaming delta (from --include-partial-messages). Not persisted. */

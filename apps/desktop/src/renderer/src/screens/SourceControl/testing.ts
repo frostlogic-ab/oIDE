@@ -13,6 +13,8 @@ import { useGit } from './gitStore';
 
 export async function setupMockApp(route?: Route) {
   const bridge = createMockBridge({ live: false, latency: 0 });
+  // The unspied invoke, for tests that override one command and pass the rest through.
+  const real = bridge.invoke.bind(bridge);
   const invoke = vi.spyOn(bridge, 'invoke');
   installFallbackBridge(bridge);
   useGit.setState({ byProject: {} });
@@ -20,5 +22,5 @@ export async function setupMockApp(route?: Route) {
   await useProjects.getState().load();
   await useAgents.getState().load();
   if (route) useRouter.setState({ route, back: [], forward: [] });
-  return { bridge, invoke };
+  return { bridge, invoke, real };
 }

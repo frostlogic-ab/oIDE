@@ -96,6 +96,10 @@ export class TelemetryObservers {
   private readonly prUrls = new Set<string>();
   private readonly prState = new Map<string, string>();
   private readonly archived = new Map<string, ArchiveReason>();
+  /** Merge predictions already reported (agent + both commits), so re-opening the dialog counts once. */
+  private readonly predicted = new Set<string>();
+  /** Agents resolving merge conflicts oIDE sent them, and since when. */
+  private readonly resolving = new Map<string, number>();
 
   constructor(
     private readonly sink: TelemetrySink,
@@ -161,6 +165,32 @@ export class TelemetryObservers {
       case 'git.mergeLocal':
         this.sink.track('agent_merged', { result: (output as { ok?: boolean }).ok ? 'merged' : 'conflicts' });
         return;
+      case 'git.predictMerge': {
+        const o = output as { agentId: string; status: string; files?: string[]; binary?: string[]; submodules?: string[]; target?: { sha: string }; branchSha?: string };
+        if (o.status !== 'conflicts') return;
+        const key = [o.agentId, o.target?.sha ?? '', o.branchSha ?? ''].join(':');
+        if (this.predicted.has(key)) return;
+        this.predicted.add(key);
+        if (this.predicted.size > 500) this.predicted.delete(this.predicted.values().next().value!);
+        this.sink.track('merge_conflict_predicted', {
+          files: countBucket(o.files?.length ?? 0),
+          binary: (o.binary?.length ?? 0) > 0,
+          submodules: (o.submodules?.length ?? 0) > 0,
+        });
+        return;
+      }
+      case 'git.askToResolve': {
+        const i = input as { agentId: string; source?: 'prediction' | 'merge' };
+        const o = output as { files: number; unarchived: boolean; resumed: boolean };
+        this.resolving.set(i.agentId, this.now);
+        if (this.resolving.size > 500) this.resolving.delete(this.resolving.keys().next().value!);
+        this.sink.track('merge_conflict_sent_to_agent', {
+          source: i.source ?? 'prediction',
+          files: countBucket(o.files),
+          agent: o.unarchived ? 'unarchived' : o.resumed ? 'resumed' : 'running',
+        });
+        return;
+      }
       case 'git.openPr':
         this.sink.track('pr_opened', { existing: !!(output as { existing?: boolean }).existing });
         return;
@@ -294,6 +324,13 @@ export class TelemetryObservers {
       case 'result':
         if (run && e.numTurns !== undefined) run.turns = e.numTurns;
         return;
+      case 'review-submitted': {
+        const since = this.resolving.get(e.agentId);
+        if (since === undefined || e.parentToolUseId) return;
+        this.resolving.delete(e.agentId);
+        this.sink.track('merge_conflict_resolved', { duration: durationBucket(Math.max(0, e.ts - since)) });
+        return;
+      }
       case 'permission-request':
         this.pending.set(e.request.requestId, {
           tool: toolCategoryOf(e.request.toolName),

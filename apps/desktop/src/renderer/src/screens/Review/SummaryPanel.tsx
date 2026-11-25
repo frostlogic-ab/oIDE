@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { Button, Dialog, Icon, agentStatusMeta } from '@oide/ui';
+import { Button, Icon, agentStatusMeta } from '@oide/ui';
 import type { AgentSummary, CheckResult, ReviewComment, WorktreeInfo } from '@oide/protocol';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
+import { targetName, useMergePrediction, useMergePredictions } from '../../stores/mergePrediction';
 import { navigate } from '../../stores/router';
 import { toast } from '../../stores/ui';
 import { useGit } from '../SourceControl/gitStore';
 import { shortBranch } from '../SourceControl/model';
 import { baseName } from './diff';
 import { DeployActions } from '../../extensions/DeployActions';
+import { MergeDialog, MergeStatus, SensitiveWarning } from './MergeDialog';
 
 const SECTION_LABEL = 'text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3';
 
@@ -31,9 +33,35 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
   const pending = comments.filter((c) => !c.sent);
   const [sendState, setSendState] = useState<'idle' | 'busy' | 'sent'>('idle');
   const [prBusy, setPrBusy] = useState(false);
-  const [merge, setMerge] = useState<{ step: 'confirm' | 'busy' | 'conflicts'; conflicts: string[] } | null>(null);
+  const [merge, setMerge] = useState<{ step: 'confirm' | 'busy' | 'conflicts' | 'asking'; conflicts: string[]; from?: 'prediction' | 'merge' } | null>(null);
   // The agent's own PR info (kept fresh by main's PR watcher) wins over Source control's cached lookup.
   const pr = agent.pr ?? worktree?.pr;
+  // Would Merge conflict? Predicted with git merge-tree (main caches it per pair of commits).
+  const forecast = useMergePrediction(agent.id, agent.projectId, Boolean(branch));
+  const prediction = forecast.prediction;
+  const target = targetName(prediction, base);
+  const who = agent.title.length > 28 ? `${agent.title.slice(0, 27)}…` : agent.title;
+
+  const openMerge = () => {
+    setMerge({ step: 'confirm', conflicts: [] });
+    // Fresh, with the main checkout's uncommitted files, every time the dialog opens.
+    void useMergePredictions.getState().load(agent.id, { refresh: true, withMainStatus: true });
+  };
+
+  const askToResolve = async (from: 'prediction' | 'merge') => {
+    const back = merge;
+    setMerge({ step: 'asking', conflicts: merge?.conflicts ?? [], from });
+    try {
+      const r = await oide.invoke('git.askToResolve', { agentId: agent.id, source: from });
+      setMerge(null);
+      const when = r.status === 'queued' ? ' It is queued until a slot is free (Settings › Agents › Max running).' : '';
+      toast(`Sent the conflicts to ${agent.title}. Merge again once it submits for review.${when}`, 'success');
+      void useMergePredictions.getState().load(agent.id, { refresh: true });
+    } catch (err) {
+      setMerge(back);
+      toast(`Couldn't send the conflicts: ${ipcErrorMessage(err)}`, 'error');
+    }
+  };
 
   const send = async () => {
     setSendState('busy');
@@ -71,9 +99,13 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
       const res = await oide.invoke('git.mergeLocal', { agentId: agent.id });
       if (res.ok) {
         setMerge(null);
-        toast(`Merged ${branch} into ${base}`, 'success');
+        toast(`Merged ${branch} into ${target}`, 'success');
         void useGit.getState().load(agent.projectId);
-      } else setMerge({ step: 'conflicts', conflicts: res.conflicts });
+      } else {
+        setMerge({ step: 'conflicts', conflicts: res.conflicts, from: 'merge' });
+        // The merge saw conflicts the prediction did not (or could not): ask main again.
+        void useMergePredictions.getState().load(agent.id, { refresh: true });
+      }
     } catch (err) {
       setMerge(null);
       toast(`Merge failed: ${ipcErrorMessage(err)}`, 'error');
@@ -84,7 +116,7 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
     setMerge(null);
     navigate('spawn', {
       projectId: agent.projectId,
-      goal: `Merge ${branch} into ${base} and resolve the conflicts in ${files.join(', ')}. Keep the intent of both sides; run the tests before submitting for review.`,
+      goal: `Merge ${branch} into ${target} and resolve the conflicts in ${files.join(', ')}. Keep the intent of both sides; run the tests before submitting for review.`,
       context: files.map((path) => ({ kind: 'file' as const, path })),
     });
   };
@@ -171,83 +203,27 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
             {prLabel}
           </Button>
         )}
-        <Button variant="ghost" size={32} className="rounded-md text-[12.5px]!" onClick={() => setMerge({ step: 'confirm', conflicts: [] })}>
-          Merge worktree into {base} locally
+        <MergeStatus agent={agent} prediction={prediction} />
+        <Button variant="ghost" size={32} className="rounded-md text-[12.5px]!" onClick={openMerge}>
+          Merge worktree into {target} locally
         </Button>
       </div>
 
-      <Dialog
-        open={merge !== null}
-        onClose={() => merge?.step !== 'busy' && setMerge(null)}
-        title={merge?.step === 'conflicts' ? 'The merge stopped on conflicts' : `Merge into ${base}?`}
-        description={
-          merge?.step === 'conflicts'
-            ? `Nothing changed in ${base}: oIDE aborted the merge.`
-            : `Runs git merge --no-ff ${branch} in the main checkout. It stops on conflicts and leaves ${base} as it was.`
-        }
-        width={460}
-        footer={
-          merge?.step === 'conflicts' ? (
-            <>
-              <Button variant="secondary" size={32} onClick={() => setMerge(null)}>
-                Close
-              </Button>
-              <Button variant="primary" size={32} onClick={() => handConflicts(merge.conflicts)}>
-                Hand them to a new agent
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="secondary" size={32} disabled={merge?.step === 'busy'} onClick={() => setMerge(null)}>
-                Cancel
-              </Button>
-              <Button variant="primary" size={32} disabled={merge?.step === 'busy'} onClick={() => void doMerge()}>
-                {merge?.step === 'busy' ? 'Merging…' : 'Merge'}
-              </Button>
-            </>
-          )
-        }
-      >
-        {merge?.step === 'confirm' && sensitiveFiles.length > 0 && <SensitiveWarning files={sensitiveFiles} />}
-        {merge?.step === 'conflicts' && (
-          <ul className="list-none m-0 p-0 flex flex-col gap-1">
-            {merge.conflicts.map((f) => (
-              <li key={f} className="font-mono text-[12px] text-bad-bright">
-                {f}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Dialog>
+      <MergeDialog
+        state={merge}
+        agentTitle={who}
+        branch={branch}
+        target={target}
+        prediction={prediction}
+        predicting={forecast.loading}
+        resolving={Boolean(agent.mergeConflict)}
+        sensitiveFiles={sensitiveFiles}
+        onClose={() => setMerge(null)}
+        onMerge={() => void doMerge()}
+        onAsk={(from) => void askToResolve(from)}
+        onHandOff={(files) => handConflicts(files)}
+      />
     </aside>
-  );
-}
-
-/** SEC-12: the agent changed files that widen what agents, git or MCP servers may do. */
-function SensitiveWarning({ files, onJump }: { files: Array<{ path: string; reason: string }>; onJump?: (path: string) => void }) {
-  return (
-    <div role="alert" className="flex flex-col gap-1.5 p-3 rounded-lg border border-warn text-[12.5px] leading-normal">
-      <span className="flex gap-2 items-center font-semibold text-warn">
-        <Icon name="alert-circle" size={16} />
-        Changes oIDE, Claude Code or git configuration
-      </span>
-      <span className="text-ink-2">Merging these can change what agents may do without asking. Read them before you merge.</span>
-      <ul className="list-none m-0 p-0 flex flex-col gap-1">
-        {files.map((f) => (
-          <li key={f.path} className="min-w-0">
-            {onJump ? (
-              <button type="button" onClick={() => onJump(f.path)} className="bg-transparent border-0 p-0 text-left font-mono text-[12px] text-ink cursor-pointer hover:underline" title={f.reason}>
-                {f.path}
-              </button>
-            ) : (
-              <span className="font-mono text-[12px] text-ink" title={f.reason}>
-                {f.path}
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 

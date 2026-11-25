@@ -7,6 +7,8 @@
 //   basic | tools | permission | review | subagents | rate-limit | crash | slow | auth | replay:<fixture.jsonl>
 //   commit-work | address-feedback | commit-all | mcp-tool | artifacts   (milestone gate tests, test/gates)
 //   artifact-update (reads the {"id":"…"} artifact in the message and writes a new version)
+//   resolve-conflicts (runs the `git merge <ref>` an oIDE merge-conflicts message names, keeps both sides, commits,
+//   submits; picked automatically for a message starting "[Sent by oIDE] Merge conflicts")
 // A user message containing `[fake-scenario:<name>]` runs that scenario for its turn (overrides the list).
 // Image content blocks (`{type:'image',source:{type:'base64',media_type,data}}`) are accepted as the real CLI
 // does (2.1.325); `basic` names them in its reply ("[1 image: image/png, 178 bytes]"). A malformed image
@@ -582,6 +584,49 @@ const SCENARIOS = {
     await result(text);
   },
 
+  // oIDE's merge-conflicts message: run the `git merge <ref>` it names in cwd, resolve every conflict by
+  // keeping both sides (ours, then theirs), commit the merge with the trailer, and submit for review.
+  async 'resolve-conflicts'(userText) {
+    const ref = /`git merge ([^`\s]+)`/.exec(userText)?.[1];
+    if (!ref) {
+      const text = 'The message does not say what to merge.';
+      await assistant([{ type: 'text', text }]);
+      await result(text);
+      return;
+    }
+    const git = (...a) => execFileSync('git', a, { cwd: process.cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const ident = ['-c', 'user.name=fake-claude', '-c', 'user.email=fake-claude@oide.invalid', '-c', 'commit.gpgsign=false'];
+    let conflicted = [];
+    const m = await useTool('Bash', { command: `git merge ${ref}`, description: `Merge ${ref}` }, {
+      run: () => {
+        if (!WRITE_FILES) return 'skipped';
+        try {
+          return git(...ident, 'merge', '--no-edit', ref) || 'Merged cleanly.';
+        } catch {
+          conflicted = git('diff', '--name-only', '--diff-filter=U').split(/\r?\n/).filter(Boolean);
+          return `Automatic merge failed; fix conflicts in: ${conflicted.join(', ')}`;
+        }
+      },
+    });
+    for (const f of conflicted) {
+      const p = cwdFile(f);
+      const before = readFileSync(p, 'utf8');
+      // Keep both sides, ours first: drop the markers only.
+      const after = before.replace(/^<<<<<<< [^\n]*\n([\s\S]*?)^(?:\|\|\|\|\|\|\| [^\n]*\n[\s\S]*?)?^=======\r?\n([\s\S]*?)^>>>>>>> [^\n]*\n/gm, '$1$2');
+      await useTool('Write', { file_path: p, content: after });
+    }
+    const c = conflicted.length
+      ? await useTool('Bash', { command: 'git add -A && git commit --no-edit', description: 'Commit the merge' }, { run: () => (WRITE_FILES ? (git('add', '-A'), git(...ident, 'commit', '-q', '--no-edit', '-m', `Merge ${ref}`, '-m', `Oide-Agent: ${agentName()}`), git('rev-parse', '--short', 'HEAD').trim()) : 'skipped') })
+      : m;
+    const r = await useTool('mcp__oide__submit_for_review', {
+      summary: conflicted.length ? `Merged ${ref} and resolved conflicts in ${conflicted.join(', ')} (kept both sides).` : `Merged ${ref}; there were no conflicts.`,
+      checks: [{ name: 'merge', status: m.ok && c.ok ? 'passed' : 'failed', detail: c.text }],
+    });
+    const text = r.ok ? 'Resolved the merge conflicts and submitted for review again.' : `Could not submit: ${r.text}`;
+    await assistant([{ type: 'text', text }]);
+    await result(text);
+  },
+
   // M5 gate: load and call an MCP tool. `[fake-tool:mcp__srv__tool]` and `[fake-args:{…}]` in the
   // message pick it; otherwise the first tool of the first stdio server in --mcp-config.
   async 'mcp-tool'(userText) {
@@ -734,7 +779,12 @@ async function runTurn(msg) {
     await emit(initEvent());
     if (text.trim().startsWith('/')) await slashCommand(text.trim());
     else {
-      const name = /\[fake-scenario:([A-Za-z0-9:._-]+)\]/.exec(text)?.[1] ?? scenarios[Math.min(turnNo - 1, scenarios.length - 1)] ?? 'basic';
+      // oIDE's merge-conflicts message always gets resolve-conflicts, as a real agent would act on it.
+      const name =
+        /\[fake-scenario:([A-Za-z0-9:._-]+)\]/.exec(text)?.[1] ??
+        (text.startsWith('[Sent by oIDE] Merge conflicts') ? 'resolve-conflicts' : undefined) ??
+        scenarios[Math.min(turnNo - 1, scenarios.length - 1)] ??
+        'basic';
       if (name.startsWith('replay:')) await replay(name.slice('replay:'.length), text);
       else if (SCENARIOS[name]) await SCENARIOS[name](text);
       else await SCENARIOS.basic(text);

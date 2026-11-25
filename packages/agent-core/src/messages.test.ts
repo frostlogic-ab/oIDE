@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { UserMessage, type MessageAttachment } from '@oide/protocol';
 import { buildLaunch } from './args.js';
-import { contentBlocks, describeFiles, messageText, toStreamJson } from './messages.js';
+import { MERGE_CONFLICTS_HEADER, contentBlocks, describeFiles, mergeConflictsText, messageText, toStreamJson } from './messages.js';
 import { fakeCli, testSettings } from '../test/helpers.js';
 
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
@@ -59,5 +59,37 @@ describe('UserMessage attachment schema', () => {
     expect(UserMessage.safeParse({ kind: 'text', text: 'x', attachments: [{ ...file, size: 26 * 1024 * 1024 }] }).success).toBe(false);
     // A base64 string longer than 5 MB decoded is refused by the schema itself.
     expect(UserMessage.safeParse({ kind: 'text', text: 'x', attachments: [{ ...image, dataBase64: 'A'.repeat(7_000_004) }] }).success).toBe(false);
+  });
+});
+
+describe('merge-conflicts messages (Ask <agent> to resolve)', () => {
+  const base = { kind: 'merge-conflicts' as const, target: 'main', targetSha: 'abc1234def5678', mergeRef: 'main', fetchFirst: false, files: ['src/a.ts', 'logo.png', 'vendor/lib'], binary: ['logo.png'], submodules: ['vendor/lib'] };
+
+  it('names the target and commit, the files, the steps and the rules', () => {
+    const text = messageText(toStreamJson(base));
+    expect(text.split('\n')[0]).toBe(MERGE_CONFLICTS_HEADER);
+    expect(text).toContain('`main` @ abc1234');
+    expect(text).toContain('- src/a.ts\n- logo.png (binary)\n- vendor/lib (submodule)');
+    expect(text).toMatch(/Binary files cannot be merged line by line/);
+    expect(text).toMatch(/For a submodule/);
+    expect(text).toContain('no fetch is needed: run `git merge main` inside your own worktree');
+    expect(text).toMatch(/submit_for_review again/);
+    expect(text).toMatch(/Never rebase and never force-push/);
+    expect(text).toMatch(/Never touch the main checkout/);
+    expect(text).toMatch(/git merge --abort` without saying why/);
+  });
+
+  it('a detached HEAD merges the commit; a remote-tracking target fetches first; unknown files are said so', () => {
+    const detached = mergeConflictsText({ ...base, target: 'abc1234def5678', mergeRef: 'abc1234def5678', files: [], binary: [], submodules: [] });
+    expect(detached).toContain("the main checkout's commit abc1234 (it is on a detached HEAD)");
+    expect(detached).toContain('run `git merge abc1234def5678`');
+    expect(detached).toMatch(/could not predict which files conflict/);
+    const remote = mergeConflictsText({ ...base, target: 'origin/main', mergeRef: 'origin/main', fetchFirst: true });
+    expect(remote).toContain('run `git fetch` first, then run `git merge origin/main`');
+  });
+
+  it('is a valid UserMessage', () => {
+    expect(UserMessage.safeParse(base).success).toBe(true);
+    expect(UserMessage.safeParse({ ...base, targetSha: 'not a sha' }).success).toBe(false);
   });
 });

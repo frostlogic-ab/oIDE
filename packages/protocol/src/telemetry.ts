@@ -359,6 +359,27 @@ export const TELEMETRY_EVENTS = {
     question: 'How often does agent work get merged locally, and how often does it conflict?',
     props: z.object({ result: z.enum(['merged', 'conflicts']) }),
   }),
+  merge_conflict_predicted: def({
+    from: 'main',
+    question:
+      'How often does "Merge into main?" predict conflicts before merging, how many files, and how often are binary files or submodules involved? (Once per agent and pair of commits; never file names.)',
+    props: z.object({ files: CountBucket, binary: z.boolean(), submodules: z.boolean() }),
+  }),
+  merge_conflict_sent_to_agent: def({
+    from: 'main',
+    question:
+      'Do people hand merge conflicts back to the agent, from the prediction or from a merge that stopped, and does the agent have to be resumed or unarchived first?',
+    props: z.object({
+      source: z.enum(['prediction', 'merge']),
+      files: CountBucket,
+      agent: z.enum(['running', 'resumed', 'unarchived']),
+    }),
+  }),
+  merge_conflict_resolved: def({
+    from: 'main',
+    question: 'How long does an agent take to resolve merge conflicts and submit for review again?',
+    props: z.object({ duration: DurationBucket }),
+  }),
   agent_discarded: def({
     from: 'main',
     question: 'How often is agent work thrown away rather than merged?',

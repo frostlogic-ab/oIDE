@@ -1,4 +1,4 @@
-import type { ContextChip, MessageAttachment, UserMessage } from '@oide/protocol';
+import type { ContextChip, MergeConflictsMessage, MessageAttachment, UserMessage } from '@oide/protocol';
 
 export type StreamJsonTextBlock = { type: 'text'; text: string };
 /** Verified on CLI 2.1.325: accepted on stdin, kept in the session as image content (see cli-integration.md). */
@@ -107,5 +107,54 @@ export function toStreamJson(msg: UserMessage, resolve?: ArtifactResolver): Stre
       if (msg.note) parts.push(msg.note);
       return textMessage(parts.join('\n\n'), msg.attachments);
     }
+    case 'merge-conflicts':
+      return textMessage(mergeConflictsText(msg));
   }
+}
+
+/** First line of every merge-conflicts message: the transcript and the agent both see oIDE wrote it. */
+export const MERGE_CONFLICTS_HEADER = '[Sent by oIDE] Merge conflicts: please resolve them in your worktree.';
+
+/**
+ * The instructions oIDE sends when merging the agent's branch would conflict (Review › Merge › "Ask
+ * <agent> to resolve"): what to merge, which files, how to resolve, and what never to do.
+ */
+export function mergeConflictsText(msg: MergeConflictsMessage): string {
+  const short = msg.targetSha.slice(0, 7);
+  const isCommit = msg.mergeRef === msg.targetSha;
+  const where = isCommit ? `the main checkout's commit ${short} (it is on a detached HEAD)` : `\`${msg.target}\` @ ${short}`;
+  const parts = [MERGE_CONFLICTS_HEADER];
+  parts.push(`The user wants to merge your branch into ${where}, and that merge conflicts. oIDE did not merge anything.`);
+  if (msg.files.length) {
+    const special = new Set([...msg.binary, ...msg.submodules]);
+    const lines = msg.files.slice(0, 200).map((f) => `- ${f}${msg.binary.includes(f) ? ' (binary)' : msg.submodules.includes(f) ? ' (submodule)' : ''}`);
+    if (msg.files.length > 200) lines.push(`- …and ${msg.files.length - 200} more`);
+    parts.push(`Conflicted ${msg.files.length === 1 ? 'file' : 'files'}:\n${lines.join('\n')}`);
+    if (special.size) {
+      const notes: string[] = [];
+      if (msg.binary.length) notes.push('Binary files cannot be merged line by line: keep one side (`git checkout --ours <file>` or `git checkout --theirs <file>`) or regenerate the file, and say which in your summary.');
+      if (msg.submodules.length) notes.push('For a submodule, point it at a commit that contains both sides (merge inside the submodule if needed), then `git add` the submodule path.');
+      parts.push(notes.join('\n'));
+    }
+  } else {
+    parts.push('oIDE could not predict which files conflict; `git merge` will list them.');
+  }
+  const fetch = msg.fetchFirst ? `\`${msg.mergeRef}\` is a remote-tracking ref: run \`git fetch\` first, then ` : 'Local branches are shared between worktrees, so no fetch is needed: ';
+  const steps = [
+    `1. ${fetch}run \`git merge ${msg.mergeRef}\` inside your own worktree (your current folder).`,
+    '2. Resolve every conflict, keeping the intent of both sides. Remove all conflict markers.',
+    '3. Run the project\'s checks (tests, lint, type check) if you know them.',
+    '4. Commit the merge (`git commit --no-edit` keeps the merge message).',
+    '5. Call mcp__oide__submit_for_review again with an updated summary and checks. The user merges by hand after that.',
+  ];
+  parts.push(`What to do:\n${steps.join('\n')}`);
+  parts.push(
+    [
+      'Rules:',
+      '- Never rebase and never force-push.',
+      `- Never touch the main checkout (the project folder); work only in your worktree.`,
+      '- Never run `git merge --abort` without saying why in your reply.',
+    ].join('\n'),
+  );
+  return parts.join('\n\n');
 }

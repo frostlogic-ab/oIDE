@@ -7,6 +7,7 @@ import { useShortcutLabel } from '../../../lib/useKeymap';
 import { INTERRUPTED_PERMISSION_NOTE, isRunning } from '../../../stores/agents';
 import { archiveAgent } from '../../../stores/archive';
 import { navigate } from '../../../stores/router';
+import { freshnessText, useMergePrediction } from '../../../stores/mergePrediction';
 import { useSetting } from '../../../stores/settings';
 import { AttachFileButton, AttachmentTray, useAttachments } from '../../../components/Attachments';
 import { PrLink } from '../../../components/PrLink';
@@ -78,7 +79,10 @@ export function TileBody({ agent }: { agent: AgentSummary }) {
       return (
         <div className={`${BOX} p-2.5 flex flex-col gap-1.5 text-[12px] text-ink-2`}>
           <span className="line-clamp-3">{agent.review?.summary ?? agent.lastMessage ?? 'Submitted for review.'}</span>
-          {agent.diff && <DiffStat mono files={agent.diff.files} additions={agent.diff.additions} deletions={agent.diff.deletions} className="text-[11.5px] text-ink-3" />}
+          <span className="flex items-center gap-2 min-w-0 text-[11.5px]">
+            {agent.diff && <DiffStat mono files={agent.diff.files} additions={agent.diff.additions} deletions={agent.diff.deletions} className="text-ink-3 shrink-0" />}
+            <MergeFreshness agent={agent} />
+          </span>
         </div>
       );
     case 'queued':
@@ -111,6 +115,18 @@ export function TileBody({ agent }: { agent: AgentSummary }) {
     case 'activity':
       return <ActivityBody agent={agent} />;
   }
+}
+
+/** "Up to date with main" / "Behind main by 2 · would conflict": main's cached prediction, refreshed on git.changed. */
+function MergeFreshness({ agent }: { agent: AgentSummary }) {
+  const { prediction } = useMergePrediction(agent.id, agent.projectId, agent.status === 'ready-for-review' && Boolean(agent.branch));
+  const text = freshnessText(prediction, { short: true });
+  if (!text) return null;
+  return (
+    <span className={`truncate ${prediction?.status === 'conflicts' ? 'text-warn' : 'text-ink-3'}`} title={freshnessText(prediction)}>
+      {text}
+    </span>
+  );
 }
 
 function QueuedBody() {

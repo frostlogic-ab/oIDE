@@ -68,7 +68,16 @@ on Windows and macOS. git prints `C:/x` on Windows; entries are normalised to na
 
 - `mergeLocal(mainCheckout, branch, { message? })` → `{ ok, conflicts, sha?, error? }`:
   `git merge --no-ff --no-edit`; on conflicts lists them (`--diff-filter=U`) and runs `merge --abort`,
-  so the main checkout is never left mid-merge.
+  so the main checkout is never left mid-merge. When git refuses because uncommitted (or untracked)
+  files in the main checkout would be overwritten, `blockedBy` lists them (`parseBlockedByLocalChanges`)
+  and `error` says to commit or stash them.
+- `predictMerge(mainCheckout, branch)` → `MergeForecast { supported, conflicts, files, binary,
+  submodules, target: { branch?, sha }, branchSha, behind, ahead, error? }`: `git merge-tree
+  --write-tree -z <HEAD> <branch>` without `--name-only`, parsed by `parseMergeTree` (stage entries
+  give the paths and mode 160000 submodules; the stable message types `CONFLICT (binary)` and
+  `CONFLICT (submodule…)` mark the rest), plus `rev-list --left-right --count`. A git too old for
+  `--write-tree` (< 2.38) gives `supported: false` with the error instead of throwing. Used by the
+  merge dialog ([screen-review](screen-review.md#merge-conflicts)); main caches it per commit pair.
 - `predictConflicts(repo, a, b)` → `{ conflicts, files, tree }` via `git merge-tree --write-tree
   --name-only --no-messages -z` (exit 1 = conflicts). Only commits count, not uncommitted edits.
 - `detectOverlaps(projectId, projectRepo, LiveWorktree[], { predict })` → `OverlapWarning[]`:

@@ -44,7 +44,7 @@ export const RowView = memo(
   function RowView({ row, ctx }: { row: ViewRow; ctx: RowContext }) {
     switch (row.kind) {
       case 'user':
-        return <UserBubble text={row.text} attachments={row.attachments} />;
+        return row.origin === 'oide' ? <OideMessage text={row.text} /> : <UserBubble text={row.text} attachments={row.attachments} />;
       case 'assistant':
         return <Markdown text={row.text} />;
       case 'thinking':
@@ -99,6 +99,19 @@ function UserBubble({ text, attachments }: { text: string; attachments?: readonl
         </div>
       ) : null}
       <div className="max-w-[80%] px-3.5 py-2.5 bg-selected rounded-[12px_12px_4px_12px] leading-[1.5] text-ink whitespace-pre-wrap break-words">{text}</div>
+    </div>
+  );
+}
+
+/** A message oIDE wrote to the agent (merge conflicts), plainly marked so it is never read as the user's. */
+function OideMessage({ text }: { text: string }) {
+  return (
+    <div className="self-end max-w-[80%] flex flex-col gap-1" role="note" aria-label="Message sent by oIDE">
+      <span className="self-end flex items-center gap-1 text-[11px] text-ink-3">
+        <Icon name="branch" size={12} />
+        Sent by oIDE
+      </span>
+      <div className="px-3.5 py-2.5 bg-panel border border-line-3 rounded-[12px_12px_4px_12px] leading-[1.5] text-ink-2 text-[12.5px] whitespace-pre-wrap break-words">{text}</div>
     </div>
   );
 }

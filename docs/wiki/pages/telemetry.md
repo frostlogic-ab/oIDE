@@ -92,6 +92,9 @@ The source of truth is `TELEMETRY_EVENTS` in `packages/protocol/src/telemetry.ts
 | `agent_finished` | main | `outcome` [ready-for-review, done, error, stopped], `duration` (bucket), `duration_ms`, `first_output_ms` (spawn to first output), `subagents`, `tokens`, `turns` (buckets), `error_code` [auth, model_not_found, api_error, spawn, protocol, other] | How do runs end, how long, how fast is the first output? |
 | `permission_answered` | main | `decision` [allow, always, deny], `tool` [Bash, Edit, Write, Read, Search, Web, Task, Plan, Notebook, mcp, other], `wait` (bucket) | Which tools ask, how do people answer, how long do agents wait? |
 | `agent_merged` | main | `result` [merged, conflicts] | How often is agent work merged, and does it conflict? |
+| `merge_conflict_predicted` | main | `files` (bucket), `binary`, `submodules` (booleans); once per agent and pair of commits, from `git.predictMerge` | How often does "Merge into main?" predict conflicts, how many files, binary or submodules involved? |
+| `merge_conflict_sent_to_agent` | main | `source` [prediction, merge], `files` (bucket), `agent` [running, resumed, unarchived], from `git.askToResolve` | Do people hand conflicts back to the agent, and does it have to be resumed or unarchived first? |
+| `merge_conflict_resolved` | main | `duration` (bucket), at the agent's next lead `review-submitted` after the conflicts were sent | How long does an agent take to resolve merge conflicts? |
 | `agent_discarded` | main | `worktree_deleted` | How often is agent work thrown away? |
 | `agent_archived` | main | `reason` [merged, discarded, completed, archived-by-user] | Why do agents leave the Wall? |
 | `agent_unarchived` | main | none | Do people bring archived agents back? |
