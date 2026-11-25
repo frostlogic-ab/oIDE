@@ -5,6 +5,9 @@ import {
   ArtifactMeta,
   ArtifactUse,
   ArtifactVersion,
+  inferKindFromContent,
+  looksLikeHtml,
+  titleFromContent,
   type ArtifactContent,
   type ArtifactKind,
   type ArtifactsBackend,
@@ -144,6 +147,47 @@ function validateContent(kind: ArtifactKind, content: string): void {
       throw new Error(`Whiteboard content must be Excalidraw JSON: ${(e as Error).message}`, { cause: e });
     }
     if (!v || typeof v !== 'object' || Array.isArray(v)) throw new Error('Whiteboard content must be an Excalidraw JSON object.');
+  }
+}
+
+/** A claude.ai / claude.site https link, normalised; anything else is refused (`invalid_input`). */
+export function claudeImportUrl(raw: string): string {
+  let u: URL;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    throw new ArtifactError('Not a valid URL.', 'invalid_input');
+  }
+  if (u.protocol !== 'https:' || !ALLOWED_IMPORT_HOSTS.some((re) => re.test(u.hostname))) throw new ArtifactError('Only https://claude.ai links can be imported.', 'invalid_input');
+  if (u.username || u.password) throw new ArtifactError('The link must not contain a user name or password.', 'invalid_input');
+  return u.toString();
+}
+
+function stripBom(s: string): string {
+  return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s;
+}
+
+function checkImportSize(content: string): void {
+  if (Buffer.byteLength(content, 'utf8') > MAX_IMPORT_BYTES) throw new ArtifactError('The content is larger than 10 MB.', 'invalid_input');
+}
+
+/**
+ * Imported content must fit its kind. A design is previewed as an HTML page with no network, so React
+ * (or other code) artifacts cannot run there: say so instead of storing a page that shows source text.
+ */
+function checkImportContent(kind: ArtifactKind, content: string): void {
+  if (kind === 'design' && !looksLikeHtml(content)) {
+    throw new ArtifactError(
+      "This isn't an HTML page, so it can't be a design. oIDE previews designs as plain HTML with no network, so React and other code artifacts don't run here. Ask Claude on claude.ai for a single self-contained HTML file, or import this as a doc.",
+      'invalid_input',
+    );
+  }
+  if (kind === 'whiteboard') {
+    try {
+      validateContent(kind, content);
+    } catch (e) {
+      throw new ArtifactError((e as Error).message, 'invalid_input');
+    }
   }
 }
 
@@ -430,21 +474,27 @@ export class ArtifactStore {
   /* ------------------------------------------------------------- import */
 
   /**
-   * "Import from claude.ai" with a pasted link. There is no public API to fetch the content, so
-   * this stores a link-only stub marked `importedFrom`; the user can paste or drop the export later.
+   * "Import from claude.ai" with a pasted link. claude.ai has no public API for artifact content, and
+   * oIDE never uses the user's claude.ai sign-in, so main cannot fetch it: the user pastes the content
+   * they copied on claude.ai (`content`), and the link is kept as `importedFrom` (Open in claude.ai).
+   * The kind follows the content when none is given. Without content this stores a link-only stub.
    */
-  async importUrl(input: { url: string; title?: string; kind?: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data' }, author = 'user'): Promise<ArtifactMeta> {
-    let u: URL;
-    try {
-      u = new URL(input.url);
-    } catch {
-      throw new Error('Not a valid URL.');
+  async importUrl(
+    input: { url: string; content?: string; title?: string; kind?: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data' },
+    author = 'user',
+  ): Promise<ArtifactMeta> {
+    const url = claudeImportUrl(input.url);
+    const pasted = input.content !== undefined && input.content.trim() ? stripBom(input.content) : undefined;
+    if (pasted !== undefined) {
+      checkImportSize(pasted);
+      const kind = input.kind ?? inferKindFromContent(pasted);
+      checkImportContent(kind, pasted);
+      const title = input.title?.trim() || titleFromContent(kind, pasted) || 'Imported from claude.ai';
+      return this.create({ title, kind, content: pasted, projectId: input.projectId, location: input.location, importedFrom: url }, author);
     }
-    if (u.protocol !== 'https:' || !ALLOWED_IMPORT_HOSTS.some((re) => re.test(u.hostname))) throw new Error('Only https://claude.ai links can be imported.');
     const kind = input.kind ?? 'doc';
     const title = input.title?.trim() || 'Imported from claude.ai';
-    const url = u.toString();
-    const note = `Imported from ${url}. oIDE cannot fetch claude.ai artifacts; paste or drop the exported content here to keep a local copy.`;
+    const note = `Imported from ${url}. oIDE cannot fetch claude.ai artifacts: open the link, copy the artifact's code and paste it here to keep a local copy.`;
     const content =
       kind === 'doc'
         ? note + '\n'
@@ -454,16 +504,25 @@ export class ArtifactStore {
     return this.create({ title, kind, content, projectId: input.projectId, location: input.location, importedFrom: url }, author);
   }
 
-  /** Import a dropped or exported file (HTML → design, Markdown → doc, Excalidraw → whiteboard). */
-  async importFile(input: { filePath: string; title?: string; kind?: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data' }, author = 'user'): Promise<ArtifactMeta> {
+  /**
+   * Import a dropped or exported file (HTML → design, Markdown → doc, Excalidraw → whiteboard).
+   * `url` is the claude.ai link the file was downloaded from, kept as `importedFrom` when given.
+   */
+  async importFile(
+    input: { filePath: string; url?: string; title?: string; kind?: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data' },
+    author = 'user',
+  ): Promise<ArtifactMeta> {
+    const importedFrom = input.url ? claudeImportUrl(input.url) : undefined;
     const st = await stat(input.filePath);
     if (!st.isFile()) throw new Error('Not a file.');
     if (st.size > MAX_IMPORT_BYTES) throw new Error('File is larger than 10 MB.');
-    const content = await readFile(input.filePath, 'utf8');
+    const content = stripBom(await readFile(input.filePath, 'utf8'));
     const kind = input.kind ?? inferKind(input.filePath, content);
     if (!kind) throw new Error('Unknown artifact type. Use an .html, .md or .excalidraw file.');
+    // An .html file is a page by its name; other files picked as a design must hold HTML.
+    if (!(kind === 'design' && /\.html?$/i.test(input.filePath))) checkImportContent(kind, content);
     const title = input.title?.trim() || basename(input.filePath, extname(input.filePath));
-    return this.create({ title, kind, content, projectId: input.projectId, location: input.location }, author);
+    return this.create({ title, kind, content, projectId: input.projectId, location: input.location, ...(importedFrom ? { importedFrom } : {}) }, author);
   }
 
   /* --------------------------------------------------------------- uses */

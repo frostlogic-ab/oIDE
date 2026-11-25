@@ -229,6 +229,15 @@ export class TelemetryObservers {
         });
         return;
       }
+      case 'artifacts.import': {
+        // Never the link, title or content: how it came in and the kind only.
+        const i = input as { url?: string; content?: string; filePath?: string };
+        const kind = (output as { kind?: unknown }).kind;
+        if (kind !== 'design' && kind !== 'doc' && kind !== 'whiteboard') return;
+        const source = i.filePath ? 'file' : i.content?.trim() ? 'link_content' : 'link';
+        this.sink.track('artifact_imported', { source, kind, linked: !!i.url });
+        return;
+      }
       case 'extensions.install': {
         const ext = output as InstalledExtension;
         if (

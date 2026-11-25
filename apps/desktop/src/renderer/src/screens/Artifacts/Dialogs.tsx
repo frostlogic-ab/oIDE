@@ -3,10 +3,10 @@
  * Rename and Delete confirms.
  */
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import type { ArtifactKind, ArtifactMeta, Project } from '@oide/protocol';
-import { Button, Dialog, SegmentedControl, Select, Tabs, TextField, tabPanelProps } from '@oide/ui';
+import { inferKindFromContent, looksLikeHtml, type ArtifactKind, type ArtifactMeta, type Project } from '@oide/protocol';
+import { Button, Dialog, SegmentedControl, Select, Tabs, TextArea, TextField, tabPanelProps } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
-import { KIND_LABEL, isClaudeLink, kindFromFileName, validateTitle } from './model';
+import { KIND_LABEL, isClaudeLink, kindFromFileName, validateContent, validateTitle } from './model';
 
 type Location = 'repo' | 'app-data';
 
@@ -167,27 +167,71 @@ export interface ImportDialogProps {
 
 type ImportTab = 'link' | 'file';
 
+/** Pasted content above this size is refused before it is sent (main checks again). */
+const MAX_PASTE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Import from claude.ai. oIDE cannot download an artifact from claude.ai (no public content API, and
+ * oIDE never uses the user's claude.ai sign-in), so "Paste a link" takes the artifact's content too:
+ * the user opens the link, copies the code and pastes it. The kind follows the content until the user
+ * picks one. "Pick a file" imports a downloaded file and can keep the link as its origin.
+ */
 export function ImportDialog({ open, onClose, projects, defaultProjectId, onImported }: ImportDialogProps) {
   const [tab, setTab] = useState<ImportTab>('link');
   const [url, setUrl] = useState('');
+  const [content, setContent] = useState('');
   const [filePath, setFilePath] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [kind, setKind] = useState<ArtifactKind>('doc');
+  const [kindPicked, setKindPicked] = useState(false);
   const [projectId, setProjectId] = useState(defaultProjectId ?? '');
   const [location, setLocation] = useState<Location>('app-data');
   const [touched, setTouched] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const urlError = touched && tab === 'link' ? (!url.trim() ? 'Paste a claude.ai link.' : !isClaudeLink(url.trim()) ? 'Only https links on claude.ai can be imported.' : undefined) : undefined;
+  const link = url.trim();
+  const hasContent = content.trim().length > 0;
+  // The link is required for "Paste a link" and optional (the file's origin) for "Pick a file".
+  const urlError = touched
+    ? tab === 'link' && !link
+      ? 'Paste a claude.ai link.'
+      : link && !isClaudeLink(link)
+        ? 'Only https links on claude.ai can be imported.'
+        : undefined
+    : undefined;
+  const contentError = tab === 'link' && hasContent ? importContentError(kind, content) : undefined;
+
+  // Start each use from the current scope (the dialog stays mounted between uses).
+  useEffect(() => {
+    if (!open) return;
+    setProjectId(defaultProjectId ?? '');
+    setLocation('app-data');
+  }, [open, defaultProjectId]);
 
   const close = () => {
     setUrl('');
+    setContent('');
     setFilePath(null);
     setTitle('');
+    setKind('doc');
+    setKindPicked(false);
     setTouched(false);
     setError(null);
     onClose();
+  };
+
+  const onContent = (next: string) => {
+    setContent(next);
+    if (!kindPicked) setKind(next.trim() ? inferKindFromContent(next) : 'doc');
+  };
+
+  const openLink = () => {
+    if (!isClaudeLink(link)) {
+      setTouched(true);
+      return;
+    }
+    oide.invoke('shell.openExternal', { url: link }).catch((err: unknown) => setError(ipcErrorMessage(err)));
   };
 
   const pick = async () => {
@@ -199,25 +243,36 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
       });
       if (path) {
         setFilePath(path);
-        setKind(kindFromFileName(path));
+        if (!kindPicked) setKind(kindFromFileName(path));
       }
     } catch (err) {
       setError(ipcErrorMessage(err));
     }
   };
 
+  const switchTab = (t: ImportTab) => {
+    setTab(t);
+    setError(null);
+    if (kindPicked) return;
+    if (t === 'link') setKind(content.trim() ? inferKindFromContent(content) : 'doc');
+    else setKind(filePath ? kindFromFileName(filePath) : 'doc');
+  };
+
   const submit = async () => {
     setTouched(true);
-    if (tab === 'link' && (!url.trim() || !isClaudeLink(url.trim()))) return;
+    if (tab === 'link' && (!link || !isClaudeLink(link))) return;
+    if (tab === 'file' && link && !isClaudeLink(link)) return;
     if (tab === 'file' && !filePath) {
       setError('Choose a file first.');
       return;
     }
+    if (contentError) return;
     setBusy(true);
     setError(null);
     try {
+      const source = tab === 'link' ? { url: link, ...(hasContent ? { content } : {}) } : { filePath: filePath!, ...(link ? { url: link } : {}) };
       const meta = await oide.invoke('artifacts.import', {
-        ...(tab === 'link' ? { url: url.trim() } : { filePath: filePath! }),
+        ...source,
         title: title.trim() || undefined,
         kind,
         projectId: projectId || undefined,
@@ -232,13 +287,34 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
     }
   };
 
+  const linkField = (
+    <div className="flex items-start gap-2">
+      <TextField
+        label={tab === 'link' ? 'claude.ai link' : 'claude.ai link (optional)'}
+        mono
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        onBlur={() => url && setTouched(true)}
+        placeholder="https://claude.ai/artifact/…"
+        error={urlError}
+        hint={tab === 'file' ? 'Where the file came from, for Open in claude.ai.' : undefined}
+        containerClassName="flex-1 min-w-0"
+      />
+      {tab === 'link' && (
+        <Button size={32} icon="external-link" onClick={openLink} disabled={!link} className="mt-[22px] shrink-0">
+          Open
+        </Button>
+      )}
+    </div>
+  );
+
   return (
     <Dialog
       open={open}
       onClose={close}
       title="Import from claude.ai"
       description="oIDE stores a copy, marked as imported. It is not synced: later changes on claude.ai don't show up here, and your edits stay in oIDE."
-      width={560}
+      width={600}
       showClose
       footer={
         <>
@@ -246,7 +322,7 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
             Cancel
           </Button>
           <Button size={32} variant="primary" onClick={() => void submit()} disabled={busy}>
-            Import
+            {tab === 'link' && !hasContent ? 'Import link only' : 'Import'}
           </Button>
         </>
       }
@@ -259,41 +335,59 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
           { id: 'file', label: 'Pick a file' },
         ]}
         value={tab}
-        onChange={(t) => {
-          setTab(t);
-          setError(null);
-        }}
+        onChange={switchTab}
         className="gap-3 border-b border-line-2"
       />
       <div {...tabPanelProps('import', tab)} className="flex flex-col gap-4 outline-none">
         {tab === 'link' ? (
-          <TextField
-            label="claude.ai link"
-            mono
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onBlur={() => url && setTouched(true)}
-            placeholder="https://claude.ai/public/artifacts/…"
-            error={urlError}
-            hint="claude.ai has no public API for artifact content, so oIDE keeps the link (for Open in claude.ai) and starts an empty copy. Paste the content into it after import."
-          />
+          <>
+            {linkField}
+            <TextArea
+              label="Artifact content"
+              mono
+              rows={7}
+              value={content}
+              onChange={(e) => onContent(e.target.value)}
+              placeholder="<!doctype html>…"
+              error={contentError}
+              hint="oIDE can't download from claude.ai: there is no public API, and oIDE never uses your claude.ai sign-in. Open the link, copy the artifact's code and paste it here. Leave it empty to keep only the link."
+              className="max-h-[240px] resize-y"
+            />
+          </>
         ) : (
-          <div className="flex flex-col gap-2">
-            <span className="text-[12px] font-semibold text-ink-2">File</span>
-            <div className="flex items-center gap-2.5">
-              <Button size={32} onClick={() => void pick()}>
-                Choose a file…
-              </Button>
-              <span className="font-mono text-[12px] text-ink-2 truncate" aria-live="polite">
-                {filePath ?? 'No file chosen'}
-              </span>
+          <>
+            <div className="flex flex-col gap-2">
+              <span className="text-[12px] font-semibold text-ink-2">File</span>
+              <div className="flex items-center gap-2.5">
+                <Button size={32} onClick={() => void pick()}>
+                  Choose a file…
+                </Button>
+                <span className="font-mono text-[12px] text-ink-2 truncate" aria-live="polite">
+                  {filePath ?? 'No file chosen'}
+                </span>
+              </div>
+              <span className="text-[12px] text-ink-3">A downloaded .html (design), .md (doc) or .excalidraw (whiteboard) file, up to 10 MB.</span>
             </div>
-            <span className="text-[12px] text-ink-3">An exported .html (design), .md (doc) or .excalidraw (whiteboard) file, up to 10 MB.</span>
-          </div>
+            {linkField}
+          </>
         )}
         <div className="grid grid-cols-2 gap-3">
-          <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={tab === 'file' && filePath ? 'From the file name' : 'Imported from claude.ai'} />
-          <Select label="Kind" options={KIND_OPTIONS} value={kind} onChange={(e) => setKind(e.target.value as ArtifactKind)} />
+          <TextField
+            label="Title"
+            value={title}
+            maxLength={200}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={tab === 'file' && filePath ? 'From the file name' : tab === 'link' && hasContent ? 'From the content' : 'Imported from claude.ai'}
+          />
+          <Select
+            label="Kind"
+            options={KIND_OPTIONS}
+            value={kind}
+            onChange={(e) => {
+              setKind(e.target.value as ArtifactKind);
+              setKindPicked(true);
+            }}
+          />
         </div>
         <Select label="Project" options={projectOptions(projects, true)} value={projectId} onChange={(e) => setProjectId(e.target.value)} />
         <LocationField value={projectId ? location : 'app-data'} onChange={setLocation} hasProject={Boolean(projectId)} />
@@ -301,6 +395,16 @@ export function ImportDialog({ open, onClose, projects, defaultProjectId, onImpo
       </div>
     </Dialog>
   );
+}
+
+/** Why pasted content can't be imported as `kind`, or undefined. Main applies the same rules. */
+function importContentError(kind: ArtifactKind, content: string): string | undefined {
+  if (new TextEncoder().encode(content).length > MAX_PASTE_BYTES) return 'The content is larger than 10 MB.';
+  if (kind === 'design' && !looksLikeHtml(content)) {
+    return "This isn't an HTML page, so it can't be a design: React and other code artifacts don't run in oIDE's preview. Ask Claude on claude.ai for one self-contained HTML file, or import it as a doc.";
+  }
+  if (kind === 'whiteboard') return validateContent('whiteboard', content) ?? undefined;
+  return undefined;
 }
 
 export interface RenameDialogProps {

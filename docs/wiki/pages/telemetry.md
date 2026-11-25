@@ -106,6 +106,7 @@ The source of truth is `TELEMETRY_EVENTS` in `packages/protocol/src/telemetry.ts
 | `slash_command_used` | main | `command` [built-in CLI commands, other] | Which built-in slash commands are used? Skills, plugin and MCP commands are `other`. |
 | `attachments_sent` | main | `where` [spawn, message], `images`, `files` (counts) | Do people attach images and files? |
 | `file_search_used` | main | `kind` [name, content, replace], `results` (bucket), `queries`, `regex`, `engine` [git-grep, scan, mixed] | Is Files search used and does it find anything? One event per run of keystrokes. |
+| `artifact_imported` | main | `source` [link, link_content, file], `kind` [design, doc, whiteboard], `linked` | How do people bring claude.ai artifacts in, and do link-only stubs still get made? Never the link, title or content. |
 | `extension_installed` | main | `extension` (official index id), `source` [marketplace, builtin] | Which marketplace extensions are installed? Never folder, git or custom-index ones. |
 | `setting_changed` | main | `key` (allow-listed key) | Which settings do people change? Never the value; once per key per 10 s. |
 | `cli_unknown_event` | main | `event_type` (`type/subtype` of the CLI), `count` | Which CLI events does oIDE not understand yet? Top 5 every 30 min. |

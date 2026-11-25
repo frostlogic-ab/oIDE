@@ -37,8 +37,18 @@ Every agent gets oIDE's own MCP server, with the tools `artifacts_list`, `artifa
 
 ## claude.ai
 
-There is no public API for claude.ai artifacts, so there is no sync. **Import from claude.ai** stores
-a copy: paste a link (stored as a link) or pick an exported file. **Open in claude.ai** appears only
-for artifacts that came from there.
+There is no public API for claude.ai artifacts, so there is no sync, and oIDE can't download an
+artifact for you (it never uses your claude.ai sign-in). **Import from claude.ai** stores a copy:
+
+- **Paste a link**: paste the artifact's link, click **Open** to view it on claude.ai, copy the
+  artifact's code there and paste it into **Artifact content**. oIDE picks the kind from the content
+  (an HTML page becomes a design) and the title from its heading. Leave the content empty to keep
+  only the link.
+- **Pick a file**: choose a file you downloaded from claude.ai (.html, .md or .excalidraw), and
+  optionally paste its link.
+
+Designs are HTML pages previewed with no network. A React artifact can't run there: ask Claude on
+claude.ai for one self-contained HTML file, or import the code as a doc. **Open in claude.ai**
+appears only for artifacts that came from there.
 
 Details: [screen-artifacts](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/screen-artifacts.md).

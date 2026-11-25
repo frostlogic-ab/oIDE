@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { ArchiveReason, Effort, PermissionMode, WorkIn } from './agent.js';
+import { ArtifactKind } from './artifacts.js';
 
 /**
  * Opt-in usage analytics and error reports (docs/wiki/pages/telemetry.md, ADR 0011).
@@ -446,6 +447,12 @@ export const TELEMETRY_EVENTS = {
       regex: z.boolean().optional(),
       engine: z.enum(['git-grep', 'scan', 'mixed']).optional(),
     }),
+  }),
+  artifact_imported: def({
+    from: 'main',
+    question:
+      'How do people bring claude.ai artifacts in (a link with pasted content, a link only, or an exported file), and which kinds?',
+    props: z.object({ source: z.enum(['link', 'link_content', 'file']), kind: ArtifactKind, linked: z.boolean() }),
   }),
   extension_installed: def({
     from: 'main',

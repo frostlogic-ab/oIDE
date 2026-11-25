@@ -69,3 +69,47 @@ export interface ArtifactSource {
   fetch(remoteId: string): Promise<{ title: string; kind: ArtifactKind; content: string; url: string }>;
   push(meta: ArtifactMeta, content: string): Promise<{ remoteId: string; url: string }>;
 }
+
+/* ---------------------------------------------------------------- import helpers (main + renderer) */
+
+function stripBom(s: string): string {
+  return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s;
+}
+
+/** True for an HTML page or fragment (what a design's `index.html` must hold). */
+export function looksLikeHtml(content: string): boolean {
+  const text = stripBom(content).trimStart();
+  const head = text.slice(0, 4096);
+  if (/^(?:<!--[\s\S]*?-->\s*)*(?:<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>]|<\?xml\s[^>]*\?>\s*<svg[\s>])/i.test(head)) return true;
+  // A fragment: starts with a tag and closes one (`<div>…</div>`, `<svg …/>`). JSX source starts with `import`/`export`.
+  return /^<[a-z][\w-]*[\s/>]/i.test(head) && /<\/[a-z][\w-]*\s*>|\/>/i.test(text);
+}
+
+/** Kind of pasted content: HTML → design, Excalidraw JSON → whiteboard, anything else → doc. */
+export function inferKindFromContent(content: string): ArtifactKind {
+  const text = stripBom(content).trim();
+  if (looksLikeHtml(text)) return 'design';
+  if (text.startsWith('{')) {
+    try {
+      if ((JSON.parse(text) as { type?: unknown }).type === 'excalidraw') return 'whiteboard';
+    } catch {
+      // not JSON: a doc
+    }
+  }
+  return 'doc';
+}
+
+const HTML_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'", apos: "'", nbsp: ' ' };
+
+/** A title from the content: an HTML `<title>` or `<h1>`, or a Markdown `# heading`. */
+export function titleFromContent(kind: ArtifactKind, content: string): string | undefined {
+  let t: string | undefined;
+  if (kind === 'design') {
+    const m = /<title[^>]*>([^<]{1,400})<\/title>/i.exec(content) ?? /<h1[^>]*>([^<]{1,400})<\/h1>/i.exec(content);
+    t = m?.[1]?.replace(/&(amp|lt|gt|quot|#39|apos|nbsp);/g, (_x, e: string) => HTML_ENTITIES[e] ?? '');
+  } else if (kind === 'doc') {
+    t = /^#[ \t]+(.{1,400})$/m.exec(content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, ''))?.[1]?.replace(/[ \t]#+[ \t]*$/, '');
+  }
+  t = t?.replace(/\s+/g, ' ').trim().slice(0, 200).trim();
+  return t || undefined;
+}

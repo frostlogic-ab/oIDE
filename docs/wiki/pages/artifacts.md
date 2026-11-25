@@ -46,8 +46,18 @@ for MCP uses), so an open editor can say "Updated by <agent>" without a refetch.
   history and agents holding the id keep working. A rename is not a version.
 - `delete(id)`: removes the folder (all versions), the index row and the uses log; `false` if unknown.
 - `versions(id)` (newest first), `readVersion(id, n)`, `dirOf(id)` (for preview and path checks), `root(location, projectId?)`.
-- `importUrl({ url, title?, kind='doc', projectId?, location? })`: only `https://claude.ai` (and `claude.site`) links; stores a link-only stub with `importedFrom`, since the content cannot be fetched. "Open in claude.ai" uses `importedFrom`.
-- `importFile({ filePath, title?, kind?, ... })`: `.html/.htm` → design, `.md/.markdown/.txt` → doc, `.excalidraw` or Excalidraw `.json` → whiteboard; 10 MB limit.
+- `importUrl({ url, content?, title?, kind?, projectId?, location? })`: only `https://claude.ai` (and `claude.site`) links,
+  no user name or password in them (`claudeImportUrl`, `ArtifactError` `invalid_input`). oIDE cannot fetch claude.ai
+  content (no public API, and it never uses the user's claude.ai sign-in), so the user pastes what they copied there as
+  `content` (10 MB limit). With content: the kind follows it unless given (`inferKindFromContent`: HTML → design,
+  Excalidraw JSON → whiteboard, else doc), the title comes from `<title>`/`<h1>` or a `# heading` unless given
+  (`titleFromContent`), and a design must hold HTML (`looksLikeHtml`; React or other code artifacts are refused with
+  `invalid_input` because the preview has no network to load them). Without content (or only whitespace): a link-only
+  stub (kind defaults to doc) whose note says how to paste the content. The link is kept as `importedFrom` either way;
+  "Open in claude.ai" uses it. The three helpers live in `@oide/protocol` (`artifacts.ts`) so the dialog uses the same rules.
+- `importFile({ filePath, url?, title?, kind?, ... })`: `.html/.htm` → design, `.md/.markdown/.txt` → doc, `.excalidraw` or
+  Excalidraw `.json` → whiteboard; 10 MB limit. `url` (the claude.ai link the file was downloaded from) becomes
+  `importedFrom`. A non-HTML file picked as a design is refused like pasted content; an `.html` file is taken as a page.
 - `rescan(projects)` re-indexes folders found on disk (repo artifacts teammates committed), assigns
   repo artifacts to the scanning project and drops index rows whose folder is gone. Run at startup.
 - Uses: `recordUse(artifactId, agentId, op)`, `uses(id)`, `usesByAgent(agentId)` ("Agents using it",

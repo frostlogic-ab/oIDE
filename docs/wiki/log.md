@@ -623,3 +623,16 @@ Review, Ready-for-review tiles and Source control from a renderer store refreshe
 `resolve-conflicts`. Pages: [screen-review](pages/screen-review.md#merge-conflicts),
 [git-worktrees](pages/git-worktrees.md), [screen-wall](pages/screen-wall.md), [protocol](pages/protocol.md),
 [telemetry](pages/telemetry.md), [testing](pages/testing.md).
+
+## [2026-11-25] build | Import from claude.ai takes the artifact's content
+
+"Paste a link" used to store only a stub (a page with a note), so importing a design looked broken. oIDE
+cannot fetch claude.ai artifacts: there is no public content API, and fetching a private one would need
+the user's claude.ai sign-in, which oIDE never touches. The dialog now has an "Artifact content" text area
+(with an Open button for the link): the user pastes the code they copied, and `artifacts.import({ url, content })`
+stores it with `importedFrom`. The kind and title follow the content (`inferKindFromContent`, `titleFromContent`,
+`looksLikeHtml` in `@oide/protocol`). React or other non-HTML code is refused as a design, with a message
+saying why. "Pick a file" can keep the claude.ai link as the origin. An empty paste still makes a link-only
+stub ("Import link only"). Links carrying a user name or password are refused, and repo imports register
+their artifact root like `create`. New telemetry event: `artifact_imported` (source, kind, linked). Pages:
+[artifacts](pages/artifacts.md), [screen-artifacts](pages/screen-artifacts.md), [telemetry](pages/telemetry.md).
