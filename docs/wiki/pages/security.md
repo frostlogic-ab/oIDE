@@ -109,6 +109,15 @@ connect-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none'` (no
 `no-store`. The renderer shows it in `<iframe sandbox="allow-scripts">` (no `allow-same-origin`), so
 the page has an opaque origin and no access to `window.oide`.
 
+React designs ([ADR 0013](../../adr/0013-react-designs-with-a-bundled-offline-runtime.md)) go through
+`resolveArtifactRequest` (`services/artifact-preview.ts`) first: `__oide/` is oIDE's namespace (first
+segment compared case-folded, trailing dots and spaces ignored) and answers only the exact path
+`__oide/react-runtime.js`, with the bundled runtime file, and only for an artifact that exists; every other
+`__oide/…` path is 404 even when the artifact folder has one. A React design's `index.html` is a page main
+generates, with the source as JSON (`<`, U+2028, U+2029 escaped so it can't close the block). Everything else
+falls through to `resolveArtifactUrl` and its checks. Same CSP and headers; the runtime needs no eval and no
+network.
+
 ## Extension panel isolation
 
 Extension panels and artifact viewers (`contributes.panels`, `contributes.artifactTypes`) never run
