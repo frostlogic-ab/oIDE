@@ -47,10 +47,13 @@ export function resumeAgent(agentId: string): Promise<boolean> {
   return run(() => oide.invoke('agents.resume', { agentId }), 'Could not resume');
 }
 
+/** Idempotent in main: a branch that already has a PR gets that PR back (`existing`), never an error. */
 export async function openPullRequest(agentId: string, title: string, body: string): Promise<boolean> {
   let url = '';
   const ok = await run(async () => {
-    url = (await oide.invoke('git.openPr', { agentId, title, body })).url;
+    const r = await oide.invoke('git.openPr', { agentId, title, body });
+    url = r.url;
+    if (r.existing) toast(`This branch already has pull request${r.number ? ` #${r.number}` : ''}: opening it.`, 'info', { agentId });
   }, 'Could not open a pull request');
   if (ok && url) await run(() => oide.invoke('shell.openExternal', { url }), 'Could not open the pull request page');
   return ok;

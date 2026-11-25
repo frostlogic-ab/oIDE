@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OideMcpServer } from '@oide/mcp-server';
-import type { AgentEvent, AgentSpecInput, AgentSummary } from '@oide/protocol';
+import { AgentSpec, type AgentEvent, type AgentEventDraft, type AgentSpecInput, type AgentSummary } from '@oide/protocol';
 import { fakeCli, stamp, tempDir, testSettings, waitFor } from '../test/helpers.js';
 import type { EventSink, SettingsProvider, WorktreeProvider } from './ports.js';
 import { AgentReducer, createSummary } from './reducer.js';
@@ -42,14 +42,14 @@ async function harness(extraFlags: string, maxRunning = 3) {
   return { sup, mcp, events, saved, removedWorktrees, get, status };
 }
 
-const spec = (patch: Partial<AgentSpecInput> = {}): AgentSpecInput => ({
+const spec = (patch: Partial<AgentSpecInput> = {}): AgentSpec => AgentSpec.parse({
   projectId: 'p1',
   title: 'Fix tests',
   goal: 'Make the tests pass.',
   mode: 'default',
   strategy: { kind: 'single', lead: { model: 'sonnet' } },
   ...patch,
-});
+} satisfies AgentSpecInput);
 
 describe('Supervisor.archive / unarchive', () => {
   it('archives a finished agent: leaves the supervisor, keeps its saved summary, frees nothing it should not', async () => {
@@ -90,7 +90,7 @@ describe('Supervisor.archive / unarchive', () => {
     const [a] = await h.sup.spawn(spec());
     const first = await h.status(a!.id, 'has-question');
     const archived = await h.sup.archive(a!.id, { reason: 'archived-by-user' });
-    const specA = { ...spec(), title: 'Fix tests' };
+    const specA = spec();
 
     const back = h.sup.unarchive({ spec: specA, summary: archived, lastSeq: 900 });
     expect(back.archived).toBeUndefined();
@@ -140,7 +140,7 @@ describe('AgentReducer cost', () => {
   it('sums the CLI-reported cost across turns and processes', () => {
     const r = new AgentReducer(createSummary({ id: 'agent-1', projectId: 'p', title: 't', mode: 'default', model: 'sonnet' }));
     const result = (total: number) => ({ type: 'result' as const, subtype: 'success', isError: false, totalCostUsd: total });
-    for (const e of stamp([{ type: 'init', sessionId: 's' }, result(0.01), result(0.25), { type: 'init', sessionId: 's' }, result(0.1)])) r.apply(e);
+    for (const e of stamp([{ type: 'init', sessionId: 's' } as AgentEventDraft, result(0.01), result(0.25), { type: 'init', sessionId: 's' } as AgentEventDraft, result(0.1)])) r.apply(e);
     expect(r.summary.costUsd).toBeCloseTo(0.35, 6);
   });
 });

@@ -599,6 +599,17 @@ export class Supervisor {
     this.publishSummary(rec);
   }
 
+  /** The branch's pull request (main's gh lookups); publishes only on a change. */
+  setPr(agentId: string, pr: AgentSummary['pr']): void {
+    const rec = this.agents.get(agentId);
+    if (!rec) return;
+    const cur = rec.reducer.summary.pr;
+    if (cur?.number === pr?.number && cur?.state === pr?.state && cur?.url === pr?.url && cur?.mergeCommit === pr?.mergeCommit) return;
+    if (pr) rec.reducer.summary.pr = pr;
+    else delete rec.reducer.summary.pr;
+    this.publishSummary(rec);
+  }
+
   /** Stop one subagent (open question 9): deny its next tool call with a stop message. */
   stopSubagent(agentId: string, subagentId: string): boolean {
     const rec = this.require(agentId);

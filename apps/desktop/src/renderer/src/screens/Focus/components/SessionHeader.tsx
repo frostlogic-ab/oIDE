@@ -2,6 +2,7 @@ import type { AgentSummary, SubagentInfo } from '@oide/protocol';
 import { Badge, Button, ContextRing, ContextRingButton, Icon, Tooltip, contextFraction, contextPercent, contextTooltip, modelFamily, subagentStatusMeta } from '@oide/ui';
 import { ARCHIVE_REASON_LABEL, formatEnded } from '../../../stores/archive';
 import { canArchive } from '../../Wall/logic';
+import { PrLink } from '../../../components/PrLink';
 import { formatTokens } from '../../../lib/format';
 import { MODE_LABEL, isSubagentActive, modelEffort, routeLabel, runningText, subagentStatusText, tokenCount } from '../model/focus';
 
@@ -108,6 +109,7 @@ export function LeadHeader({ agent, project, now, warnAt, dangerAt, modeShortcut
           <span className={NARROW_LABEL}>Pause</span>
         </Button>
       )}
+      {agent.pr && <PrLink pr={agent.pr} className="shrink-0 @max-[700px]:hidden" />}
       {onArchive && canArchive(agent) && (
         <Button size={28} className={ACTION} icon="archive" onClick={onArchive} title="Archive">
           <span className={NARROW_LABEL}>Archive</span>
@@ -158,6 +160,7 @@ function ArchivedHeader({ agent, project, worktree, onUnarchive, onDelete }: { a
           </span>
         </span>
       </div>
+      {agent.pr && <PrLink pr={agent.pr} className="shrink-0" />}
       <Button size={28} className={ACTION} icon="archive" onClick={onUnarchive}>
         Unarchive
       </Button>

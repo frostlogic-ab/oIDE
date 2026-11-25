@@ -12,7 +12,20 @@ export interface PrInfo {
   state: string;
   number?: number;
   url?: string;
+  /** Merge commit sha (merged PRs). */
+  mergeCommit?: string;
 }
+
+/** A lookup that tells "no PR for this branch" (`pr` undefined, no error) from a gh failure (`error`). */
+export interface PrLookup {
+  pr?: PrInfo;
+  error?: string;
+  /** gh is missing or signed out. */
+  unavailable?: boolean;
+}
+
+/** gh's message when a branch has no pull request. */
+const NO_PR = /no (open )?pull requests? found|could not find any pull requests/i;
 
 interface Run {
   stdout: string;
@@ -67,10 +80,20 @@ export class GhCli {
 
   /** PR for a branch, or undefined when there is none or gh is unavailable. */
   async prView(cwd: string, branch: string): Promise<PrInfo | undefined> {
-    if (!(await this.available())) return undefined;
-    const r = await this.run(['pr', 'view', branch, '--json', 'state,number,url,isDraft'], cwd);
-    if (r.code !== 0) return undefined;
-    return parsePrView(r.stdout);
+    return (await this.prLookup(cwd, branch)).pr;
+  }
+
+  /** PR for a branch, telling "none" apart from a failure (for backoff). */
+  async prLookup(cwd: string, branch: string): Promise<PrLookup> {
+    if (!(await this.available())) return { unavailable: true };
+    const r = await this.run(['pr', 'view', branch, '--json', 'state,number,url,isDraft,mergeCommit'], cwd);
+    if (r.code === 0) {
+      const pr = parsePrView(r.stdout);
+      return pr ? { pr } : { error: 'gh pr view returned no state' };
+    }
+    const msg = (r.stderr || r.stdout).trim();
+    if (NO_PR.test(msg)) return {};
+    return { error: msg.slice(0, 300) || `gh exited with ${r.code}` };
   }
 
   /** Create a PR. Returns its URL, or undefined when gh is unavailable. Throws with gh's message on failure. */
@@ -89,10 +112,10 @@ export class GhCli {
 
 export function parsePrView(json: string): PrInfo | undefined {
   try {
-    const v = JSON.parse(json) as { state?: string; number?: number; url?: string; isDraft?: boolean };
+    const v = JSON.parse(json) as { state?: string; number?: number; url?: string; isDraft?: boolean; mergeCommit?: { oid?: string } | null };
     if (!v.state) return undefined;
     const state = v.isDraft && v.state === 'OPEN' ? 'draft' : v.state.toLowerCase();
-    return { state, number: v.number, url: v.url };
+    return { state, number: v.number, url: v.url, ...(v.mergeCommit?.oid ? { mergeCommit: v.mergeCommit.oid } : {}) };
   } catch {
     return undefined;
   }

@@ -9,6 +9,7 @@ import { archiveAgent } from '../../../stores/archive';
 import { navigate } from '../../../stores/router';
 import { useSetting } from '../../../stores/settings';
 import { AttachFileButton, AttachmentTray, useAttachments } from '../../../components/Attachments';
+import { PrLink } from '../../../components/PrLink';
 import { answerPermission, openPullRequest, resumeAgent, sendReply, type PermissionChoice } from '../actions';
 import { canArchive, interruptionText, parseActivity, permissionView, tileBodyKind } from '../logic';
 
@@ -212,7 +213,7 @@ export function TileFooter({ agent, projectName, focused }: { agent: AgentSummar
           >
             Review diff
           </LinkButton>
-          <OpenPrButton agent={agent} />
+          {agent.pr ? <PrLink pr={agent.pr} /> : <OpenPrButton agent={agent} />}
           <div className="flex-1" />
           <ArchiveButton agent={agent} />
         </div>
@@ -243,6 +244,7 @@ export function TileFooter({ agent, projectName, focused }: { agent: AgentSummar
         <div className={`${FOOTER} gap-2.5 text-ink-3 text-[12px]`}>
           {kind === 'queued' ? <span>Queued</span> : agent.diff ? <Diff agent={agent} /> : <span>No changes yet</span>}
           <div className="flex-1" />
+          {agent.pr && <PrLink pr={agent.pr} />}
           {(agent.status === 'paused' || agent.status === 'stopped' || agent.status === 'done') && <ArchiveButton agent={agent} />}
           {(agent.status === 'paused' || agent.status === 'stopped') && <ResumeButton agent={agent} />}
           {open()}

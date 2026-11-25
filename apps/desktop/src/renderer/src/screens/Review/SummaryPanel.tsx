@@ -32,7 +32,8 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
   const [sendState, setSendState] = useState<'idle' | 'busy' | 'sent'>('idle');
   const [prBusy, setPrBusy] = useState(false);
   const [merge, setMerge] = useState<{ step: 'confirm' | 'busy' | 'conflicts'; conflicts: string[] } | null>(null);
-  const pr = worktree?.pr;
+  // The agent's own PR info (kept fresh by main's PR watcher) wins over Source control's cached lookup.
+  const pr = agent.pr ?? worktree?.pr;
 
   const send = async () => {
     setSendState('busy');

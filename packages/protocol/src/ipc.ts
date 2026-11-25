@@ -111,7 +111,11 @@ export const Commands = {
   'git.overlaps': cmd(z.object({ projectId: Id }), z.array(OverlapWarning)),
   'git.diff': cmd(z.object({ agentId: Id }), z.array(FileDiff)),
   'git.mergeLocal': cmd(z.object({ agentId: Id }), z.object({ ok: z.boolean(), conflicts: z.array(z.string()).default([]) })),
-  'git.openPr': cmd(z.object({ agentId: Id, title: z.string(), body: z.string().default('') }), z.object({ url: z.string() })),
+  /** Idempotent: when the branch already has a pull request, it is returned instead of opening another one (`existing: true`). */
+  'git.openPr': cmd(
+    z.object({ agentId: Id, title: z.string(), body: z.string().default('') }),
+    z.object({ url: z.string(), number: z.number().int().optional(), state: z.enum(['open', 'draft', 'merged', 'closed']).optional(), existing: z.boolean().optional() }),
+  ),
   'git.reconcile': cmd(z.object({ projectId: Id, agentIds: z.tuple([Id, Id]) }), z.array(AgentSummary)),
   'git.pruneOrphans': cmd(z.object({ projectId: Id }), z.object({ removed: z.array(z.string()) })),
   /** Whether PRs can be opened for this project (gh installed and signed in). Source control hides PR state and Review disables Open pull request when false. */

@@ -23,12 +23,15 @@ import type { SettingsService, Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
 import type { ProjectsService } from './projects.js';
+import { PrWatcher, toAgentPr } from './pr-watch.js';
 
 /** Minimal view of the agents the git service needs (avoids a cycle with AgentsService). */
 export interface AgentLookup {
   list(): AgentSummary[];
   get(agentId: string): AgentSummary | undefined;
   setDiff(agentId: string, diff: AgentSummary['diff']): void;
+  /** The branch's pull request (tile "View PR", PR-merged archive). */
+  setPr?(agentId: string, pr: AgentSummary['pr']): void;
 }
 
 interface Subscription {
@@ -61,6 +64,8 @@ const DAY = 24 * 60 * 60 * 1000;
  */
 export class GitService {
   readonly gh: GhCli;
+  /** Polls open/draft PRs; a merged one archives its agent (pr-watch.ts). */
+  readonly prs: PrWatcher;
   private readonly lastFetchAt = new Map<string, number>();
   private readonly prCache = new Map<string, { at: number; pr: PrInfo | undefined }>();
   private readonly watchers = new Map<string, { projectId: string; sub: Promise<Subscription | undefined> }>();
@@ -89,6 +94,8 @@ export class GitService {
       watch?: WatchFn | undefined;
       background?: boolean | undefined;
       gh?: GhCli;
+      /** False while the machine is offline (Electron's net.isOnline): no PR polling then. */
+      isOnline?: () => boolean;
       debounceMs?: number;
       /** Test seam for the tile diff counts. */
       diffStat?: typeof diffStat;
@@ -97,6 +104,15 @@ export class GitService {
     },
   ) {
     this.gh = o.gh ?? new GhCli();
+    this.prs = new PrWatcher({
+      gh: this.gh,
+      agents: { list: () => this.o.agents.list(), setPr: (id, pr) => this.o.agents.setPr?.(id, pr) },
+      trusted: (projectId) => this.o.projects.get(projectId)?.trusted ?? false,
+      intervalMinutes: () => this.o.settings.get().agents.fetchIntervalMinutes,
+      ...(o.isOnline ? { isOnline: o.isOnline } : {}),
+      onMerged: (a, pr) => this.archiveForMergedPr(a, pr),
+      log: o.ctx.log,
+    });
     if (o.background) {
       this.armFetchTimer();
       o.settings.onChange(() => this.armFetchTimer());
@@ -193,6 +209,9 @@ export class GitService {
       agents.map(async (a) => {
         const info = await this.o.worktrees.info({ projectId, path: a.worktreePath, branch: a.branch, baseRef: a.baseRef, agentId: a.id });
         const pr = prOk && !info.orphaned ? await this.prFor(a.worktreePath, a.branch) : undefined;
+        // The same lookup puts the PR on the agent (tile "View PR #12"), also for PRs opened outside oIDE.
+        const agentPr = toAgentPr(pr, Date.now());
+        if (agentPr && agentPr.state !== 'merged') this.o.agents.setPr?.(a.id, agentPr);
         return pr ? { ...info, pr: { state: pr.state, ...(pr.number !== undefined ? { number: pr.number } : {}), ...(pr.url ? { url: pr.url } : {}) } } : info;
       }),
     );
@@ -303,19 +322,67 @@ export class GitService {
     return removed;
   }
 
-  async openPr(agentId: string, title: string, body: string): Promise<{ url: string }> {
+  /**
+   * Push the branch and open a PR. Idempotent: when the branch already has an open or draft PR
+   * (opened before, or outside oIDE), that one is returned (`existing: true`) instead of failing.
+   */
+  async openPr(agentId: string, title: string, body: string): Promise<{ url: string; number?: number; state?: 'open' | 'draft' | 'merged' | 'closed'; existing?: boolean }> {
     const a = this.agent(agentId);
     if (!a.branch || !a.worktreePath) throw new IpcError('This agent has no branch to open a pull request for.', 'conflict');
     if (!(await this.gh.available())) throw new IpcError('The GitHub CLI (gh) is not installed or not signed in.', 'unavailable');
-    await this.remote(() => gitPush(a.worktreePath!, { branch: a.branch!, setUpstream: true }));
+    const cwd = a.worktreePath;
+    const branch = a.branch;
+    const existing = async () => {
+      const r = await this.gh.prLookup(cwd, branch);
+      const pr = toAgentPr(r.pr, Date.now());
+      return pr && (pr.state === 'open' || pr.state === 'draft') ? pr : undefined;
+    };
+    const known = await existing();
+    // New commits still go up, so the existing PR shows them.
+    await this.remote(() => gitPush(cwd, { branch, setUpstream: true }));
+    if (known) return this.notePr(a, known, true);
     const base = a.baseRef && !/^[0-9a-f]{40}$/.test(a.baseRef) ? a.baseRef.replace(/^origin\//, '') : undefined;
-    const r = await this.gh.prCreate(a.worktreePath, { title, body, head: a.branch, ...(base ? { base } : {}) }).catch((err: Error) => {
-      throw new IpcError(err.message, 'git_failed');
-    });
-    if (!r) throw new IpcError('The GitHub CLI (gh) is not available.', 'unavailable');
-    this.prCache.delete(a.branch);
+    let created: { url: string } | undefined;
+    try {
+      created = await this.gh.prCreate(cwd, { title, body, head: branch, ...(base ? { base } : {}) });
+    } catch (err) {
+      // A PR appeared in between (or gh's lookup missed it): "a pull request for branch … already exists".
+      const again = /already exists/i.test((err as Error).message) ? await existing() : undefined;
+      if (again) return this.notePr(a, again, true);
+      throw new IpcError((err as Error).message, 'git_failed');
+    }
+    if (!created) throw new IpcError('The GitHub CLI (gh) is not available.', 'unavailable');
+    const number = Number(/\/pull\/(\d+)/.exec(created.url)?.[1]);
+    const pr = (await existing()) ?? (number > 0 ? { number, url: created.url, state: 'open' as const, checkedAt: Date.now() } : undefined);
+    if (!pr) {
+      this.prCache.delete(branch);
+      this.changed(a.projectId);
+      return created;
+    }
+    return this.notePr(a, pr, false);
+  }
+
+  private notePr(a: AgentSummary, pr: NonNullable<AgentSummary['pr']>, existing: boolean) {
+    this.o.agents.setPr?.(a.id, pr);
+    this.prs.noteKnown(a.id);
+    if (a.branch) this.prCache.delete(a.branch);
     this.changed(a.projectId);
-    return r;
+    return { url: pr.url, number: pr.number, state: pr.state, existing };
+  }
+
+  /**
+   * The agent's PR was merged on the forge: archive it (reason `merged`, the PR's merge commit), as a
+   * merge inside oIDE does. Worktree cleanup follows Settings, but never deletes uncommitted work.
+   */
+  private async archiveForMergedPr(a: AgentSummary, pr: NonNullable<AgentSummary['pr']>): Promise<void> {
+    if (!this.o.agents.get(a.id)) return;
+    const cleanup = this.o.settings.get().agents.cleanup;
+    const dirty = a.worktreePath && existsSync(a.worktreePath) ? await this.hasLocalChanges(a.worktreePath).catch(() => true) : false;
+    if (dirty) this.o.ctx.log.warn('merged PR: worktree has uncommitted changes, so it is kept', { agent: a.id });
+    if (cleanup === 'after-7-days' && !dirty) this.o.store.ui.kv.set(MERGED_KEY(a.id), Date.now());
+    await this.o.archiveMerged(a.id, { ...(pr.mergeCommit ? { mergeCommit: pr.mergeCommit } : {}), deleteWorktree: cleanup === 'right-away' && !dirty });
+    this.o.ctx.emit('notify', { level: 'info', message: `PR #${pr.number} merged · ${a.title} archived`, agentId: a.id });
+    this.changed(a.projectId);
   }
 
   async pruneOrphans(projectId: string): Promise<{ removed: string[] }> {
@@ -454,6 +521,14 @@ export class GitService {
   async fetchAll(): Promise<void> {
     if (this.closed) return;
     await this.track(() => this.fetchAllNow());
+    // Then the PR states (open/draft PRs only; backs off on gh errors).
+    if (!this.closed) await this.track(() => this.prs.poll('timer'));
+  }
+
+  /** The window got focus: look at open PRs again (throttled in PrWatcher). */
+  onWindowFocus(): void {
+    if (this.closed || !this.o.background) return;
+    void this.track(() => this.prs.poll('focus'));
   }
 
   private async fetchAllNow(): Promise<void> {

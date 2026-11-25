@@ -200,4 +200,36 @@ describe('archived agents (main services, fake-claude)', () => {
     (live as { status: string }).status = 'exploded';
     expect((await h.call('agents.list', undefined)).map((x) => x.id)).toEqual([a!.id]);
   }, 60_000);
+  it('a pull request merged on the forge archives its agent (reason merged, merge commit) and toasts; closed only shows', async () => {
+    const prs = new Map<string, { state: string; number: number; url: string; mergeCommit?: string }>();
+    const gh = {
+      available: async () => true,
+      prLookup: async (_cwd: string, branch: string) => (prs.has(branch) ? { pr: prs.get(branch)! } : {}),
+      prView: async (_cwd: string, branch: string) => prs.get(branch),
+      prCreate: async () => undefined,
+      refresh: () => {},
+    };
+    const h = await harness({ gh: gh as never });
+    const { project: p } = await project(h, '--fake-scenario basic', { agents: { cleanup: 'right-away' } });
+    const [a] = await h.call('agents.spawn', { projectId: p.id, title: 'Ship it', goal: 'hi', mode: 'acceptEdits', strategy });
+    const [b] = await h.call('agents.spawn', { projectId: p.id, title: 'Abandoned', goal: 'hi', mode: 'acceptEdits', strategy });
+    const idle = await status(h, a!.id, 'has-question');
+    const idleB = await status(h, b!.id, 'has-question');
+    // A PR opened outside oIDE is found by the first lookup.
+    prs.set(idle.branch!, { state: 'OPEN'.toLowerCase(), number: 7, url: 'https://github.com/o/r/pull/7' });
+    prs.set(idleB.branch!, { state: 'closed', number: 8, url: 'https://github.com/o/r/pull/8' });
+    await h.services.git.prs.poll('manual');
+    expect((await agent(h, a!.id))?.pr).toMatchObject({ number: 7, state: 'open' });
+    expect((await agent(h, b!.id))?.pr).toMatchObject({ number: 8, state: 'closed' });
+
+    prs.set(idle.branch!, { state: 'merged', number: 7, url: 'https://github.com/o/r/pull/7', mergeCommit: 'deadbeef' });
+    await h.services.git.prs.poll('manual');
+    expect(await agent(h, a!.id)).toBeUndefined();
+    const arch = await h.call('agents.getArchived', { agentId: a!.id });
+    expect(arch).toMatchObject({ archived: { reason: 'merged', mergeCommit: 'deadbeef', worktreeRemoved: true }, pr: { number: 7, state: 'merged' } });
+    expect(existsSync(idle.worktreePath!)).toBe(false);
+    expect(h.eventsOf('notify').some((n) => n.message === 'PR #7 merged · Ship it archived')).toBe(true);
+    // Closed without merging: stays on the Wall with its badge; the user archives it if they want.
+    expect((await agent(h, b!.id))?.pr?.state).toBe('closed');
+  }, 60_000);
 });

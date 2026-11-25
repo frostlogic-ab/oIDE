@@ -275,6 +275,21 @@ export type AgentArchiveInfo = z.infer<typeof AgentArchiveInfo>;
 export const AgentInterruption = z.object({ at: z.number(), reason: z.enum(['restart', 'crash', 'mcp-down']) });
 export type AgentInterruption = z.infer<typeof AgentInterruption>;
 
+/**
+ * The pull request for an agent's branch (opened from oIDE or anywhere else), from the user's own
+ * `gh`. An open or draft PR is polled; once merged the agent is archived (reason `merged`).
+ */
+export const AgentPrInfo = z.object({
+  number: z.number().int().positive(),
+  url: z.string().url(),
+  state: z.enum(['open', 'draft', 'merged', 'closed']),
+  /** The merge commit on the base branch, when gh reports it (merged PRs). */
+  mergeCommit: z.string().optional(),
+  /** When oIDE last saw this state. */
+  checkedAt: z.number().optional(),
+});
+export type AgentPrInfo = z.infer<typeof AgentPrInfo>;
+
 /** Compact per-agent state the Wall renders. Reduced from the event stream in main. */
 export const AgentSummary = z.object({
   id: Id,
@@ -322,6 +337,8 @@ export const AgentSummary = z.object({
   interrupted: AgentInterruption.optional(),
   /** Why Resume cannot work, e.g. the worktree was deleted. Resume is hidden while this is set. */
   resumeBlocked: z.string().optional(),
+  /** The branch's pull request, when there is one (tile "View PR #12", Focus, Review). */
+  pr: AgentPrInfo.optional(),
   /** Cost the CLI reported (`total_cost_usd`), summed over the agent's processes. */
   costUsd: z.number().nonnegative().optional(),
   /** Latest plan usage window from the CLI's `rate_limit_event` (utilization is 0..1 when reported). */
