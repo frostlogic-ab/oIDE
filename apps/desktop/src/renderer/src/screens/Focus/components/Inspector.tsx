@@ -8,6 +8,8 @@ import { isSubagentActive, modelEffort, routeLabel, routingLine, subagentStatusT
 import { subagentFiles } from '../model/transcript';
 import { InspectorPanelFrames, useInspectorPanels } from '../../../extensions/InspectorPanels';
 import { Markdown } from './Markdown';
+import { ResizableAside } from '../../../components/ResizableAside';
+import { PANELS } from '../../../lib/panels';
 
 /** xterm loads only when the Terminal tab is first opened. */
 const TerminalPanel = lazy(() => import('./TerminalPanel').then((m) => ({ default: m.TerminalPanel })));
@@ -50,7 +52,7 @@ export function Inspector({ agent, events, subEvents, tab, onTab, now, stopReque
   return (
     // A size container: below its 340px maximum (the 1100–1280px windows) the five tabs tighten
     // their padding so "Terminal" is never clipped.
-    <aside aria-label="Inspector" className="@container flex-[1_1_320px] max-w-[340px] min-w-[300px] flex flex-col bg-panel border-l border-line box-border min-h-0">
+    <ResizableAside panel={PANELS.focusInspector} aria-label="Inspector" className="@container flex flex-col bg-panel border-l border-line box-border min-h-0">
       <div className="px-2 @max-[339px]:px-1 pt-2 border-b border-line">
         <Tabs
           tabs={tabs}
@@ -79,7 +81,7 @@ export function Inspector({ agent, events, subEvents, tab, onTab, now, stopReque
       )}
       <InspectorPanelFrames agent={agent} tabs={extTabs} tab={tab} idPrefix={ID} />
       {tab !== 'term' && !isExt && <AgentTools projectId={agent.projectId} />}
-    </aside>
+    </ResizableAside>
   );
 }
 

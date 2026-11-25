@@ -9,6 +9,8 @@ import { useScope } from '../../../stores/scope';
 import { toast } from '../../../stores/ui';
 import { useWall } from '../wallState';
 import { tileDomId } from './AgentTile';
+import { ResizableAside } from '../../../components/ResizableAside';
+import { PANELS } from '../../../lib/panels';
 
 export async function openProject(): Promise<void> {
   try {
@@ -28,7 +30,7 @@ export function ProjectSidebar() {
   const scope = useScope((s) => s.scope);
   const total = useAgents((s) => s.order.length);
   return (
-    <aside aria-label="Projects" className="w-[248px] shrink-0 flex flex-col gap-1 px-2.5 py-3.5 bg-panel border-r border-line box-border overflow-y-auto">
+    <ResizableAside panel={PANELS.wallProjects} aria-label="Projects" className="flex flex-col gap-1 px-2.5 py-3.5 bg-panel border-r border-line box-border overflow-y-auto">
       <div className="flex items-center justify-between px-1.5 pb-2">
         <SectionLabel as="h2">Projects</SectionLabel>
         <IconButton icon="plus" aria-label="Open project" onClick={() => void openProject()} />
@@ -64,7 +66,7 @@ export function ProjectSidebar() {
           Subagent, letter = model
         </span>
       </div>
-    </aside>
+    </ResizableAside>
   );
 }
 

@@ -643,4 +643,17 @@ compounds per directory level, so a held folder made the delete hang for minutes
 - Telemetry: `worktree_delete_failed { holder }`, `worktree_delete_retried_ok { attempts }`.
 Pages: [git-worktrees](pages/git-worktrees.md#why-a-worktree-cant-be-deleted-on-windows),
 [reliability](pages/reliability.md#windows), [telemetry](pages/telemetry.md),
+
+## [2026-11-25] build | Resizable sidebars
+
+Every sidebar can be resized by dragging its inner edge, within a per-panel min (where the content
+still fits) and max; the main area always keeps 360px. One component, `ResizableAside`
+(`apps/desktop/src/renderer/src/components/ResizableAside.tsx`), replaces the fixed-width `<aside>`
+on all 14 sidebars; the registry with ids, sides, defaults (the canvas widths) and limits is
+`src/lib/panels.ts`. The handle is a focusable `role="separator"` (arrows, Shift for big steps,
+Home / End; double-click resets; Escape cancels a drag). Widths are saved on release (keyboard: after
+400 ms) to the new `settings.ui.panelWidths` (protocol `PanelWidths`: id `^[a-z][a-z0-9.-]{0,63}$`,
+integer 120-1600 px, at most 64 entries; bad entries are dropped so a stale one never resets the
+rest of `ui`), so they survive restarts; Settings › Appearance has Reset
+sidebar widths. Pages: [design-system](pages/design-system.md), [desktop-shell](pages/desktop-shell.md),
 [screen-settings](pages/screen-settings.md).

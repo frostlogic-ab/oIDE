@@ -31,9 +31,10 @@ apps/desktop/
     index.html                 CSP meta injected at build (%OIDE_CSP%)
     src/main.tsx, App.tsx      fonts, keymap attach, mock bridge in dev browser, store boot
     src/components/frame/      AppFrame, Header, HeaderSlot, Rail, StatusBar, CommandBar, Toasts
+    src/components/ResizableAside.tsx  resizable sidebars (drag / keyboard, widths in settings.ui.panelWidths)
     src/screens/<Name>/        one folder per screen; registry.tsx lists them
     src/stores/                router, agents, projects, scope, settings, cli, ui
-    src/lib/                   bridge, keymap, useKeymap, commands, coreCommands, boot, format, mock/
+    src/lib/                   bridge, keymap, useKeymap, commands, coreCommands, boot, format, panels, mock/
 ```
 
 ## Main process

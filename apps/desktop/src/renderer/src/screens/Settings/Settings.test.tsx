@@ -128,4 +128,17 @@ describe('Settings screen', () => {
     expect(screen.getByLabelText('Display name').getAttribute('aria-invalid')).toBe('true');
     expect(invoke.mock.calls.some(([c]) => c === 'settings.saveCustomModel')).toBe(false);
   });
+
+  it('Appearance resets every sidebar width to its default', async () => {
+    current = { ...current, ui: { ...current.ui, panelWidths: { 'wall.projects': 320, 'files.tree': 400 } } };
+    useSettings.setState({ settings: current });
+    open('look');
+    expect(screen.getByText(/2 sidebars have a custom width/)).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Reset sidebar widths' }));
+    });
+    expect(updates()).toContainEqual({ ui: { panelWidths: null } });
+    expect(current.ui.panelWidths).toEqual({});
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Reset sidebar widths' }) as HTMLButtonElement).disabled).toBe(true));
+  });
 });

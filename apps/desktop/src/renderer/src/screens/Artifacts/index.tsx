@@ -21,6 +21,8 @@ import { ArtifactPreview, KindThumb } from './Preview';
 import { Viewer, type CompareSide, type ViewerMode } from './Viewer';
 import { KIND_LABEL, KIND_TABS, agentsUsing, filterArtifacts, isClaudeLink, usageLine, versionLabel, type KindTab } from './model';
 import './artifacts.css';
+import { ResizableAside } from '../../components/ResizableAside';
+import { PANELS } from '../../lib/panels';
 
 type Detail = CommandOutput<'artifacts.get'>;
 type OpenAs = { mode?: ViewerMode; compare?: { from: CompareSide; to: CompareSide } };
@@ -161,7 +163,7 @@ export default function ArtifactsScreen() {
             <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search artifacts" className="w-[180px] bg-transparent border-0 outline-none text-ink text-[12.5px] placeholder:text-ink-3" />
           </label>
       </HeaderSlot>
-      <main className="flex-[999_1_560px] min-w-0 overflow-auto flex flex-col gap-4 px-5 py-[18px] box-border">
+      <main className="flex-1 min-w-[360px] overflow-auto flex flex-col gap-4 px-5 py-[18px] box-border">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="m-0 text-[18px] font-semibold">Artifacts</h1>
           <KindTabs value={kind} onChange={setKind} />
@@ -315,9 +317,9 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
 
   if (!detail) {
     return (
-      <aside aria-label="Artifact details" className="flex-[1_1_320px] max-w-[380px] flex flex-col items-center justify-center gap-3 px-4 py-[18px] bg-panel border-l border-line box-border text-[12.5px] text-ink-3">
+      <ResizableAside panel={PANELS.artifactsDetails} aria-label="Artifact details" className="flex flex-col items-center justify-center gap-3 px-4 py-[18px] bg-panel border-l border-line box-border text-[12.5px] text-ink-3">
         {selected ? <Spinner /> : 'Select an artifact to see it here.'}
-      </aside>
+      </ResizableAside>
     );
   }
 
@@ -352,7 +354,7 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
   };
 
   return (
-    <aside aria-label="Artifact details" className="flex-[1_1_320px] max-w-[380px] min-h-0 overflow-auto flex flex-col gap-3.5 px-4 py-[18px] bg-panel border-l border-line box-border">
+    <ResizableAside panel={PANELS.artifactsDetails} aria-label="Artifact details" className="min-h-0 overflow-auto flex flex-col gap-3.5 px-4 py-[18px] bg-panel border-l border-line box-border">
       <div className="h-[190px] shrink-0 rounded-xl bg-raised border border-line-2 overflow-hidden box-border">
         <ArtifactPreview
           artifactId={meta.id}
@@ -477,6 +479,6 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
           })}
         </ul>
       </section>
-    </aside>
+    </ResizableAside>
   );
 }

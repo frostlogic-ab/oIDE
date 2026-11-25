@@ -3,6 +3,8 @@ import { Icon, IconButton, Menu, SectionLabel, Spinner, type MenuItem } from '@o
 import type { Project, WorktreeInfo } from '@oide/protocol';
 import { shortBranch } from '../SourceControl/model';
 import { ancestorDirs, useFiles, visibleRows, type TreeRow } from './filesStore';
+import { ResizableAside } from '../../components/ResizableAside';
+import { PANELS } from '../../lib/panels';
 
 /** Row pitch: 22px row + 1px gap (canvas `.tr`, `gap: 1px`). */
 export const ROW_H = 23;
@@ -74,7 +76,7 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
   const all = (fn: (root: string) => void) => () => openRoots.forEach(fn);
 
   return (
-    <aside aria-label="File tree" className="flex-[0_0_270px] w-[270px] flex flex-col px-2 pt-1.5 pb-3 bg-panel border-r border-line box-border min-h-0">
+    <ResizableAside panel={PANELS.filesTree} aria-label="File tree" className="flex flex-col px-2 pt-1.5 pb-3 bg-panel border-r border-line box-border min-h-0">
       <div role="toolbar" aria-label="File tree actions" className="flex items-center gap-0.5 h-8 pl-1.5 mb-1 shrink-0">
         <SectionLabel as="h2" className="flex-1">
           Files
@@ -133,7 +135,7 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
         </span>
         <span className="leading-[1.45] mt-0.5">Each project shows its own branch or agent worktree. The menu next to a project switches it.</span>
       </div>
-    </aside>
+    </ResizableAside>
   );
 }
 
