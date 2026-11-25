@@ -4,6 +4,8 @@
  * id (main rejects anything else).
  */
 import { useSyncExternalStore } from 'react';
+import type { MessageAttachment } from '@oide/protocol';
+import { attachmentOnlyText } from '../../lib/attachments';
 import { ipcErrorCode, ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
 
@@ -28,10 +30,11 @@ export function answerPermission(agentId: string, requestId: string, choice: Per
   return run(() => oide.invoke('agents.answerPermission', { agentId, answer }), 'Could not answer the permission prompt');
 }
 
-export function sendReply(agentId: string, text: string): Promise<boolean> {
+export function sendReply(agentId: string, text: string, attachments: readonly MessageAttachment[] = []): Promise<boolean> {
   const trimmed = text.trim();
-  if (!trimmed) return Promise.resolve(false);
-  return run(() => oide.invoke('agents.send', { agentId, message: { kind: 'text', text: trimmed } }), 'Could not send the reply');
+  if (!trimmed && !attachments.length) return Promise.resolve(false);
+  const message = attachments.length ? { kind: 'text' as const, text: trimmed || attachmentOnlyText(attachments), attachments: [...attachments] } : { kind: 'text' as const, text: trimmed };
+  return run(() => oide.invoke('agents.send', { agentId, message }), 'Could not send the reply');
 }
 
 export async function compactAgent(agentId: string, title: string): Promise<boolean> {

@@ -2,8 +2,9 @@
  * Pure helpers for the Focus screen: agent list order, mode cycling, composer messages, permission
  * copy, subagent timing, token share and timeline geometry. Tested in focus.test.ts.
  */
-import type { AgentSummary, PermissionMode, PermissionRequest, SubagentInfo, TokenUsage, UserMessage } from '@oide/protocol';
+import type { AgentSummary, MessageAttachment, PermissionMode, PermissionRequest, SubagentInfo, TokenUsage, UserMessage } from '@oide/protocol';
 import { modelFamily } from '@oide/ui';
+import { attachmentOnlyText } from '../../../lib/attachments';
 import { formatDuration } from '../../../lib/format';
 import { clip, toolPath } from './transcript';
 
@@ -92,32 +93,23 @@ export const MODE_LABEL: Record<PermissionMode, string> = {
 /** Verified on CLI 2.1.325 (`slash_commands` in init); used until the agent's own init reports its list. */
 export const DEFAULT_SLASH_COMMANDS = ['compact', 'context', 'init'] as const;
 
-const SLASH_HELP: Record<string, string> = {
-  compact: 'Summarize the conversation to free up context (asks first)',
-  context: 'Show how the context window is used',
-  init: 'Write a CLAUDE.md for this project',
-  clear: 'Start a fresh conversation',
-  cost: 'Show token usage for this session',
-  review: 'Review the changes',
-};
-export const slashHelp = (name: string): string => SLASH_HELP[name] ?? 'Run this command in the agent';
-
-export function filterSlash(commands: readonly string[], query: string): string[] {
-  const q = query.replace(/^\//, '').toLowerCase();
-  return commands.filter((c) => c.toLowerCase().startsWith(q)).concat(commands.filter((c) => !c.toLowerCase().startsWith(q) && c.toLowerCase().includes(q)));
-}
+// The `/` menu's grouping, labels, descriptions and filter: lib/slash.ts (shared SlashMenu).
 
 export type ComposerIntent = { kind: 'send'; message: UserMessage } | { kind: 'compact' } | { kind: 'none' };
 
 /**
  * What the composer sends. `/compact` opens the confirm dialog (never sent directly); other `/x`
  * become command messages; an attached artifact becomes an artifact message with the text as note.
- * Messages typed while viewing a subagent go to the lead, prefixed with which subagent they concern.
+ * Pasted, dropped or picked attachments ride on the text (or artifact) message; a message with
+ * attachments is never a command. Messages typed while viewing a subagent go to the lead, prefixed
+ * with which subagent they concern.
  */
-export function composeMessage(input: { text: string; artifactId?: string; subagentName?: string; commands?: readonly string[] }): ComposerIntent {
+export function composeMessage(input: { text: string; artifactId?: string; subagentName?: string; commands?: readonly string[]; attachments?: readonly MessageAttachment[] }): ComposerIntent {
   const text = input.text.trim();
   const about = (t: string) => (input.subagentName ? `About the subagent "${input.subagentName}": ${t}` : t);
-  if (input.artifactId) return { kind: 'send', message: { kind: 'artifact', artifactId: input.artifactId, ...(text ? { note: about(text) } : {}) } };
+  const atts = input.attachments?.length ? { attachments: [...input.attachments] } : {};
+  if (input.artifactId) return { kind: 'send', message: { kind: 'artifact', artifactId: input.artifactId, ...(text ? { note: about(text) } : {}), ...atts } };
+  if (input.attachments?.length) return { kind: 'send', message: { kind: 'text', text: about(text || attachmentOnlyText(input.attachments)), ...atts } };
   if (!text) return { kind: 'none' };
   const m = /^\/([a-z][\w:-]*)(\s|$)/i.exec(text);
   // Only the CLI's known commands are commands; "/usr/bin is missing" stays a message.

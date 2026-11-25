@@ -528,3 +528,19 @@ icon in dev and unpackaged runs (`main/app-icon.ts`, AUMID `dev.oide.app`, macOS
 accent), screen error panel, renderer favicon, docs site (nav logo, hero, favicon, og:image), README
 header. Open question 18 added (trademark). See [design-system](pages/design-system.md#brand),
 [packaging](pages/packaging.md).
+
+## [2026-11-25] build | Slash menu and attachments
+
+- Focus's `/` menu rebuilt (`components/SlashMenu.tsx`, `lib/slash.ts`): one fixed 28px row per command, mono
+  label truncated with the full command in the tooltip, right-aligned description; built-ins, skills, plugins,
+  then one group per MCP server (`mcp__claude_ai_HubSpot__x` → "HubSpot (MCP)" / `x`); filter with prefix
+  matches first, "N of M" count, 320px cap with scrolling, arrows/Page/Home/End/Enter/Tab/Esc, combobox and
+  listbox ARIA. Picking inserts `/<command> `; `/compact` keeps its confirm. Mock reports 96 commands.
+- Attachments on the Focus composer, the Wall reply box and Spawn's goal: paste screenshots, drop files,
+  Attach file (`dialog.pickFiles`). Images go as stream-json image blocks; other files are copied to
+  `.oide/attachments/<timestamp>-<name>` in the agent's folder (excluded via `info/exclude`). Main validates
+  (picked/dropped or worktree paths only, sniffed image types, 5/20/25 MB and 10-item limits). Drops use a
+  preload-only channel fed by `webUtils.getPathForFile`. Transcript shows thumbnails (click to enlarge).
+- Real CLI 2.1.325 check (3 Haiku runs): image blocks accepted; single image recognised ("red"); with two
+  images Haiku said it saw only paths, so multi-image recognition is unconfirmed. See
+  [cli-integration](pages/cli-integration.md) and [screen-focus](pages/screen-focus.md).

@@ -10,6 +10,7 @@ import { boundModelKey } from '../security/model-keys.js';
 import { isLockedFileError, lockedFolderMessage, type CleanupQueue } from '../reliability/cleanup-queue.js';
 import type { Redactor } from '../reliability/redact.js';
 import { BufferedWriter, StorageErrorReporter } from '../reliability/storage-errors.js';
+import { copyAttachments, validateAttachments } from './attachments.js';
 import type { CliService } from './cli.js';
 import type { ExtensionsService } from './extensions.js';
 import type { GitService } from './git.js';
@@ -94,6 +95,8 @@ export interface AgentsServiceOptions {
   extensions?: ExtensionsService;
   git?: GitService;
   driver?: AgentDriver;
+  /** `Services.picked`: paths picked in a native dialog or dropped this session (attachments may use only these). */
+  picked?: Set<string>;
 }
 
 /**
@@ -124,6 +127,8 @@ export class AgentsService {
       sink: this.eventSink(),
       settings: this.settingsProvider(),
       secrets: this.secretProvider(),
+      // Files attached to a message are copied into the agent's folder (`.oide/attachments/`) before they reach the CLI.
+      attachments: { materialize: ({ cwd, attachments }) => copyAttachments(cwd, attachments) },
       broker: guardedBroker(o.mcp, { ...(o.mcpReady ? { mcpReady: o.mcpReady } : {}), ...(o.ctx.reliability ? { redactor: o.ctx.reliability.logs.redactor } : {}) }),
       ...(o.driver ? { driver: o.driver } : {}),
       log: (m, d) => o.ctx.log.debug('[supervisor]', m, d ?? ''),
@@ -404,6 +409,10 @@ export class AgentsService {
       const holder = this.list().find((a) => a.projectId === p.id && a.worktreePath && samePath(a.worktreePath, p.path) && !['stopped', 'error', 'done'].includes(a.status));
       if (holder) throw new IpcError(`"${holder.title}" already works in the project folder. Use a worktree, or stop it first.`, 'conflict');
     }
+    if (spec.attachments?.length) {
+      // Validated now so Spawn shows the problem; copied into the worktree once it exists (supervisor port).
+      spec = { ...spec, attachments: await validateAttachments(spec.attachments, { picked: this.o.picked ?? new Set(), roots: [p.path] }) };
+    }
     try {
       const out = await this.supervisor.spawn(spec);
       void this.extensions?.host?.activate('onAgentSpawn');
@@ -414,9 +423,20 @@ export class AgentsService {
     }
   }
 
-  send(agentId: string, msg: UserMessage): void {
-    this.require(agentId);
+  /** Synchronous unless the message has attachments (then they are checked and copied first). */
+  send(agentId: string, msg: UserMessage): void | Promise<void> {
+    const a = this.require(agentId);
+    if ((msg.kind === 'text' || msg.kind === 'artifact') && msg.attachments?.length) return this.sendWithAttachments(a, msg);
     this.supervisor.send(agentId, msg);
+  }
+
+  private async sendWithAttachments(a: AgentSummary, msg: Extract<UserMessage, { kind: 'text' | 'artifact' }>): Promise<void> {
+    const roots = a.worktreePath ? [a.worktreePath] : [];
+    const checked = await validateAttachments(msg.attachments, { picked: this.o.picked ?? new Set(), roots });
+    const hasFiles = checked.some((x) => x.kind === 'file');
+    if (hasFiles && !a.worktreePath) throw new IpcError('This agent has no folder yet. Attach files once it has started.', 'conflict');
+    const attachments = hasFiles && a.worktreePath ? await copyAttachments(a.worktreePath, checked) : checked;
+    this.supervisor.send(a.id, { ...msg, attachments });
   }
 
   async answerPermission(agentId: string, answer: PermissionAnswer): Promise<void> {

@@ -1,9 +1,20 @@
-import type { ContextChip, UserMessage } from '@oide/protocol';
+import type { ContextChip, MessageAttachment, UserMessage } from '@oide/protocol';
+
+export type StreamJsonTextBlock = { type: 'text'; text: string };
+/** Verified on CLI 2.1.325: accepted on stdin, kept in the session as image content (see cli-integration.md). */
+export type StreamJsonImageBlock = { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
+export type StreamJsonContentBlock = StreamJsonTextBlock | StreamJsonImageBlock;
 
 /** The stream-json user message the CLI reads on stdin (verified on CLI 2.1.325). */
 export interface StreamJsonUserMessage {
   type: 'user';
-  message: { role: 'user'; content: string | Array<{ type: 'text'; text: string }> };
+  message: { role: 'user'; content: string | StreamJsonContentBlock[] };
+}
+
+/** The text parts of a stream-json user message (for the transcript's `user-text`). */
+export function messageText(msg: StreamJsonUserMessage): string {
+  const c = msg.message.content;
+  return typeof c === 'string' ? c : c.flatMap((b) => (b.type === 'text' ? [b.text] : [])).join('\n');
 }
 
 export interface ArtifactRef {
@@ -15,8 +26,38 @@ export interface ArtifactRef {
 
 export type ArtifactResolver = (id: string) => ArtifactRef | undefined;
 
-export function textMessage(text: string): StreamJsonUserMessage {
-  return { type: 'user', message: { role: 'user', content: [{ type: 'text', text }] } };
+export function textMessage(text: string, attachments?: readonly MessageAttachment[]): StreamJsonUserMessage {
+  return { type: 'user', message: { role: 'user', content: contentBlocks(text, attachments) } };
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Files attached to a message, named for the agent. By the time a message reaches the driver, main has
+ * copied each file into the agent's folder and `path` is that copy's path relative to it.
+ */
+export function describeFiles(attachments: readonly MessageAttachment[] | undefined): string {
+  const files = (attachments ?? []).filter((a) => a.kind === 'file');
+  if (!files.length) return '';
+  const lines = files.map((f) => `- ${f.path} (${f.name}, ${formatBytes(f.size)})`);
+  return `Attached ${files.length === 1 ? 'file' : 'files'} (copied into your working folder; read ${files.length === 1 ? 'it' : 'them'} from there):\n${lines.join('\n')}`;
+}
+
+/**
+ * Content blocks for a user message: images first (the shape verified with the real CLI: the model
+ * named the image's colour), then one text block with the text and the attached files' paths.
+ */
+export function contentBlocks(text: string, attachments?: readonly MessageAttachment[]): StreamJsonContentBlock[] {
+  const images: StreamJsonImageBlock[] = (attachments ?? []).flatMap((a) =>
+    a.kind === 'image' ? [{ type: 'image' as const, source: { type: 'base64' as const, media_type: a.mediaType, data: a.dataBase64 } }] : [],
+  );
+  const files = describeFiles(attachments);
+  const body = [text, files].filter(Boolean).join('\n\n');
+  return [...images, { type: 'text', text: body || (images.length ? 'See the attached image.' : '') }];
 }
 
 /**
@@ -47,7 +88,7 @@ export function describeContext(chips: ContextChip[], resolve?: ArtifactResolver
 export function toStreamJson(msg: UserMessage, resolve?: ArtifactResolver): StreamJsonUserMessage {
   switch (msg.kind) {
     case 'text':
-      return textMessage(msg.text);
+      return textMessage(msg.text, msg.attachments);
     case 'command':
       return commandMessage(msg.command);
     case 'review-feedback': {
@@ -64,7 +105,7 @@ export function toStreamJson(msg: UserMessage, resolve?: ArtifactResolver): Stre
       const ref = resolve?.(msg.artifactId) ?? { id: msg.artifactId };
       const parts = [`Use this ${describeArtifact(ref)}`];
       if (msg.note) parts.push(msg.note);
-      return textMessage(parts.join('\n\n'));
+      return textMessage(parts.join('\n\n'), msg.attachments);
     }
   }
 }

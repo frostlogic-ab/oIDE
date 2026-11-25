@@ -6,6 +6,7 @@ import {
   type AgentSpecInput,
   type AgentStatus,
   type AgentSummary,
+  type MessageAttachment,
   type PermissionAnswer,
   type PermissionMode,
   type PermissionRequest,
@@ -15,7 +16,8 @@ import { buildLaunch, cliPermissionMode, subagentTiers, LaunchError } from './ar
 import { ClaudeCliDriver, rawJsonOf, type AgentDriver, type AgentHandle } from './driver.js';
 import { ContextWindowBook } from './context-window.js';
 import { AgentReducer, createSummary } from './reducer.js';
-import type { EventSink, PermissionBroker, SecretProvider, SettingsProvider, WorktreeProvider, WorktreeResult } from './ports.js';
+import { messageText } from './messages.js';
+import type { AttachmentProvider, EventSink, PermissionBroker, SecretProvider, SettingsProvider, WorktreeProvider, WorktreeResult } from './ports.js';
 
 /**
  * The Supervisor turns Spawn requests into long-lived `claude` processes, queues them under
@@ -28,6 +30,8 @@ export interface SupervisorDeps {
   settings: SettingsProvider;
   secrets?: SecretProvider;
   broker: PermissionBroker;
+  /** Copies file attachments into the agent's folder (main). */
+  attachments?: AttachmentProvider;
   driver?: AgentDriver;
   log?: (message: string, detail?: unknown) => void;
   /** Override for tests. */
@@ -67,6 +71,8 @@ interface AgentRecord {
   pendingPermissions: Map<string, PermissionRequest>;
   /** Status to show after a resume spawn that has nothing to send. */
   idleStatus: AgentStatus;
+  /** Spawn's attachments for the first message. Kept in memory only (never in the stored spec), dropped once sent. */
+  firstAttachments?: MessageAttachment[];
 }
 
 export interface RestoreEntry {
@@ -152,7 +158,7 @@ export class Supervisor {
 
   /** Spawn N attempts (spec.attempts) sharing one attemptGroup. Each starts queued. */
   async spawn(input: AgentSpecInput): Promise<AgentSummary[]> {
-    const spec = AgentSpec.parse(input);
+    const { attachments: firstAttachments, ...spec } = AgentSpec.parse(input);
     const n = spec.attempts;
     const attemptGroup = spec.attemptGroup ?? (n > 1 ? this.newId() : undefined);
     const out: AgentSummary[] = [];
@@ -176,6 +182,7 @@ export class Supervisor {
         ...(attemptGroup ? { attemptGroup } : {}),
       });
       const rec = this.newRecord(s, summary, 0, false);
+      if (firstAttachments?.length) rec.firstAttachments = firstAttachments;
       this.agents.set(id, rec);
       this.emitDraft(rec, { type: 'status', status: 'queued' });
       // The summary is born queued, so the status event above changes nothing and would not publish:
@@ -282,6 +289,11 @@ export class Supervisor {
       const project = await this.deps.settings.project?.(rec.spec.projectId);
       const customModel = rec.spec.customModel ? await this.deps.settings.customModel?.(rec.spec.customModel.id) : undefined;
       const customModelSecret = customModel?.hasKey ? await this.deps.secrets?.customModelKey(customModel.id) : undefined;
+      let firstAttachments: MessageAttachment[] | undefined;
+      if (!(resume || rec.started) && rec.firstAttachments?.length) {
+        const cwd = rec.worktree.path;
+        firstAttachments = this.deps.attachments ? await this.deps.attachments.materialize({ agentId: rec.id, projectId: rec.spec.projectId, cwd, attachments: rec.firstAttachments }) : rec.firstAttachments;
+      }
       const plan = buildLaunch(rec.spec, {
         agentId: rec.id,
         sessionId: rec.sessionId,
@@ -300,6 +312,7 @@ export class Supervisor {
         ...(customModelSecret ? { customModelSecret } : {}),
         ...(this.deps.baseEnv ? { baseEnv: this.deps.baseEnv } : {}),
         ...(this.deps.settings.resolveArtifact ? { resolveArtifact: this.deps.settings.resolveArtifact } : {}),
+        ...(firstAttachments ? { firstAttachments } : {}),
       });
       for (const w of plan.warnings) this.emitDraft(rec, { type: 'stderr', text: `[oide] ${w}` });
       const handle = await this.driver.start(rec.spec, {
@@ -317,8 +330,8 @@ export class Supervisor {
       rec.started = true;
       void this.consume(rec, handle);
       if (plan.firstMessage) {
-        const c = plan.firstMessage.message.content;
-        this.emitDraft(rec, { type: 'user-text', text: typeof c === 'string' ? c : c.map((b) => b.text).join('\n') });
+        delete rec.firstAttachments;
+        this.emitDraft(rec, { type: 'user-text', text: messageText(plan.firstMessage), ...(firstAttachments?.length ? { attachments: firstAttachments } : {}) });
         this.emitDraft(rec, { type: 'status', status: 'running' });
         if (rec.held.length) this.flushHeld(rec);
       }
@@ -451,7 +464,8 @@ export class Supervisor {
     const isCompact = msg.kind === 'command' && msg.command.trim() === '/compact';
     rec.handle!.send(msg);
     const text = msg.kind === 'text' ? msg.text : msg.kind === 'command' ? msg.command : msg.kind === 'review-feedback' ? `Review feedback (${msg.comments.length} comments)` : `Artifact ${msg.artifactId}`;
-    this.emitDraft(rec, { type: 'user-text', text });
+    const attachments = msg.kind === 'text' || msg.kind === 'artifact' ? msg.attachments : undefined;
+    this.emitDraft(rec, { type: 'user-text', text, ...(attachments?.length ? { attachments } : {}) });
     this.emitDraft(rec, { type: 'status', status: 'running', ...(isCompact ? { detail: 'compact' } : {}) });
   }
 

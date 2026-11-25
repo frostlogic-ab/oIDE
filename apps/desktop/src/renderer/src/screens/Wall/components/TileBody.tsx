@@ -7,6 +7,7 @@ import { useShortcutLabel } from '../../../lib/useKeymap';
 import { INTERRUPTED_PERMISSION_NOTE, isRunning } from '../../../stores/agents';
 import { navigate } from '../../../stores/router';
 import { useSetting } from '../../../stores/settings';
+import { AttachFileButton, AttachmentTray, useAttachments } from '../../../components/Attachments';
 import { answerPermission, openPullRequest, resumeAgent, sendReply, type PermissionChoice } from '../actions';
 import { parseActivity, permissionView, tileBodyKind } from '../logic';
 
@@ -314,19 +315,26 @@ function PermissionActions({ agent, projectName, focused, open }: { agent: Agent
   );
 }
 
+/** The question tile's reply: text plus pasted screenshots, dropped files or Attach file (shown as one compact row). */
 function ReplyBox({ agent }: { agent: AgentSummary }) {
   const id = useId();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const atts = useAttachments();
+  const ready = (text.trim() !== '' || atts.items.length > 0) && !atts.busy;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!text.trim() || busy) return;
+    if (!ready || busy) return;
     setBusy(true);
-    if (await sendReply(agent.id, text)) setText('');
+    if (await sendReply(agent.id, text, atts.attachments)) {
+      setText('');
+      atts.clear();
+    }
     setBusy(false);
   };
   return (
-    <form className={FOOTER} onSubmit={submit}>
+    <form className={FOOTER} onSubmit={submit} {...atts.dropProps}>
+      <AttachmentTray state={atts} compact className="w-full" />
       <label htmlFor={id} className="sr-only">
         Reply to {agent.title}
       </label>
@@ -335,11 +343,13 @@ function ReplyBox({ agent }: { agent: AgentSummary }) {
         type="text"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder="Reply…"
+        onPaste={atts.onPaste}
+        placeholder={atts.dragging ? 'Drop to attach' : 'Reply…'}
         autoComplete="off"
-        className="flex-1 min-w-0 h-7 px-2.5 rounded-sm border border-warn-line bg-chrome text-ink text-[12px] outline-none focus:border-warn placeholder:text-ink-3"
+        className={`flex-1 min-w-0 h-7 px-2.5 rounded-sm border bg-chrome text-ink text-[12px] outline-none focus:border-warn placeholder:text-ink-3 ${atts.dragging ? 'border-warn' : 'border-warn-line'}`}
       />
-      <Button type="submit" variant="warn" disabled={busy || !text.trim()}>
+      <AttachFileButton state={atts} size={28} />
+      <Button type="submit" variant="warn" disabled={busy || !ready}>
         Send
       </Button>
     </form>

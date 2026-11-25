@@ -57,6 +57,58 @@ export const ContextChip = z.discriminatedUnion('kind', [
 ]);
 export type ContextChip = z.infer<typeof ContextChip>;
 
+/**
+ * Attachments on a user message (Focus composer, Wall reply, Spawn goal). Images travel as
+ * stream-json image content blocks (verified on CLI 2.1.325); other files are copied into the
+ * agent's folder under `.oide/attachments/` and named in the text. Main re-checks every limit.
+ */
+export const ATTACHMENT_LIMITS = {
+  /** Decoded bytes per image (the API's own per-image limit). */
+  imageBytes: 5 * 1024 * 1024,
+  /** Decoded image bytes in one message (keeps the request under the API's request size). */
+  imagesTotalBytes: 20 * 1024 * 1024,
+  fileBytes: 25 * 1024 * 1024,
+  count: 10,
+} as const;
+
+export const IMAGE_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'] as const;
+export const ImageMediaType = z.enum(IMAGE_MEDIA_TYPES);
+export type ImageMediaType = z.infer<typeof ImageMediaType>;
+
+/** Decoded size of a base64 string (no whitespace). */
+export function base64Bytes(b64: string): number {
+  const pad = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+  return Math.max(0, Math.floor((b64.length * 3) / 4) - pad);
+}
+
+const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
+const AttachmentName = z.string().min(1).max(255);
+
+export const ImageAttachment = z.object({
+  kind: z.literal('image'),
+  mediaType: ImageMediaType,
+  dataBase64: z
+    .string()
+    .min(4)
+    .max(Math.ceil(ATTACHMENT_LIMITS.imageBytes / 3) * 4)
+    .refine((s) => s.length % 4 === 0 && BASE64.test(s), 'Image data is not valid base64'),
+  name: AttachmentName.optional(),
+});
+export type ImageAttachment = z.infer<typeof ImageAttachment>;
+
+export const FileAttachment = z.object({
+  kind: z.literal('file'),
+  /** From the renderer: the absolute path picked or dropped. Once delivered: the copy's path relative to the agent's folder. */
+  path: z.string().min(1).max(4096),
+  name: AttachmentName,
+  size: z.number().int().nonnegative().max(ATTACHMENT_LIMITS.fileBytes),
+});
+export type FileAttachment = z.infer<typeof FileAttachment>;
+
+export const MessageAttachment = z.discriminatedUnion('kind', [ImageAttachment, FileAttachment]);
+export type MessageAttachment = z.infer<typeof MessageAttachment>;
+export const MessageAttachments = z.array(MessageAttachment).max(ATTACHMENT_LIMITS.count, `At most ${ATTACHMENT_LIMITS.count} attachments per message`);
+
 /** A custom model endpoint ("Your models"). The secret lives in the keychain, referenced by id. */
 export const CustomModelRef = z.object({ id: Id });
 export type CustomModelRef = z.infer<typeof CustomModelRef>;
@@ -67,6 +119,8 @@ export const AgentSpec = z.object({
   title: z.string().min(1).max(200),
   goal: z.string().min(1).max(100_000),
   context: z.array(ContextChip).default([]),
+  /** Images and files sent with the first message (not persisted with the spec; see supervisor). */
+  attachments: MessageAttachments.optional(),
   workIn: WorkIn.default('worktree-from-main'),
   /** Start the worktree from this branch or ref instead of the one `workIn` picks (reconcile agents). */
   baseRef: GitRef.optional(),
@@ -252,13 +306,13 @@ export type AgentSummary = z.infer<typeof AgentSummary>;
 
 /** User → agent messages, delivered as stream-json user messages. */
 export const UserMessage = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('text'), text: z.string().min(1) }),
+  z.object({ kind: z.literal('text'), text: z.string().min(1), attachments: MessageAttachments.optional() }),
   z.object({ kind: z.literal('command'), command: z.string().regex(/^\//) }),
   z.object({
     kind: z.literal('review-feedback'),
     comments: z.array(z.object({ path: z.string(), line: z.number().int().optional(), side: z.enum(['old', 'new']).optional(), body: z.string() })),
     note: z.string().optional(),
   }),
-  z.object({ kind: z.literal('artifact'), artifactId: Id, note: z.string().optional() }),
+  z.object({ kind: z.literal('artifact'), artifactId: Id, note: z.string().optional(), attachments: MessageAttachments.optional() }),
 ]);
 export type UserMessage = z.infer<typeof UserMessage>;

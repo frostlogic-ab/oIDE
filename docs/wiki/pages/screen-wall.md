@@ -29,7 +29,7 @@ The 92px body depends on `tileBodyKind(agent)`:
 | --- | --- | --- |
 | activity (running, starting, paused, stopped) | last 5 `activity` lines: `●` done, `◐` in progress (ends with "…", or a running subagent's line), `⎿` results, `↳ Subagent` lines, `+n −n` coloured | diff stat (`DiffStat`) or "No changes yet"; Resume for paused/stopped; Open |
 | permission | "Subagent *X* wants to run:" + the command (Bash), path (Edit/Write), URL (WebFetch) or summary, + the tool's description | Allow once · Always in *project* (tooltip shows the rule saved) · Deny · Open. Y / D hints show when the tile is focused |
-| question | `lastMessage` | inline reply box → `agents.send` text |
+| question | `lastMessage` | inline reply box → `agents.send` text; paste a screenshot, drop files or the paperclip (Attach file) to add attachments, shown as one compact chip row above the input (see [screen-focus](screen-focus.md#attachments)) |
 | review | `review.summary` + diff stat | Review diff (→ Review) · Open PR (`git.openPr` then `shell.openExternal`; hidden when `git.prAvailable` says no) |
 | queued | "Waiting for a free slot", max running from Settings | Open |
 | rate-limited | reset time; "oIDE does not retry on its own" | "Resets 4:00 PM" · Resume (manual only) · Open |

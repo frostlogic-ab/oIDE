@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ArtifactMeta, ContextChip } from '@oide/protocol';
 import { Button, Chip, SegmentedControl, fieldClass } from '@oide/ui';
+import { AttachFileButton, type AttachmentsState } from '../../../components/Attachments';
+import { attachmentBytes, attachmentName, formatSize, imageSrc } from '../../../lib/attachments';
 import { invokeOr } from '../../../lib/bridge';
 
 type Kind = ContextChip['kind'];
@@ -15,8 +17,12 @@ function chipKey(c: ContextChip): string {
   return c.kind === 'artifact' ? `a:${c.id}` : c.kind === 'file' ? `f:${c.path}` : `u:${c.url}`;
 }
 
-/** "Context: [Main window v2] [src/shell/StatusBar.tsx] [+ Artifact, file or URL]" under the goal. */
-export function ContextChips({ value, onChange, projectId }: { value: ContextChip[]; onChange: (next: ContextChip[]) => void; projectId: string }) {
+/**
+ * "Context: [Main window v2] [src/shell/StatusBar.tsx] [+ Artifact, file or URL]" under the goal.
+ * `attachments`: screenshots and files pasted, dropped or picked for the goal, as chips in the same row
+ * (images with a thumbnail), plus the Attach file button; they go with the first message.
+ */
+export function ContextChips({ value, onChange, projectId, attachments }: { value: ContextChip[]; onChange: (next: ContextChip[]) => void; projectId: string; attachments?: AttachmentsState }) {
   const [adding, setAdding] = useState(false);
   const add = (c: ContextChip) => {
     if (!value.some((v) => chipKey(v) === chipKey(c))) onChange([...value, c]);
@@ -38,6 +44,16 @@ export function ContextChips({ value, onChange, projectId }: { value: ContextChi
             {chipLabel(c)}
           </Chip>
         ))}
+        {attachments?.items.map(({ key, attachment: a }) => {
+          const name = attachmentName(a);
+          return (
+            <Chip key={key} icon={a.kind === 'file' ? 'file' : undefined} onRemove={() => attachments.remove(key)} removeLabel={`Remove ${name}`} title={a.kind === 'file' ? a.path : name} className="max-w-[240px]">
+              {a.kind === 'image' && <img src={imageSrc(a)} alt="" className="w-4 h-4 rounded-[3px] object-cover" />}
+              <span className="truncate">{name}</span>
+              <span className="font-mono text-[11px] text-ink-3">{formatSize(attachmentBytes(a))}</span>
+            </Chip>
+          );
+        })}
         <button
           type="button"
           aria-expanded={adding}
@@ -46,7 +62,13 @@ export function ContextChips({ value, onChange, projectId }: { value: ContextChi
         >
           + Artifact, file or URL
         </button>
+        {attachments && <AttachFileButton state={attachments} variant="pill" />}
       </div>
+      {attachments?.error && (
+        <span className="text-[12px] text-bad" role="alert">
+          {attachments.error}
+        </span>
+      )}
       {adding && <AddContext projectId={projectId} onAdd={add} onCancel={() => setAdding(false)} />}
     </div>
   );

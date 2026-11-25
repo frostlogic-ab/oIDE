@@ -27,7 +27,7 @@ Route: `focus { agentId, subagentId? }`. Code: `apps/desktop/src/renderer/src/sc
 | `components/AgentList.tsx` | Mini wall: needs permission first, then other needs-you, review, running; current agent shows its lead + subagent tree |
 | `components/SessionHeader.tsx` | Lead header (project, worktree, mode button, model, running time, context ring → compact, Raw terminal, Pause/Resume, Stop) and subagent header (breadcrumb, model/effort/route/status/tokens, own context ring, Stop subagent) |
 | `components/PermissionPrompt.tsx` | Pinned prompt; Y / Always in &lt;project&gt; / D answer the exact `requestId` once (`answerPermission`) |
-| `components/Composer.tsx` | Enter or Ctrl/Cmd+Enter sends, Shift+Enter newline, Shift+Tab switches mode (as in the CLI); `/` menu of the CLI's slash commands; Attach artifact picker (`artifacts.list`); disabled while queued |
+| `components/Composer.tsx` | Enter or Ctrl/Cmd+Enter sends, Shift+Enter newline, Shift+Tab switches mode (as in the CLI); `/` menu (shared `components/SlashMenu.tsx`); pasted screenshots, dropped files and Attach file (paperclip) as removable chips (shared `components/Attachments.tsx`); Attach artifact picker (`artifacts.list`); disabled while queued |
 | `components/CompactDialog.tsx` | "Compact this session?" → `agents.compact`; modal keymap scope |
 | `components/Inspector.tsx` | Tabs Plan (todos, plan text, changed files, artifacts in use, as drawn), Subagents (counts, routing, timeline, cards with Open/Stop, token share), Changes (`git.diff` → Review), Artifacts (`artifacts.list` + `artifacts.uses` filtered to this agent, plus its `mcp__oide__artifacts_*` calls), Terminal; Agent tools footer (`extensions.installed`) |
 | `components/TerminalPanel.tsx` | xterm.js + fit addon on `terminal.create({ cwd: worktreePath })`; lazy-loaded on first open, kept mounted while switching tabs, killed and disposed on unmount |
@@ -69,12 +69,69 @@ prefixed `About the subagent "<name>":`.
 - Stop subagent explains that it takes effect at its next tool call (open question 9) in a tooltip and a toast.
 - Slash commands: the CLI's `slash_commands` from init (protocol `init.slashCommands`, filled by agent-core's
   parser: strings only, leading `/` dropped, de-duplicated); until reported, the 2.1.325 list `compact, context, init`. Only known commands are sent as `command`
-  messages; `/compact` always goes through the confirm.
+  messages; `/compact` always goes through the confirm. See [Slash menu](#slash-menu).
 - Tool errors show a red dot (the canvas draws only done / running / needs-you).
+
+## Slash menu
+
+`components/SlashMenu.tsx` (`useSlashMenu` + `SlashMenu`) over `lib/slash.ts`. A CLI with claude.ai connectors
+reports ~100 commands, most of them MCP prompts (`mcp__claude_ai_HubSpot__check-database-status`); the old
+menu wrapped them into each other. Now:
+
+- One 28px row per command, never wrapping: the label in JetBrains Mono 12px, truncated, the full `/command`
+  (and description) in the row's `title`; the description (built-ins only; the CLI gives none for the rest)
+  right-aligned in Inter 12px ink-3, truncated.
+- Groups: **Claude Code** (built-ins, CLI order), **Skills and custom commands**, `<plugin> (plugin)` for
+  `plugin:command`, then one group per MCP server: `mcp__<server>__<prompt>` → "<Server> (MCP)" (a
+  `claude_ai_` prefix dropped, underscores shown as spaces) with the prompt name as the label. Groups A–Z.
+- Filter as you type after `/`: prefix of the command or label first, then a word of the label or the
+  server/plugin name (`/hub` lists HubSpot's prompts), then substrings; fuzzy letters-in-order only when
+  nothing matches better. Groups stay together, the group with the best match first. The header shows
+  "96 commands" or "12 of 96" (polite live region).
+- Card popup (border line-3, radius 10, shadow-dialog), list capped at 264px (popup about 320px) and scrolls;
+  footer hint row. Up/Down (wrap), PageUp/PageDown (8 rows), Home/End, Enter/Tab insert `/<command> ` (not
+  sent), Esc closes until the text changes; hover moves the highlight, click picks. The active row (and its
+  group header when it is the group's first row) is scrolled into view. `/compact` picked from the menu
+  opens the compact confirm instead.
+- ARIA: the textarea is a `combobox` (`aria-expanded`, `aria-controls`, `aria-activedescendant`); the list
+  is a `listbox` of `group`s labelled by their headers; rows are `option`s.
+- The Wall's reply box has no `/` commands, so it does not use the menu.
+
+## Attachments
+
+Focus composer, Wall question reply and Spawn's goal share `components/Attachments.tsx` (`useAttachments`,
+`AttachmentTray`, `AttachFileButton`, `MessageAttachments`) and `lib/attachments.ts`.
+
+- **Paste** (Ctrl/Cmd+V of a screenshot): PNG/JPEG/GIF/WebP images are read in the renderer as base64
+  (named "Pasted image N.png"); they never touch disk except as the message payload. **Drop** files on the
+  input: images the same way, other files through preload's `attachDropped` (below). **Attach file**
+  (paperclip): `dialog.pickFiles`, the native multi-file picker.
+- Chips: thumbnail (images) or file icon, name (truncated; full name and path in the tooltip), size, remove
+  button. Limits, checked here and again in main: images at most 5 MB each and 20 MB together, files at most
+  25 MB, at most 10 per message; a refusal shows under the input (`role="alert"`).
+- Sending: `UserMessage` `text` (and `artifact`) carry `attachments`; a send with only attachments says
+  "See the attached image.". A message with attachments is never a slash command. Spawn sends them as
+  `AgentSpec.attachments`.
+- Main (`services/attachments.ts`): `validateAttachments` on every `agents.send` / `agents.spawn` (image bytes
+  sniffed and matched to the declared type; file paths must be picked or dropped this session, or inside the
+  agent's worktree; sizes from `stat`, never from the renderer). Files are copied to
+  `<agent folder>/.oide/attachments/<UTC timestamp>-<safe name>` and `/.oide/attachments/` is added to the
+  repo's `info/exclude` (`git rev-parse --git-path info/exclude`: the common one for linked worktrees; never
+  `.gitignore`). Project-folder agents use the same folder in the project. The message text names each copy
+  by its relative path; images go as stream-json image blocks (see [cli-integration](cli-integration.md)).
+- Drops: preload's `window.oide.attachDropped(files)` takes only real `File` objects, reads their paths with
+  `webUtils.getPathForFile` (empty for a File the page built) and sends them on the preload-only
+  `IPC_DROP_CHANNEL`; main checks the sender frame, registers the paths as picked and answers with
+  `PickedAttachments`. Page code cannot send a path there itself.
+- Transcript: the `user-text` event stores the attachments (images inline), so a user bubble shows image
+  thumbnails (click: a portaled dialog with the full image) and file chips.
 
 ## Protocol additions
 
 - `init` event: optional `slashCommands: string[]`, filled from `system/init.slash_commands` (`parser.ts`).
+- `MessageAttachment` (`image` {mediaType, dataBase64, name?} | `file` {path, name, size}) and `ATTACHMENT_LIMITS`;
+  optional `attachments` on `UserMessage` `text` / `artifact`, on `AgentSpec` and on the `user-text` event;
+  `dialog.pickFiles` returns `PickedAttachments`; `IPC_DROP_CHANNEL` and `OideBridge.attachDropped`.
 - `AgentSummary.interruptedPermission { toolName, summary?, at }`: the prompt that was open when oIDE quit
   (the broker denies it with `permission-resolved.reason: 'quit'`). Focus shows "oIDE closed while waiting for
   your answer; send a message to continue." above the composer until the user sends a message (the reducer
@@ -82,6 +139,8 @@ prefixed `About the subagent "<name>":`.
 
 ## Mock data (`lib/mock/focus.ts`)
 
+`a-bridge` reports `MOCK_SLASH_COMMANDS` (96 commands, mostly MCP prompts) for the `/` menu; `agents.send`
+echoes text messages (with attachments) into the transcript; `dialog.pickFiles` returns a pretend PDF.
 `a-bridge` reproduces the canvas (lead, three subagents with tagged events, todos, pending prompt with
 `toolUseId`, plan usage 38% weekly); `a-shell` has ~5,000 generated events for virtualization and
 paging, and streams a demo reply every 20 s; `a-invoice` and `a-webhook` cover question and review.
@@ -96,7 +155,20 @@ composer sends text / command / artifact, /compact asks, queued disables, Shift+
 subagent view and Stop subagent, compact confirm, J and Esc). Virtualized rows do not render in jsdom;
 the Playwright check covers them.
 
+Slash menu and attachments: `lib/slash.test.ts` (grouping, labels, scoring, filter order),
+`components/SlashMenu.test.tsx` (~100 commands, rows, ARIA, filter and count, arrows/Page/Home/End with scroll
+into view, Enter/Tab insert, Esc, hover and click), `Focus.test.tsx` (pasted screenshot sent as an image
+attachment, 5 MB refusal, Attach file), `main/services/attachments.test.ts` (picked or worktree paths only, image
+sniffing and limits, copies and `info/exclude`), agent-core `messages.test.ts` (content blocks) and
+`supervisor.test.ts` (images through fake-claude, Spawn files materialized, stored spec without attachments),
+`e2e/attachments.spec.ts` (paste in the real app: fake-claude's stdin has the image block; thumbnail and dialog
+in the transcript).
+
 ## Known gaps
+
+- Spawn attachments of a queued agent live in memory until it starts; if oIDE quits first, the goal goes
+  without them.
+- Multi-image recognition was not confirmed on Haiku with the real CLI (see [cli-integration](cli-integration.md)).
 
 - Scroll-position keeping on prepend is approximate while new rows are still being measured.
 - "Always in &lt;project&gt;" does not show the rule it will save except in a tooltip.

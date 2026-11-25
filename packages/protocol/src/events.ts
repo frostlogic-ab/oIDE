@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AgentStatus, Id, PermissionRequest, ReviewSubmission, SubagentInfo, TodoItem, TokenUsage } from './agent.js';
+import { AgentStatus, Id, MessageAttachments, PermissionRequest, ReviewSubmission, SubagentInfo, TodoItem, TokenUsage } from './agent.js';
 
 /**
  * Normalized agent events. `packages/agent-core` parses raw CLI stream-json into these.
@@ -30,7 +30,8 @@ export const AgentEvent = z.discriminatedUnion('type', [
     /** The CLI's `slash_commands` (without the leading "/"), e.g. ["compact","context","init"]. Focus's `/` menu. */
     slashCommands: z.array(z.string()).optional(),
   }),
-  z.object({ ...base, type: z.literal('user-text'), text: z.string() }),
+  /** `attachments`: what oIDE sent with the message (images inline, files as their copies' relative paths). */
+  z.object({ ...base, type: z.literal('user-text'), text: z.string(), attachments: MessageAttachments.optional() }),
   z.object({ ...base, type: z.literal('assistant-text'), messageId: z.string().optional(), text: z.string() }),
   z.object({ ...base, type: z.literal('thinking'), messageId: z.string().optional(), text: z.string() }),
   /** Partial streaming delta (from --include-partial-messages). Not persisted. */

@@ -1,7 +1,7 @@
 import { existsSync, statSync } from 'node:fs';
 import { delimiter, isAbsolute, posix, win32 } from 'node:path';
 import { isValidPermissionRule } from '@oide/protocol';
-import type { AgentSpec, CliInfo, CustomModel, Effort, ModelSlot, ModelStrategy, PermissionMode, Settings, SubagentTier, Technique } from '@oide/protocol';
+import type { AgentSpec, CliInfo, CustomModel, Effort, MessageAttachment, ModelSlot, ModelStrategy, PermissionMode, Settings, SubagentTier, Technique } from '@oide/protocol';
 import { describeContext, textMessage, type ArtifactResolver, type StreamJsonUserMessage } from './messages.js';
 
 /**
@@ -46,6 +46,8 @@ export interface LaunchContext {
   /** Name used in the `Oide-Agent:` commit trailer. Defaults to the spec title. */
   agentName?: string;
   resolveArtifact?: ArtifactResolver;
+  /** Attachments for the first message (files already copied into the agent's folder). Default: `spec.attachments`. */
+  firstAttachments?: readonly MessageAttachment[];
 }
 
 export interface LaunchPlan {
@@ -642,7 +644,7 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
     const parts = [spec.goal.trim(), ...picked.filter((t) => t.placement === 'first-message').map((t) => t.text.trim())];
     const context = describeContext(spec.context, ctx.resolveArtifact);
     if (context) parts.push(context);
-    firstMessage = textMessage(parts.filter(Boolean).join('\n\n'));
+    firstMessage = textMessage(parts.filter(Boolean).join('\n\n'), ctx.firstAttachments ?? spec.attachments);
   }
 
   return {

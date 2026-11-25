@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { OideMcpServer } from '@oide/mcp-server';
 import type { AgentEvent, AgentSpecInput, AgentSummary, Settings } from '@oide/protocol';
 import { fakeCli, tempDir, testSettings, waitFor } from '../test/helpers.js';
-import type { EventSink, SettingsProvider, WorktreeProvider } from './ports.js';
+import type { AttachmentProvider, EventSink, SettingsProvider, WorktreeProvider } from './ports.js';
 import { Supervisor } from './supervisor.js';
 
 interface Harness {
@@ -23,7 +23,7 @@ afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();
 });
 
-async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup?: WorktreeProvider['runSetup'] }): Promise<Harness> {
+async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup?: WorktreeProvider['runSetup']; attachments?: AttachmentProvider }): Promise<Harness> {
   const settings = testSettings({ extraFlags: opts.extraFlags, maxRunning: opts.maxRunning ?? 3 });
   const mcp = new OideMcpServer({ appDataDir: tempDir('oide-app-') });
   await mcp.start();
@@ -52,7 +52,7 @@ async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup
     project: () => ({ path: '/repo', trusted: true, rules: { allow: [], deny: [] } }),
     addAllowRule: (p, r) => void rules.push([p, r]),
   };
-  const sup = new Supervisor({ worktrees, sink, settings: provider, broker: mcp });
+  const sup = new Supervisor({ worktrees, sink, settings: provider, broker: mcp, ...(opts.attachments ? { attachments: opts.attachments } : {}) });
   cleanups.push(async () => {
     await sup.shutdown();
     await mcp.close();
@@ -267,5 +267,34 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     await h.sup.remove(a!.id);
     expect(removed).toEqual([a!.id]);
     expect(h.sup.get(a!.id)).toBeUndefined();
+  }, 30_000);
+
+  it('attachments: images reach the CLI as image blocks; Spawn files are materialized in the worktree; the stored spec has none', async () => {
+    const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
+    const image = { kind: 'image' as const, mediaType: 'image/png' as const, dataBase64: PNG, name: 'shot.png' };
+    const seen: Array<{ cwd: string; n: number }> = [];
+    const h = await harness({
+      extraFlags: '--fake-scenario basic',
+      attachments: {
+        materialize: async ({ cwd, attachments }) => {
+          seen.push({ cwd, n: attachments.length });
+          return attachments.map((a) => (a.kind === 'file' ? { ...a, path: '.oide/attachments/20261125T000000-notes.txt' } : a));
+        },
+      },
+    });
+    const [a] = await h.sup.spawn(spec({ attachments: [image, { kind: 'file', path: '/picked/notes.txt', name: 'notes.txt', size: 5 }] }));
+    expect(h.sup.spec(a!.id)!.attachments).toBeUndefined();
+    await status(h, a!.id, 'has-question');
+    expect(seen).toEqual([{ cwd: h.get(a!.id).worktreePath!, n: 2 }]);
+    const first = h.events.find((e) => e.agentId === a!.id && e.type === 'user-text');
+    expect(first).toMatchObject({ type: 'user-text', attachments: [{ kind: 'image', mediaType: 'image/png' }, { kind: 'file', path: '.oide/attachments/20261125T000000-notes.txt' }] });
+    expect(first!.type === 'user-text' && first!.text).toContain('- .oide/attachments/20261125T000000-notes.txt (notes.txt, 5 B)');
+    expect(h.get(a!.id).lastMessage).toContain('[1 image: image/png, 70 bytes]');
+
+    h.sup.send(a!.id, { kind: 'text', text: 'and this one', attachments: [image, image] });
+    await waitFor(() => h.get(a!.id).lastMessage?.includes('You said: and this one [2 images'), 10_000, 'two images delivered');
+    const last = h.events.filter((e) => e.agentId === a!.id && e.type === 'user-text').pop();
+    expect(last).toMatchObject({ text: 'and this one', attachments: [{ kind: 'image' }, { kind: 'image' }] });
+    expect(h.raw.some((l) => l.includes('"type":"image"'))).toBe(false); // stdout never echoes the image back
   }, 30_000);
 });

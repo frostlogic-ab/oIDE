@@ -13,6 +13,8 @@ export interface Platform {
   pickFolder(title?: string): Promise<string | null>;
   /** Native file picker; null when cancelled. */
   pickFile(title: string | undefined, filters: Array<{ name: string; extensions: string[] }>): Promise<string | null>;
+  /** Native multi-file picker (Attach file); [] when cancelled. Without it, `pickFile` picks one. */
+  pickFiles?(title: string | undefined): Promise<string[]>;
   /**
    * First open of a project: ask whether to trust it (native dialog). Resolves true/false; the
    * project is stored untrusted on false and the user can trust it later (`projects.trust`).

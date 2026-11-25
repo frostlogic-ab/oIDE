@@ -54,6 +54,16 @@ describe('fake-claude', () => {
     expect(lines.find((l) => (l.response as { request_id?: string } | undefined)?.request_id === 'r2')).toMatchObject({ response: { subtype: 'error' } });
   });
 
+  it('accepts image content blocks like the real CLI and refuses malformed ones with a 400', async () => {
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==';
+    const img = (media_type: string, data = png) => ({ type: 'image', source: { type: 'base64', media_type, data } });
+    const msg = (content: unknown[]) => JSON.stringify({ type: 'user', message: { role: 'user', content } });
+    const { lines } = await run([...BASE, '--fake-scenario', 'basic'], [msg([img('image/png'), { type: 'text', text: 'what is this?' }]), msg([img('image/svg+xml'), { type: 'text', text: 'and this?' }])]);
+    const results = lines.filter((l) => l.type === 'result');
+    expect(results[0]).toMatchObject({ is_error: false, result: 'Hello from fake-claude. You said: what is this? [1 image: image/png, 70 bytes]' });
+    expect(results[1]).toMatchObject({ is_error: true, api_error_status: 400 });
+  });
+
   it('a [fake-scenario:<name>] marker in the message picks that turn’s scenario', async () => {
     const { lines } = await run([...BASE, '--fake-scenario', 'basic'], [user('[fake-scenario:rate-limit] go'), user('plain')]);
     const results = lines.filter((l) => l.type === 'result');

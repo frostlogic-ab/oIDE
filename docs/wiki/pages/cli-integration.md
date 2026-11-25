@@ -50,6 +50,23 @@ Features are detected at startup from `claude --help` (`detectCli` → `CliInfo.
 ```
 
 - One long-lived process handles many turns: send the next user message after `result`.
+- **Image content blocks are accepted** (verified 2026-11-25, CLI 2.1.325, three `claude -p --model haiku
+  --input-format stream-json --output-format stream-json --verbose --tools ""` runs in a temp folder):
+
+  ```json
+  {"type":"user","message":{"role":"user","content":[
+    {"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0…"}},
+    {"type":"text","text":"What single color fills this image? Answer with one lowercase word only."}]}}
+  ```
+
+  No error, `result.is_error:false`. The CLI keeps the block as image content in the session transcript
+  (with `imagePasteIds`), saves a copy under its temp folder and adds a meta user message
+  `[Image: source: <temp path>]`, exactly like an interactive paste. One 64×64 solid red PNG, image first:
+  the model answered `red`. Two images (text first, then images; and images first, then text): Haiku
+  replied that it saw only file paths, so multi-image recognition on Haiku is unconfirmed; the CLI accepted
+  both messages. oIDE sends images first, then one text block (`contentBlocks` in `agent-core/messages.ts`),
+  the shape that worked. Non-image attachments are not sent as blocks: main copies them into the agent's
+  folder (`.oide/attachments/<timestamp>-<name>`, excluded through `info/exclude`) and the text names them.
 - **Slash commands work as user messages**: `"content":"/compact"` → `system/status {status:"compacting"}`,
   `system/status {compact_result:"success"}`, `system/init`, `system/compact_boundary {compact_metadata:{trigger:"manual",pre_tokens,post_tokens}}`,
   a replayed user message `<local-command-stdout>Compacted </local-command-stdout>` and a `result` with `local_command:"compact"`.

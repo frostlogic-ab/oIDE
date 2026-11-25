@@ -59,8 +59,30 @@ const FLAGS_REPORT = [
   '| `--resume` | Continue a stored session |',
 ].join('\n');
 
+/**
+ * What a CLI with several claude.ai connectors reports in `init.slash_commands` (~100 entries, most of
+ * them MCP prompts named `mcp__<server>__<prompt>`), so the `/` menu can be checked at that size.
+ */
+export const MOCK_SLASH_COMMANDS: string[] = [
+  'compact', 'context', 'init', 'review', 'security-review', 'pr-comments', 'release-notes', 'cost', 'todos',
+  'gsd-add-phase', 'gsd-plan-phase', 'gsd-execute-phase', 'gsd-progress', 'gsd-debug', 'simplify', 'code-review',
+  'engineering:code-review', 'engineering:debug', 'engineering:standup', 'engineering:system-design', 'engineering:testing-strategy',
+  'product-management:write-spec', 'product-management:roadmap-update', 'product-management:sprint-planning',
+  ...['check-database-status', 'create-contact-from-email', 'summarize-deal-pipeline', 'find-stale-deals', 'draft-follow-up-email', 'enrich-company-record', 'list-open-tickets', 'weekly-sales-digest', 'merge-duplicate-contacts', 'campaign-performance-report', 'import-claude-design-from-url', 'render-hubspot-home'].map((p) => `mcp__claude_ai_HubSpot__${p}`),
+  ...['dfs-keyword-research', 'dfs-serp-overview', 'dfs-backlink-audit', 'dfs-competitor-gap-analysis-for-a-domain-with-very-long-name', 'dfs-content-brief', 'dfs-rank-tracker-setup', 'dfs-local-pack-check', 'dfs-site-audit', 'dfs-llm-mentions-report', 'dfs-amazon-product-research', 'dfs-youtube-keyword-ideas', 'dfs-trends-explorer'].map((p) => `mcp__claude_ai_DataForSEO__${p}`),
+  ...['search-workspace', 'create-page', 'create-task', 'summarize-page', 'meeting-notes', 'weekly-review', 'database-query', 'find-owner'].map((p) => `mcp__claude_ai_Notion__${p}`),
+  ...['outlook-triage', 'draft-reply', 'schedule-meeting', 'teams-digest', 'sharepoint-find', 'calendar-today'].map((p) => `mcp__claude_ai_ms365__${p}`),
+  ...['find-prospects', 'enrich-list', 'sequence-health', 'draft-sequence-copy', 'pipeline-gaps', 'account-research', 'call-summary', 'deal-review'].map((p) => `mcp__claude_ai_Apollo_io__${p}`),
+  ...['create-doc', 'export-doc', 'outline-from-notes', 'comment-digest'].map((p) => `mcp__claude_ai_Claude_Docs__${p}`),
+  ...['resolve-library', 'query-docs', 'upgrade-guide'].map((p) => `mcp__claude_ai_Context7__${p}`),
+  ...['portfolio-overview', 'root-cause', 'energy-anomalies', 'forecast-load', 'what-if-setpoint', 'comfort-report', 'kb-search', 'propose-change'].map((p) => `mcp__claude_ai_Explore__${p}`),
+  ...['brief', 'ask', 'search', 'remember', 'draft'].map((p) => `mcp__claude_ai_Frostlogic_Brain__${p}`),
+  ...['account-brief', 'list-signals', 'post-analytics'].map((p) => `mcp__claude_ai_SurroundR__${p}`),
+  ...['browse', 'screenshot', 'fill-form'].map((p) => `mcp__claude-in-chrome__${p}`),
+];
+
 const bridgeDrafts: Draft[] = [
-  { type: 'init', sessionId: 'sess-bridge', model: 'claude-opus-5', cwd: '/Users/you/.oide/worktrees/oide/cli-bridge', tools: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob', 'Agent', 'TodoWrite'], mcpServers: [{ name: 'oide', status: 'connected' }], permissionMode: 'auto', cliVersion: '2.1.325', slashCommands: ['compact', 'context', 'init'], at: ago(19) },
+  { type: 'init', sessionId: 'sess-bridge', model: 'claude-opus-5', cwd: '/Users/you/.oide/worktrees/oide/cli-bridge', tools: ['Read', 'Edit', 'Write', 'Bash', 'Grep', 'Glob', 'Agent', 'TodoWrite'], mcpServers: [{ name: 'oide', status: 'connected' }], permissionMode: 'auto', cliVersion: '2.1.325', slashCommands: MOCK_SLASH_COMMANDS, at: ago(19) },
   { type: 'status', status: 'running', at: ago(19) },
   { type: 'user-text', text: 'Spawn each session as a real claude CLI process in its own worktree and stream its events into the tiles. Follow the Main window v2 design.', at: ago(19) },
   { type: 'assistant-text', messageId: 'm1', text: "I'll host each CLI in a pseudo-terminal so it behaves like your shell, and parse its streaming JSON for the tiles. SessionHost is done. Next is the terminal dependency.", at: ago(18.5) },

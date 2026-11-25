@@ -158,6 +158,8 @@ const P = {
       <path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1" />
     </>
   ),
+  /** Extra: "Attach file" on prompt inputs (Focus composer, Wall reply, Spawn goal). */
+  paperclip: <path d="M20.5 11.5l-8.1 8.1a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8" />,
   branch: (
     <>
       <circle cx="6" cy="5" r="2" />

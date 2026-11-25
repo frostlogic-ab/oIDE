@@ -146,7 +146,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   const pickedCli = new Set<string>();
   const projects = new ProjectsService({ ctx, store, platform, picked });
   const cleanup = new CleanupQueue(ctx.userDataDir);
-  const agents = new AgentsService({ ctx, store, settings, secrets, worktrees, mcp, projects, cli, platform, cleanup, mcpReady: () => mcpPort !== undefined, ...(opts.driver ? { driver: opts.driver } : {}) });
+  const agents = new AgentsService({ ctx, store, settings, secrets, worktrees, mcp, projects, cli, platform, cleanup, picked, mcpReady: () => mcpPort !== undefined, ...(opts.driver ? { driver: opts.driver } : {}) });
   const git = new GitService({
     ctx,
     store,

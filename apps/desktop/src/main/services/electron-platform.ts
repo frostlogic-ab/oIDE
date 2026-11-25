@@ -118,6 +118,12 @@ export function electronPlatform(ctx: MainContext, terminals: TerminalService): 
       const r = w ? await dialog.showOpenDialog(w, options) : await dialog.showOpenDialog(options);
       return r.canceled ? null : (r.filePaths[0] ?? null);
     },
+    pickFiles: async (title) => {
+      const w = win();
+      const options: Electron.OpenDialogOptions = { title: title ?? 'Attach files', properties: ['openFile', 'multiSelections'] };
+      const r = w ? await dialog.showOpenDialog(w, options) : await dialog.showOpenDialog(options);
+      return r.canceled ? [] : r.filePaths;
+    },
     confirmTrust: async ({ name, path }) => {
       if (autoTrust) return autoTrust === 'trust';
       const options: Electron.MessageBoxOptions = {

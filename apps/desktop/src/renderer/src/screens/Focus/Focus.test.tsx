@@ -29,6 +29,8 @@ const invoke = vi.fn(async (command: string, input?: unknown): Promise<unknown> 
     case 'extensions.installed':
     case 'git.diff':
       return [];
+    case 'dialog.pickFiles':
+      return { attachments: [{ kind: 'file', path: '/tmp/spec.pdf', name: 'spec.pdf', size: 2048 }], rejected: [] };
     default:
       return { ok: true };
   }
@@ -138,8 +140,9 @@ describe('Composer', () => {
     fireEvent.change(input, { target: { value: '/con' } });
     expect(screen.getByRole('listbox', { name: 'Commands' })).toBeTruthy();
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([expect.stringContaining('/context')]);
-    fireEvent.keyDown(input, { key: 'Enter' }); // picks /context
-    expect(input.value).toBe('/context');
+    fireEvent.keyDown(input, { key: 'Enter' }); // picks /context: inserted, not sent
+    expect(input.value).toBe('/context ');
+    expect(calls('agents.send')).toHaveLength(0);
     fireEvent.keyDown(input, { key: 'Enter' }); // sends it
     await waitFor(() => expect(calls('agents.send')).toEqual([{ agentId: 'a-bridge', message: { kind: 'command', command: '/context' } }]));
   });
@@ -150,6 +153,44 @@ describe('Composer', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onCompact).toHaveBeenCalledTimes(1);
     expect(calls('agents.send')).toHaveLength(0);
+    // Picked from the menu, too.
+    fireEvent.change(input, { target: { value: '/comp' } });
+    fireEvent.mouseDown(screen.getByRole('option', { name: /compact/ }));
+    expect(onCompact).toHaveBeenCalledTimes(2);
+    expect(input.value).toBe('');
+  });
+
+  it('sends a pasted screenshot as an image attachment with the text', async () => {
+    const { input } = setup();
+    const png = new File([new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13])], 'image.png', { type: 'image/png' });
+    fireEvent.paste(input, { clipboardData: { files: [png], types: ['Files'] } });
+    const chip = await screen.findByRole('list', { name: 'Attachments' });
+    expect(chip.textContent).toMatch(/Pasted image [0-9]+[.]png/);
+    expect(chip.textContent).toContain('12 B');
+    fireEvent.change(input, { target: { value: 'What is wrong here?' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(calls('agents.send')).toHaveLength(1));
+    const sent = calls('agents.send')[0] as { message: { kind: string; text: string; attachments: Array<{ kind: string; mediaType: string; dataBase64: string }> } };
+    expect(sent.message).toMatchObject({ kind: 'text', text: 'What is wrong here?' });
+    expect(sent.message.attachments).toEqual([expect.objectContaining({ kind: 'image', mediaType: 'image/png', dataBase64: 'iVBORw0KGgoAAAAN' })]);
+    await waitFor(() => expect(screen.queryByRole('list', { name: 'Attachments' })).toBeNull());
+  });
+
+  it('refuses images over 5 MB with a clear message', async () => {
+    const { input } = setup();
+    const big = new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'huge.png', { type: 'image/png' });
+    fireEvent.paste(input, { clipboardData: { files: [big], types: ['Files'] } });
+    expect((await screen.findByRole('alert')).textContent).toContain('huge.png: images can be at most 5.0 MB');
+    expect(screen.queryByRole('list', { name: 'Attachments' })).toBeNull();
+  });
+
+  it('Attach file adds picked files as chips (dialog.pickFiles)', async () => {
+    const { input } = setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Attach file' }));
+    expect((await screen.findByRole('list', { name: 'Attachments' })).textContent).toContain('spec.pdf');
+    fireEvent.change(input, { target: { value: 'Read this' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(calls('agents.send')).toEqual([{ agentId: 'a-bridge', message: { kind: 'text', text: 'Read this', attachments: [{ kind: 'file', path: '/tmp/spec.pdf', name: 'spec.pdf', size: 2048 }] } }]));
   });
 
   it('attaches an artifact and sends an artifact message with the note', async () => {

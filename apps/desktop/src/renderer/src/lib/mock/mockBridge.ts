@@ -103,6 +103,14 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
         emit('notify', { level: 'info', message: `Sent /compact to ${a.title}. Compacting…`, agentId });
       }
       if (a.status === 'has-question') updateAgent(agentId, { status: 'running', lastMessage: undefined });
+      // Echo text messages into the transcript (with pasted images and files) so dev:web shows them.
+      if (message.kind === 'text') {
+        const list = events.get(agentId) ?? [];
+        const ev = AgentEvent.parse({ type: 'user-text', agentId, seq: (list[list.length - 1]?.seq ?? -1) + 1, ts: Date.now(), text: message.text, ...(message.attachments?.length ? { attachments: message.attachments } : {}) });
+        list.push(ev);
+        events.set(agentId, list);
+        emit('agents.batch', { events: [ev] });
+      }
       return { ok: true as const };
     },
     // The Wall toasts "Sent /compact to …" itself after this resolves.
@@ -126,6 +134,8 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
       return { ok: true as const };
     },
     'dialog.pickFolder': () => null,
+    // Attach file: the mock has no files on disk; it returns one pretend file.
+    'dialog.pickFiles': () => ({ attachments: [{ kind: 'file' as const, path: '/Users/you/Downloads/requirements.pdf', name: 'requirements.pdf', size: 248_000 }], rejected: [] }),
     // Focus: Terminal tab shell, Stop subagent (lib/mock/focus.ts).
     ...focusHandlers(emit),
     // Wall and Spawn: agents.spawn, projects.open (lib/mock/wall.ts).

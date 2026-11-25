@@ -10,7 +10,7 @@
  * - Every row carries `v`, the seq of the newest event that changed it, so memoized row
  *   components re-render only when their own content changed.
  */
-import type { AgentEvent, CheckResult } from '@oide/protocol';
+import type { AgentEvent, CheckResult, MessageAttachment } from '@oide/protocol';
 
 export interface ToolCall {
   id: string;
@@ -35,7 +35,7 @@ interface RowBase {
 }
 
 export type TranscriptRow =
-  | (RowBase & { kind: 'user'; text: string })
+  | (RowBase & { kind: 'user'; text: string; attachments?: MessageAttachment[] })
   | (RowBase & { kind: 'assistant'; text: string })
   | (RowBase & { kind: 'thinking'; text: string })
   | (RowBase & { kind: 'tools'; lines: ToolLine[] })
@@ -304,7 +304,7 @@ export function buildRows(events: readonly AgentEvent[]): TranscriptRow[] {
       case 'user-text': {
         const c = classifyUserText(e.text);
         if (c === 'hide') break;
-        if (c === 'user') push({ ...base, kind: 'user', text: e.text });
+        if (c === 'user') push({ ...base, kind: 'user', text: e.text, ...(e.attachments?.length ? { attachments: e.attachments } : {}) });
         else push({ ...base, kind: 'notice', tone: 'info', text: c.notice });
         break;
       }

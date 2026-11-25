@@ -8,6 +8,9 @@
 //   commit-work | address-feedback | commit-all | mcp-tool | artifacts   (milestone gate tests, test/gates)
 //   artifact-update (reads the {"id":"…"} artifact in the message and writes a new version)
 // A user message containing `[fake-scenario:<name>]` runs that scenario for its turn (overrides the list).
+// Image content blocks (`{type:'image',source:{type:'base64',media_type,data}}`) are accepted as the real CLI
+// does (2.1.325); `basic` names them in its reply ("[1 image: image/png, 178 bytes]"). A malformed image
+// block ends the turn with an API-style 400 error result.
 // `/compact` (and other slash commands) work in every scenario. `--resume <id>` echoes the session id.
 // MCP servers from --mcp-config are reached over HTTP (`url`) or started over stdio (`command`).
 // Flags --fake-record <file>, --fake-exit-code <n>, --fake-no-control mirror the env vars below.
@@ -450,7 +453,7 @@ function gitCommit(files, message, name) {
 const SCENARIOS = {
   async basic(userText) {
     await thinking();
-    const reply = resumeId && turnNo === 1 ? `Resumed session ${sessionId}.` : `Hello from fake-claude. You said: ${userText.slice(0, 80)}`;
+    const reply = resumeId && turnNo === 1 ? `Resumed session ${sessionId}.` : `Hello from fake-claude. You said: ${userText.slice(0, 80)}${imageNote()}`;
     await assistant([{ type: 'text', text: reply }], { streamText: reply });
     await rateLimitAllowed();
     await result(reply);
@@ -687,12 +690,44 @@ async function slashCommand(cmd) {
 function userTextOf(msg) {
   const c = msg?.message?.content;
   if (typeof c === 'string') return c;
-  if (Array.isArray(c)) return c.map((b) => (typeof b?.text === 'string' ? b.text : '')).join('\n');
+  if (Array.isArray(c)) return c.filter((b) => typeof b?.text === 'string').map((b) => b.text).join('\n');
   return '';
+}
+
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
+let turnImages = [];
+
+/** Image blocks of a user message; throws on a block the API would refuse. */
+function imagesOf(msg) {
+  const c = msg?.message?.content;
+  if (!Array.isArray(c)) return [];
+  return c
+    .filter((b) => b?.type === 'image')
+    .map((b) => {
+      const src = b.source ?? {};
+      if (src.type !== 'base64' || !IMAGE_TYPES.includes(src.media_type) || typeof src.data !== 'string' || !src.data || !/^[A-Za-z0-9+/]+={0,2}$/.test(src.data)) {
+        throw new Error('messages.0.content: invalid image source (base64 png, jpeg, gif or webp)');
+      }
+      return { mediaType: src.media_type, bytes: Buffer.from(src.data, 'base64').length };
+    });
+}
+
+function imageNote() {
+  if (!turnImages.length) return '';
+  const n = turnImages.length;
+  return ` [${n} image${n === 1 ? '' : 's'}: ${turnImages.map((i) => `${i.mediaType}, ${i.bytes} bytes`).join('; ')}]`;
 }
 
 async function runTurn(msg) {
   const text = userTextOf(msg);
+  try {
+    turnImages = imagesOf(msg);
+  } catch (err) {
+    turnNo++;
+    await emit(initEvent());
+    out({ type: 'result', subtype: 'success', is_error: true, api_error_status: 400, result: `API Error: 400 ${err.message}`, session_id: sessionId, uuid: uuid() });
+    return;
+  }
   current = { aborted: false, denials: [] };
   turnNo++;
   try {

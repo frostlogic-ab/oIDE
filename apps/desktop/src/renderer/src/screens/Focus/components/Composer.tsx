@@ -1,9 +1,12 @@
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import type { ArtifactMeta } from '@oide/protocol';
 import { Chip, Icon } from '@oide/ui';
+import { AttachFileButton, AttachmentTray, useAttachments } from '../../../components/Attachments';
+import { SlashMenu, useSlashMenu } from '../../../components/SlashMenu';
 import { invokeOr, ipcErrorMessage, oide } from '../../../lib/bridge';
+import { insertText } from '../../../lib/slash';
 import { toast } from '../../../stores/ui';
-import { composeMessage, filterSlash, slashHelp } from '../model/focus';
+import { composeMessage } from '../model/focus';
 
 export interface ComposerProps {
   agentId: string;
@@ -22,30 +25,42 @@ export interface ComposerProps {
 
 /**
  * "Steer this agent, or type / for commands". Enter or Ctrl/Cmd+Enter sends, Shift+Enter adds a
- * line. A leading "/" opens the CLI's command list; /compact asks first (confirm dialog).
- * Attach artifact picks from `artifacts.list` and sends an artifact UserMessage.
+ * line. A leading "/" opens the CLI's command list (SlashMenu); picking inserts `/<command> ` and
+ * `/compact` asks first (confirm dialog). Screenshots paste in as images, files drop in or come from
+ * Attach file; they show as chips and go with the next message. Attach artifact picks from
+ * `artifacts.list` and sends an artifact UserMessage.
  */
 export function Composer({ agentId, projectId, placeholder, commands, subagentName, disabledReason, onCompact, onCycleMode }: ComposerProps) {
   const [text, setText] = useState('');
   const [artifact, setArtifact] = useState<ArtifactMeta | null>(null);
   const [sending, setSending] = useState(false);
-  const [active, setActive] = useState(0);
-  const [menuDismissed, setMenuDismissed] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
-  const listId = useId();
+  const inputId = useId();
   const pickerId = useId();
   const disabled = !!disabledReason;
+  const atts = useAttachments({ disabled });
+  const { clear: clearAttachments } = atts;
 
-  const slashQuery = /^\/[\w:-]*$/.test(text) ? text : null;
-  const matches = useMemo(() => (slashQuery !== null ? filterSlash(commands, slashQuery) : []), [commands, slashQuery]);
-  const menuOpen = slashQuery !== null && !menuDismissed && matches.length > 0;
+  const menu = useSlashMenu({
+    text,
+    commands,
+    onPick: (item) => {
+      if (item.name === 'compact') {
+        setText('');
+        onCompact();
+        return;
+      }
+      setText(insertText(item));
+      ref.current?.focus();
+    },
+  });
 
-  useEffect(() => setActive(0), [slashQuery]);
   useEffect(() => {
     setText('');
     setArtifact(null);
-  }, [agentId]);
+    clearAttachments();
+  }, [agentId, clearAttachments]);
 
   useEffect(() => {
     const el = ref.current;
@@ -54,15 +69,9 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
     el.style.height = `${Math.min(160, el.scrollHeight)}px`;
   }, [text]);
 
-  const pick = (cmd: string) => {
-    setText(`/${cmd}`);
-    setMenuDismissed(true);
-    ref.current?.focus();
-  };
-
   const send = async () => {
-    if (sending || disabled) return;
-    const intent = composeMessage({ text, artifactId: artifact?.id, subagentName, commands });
+    if (sending || disabled || atts.busy) return;
+    const intent = composeMessage({ text, artifactId: artifact?.id, subagentName, commands, attachments: atts.attachments });
     if (intent.kind === 'none') return;
     if (intent.kind === 'compact') {
       setText('');
@@ -74,7 +83,7 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
       await oide.invoke('agents.send', { agentId, message: intent.message });
       setText('');
       setArtifact(null);
-      setMenuDismissed(false);
+      atts.clear();
     } catch (err) {
       toast(ipcErrorMessage(err), 'error');
     } finally {
@@ -83,27 +92,7 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (menuOpen) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault();
-        setActive((i) => (i + (e.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length);
-        return;
-      }
-      if ((e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) || e.key === 'Tab') {
-        const cmd = matches[active];
-        if (cmd && `/${cmd}` !== text) {
-          e.preventDefault();
-          pick(cmd);
-          return;
-        }
-      }
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        setMenuDismissed(true);
-        return;
-      }
-    }
+    if (menu.onKeyDown(e)) return;
     if (e.key === 'Tab' && e.shiftKey && onCycleMode) {
       e.preventDefault();
       onCycleMode();
@@ -115,31 +104,11 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
     }
   };
 
-  const canSend = !disabled && !sending && (text.trim() !== '' || artifact !== null);
+  const canSend = !disabled && !sending && !atts.busy && (text.trim() !== '' || artifact !== null || atts.items.length > 0);
 
   return (
-    <div className="relative">
-      {menuOpen && (
-        <div id={listId} role="listbox" aria-label="Commands" className="absolute bottom-[calc(100%+6px)] left-0 right-0 z-30 py-1 rounded-[10px] border border-line-3 bg-card shadow-dialog">
-          {matches.map((c, i) => (
-            <div
-              key={c}
-              id={`${listId}-${c}`}
-              role="option"
-              aria-selected={i === active}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                pick(c);
-              }}
-              onMouseEnter={() => setActive(i)}
-              className={`flex items-center gap-3 h-8 px-3 cursor-pointer text-[12.5px] ${i === active ? 'bg-selected' : ''}`}
-            >
-              <span className="font-mono text-ink w-[96px]">/{c}</span>
-              <span className="text-ink-3 truncate">{slashHelp(c)}</span>
-            </div>
-          ))}
-        </div>
-      )}
+    <div className="relative" {...atts.dropProps}>
+      <SlashMenu menu={menu} />
       {pickerOpen && (
         <ArtifactPicker
           id={pickerId}
@@ -152,56 +121,56 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
           onClose={() => setPickerOpen(false)}
         />
       )}
-      <div className={`flex items-center gap-2 py-2 pr-2 pl-3.5 border border-line-3 bg-card rounded-xl ${disabled ? 'opacity-60' : ''}`}>
-        {artifact && (
-          <Chip icon="artifacts" onRemove={() => setArtifact(null)} removeLabel={`Remove ${artifact.title}`} className="shrink-0">
-            {artifact.title}
-          </Chip>
-        )}
-        <label htmlFor={`${listId}-input`} className="sr-only">
-          {subagentName ? `Message the lead agent about ${subagentName}` : 'Message this agent'}
-        </label>
-        <textarea
-          ref={ref}
-          id={`${listId}-input`}
-          rows={1}
-          value={text}
-          disabled={disabled}
-          placeholder={disabledReason ?? placeholder}
-          role="combobox"
-          aria-expanded={menuOpen}
-          aria-controls={menuOpen ? listId : undefined}
-          aria-autocomplete="list"
-          aria-activedescendant={menuOpen && matches[active] ? `${listId}-${matches[active]}` : undefined}
-          onChange={(e) => {
-            setText(e.target.value);
-            setMenuDismissed(false);
-          }}
-          onKeyDown={onKeyDown}
-          className="flex-1 min-w-0 resize-none border-0 outline-none bg-transparent text-ink text-[13.5px] leading-[20px] py-[5px] placeholder:text-ink-3 focus-visible:outline-none"
-        />
-        <button
-          type="button"
-          aria-haspopup="dialog"
-          aria-expanded={pickerOpen}
-          aria-controls={pickerOpen ? pickerId : undefined}
-          disabled={disabled}
-          onClick={() => setPickerOpen((o) => !o)}
-          className="h-[30px] px-2.5 shrink-0 rounded-[7px] border border-line-3 bg-transparent text-ink-2 text-[12px] flex items-center gap-[5px] hover:bg-raised disabled:opacity-50"
-        >
-          <Icon name="artifacts" size={14} />
-          Attach artifact
-        </button>
-        <button
-          type="button"
-          aria-label={sending ? 'Sending' : 'Send'}
-          title="Send (Enter or Ctrl+Enter)"
-          disabled={!canSend}
-          onClick={() => void send()}
-          className="w-8 h-8 shrink-0 rounded-md border-0 bg-accent text-on-accent flex items-center justify-center hover:brightness-110 disabled:opacity-50"
-        >
-          <Icon name="arrow-up" size={18} />
-        </button>
+      <div
+        className={`flex flex-col gap-2 py-2 pr-2 pl-3.5 border bg-card rounded-xl ${atts.dragging ? 'border-accent' : 'border-line-3'} ${disabled ? 'opacity-60' : ''}`}
+      >
+        <AttachmentTray state={atts} className="pr-1.5" />
+        <div className="flex items-center gap-2">
+          {artifact && (
+            <Chip icon="artifacts" onRemove={() => setArtifact(null)} removeLabel={`Remove ${artifact.title}`} className="shrink-0">
+              {artifact.title}
+            </Chip>
+          )}
+          <label htmlFor={inputId} className="sr-only">
+            {subagentName ? `Message the lead agent about ${subagentName}` : 'Message this agent'}
+          </label>
+          <textarea
+            ref={ref}
+            id={inputId}
+            rows={1}
+            value={text}
+            disabled={disabled}
+            placeholder={atts.dragging ? 'Drop to attach' : (disabledReason ?? placeholder)}
+            {...menu.inputProps}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={onKeyDown}
+            onPaste={atts.onPaste}
+            className="flex-1 min-w-0 resize-none border-0 outline-none bg-transparent text-ink text-[13.5px] leading-[20px] py-[5px] placeholder:text-ink-3 focus-visible:outline-none"
+          />
+          <AttachFileButton state={atts} disabled={disabled} />
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={pickerOpen}
+            aria-controls={pickerOpen ? pickerId : undefined}
+            disabled={disabled}
+            onClick={() => setPickerOpen((o) => !o)}
+            className="h-[30px] px-2.5 shrink-0 rounded-[7px] border border-line-3 bg-transparent text-ink-2 text-[12px] flex items-center gap-[5px] hover:bg-raised disabled:opacity-50"
+          >
+            <Icon name="artifacts" size={14} />
+            Attach artifact
+          </button>
+          <button
+            type="button"
+            aria-label={sending ? 'Sending' : 'Send'}
+            title="Send (Enter or Ctrl+Enter)"
+            disabled={!canSend}
+            onClick={() => void send()}
+            className="w-8 h-8 shrink-0 rounded-md border-0 bg-accent text-on-accent flex items-center justify-center hover:brightness-110 disabled:opacity-50"
+          >
+            <Icon name="arrow-up" size={18} />
+          </button>
+        </div>
       </div>
     </div>
   );

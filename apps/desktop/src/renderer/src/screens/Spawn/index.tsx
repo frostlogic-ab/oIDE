@@ -18,6 +18,7 @@ import { useScope } from '../../stores/scope';
 import { useSettings } from '../../stores/settings';
 import { highlightTiles } from '../Wall/wallState';
 import { CardRadioGroup } from './components/CardRadioGroup';
+import { useAttachments } from '../../components/Attachments';
 import { ContextChips } from './components/ContextChips';
 import {
   CUSTOM_PREFIX,
@@ -93,6 +94,8 @@ export default function SpawnScreen() {
   const [techniques, setTechniques] = useState<Technique[]>(settings?.techniques ?? []);
   const [extensions, setExtensions] = useState<InstalledExtension[]>([]);
   const goalRef = useRef<HTMLTextAreaElement>(null);
+  /** Screenshots pasted into the goal, files dropped on it or picked: sent with the first message. */
+  const atts = useAttachments({ disabled: busy });
 
   // Settings / projects may arrive after the dialog opened (cold start): re-derive until the user
   // edits. The project's own defaults (mode, preset) apply too, unless the user already chose them.
@@ -193,7 +196,7 @@ export default function SpawnScreen() {
     }
     setBusy(true);
     try {
-      const created = await oide.invoke('agents.spawn', res.spec);
+      const created = await oide.invoke('agents.spawn', atts.attachments.length ? { ...res.spec, attachments: atts.attachments } : res.spec);
       const agents = useAgents.getState();
       for (const a of created) agents.applySummary(a);
       void useSettings
@@ -272,18 +275,19 @@ export default function SpawnScreen() {
         )}
 
         {/* Goal + context */}
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2" {...atts.dropProps}>
           <TextArea
             ref={goalRef}
+            onPaste={atts.onPaste}
             id={goalId}
             label="Goal"
             rows={3}
             value={form.goal}
-            placeholder="What should the agent do? For example: Add a usage panel that opens from the status bar."
+            placeholder={atts.dragging ? 'Drop to attach' : 'What should the agent do? For example: Add a usage panel that opens from the status bar.'}
             onChange={(e) => update({ goal: e.target.value })}
             error={errors.goal}
           />
-          <ContextChips value={form.context} onChange={(context) => update({ context })} projectId={form.projectId} />
+          <ContextChips value={form.context} onChange={(context) => update({ context })} projectId={form.projectId} attachments={atts} />
         </div>
 
         {/* Project + Work in */}

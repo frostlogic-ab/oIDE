@@ -9,8 +9,9 @@ export function registerAgentHandlers(router: IpcRouter, s: Services, _ctx: Main
   const a = s.agents;
   router.register('agents.list', () => a.list());
   router.register('agents.spawn', (spec) => a.spawn(spec));
-  router.register('agents.send', ({ agentId, message }) => {
-    a.send(agentId, message);
+  // Attachments are checked (picked/dropped paths only, sizes, image bytes) and files copied into the agent's folder.
+  router.register('agents.send', async ({ agentId, message }) => {
+    await a.send(agentId, message);
     return OK;
   });
   // Accepted only for the exact pending request id of this agent (else not_found).

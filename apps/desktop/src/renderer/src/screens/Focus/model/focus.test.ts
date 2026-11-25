@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AgentEvent, AgentSummary, type AgentEventDraft } from '@oide/protocol';
-import { agentListLine, composeMessage, filterSlash, nextMode, permissionCopy, sortAgentList, subagentStatusText, subagentSummary, subagentTokenShare, timeline } from './focus';
+import { agentListLine, composeMessage, nextMode, permissionCopy, sortAgentList, subagentStatusText, subagentSummary, subagentTokenShare, timeline } from './focus';
 import { mergeOlder, mergeTail } from './history';
 
 const agent = (over: Partial<AgentSummary> & { id: string }) =>
@@ -33,9 +33,12 @@ describe('composer → UserMessage shapes', () => {
   it('does nothing for empty input', () => {
     expect(composeMessage({ text: '   ' })).toEqual({ kind: 'none' });
   });
-  it('filters slash commands by prefix first', () => {
-    expect(filterSlash(['compact', 'context', 'init'], '/co')).toEqual(['compact', 'context']);
-    expect(filterSlash(['compact', 'context', 'init'], '/t')).toEqual(['compact', 'context', 'init'].filter((c) => c.includes('t')));
+  it('carries attachments on a text message, never as a command', () => {
+    const img = { kind: 'image' as const, mediaType: 'image/png' as const, dataBase64: 'iVBORw0KGgo=', name: 'shot.png' };
+    expect(composeMessage({ text: 'Fix this', attachments: [img] })).toEqual({ kind: 'send', message: { kind: 'text', text: 'Fix this', attachments: [img] } });
+    expect(composeMessage({ text: '', attachments: [img] })).toEqual({ kind: 'send', message: { kind: 'text', text: 'See the attached image.', attachments: [img] } });
+    expect(composeMessage({ text: '/context', attachments: [img] })).toMatchObject({ kind: 'send', message: { kind: 'text' } });
+    expect(composeMessage({ text: 'Use it', artifactId: 'art-1', attachments: [img] })).toEqual({ kind: 'send', message: { kind: 'artifact', artifactId: 'art-1', note: 'Use it', attachments: [img] } });
   });
 });
 

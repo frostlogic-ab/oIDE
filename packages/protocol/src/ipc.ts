@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AgentSpec, AgentSummary, GitRef, Id, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
+import { AgentSpec, AgentSummary, GitRef, Id, MessageAttachments, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
 import { ArtifactKind, ArtifactMeta, ArtifactUse, ArtifactVersion } from './artifacts.js';
 import { AgentEvent } from './events.js';
 import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
@@ -34,6 +34,13 @@ export const Diagnostics = z.object({ generatedAt: z.string(), checks: z.array(D
 export type Diagnostics = z.infer<typeof Diagnostics>;
 
 export const Scope = z.union([z.literal('all'), Id]);
+/** Files picked in `dialog.pickFiles` or dropped on an input (`OideBridge.attachDropped`). */
+export const PickedAttachments = z.object({
+  attachments: MessageAttachments,
+  rejected: z.array(z.object({ name: z.string(), reason: z.string() })).default([]),
+});
+export type PickedAttachments = z.infer<typeof PickedAttachments>;
+
 export type Scope = z.infer<typeof Scope>;
 
 export const Commands = {
@@ -221,6 +228,12 @@ export type CommandName = keyof typeof Commands;
 export type CommandInput<K extends CommandName> = z.input<(typeof Commands)[K]['input']>;
 export type CommandOutput<K extends CommandName> = z.output<(typeof Commands)[K]['output']>;
 
+  /**
+   * Native multi-file picker for "Attach file" (Focus composer, Wall reply, Spawn goal). Main registers the
+   * picked paths for this session and returns them as attachments: images (≤ 5 MB) inline as base64, other
+   * files (≤ 25 MB) by path. Files over the limits come back in `rejected` with the reason.
+   */
+  'dialog.pickFiles': cmd(z.object({ title: z.string().optional() }), PickedAttachments),
 /** Main → renderer streamed events. Agent events are batched per animation frame. */
 export const Events = {
   'agents.batch': z.object({ events: z.array(AgentEvent) }),
@@ -274,3 +287,14 @@ export interface OideBridge {
   on<K extends EventName>(event: K, listener: (payload: EventPayload<K>) => void): () => void;
   platform: string;
 }
+/**
+ * Preload-only channel: the paths of files the user dropped (or pasted) on an input, read in preload with
+ * `webUtils.getPathForFile` from real `File` objects. Not a contract command, so page code cannot send
+ * arbitrary paths; main registers them like native picks and answers with `PickedAttachments`.
+ */
+export const IPC_DROP_CHANNEL = 'oide:dropped-files';
+  /**
+   * Attach files the user dropped or pasted (real DOM `File` objects only; anything else is skipped).
+   * Absent in the browser mock, which has no file paths.
+   */
+  attachDropped?(files: readonly object[]): Promise<PickedAttachments>;

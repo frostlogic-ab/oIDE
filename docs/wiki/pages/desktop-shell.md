@@ -158,6 +158,10 @@ Behaviour worth knowing:
 - `artifacts.previewUrl` → `oide-artifact://<id>/<entry>`; `artifacts.import({ filePath })` and
   `extensions.addFromFolder({ path })` need a path the user picked with `dialog.pickFile` /
   `dialog.pickFolder` in this session (`forbidden_path` otherwise).
+- Message attachments: `dialog.pickFiles` (multi-select) and preload's `attachDropped` (the preload-only
+  `IPC_DROP_CHANNEL`, paths read with `webUtils.getPathForFile` from real dropped `File`s) register paths as
+  picked; `agents.send` / `agents.spawn` accept file attachments only from those or from inside the agent's
+  worktree. Details: [screen-focus](screen-focus.md#attachments).
 - `settings.saveCustomModel({ apiKey })` stores the key in the secret store; `settings.get` reports
   `hasKey` only. `settings.testCustomModel` refuses Anthropic hosts.
 - `cli.openSignIn` opens a terminal (in userData) running the detected `claude`.

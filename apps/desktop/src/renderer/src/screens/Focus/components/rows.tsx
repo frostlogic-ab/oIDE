@@ -4,8 +4,9 @@
  * changed, and partial deltas re-render nothing here (see Streaming.tsx).
  */
 import { memo, type ReactNode } from 'react';
-import type { AgentEvent, SubagentInfo } from '@oide/protocol';
+import type { AgentEvent, MessageAttachment, SubagentInfo } from '@oide/protocol';
 import { Button, Icon, subagentStatusMeta } from '@oide/ui';
+import { MessageAttachments } from '../../../components/Attachments';
 import { formatDuration, formatResetTime, formatTokens } from '../../../lib/format';
 import { modelEffort, routeLabel, subagentStatusText, tokenCount } from '../model/focus';
 import {
@@ -43,7 +44,7 @@ export const RowView = memo(
   function RowView({ row, ctx }: { row: ViewRow; ctx: RowContext }) {
     switch (row.kind) {
       case 'user':
-        return <UserBubble text={row.text} />;
+        return <UserBubble text={row.text} attachments={row.attachments} />;
       case 'assistant':
         return <Markdown text={row.text} />;
       case 'thinking':
@@ -89,9 +90,14 @@ export const RowView = memo(
   (a, b) => a.row.key === b.row.key && a.row.v === b.row.v && a.ctx === b.ctx,
 );
 
-function UserBubble({ text }: { text: string }) {
+function UserBubble({ text, attachments }: { text: string; attachments?: readonly MessageAttachment[] }) {
   return (
-    <div className="flex justify-end">
+    <div className="flex flex-col items-end gap-1.5">
+      {attachments?.length ? (
+        <div className="max-w-[80%]">
+          <MessageAttachments attachments={attachments} />
+        </div>
+      ) : null}
       <div className="max-w-[80%] px-3.5 py-2.5 bg-selected rounded-[12px_12px_4px_12px] leading-[1.5] text-ink whitespace-pre-wrap break-words">{text}</div>
     </div>
   );

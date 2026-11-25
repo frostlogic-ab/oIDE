@@ -5,6 +5,7 @@ import type {
   CheckResult,
   CliInfo,
   CustomModel,
+  MessageAttachment,
   PermissionAnswer,
   PermissionRequest,
   Settings,
@@ -75,6 +76,15 @@ export interface SettingsProvider {
   /** "Always in <project>": save an allow rule (e.g. `Bash(npm test)`) to `.oide/permissions.json`. */
   addAllowRule?(projectId: string, rule: string): void | Promise<void>;
   resolveArtifact?: ArtifactResolver;
+}
+
+/**
+ * Prepares a message's attachments in the agent's folder before they reach the CLI: copies picked or
+ * dropped files under `.oide/attachments/` and returns them with paths relative to `cwd`. Images pass
+ * through. Implemented in main; without it, file attachments keep the paths they came with.
+ */
+export interface AttachmentProvider {
+  materialize(input: { agentId: string; projectId: string; cwd: string; attachments: readonly MessageAttachment[] }): Promise<MessageAttachment[]>;
 }
 
 export interface SecretProvider {

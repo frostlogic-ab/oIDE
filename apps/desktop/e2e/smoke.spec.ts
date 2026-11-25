@@ -54,7 +54,8 @@ test('renderer is isolated: no Node, only window.oide, strict CSP', async () => 
   expect(probe.module).toBe('undefined');
   expect(probe.ipcRenderer).toBe('undefined');
   expect(probe.electron).toBe('undefined');
-  expect(probe.oideKeys).toEqual(['invoke', 'on', 'platform']);
+  // attachDropped: paths of real dropped File objects only (preload-only drop channel), see screen-focus.md.
+  expect(probe.oideKeys).toEqual(['attachDropped', 'invoke', 'on', 'platform']);
 
   // Code handed to page.evaluate itself bypasses CSP (DevTools protocol), so probe with code the
   // page would run on its own: a string timer (needs 'unsafe-eval') and an inline <script>.
