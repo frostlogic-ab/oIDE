@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import {
   AgentEvent,
   AgentSpec,
+  cleanAgentTitle,
   type AgentEventDraft,
   type AgentSpecInput,
   type AgentInterruption,
@@ -19,7 +20,7 @@ import { ClaudeCliDriver, rawJsonOf, type AgentDriver, type AgentHandle } from '
 import { ContextWindowBook } from './context-window.js';
 import { AgentReducer, createSummary } from './reducer.js';
 import { mergeConflictsText, messageText } from './messages.js';
-import type { AttachmentProvider, EventSink, PermissionBroker, SecretProvider, SettingsProvider, WorktreeProvider, WorktreeResult } from './ports.js';
+import type { AttachmentProvider, EventSink, PermissionBroker, SecretProvider, SettingsProvider, TitleResult, WorktreeProvider, WorktreeResult } from './ports.js';
 
 /**
  * The Supervisor turns Spawn requests into long-lived `claude` processes, queues them under
@@ -110,6 +111,19 @@ function slugify(s: string): string {
       .replace(/^-+|-+$/g, '')
       .slice(0, 40) || 'agent'
   );
+}
+
+/**
+ * The spec to relaunch a saved agent with. The summary is the truth for what changed while it ran:
+ * its mode (the CLI changes it on its own) and its title (the agent named itself: set_title).
+ */
+function specFromSaved(spec: AgentSpec, s: AgentSummary): AgentSpec {
+  const parsed = AgentSpec.parse({ ...spec, mode: s.mode });
+  if (s.title && s.title !== parsed.title && AgentSpec.shape.title.safeParse(s.title).success) {
+    const { autoTitle: _, ...rest } = parsed;
+    return { ...rest, title: s.title };
+  }
+  return parsed;
 }
 
 export class Supervisor {
@@ -308,6 +322,7 @@ export class Supervisor {
           onPermissionRequest: (req) => this.onPermissionRequest(rec, req),
           onPermissionResolved: (requestId, behavior, reason) => this.onPermissionResolved(rec, requestId, behavior, reason),
           onReview: (review) => this.emitDraft(rec, { type: 'review-submitted', review: { agentId: rec.id, summary: review.summary, checks: review.checks, submittedAt: Date.now() } }),
+          onTitle: (title) => this.setOwnTitle(rec, title),
         },
         extra,
         { projectId: rec.spec.projectId, secretEnv },
@@ -430,6 +445,24 @@ export class Supervisor {
       return;
     }
     this.ingest(rec, parsed.data);
+  }
+
+  /**
+   * `set_title` from the agent: replace the stand-in title Spawn made from the goal. Only while the
+   * spec still says so (a title the user or oIDE gave is kept); once named, later calls are refused.
+   * Parallel attempts keep their " #n" suffix. The worktree branch keeps its first name.
+   */
+  private setOwnTitle(rec: AgentRecord, raw: string): TitleResult {
+    if (this.agents.get(rec.id) !== rec) return { ok: false, message: 'This agent is no longer active.' };
+    if (!rec.spec.autoTitle) return { ok: false, message: 'This agent already has its title; keep it.' };
+    const clean = cleanAgentTitle(raw);
+    if (!clean) return { ok: false, message: 'The title was empty.' };
+    const suffix = rec.spec.attemptGroup ? (/ #\d+$/.exec(rec.spec.title)?.[0] ?? '') : '';
+    const title = `${clean}${suffix}`;
+    const { autoTitle: _, ...spec } = rec.spec;
+    rec.spec = { ...spec, title };
+    this.emitDraft(rec, { type: 'title-changed', title });
+    return { ok: true, title };
   }
 
   private publishSummary(rec: AgentRecord): void {
@@ -783,7 +816,7 @@ export class Supervisor {
     if (entry.resumeBlocked) s.resumeBlocked = entry.resumeBlocked;
     else delete s.resumeBlocked;
     s.updatedAt = Date.now();
-    const parsed = AgentSpec.parse({ ...entry.spec, mode: s.mode });
+    const parsed = specFromSaved(entry.spec, s);
     s.workIn = parsed.workIn;
     const rec = this.newRecord(parsed, s, (entry.lastSeq ?? -1) + 1, Boolean(s.sessionId));
     this.agents.set(rec.id, rec);
@@ -814,7 +847,7 @@ export class Supervisor {
       if (ACTIVE.has(s.status) || interruption) s.interrupted = { at: now, reason: interruption ?? 'restart' };
       if (ACTIVE.has(s.status) || s.status === 'paused') s.status = 'stopped';
       // Saved before the spec followed the CLI's own mode changes: the summary's mode is the real one.
-      const parsed = AgentSpec.parse({ ...spec, mode: s.mode });
+      const parsed = specFromSaved(spec, s);
       s.workIn = parsed.workIn;
       const rec = this.newRecord(parsed, s, (lastSeq ?? -1) + 1, started);
       this.agents.set(rec.id, rec);

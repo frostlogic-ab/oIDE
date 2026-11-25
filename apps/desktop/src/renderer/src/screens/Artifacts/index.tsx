@@ -2,9 +2,11 @@
  * Artifacts screen (docs/wiki/raw/design/Artifacts.dc.html, page: docs/wiki/pages/screen-artifacts.md).
  *
  * Grid of local artifacts filtered by kind, the shared project scope and a search; a detail pane
- * with a live preview, Open, Give to an agent, Open in claude.ai, Rename, Delete, Agents using it
- * and History (view, restore or compare versions); Import from claude.ai and New artifact dialogs.
- * Open shows the editor for the kind (Viewer.tsx).
+ * with a live preview, Open, Give to an agent, Update (a linked artifact, retrieved again by an
+ * agent), Open in claude.ai, Rename, Delete, Agents using it and History (view, restore or compare
+ * versions); one New artifact dialog (from a link, files, or blank). A link is retrieved by an agent
+ * (ADR 0014): the card and the detail pane show it retrieving, or why it failed. Open shows the
+ * editor for the kind (Viewer.tsx).
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { ArtifactMeta, ArtifactUse, ArtifactVersion, CommandOutput } from '@oide/protocol';
@@ -16,12 +18,26 @@ import { projectName as nameOf, useProjects } from '../../stores/projects';
 import { navigate, useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { toast } from '../../stores/ui';
-import { DeleteDialog, ImportDialog, NewArtifactDialog, RenameDialog } from './Dialogs';
-import { useFileDrop } from './drop';
+import { DeleteDialog, NewArtifactDialog, RenameDialog } from './Dialogs';
+import { useFileDrop, type DroppedFiles } from './drop';
 import { BrokenImportBadge, FixImportPanel } from './FixImportPanel';
 import { ArtifactPreview, KindThumb } from './Preview';
+import { ProjectPrompt, RetrievalCardLine, RetrievalStatus, useRetrieval } from './Retrieval';
 import { Viewer, type CompareSide, type ViewerMode } from './Viewer';
-import { KIND_LABEL, KIND_TABS, agentsUsing, canOpenClaudeLink, filterArtifacts, usageLine, versionLabel, type KindTab } from './model';
+import {
+  KIND_LABEL,
+  KIND_TABS,
+  activeRetrieval,
+  agentsUsing,
+  canOpenClaudeLink,
+  canUpdateFromLink,
+  filterArtifacts,
+  relativeTime,
+  retrievalLine,
+  usageLine,
+  versionLabel,
+  type KindTab,
+} from './model';
 import './artifacts.css';
 import { ResizableAside } from '../../components/ResizableAside';
 import { PANELS } from '../../lib/panels';
@@ -89,16 +105,22 @@ export default function ArtifactsScreen() {
   const { list, uses } = useLibrary();
   const [kind, setKind] = useState<KindTab>('all');
   const [query, setQuery] = useState('');
-  const [dialog, setDialog] = useState<'new' | 'import' | 'rename' | 'delete' | null>(null);
+  const [dialog, setDialog] = useState<'new' | 'rename' | 'delete' | null>(null);
   const [opened, setOpened] = useState<false | OpenAs>(false);
-  /** A file dropped on the grid, handed to the Import dialog. */
-  const [dropped, setDropped] = useState<{ path: string; name: string } | null>(null);
+  /** Files dropped on the grid, handed to the New artifact dialog (Files). */
+  const [dropped, setDropped] = useState<DroppedFiles | null>(null);
 
   const projectName = useCallback((id: string | undefined) => (id ? nameOf(projects, id) : 'Personal'), [projects]);
   const visible = useMemo(() => filterArtifacts(list ?? [], { kind, project: scope, query }, projectName), [list, kind, scope, query, projectName]);
   const selectedId = routeId && (list ?? []).some((a) => a.id === routeId) ? routeId : visible[0]?.id;
-  const { detail, setDetail } = useDetail(selectedId);
+  const { detail, setDetail, reload } = useDetail(selectedId);
   const select = (id: string) => useRouter.getState().replace('artifacts', { artifactId: id });
+  /** Meta from main (a retrieval started or was cancelled, a new entry): a new version reloads. */
+  const applyMeta = (m: ArtifactMeta) => {
+    if (!detail || detail.meta.id !== m.id) return;
+    if (detail.meta.version !== m.version || detail.meta.entry !== m.entry) return void reload();
+    setDetail((d) => (d && d.meta.id === m.id ? { ...d, meta: m } : d));
+  };
 
   useEffect(() => setOpened(false), [selectedId]);
 
@@ -139,10 +161,10 @@ export default function ArtifactsScreen() {
     select(meta.id);
   };
 
-  const { dragging, dropProps } = useFileDrop((f) => {
-    if ('error' in f) return toast(f.error, 'error');
-    setDropped(f);
-    setDialog('import');
+  const { dragging, dropProps } = useFileDrop((r) => {
+    if ('error' in r) return toast(r.error, 'error');
+    setDropped(r);
+    setDialog('new');
   }, dialog !== null);
 
   if (opened && shown) {
@@ -156,6 +178,7 @@ export default function ArtifactsScreen() {
           compare={opened.compare}
           onClose={() => setOpened(false)}
           onSaved={(meta, content) => setDetail((d) => (d && d.meta.id === meta.id ? withSaved(d, meta, content) : d))}
+          onMeta={applyMeta}
           onReplaced={(meta) => {
             setOpened(false);
             created(meta);
@@ -180,7 +203,7 @@ export default function ArtifactsScreen() {
       <main {...dropProps} className={cn('relative flex-1 min-w-[360px] overflow-auto flex flex-col gap-4 px-5 py-[18px] box-border', dragging && 'outline-2 outline-dashed outline-accent -outline-offset-4')}>
         {dragging && (
           <div aria-hidden="true" className="absolute inset-4 z-10 rounded-xl bg-ground/80 flex items-center justify-center text-[13px] text-ink pointer-events-none">
-            Drop a file to import it
+            Drop files to make an artifact of them
           </div>
         )}
         <div className="flex items-center gap-3 flex-wrap">
@@ -203,9 +226,6 @@ export default function ArtifactsScreen() {
               </option>
             ))}
           </select>
-          <Button size={32} className="rounded-md" onClick={() => setDialog('import')}>
-            Import from claude.ai
-          </Button>
           <Button size={32} variant="primary" className="rounded-md px-3.5" onClick={() => setDialog('new')}>
             + New artifact
           </Button>
@@ -219,7 +239,7 @@ export default function ArtifactsScreen() {
           <EmptyState
             icon="artifacts"
             title={list.length ? 'No artifacts match' : 'No artifacts yet'}
-            description={list.length ? 'Try another type, project or search.' : 'Create a design, doc or whiteboard, or import one from claude.ai. Agents read and write them through oIDE.'}
+            description={list.length ? 'Try another type, project or search.' : 'Start a design, doc or whiteboard from a claude.ai link, from files, or blank. Agents read and write them through oIDE.'}
             className="flex-1"
           />
         ) : (
@@ -247,7 +267,13 @@ export default function ArtifactsScreen() {
                     <span className="text-[12px] text-ink-3">
                       {KIND_LABEL[a.kind]} · {projectName(a.projectId)}
                     </span>
-                    {a.brokenImport ? <BrokenImportBadge /> : <span className={cn('text-[11.5px]', line.live ? 'text-ok' : 'text-ink-3')}>{line.text}</span>}
+                    {retrievalLine(a) ? (
+                      <RetrievalCardLine meta={a} />
+                    ) : a.brokenImport ? (
+                      <BrokenImportBadge />
+                    ) : (
+                      <span className={cn('text-[11.5px]', line.live ? 'text-ok' : 'text-ink-3')}>{line.text}</span>
+                    )}
                   </div>
                 </button>
               );
@@ -265,22 +291,27 @@ export default function ArtifactsScreen() {
         agentStatus={(id) => agents[id]?.status}
         onOpen={(o) => setOpened(o ?? {})}
         onRestored={(d) => setDetail(d)}
-        onSaved={(meta, content) => setDetail((d) => (d && d.meta.id === meta.id ? withSaved(d, meta, content) : d))}
+        onMeta={applyMeta}
         onReplaced={created}
         onRename={() => setDialog('rename')}
         onDelete={() => setDialog('delete')}
       />
       {actionDialogs}
 
-      <NewArtifactDialog open={dialog === 'new'} onClose={() => setDialog(null)} projects={projects} defaultProjectId={scope === 'all' ? undefined : scope} onCreated={created} />
-      <ImportDialog
-        open={dialog === 'import'}
+      <NewArtifactDialog
+        open={dialog === 'new'}
         onClose={() => {
           setDialog(null);
           setDropped(null);
         }}
-        initialFile={dropped}
-        projects={projects} defaultProjectId={scope === 'all' ? undefined : scope} onImported={created} />
+        projects={projects}
+        defaultProjectId={scope === 'all' ? undefined : scope}
+        onCreated={(meta) => {
+          setDropped(null);
+          created(meta);
+        }}
+        initialDrop={dropped}
+      />
     </>
   );
 }
@@ -335,16 +366,13 @@ interface DetailPaneProps {
   agentStatus: (id: string) => Parameters<typeof agentStatusMeta>[0] | undefined;
   onOpen: (o?: OpenAs) => void;
   onRestored: (d: Detail) => void;
-  onSaved: (meta: ArtifactMeta, content: string) => void;
+  onMeta: (meta: ArtifactMeta) => void;
   onReplaced: (meta: ArtifactMeta) => void;
   onRename: () => void;
   onDelete: () => void;
 }
 
-function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, onOpen, onRestored, onSaved, onReplaced, onRename, onDelete }: DetailPaneProps) {
-  const [viewing, setViewing] = useState<{ version: number; content: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-
+function DetailPane({ detail, selected, ...rest }: DetailPaneProps) {
   if (!detail) {
     return (
       <ResizableAside panel={PANELS.artifactsDetails} aria-label="Artifact details" className="flex flex-col items-center justify-center gap-3 px-4 py-[18px] bg-panel border-l border-line box-border text-[12.5px] text-ink-3">
@@ -352,11 +380,23 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
       </ResizableAside>
     );
   }
+  return <DetailContent detail={detail} {...rest} />;
+}
 
+function DetailContent({ detail, projectName, agentTitle, agentStatus, onOpen, onRestored, onMeta, onReplaced, onRename, onDelete }: Omit<DetailPaneProps, 'detail' | 'selected'> & { detail: Detail }) {
+  const [viewing, setViewing] = useState<{ version: number; content: string } | null>(null);
+  const [busy, setBusy] = useState(false);
   const { meta, versions } = detail;
+  const retrieval = useRetrieval(meta, onMeta);
+
   const users = agentsUsing(detail.uses);
   const claude = canOpenClaudeLink(meta.importedFrom) ? meta.importedFrom : undefined;
-  const origin = meta.importedFrom ? (claude ? 'imported from claude.ai' : 'imported') : meta.location === 'repo' ? 'in the repo' : 'personal';
+  const origin = meta.importedFrom ? (claude ? 'from claude.ai' : 'imported') : meta.location === 'repo' ? 'in the repo' : 'personal';
+  const state = activeRetrieval(meta);
+  const noFiles = meta.version === 0;
+  // Update: a linked artifact with files, when no retrieval is running or waiting for a Retry.
+  const canUpdate = canUpdateFromLink(meta) && !meta.brokenImport && !noFiles && !state;
+  const retrievedAt = meta.retrieval?.retrievedAt;
 
   const viewVersion = async (v: ArtifactVersion) => {
     if (v.version === meta.version) return setViewing(null);
@@ -372,7 +412,8 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
     if (!viewing) return;
     setBusy(true);
     try {
-      const next = await oide.invoke('artifacts.save', { id: meta.id, content: viewing.content, note: `Restored v${viewing.version}` });
+      // The whole snapshot comes back (every file, and its entry), not only the entry's text.
+      const next = await oide.invoke('artifacts.restore', { id: meta.id, version: viewing.version, baseVersion: meta.version });
       toast(`Restored v${viewing.version} as v${next.version}`, 'success');
       onRestored({ ...detail, meta: next, content: viewing.content });
       setViewing(null);
@@ -386,7 +427,13 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
   return (
     <ResizableAside panel={PANELS.artifactsDetails} aria-label="Artifact details" className="min-h-0 overflow-auto flex flex-col gap-3.5 px-4 py-[18px] bg-panel border-l border-line box-border">
       {meta.brokenImport ? (
-        <FixImportPanel meta={meta} onSaved={onSaved} onReplaced={onReplaced} onDelete={onDelete} />
+        <FixImportPanel meta={meta} actions={retrieval} onReplaced={onReplaced} onDelete={onDelete} />
+      ) : noFiles ? (
+        meta.retrieval ? (
+          <RetrievalStatus meta={meta} actions={retrieval} onDelete={onDelete} />
+        ) : (
+          <div className="h-[120px] shrink-0 rounded-xl bg-raised border border-line-2 flex items-center justify-center text-[12.5px] text-ink-3">No files yet.</div>
+        )
       ) : (
         <div className="h-[190px] shrink-0 rounded-xl bg-raised border border-line-2 overflow-hidden box-border">
           <ArtifactPreview
@@ -441,13 +488,38 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
         >
           Give to an agent
         </LinkButton>
+        {canUpdate && (
+          <Button
+            size={32}
+            className="rounded-md"
+            icon="refresh"
+            aria-label="Update from claude.ai"
+            title="Update from claude.ai: an agent retrieves the latest version"
+            onClick={() => void retrieval.refresh()}
+            disabled={retrieval.busy !== null}
+          >
+            {retrieval.busy === 'refresh' ? 'Starting…' : 'Update'}
+          </Button>
+        )}
         {claude && (
           <Button size={32} className="rounded-md" icon="external-link" onClick={() => void oide.invoke('shell.openExternal', { url: claude }).catch((err) => toast(ipcErrorMessage(err), 'error'))}>
             Open in claude.ai
           </Button>
         )}
       </div>
-      {meta.importedFrom && <span className="text-[11.5px] text-ink-3 -mt-1.5">A copy, not synced. Changes on claude.ai don't show up here.</span>}
+      {meta.importedFrom && !noFiles && !meta.brokenImport && (
+        <span className="text-[11.5px] text-ink-3 -mt-1.5">
+          {retrievedAt ? `Retrieved ${relativeTime(retrievedAt)}. ` : ''}
+          {canUpdateFromLink(meta) ? 'Not synced: Update gets the latest version.' : "A copy, not synced. Changes on claude.ai don't show up here."}
+        </span>
+      )}
+      {!noFiles && !meta.brokenImport && <RetrievalStatus meta={meta} actions={retrieval} onDelete={onDelete} />}
+      {!state && !meta.brokenImport && retrieval.askProject && <ProjectPrompt actions={retrieval} label="Update" />}
+      {!state && !meta.brokenImport && retrieval.error && (
+        <span role="alert" className="text-[12px] text-bad -mt-1.5">
+          {retrieval.error}
+        </span>
+      )}
 
       <section aria-labelledby="art-users" className="flex flex-col gap-2">
         <h3 id="art-users" className="m-0 text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3">
@@ -493,6 +565,7 @@ function DetailPane({ detail, selected, projectName, agentTitle, agentStatus, on
             </button>
           )}
         </div>
+        {versions.length === 0 && <span className="text-[12.5px] text-ink-3">No versions yet.</span>}
         <ul className="m-0 p-0 list-none flex flex-col gap-1">
           {versions.map((v) => {
             const current = v.version === meta.version;

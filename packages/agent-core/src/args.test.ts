@@ -98,6 +98,14 @@ describe('buildLaunch', () => {
     expect(flagValue(p.args, '--append-system-prompt')).toBe(p.appendSystemPrompt);
   });
 
+  it('asks the agent to name its task only when the title was made from the goal; set_title needs no prompt', () => {
+    const given = buildLaunch(spec(), ctx());
+    expect(given.appendSystemPrompt).not.toMatch(/set_title/);
+    const auto = buildLaunch(spec({ autoTitle: true }), ctx());
+    expect(auto.appendSystemPrompt).toMatch(/call mcp__oide__set_title once/);
+    for (const p of [given, auto]) expect(flagValue(p.args, '--allowedTools')!.split(',')).toContain('mcp__oide__set_title');
+  });
+
   it('adds context chips to the first message, artifacts by MCP id and path', () => {
     const p = buildLaunch(
       spec({ context: [{ kind: 'artifact', id: 'art-1', title: 'Login design' }, { kind: 'file', path: 'src/login.ts' }, { kind: 'url', url: 'https://example.com/spec' }] }),

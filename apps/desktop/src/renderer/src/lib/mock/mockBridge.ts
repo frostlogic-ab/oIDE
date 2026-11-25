@@ -196,6 +196,10 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
         settings = s;
         emit('settings.changed', s);
       },
+      putAgent: (a) => {
+        agents.set(a.id, a);
+        emit('agents.summary', a);
+      },
     }),
   };
 

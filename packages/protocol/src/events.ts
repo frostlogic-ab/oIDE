@@ -145,6 +145,8 @@ export const AgentEvent = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('todos'), todos: z.array(TodoItem) }),
   z.object({ ...base, type: z.literal('subagent'), subagent: SubagentInfo }),
   z.object({ ...base, type: z.literal('review-submitted'), review: ReviewSubmission }),
+  /** The agent named its task (`mcp__oide__set_title`), replacing the title made from the goal. */
+  z.object({ ...base, type: z.literal('title-changed'), title: z.string().min(1).max(200) }),
   z.object({
     ...base,
     type: z.literal('rate-limit'),
