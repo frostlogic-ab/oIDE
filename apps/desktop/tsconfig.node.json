@@ -14,6 +14,7 @@
   "include": [
     "electron.vite.config.ts",
     "vite.web.config.ts",
+    "vite.runtime.config.ts",
     "excalidraw-assets.ts",
     "src/main/**/*",
     "src/preload/**/*"

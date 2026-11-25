@@ -31,9 +31,10 @@ function recorder() {
 function memoryArtifacts(): ArtifactsBackend {
   const meta: ArtifactMeta = { id: 'art-1', slug: 'login', title: 'Login design', kind: 'design', location: 'app-data', version: 1, entry: 'index.html', createdAt: 1, updatedAt: 1 };
   let content = '<h1>Login</h1>';
+  const broken: ArtifactMeta = { ...meta, id: 'art-9', slug: 'site', title: 'Site', importedFrom: 'https://claude.ai/artifact/NFaggV4JC9X6prTgKhobKm', brokenImport: true };
   return {
-    list: async () => [meta],
-    read: async () => ({ meta, content }),
+    list: async () => [meta, broken],
+    read: async (_c, id) => (id === 'art-9' ? { meta: broken, content: '<p>oIDE cannot fetch claude.ai artifacts</p>' } : { meta, content }),
     write: async (_c, _id, c) => {
       content = c;
       meta.version++;
@@ -224,6 +225,20 @@ describe('OideMcpServer', () => {
     const res = await client.readResource({ uri: 'oide://artifacts/art-1' });
     expect((res.contents[0] as { text: string }).text).toBe('<h1>v2</h1>');
     expect(uses.map((u) => `${u.op}:${u.artifactId}:${u.agentId}`)).toEqual(['list:*:agent-1', 'read:art-1:agent-1', 'write:art-1:agent-1', 'create:art-2:agent-1', 'read:art-1:agent-1']);
+    await client.close();
+  });
+
+  it('tells agents a claude.ai import without content is not the artifact, and gives no placeholder content', async () => {
+    const { reg } = await setup({ artifacts: true });
+    const client = await connect(reg.url, reg.secret);
+    const list = JSON.parse(textOf(await client.callTool({ name: 'artifacts_list', arguments: {} }))) as Array<Record<string, unknown>>;
+    expect(list[1]).toMatchObject({ id: 'art-9', brokenImport: true, importedFrom: 'https://claude.ai/artifact/NFaggV4JC9X6prTgKhobKm' });
+    expect(list[0]).not.toHaveProperty('brokenImport');
+    const read = JSON.parse(textOf(await client.callTool({ name: 'artifacts_read', arguments: { id: 'art-9' } }))) as Record<string, unknown>;
+    expect(read).toMatchObject({ content: null, status: 'import-has-no-content' });
+    expect(read.message).toMatch(/do not build from it/);
+    expect(read.message).toMatch(/paste the artifact's code/);
+    expect(JSON.stringify(read)).not.toMatch(/cannot fetch/);
     await client.close();
   });
 

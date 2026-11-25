@@ -38,7 +38,7 @@ export default tseslint.config(
   },
   {
     // Renderer, UI kit and extension UIs run in the browser.
-    files: ['apps/desktop/src/renderer/**/*.{ts,tsx}', 'packages/ui/**/*.{ts,tsx}', 'extensions/*/ui/**/*.{ts,tsx,js}'],
+    files: ['apps/desktop/src/renderer/**/*.{ts,tsx}', 'apps/desktop/src/artifact-runtime/**/*.ts', 'packages/ui/**/*.{ts,tsx}', 'extensions/*/ui/**/*.{ts,tsx,js}'],
     languageOptions: { globals: { ...globals.browser } },
   },
   {

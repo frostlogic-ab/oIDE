@@ -8,6 +8,7 @@
  */
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Spinner } from '@oide/ui';
+import type { SourceLanguage } from './model';
 
 /**
  * Keys typed into an embedded editor stay there. Monaco types through an EditContext element (and
@@ -23,7 +24,7 @@ type Editor = import('../Files/monaco/setup').monaco.editor.IStandaloneCodeEdito
 
 export interface SourceEditorProps {
   value: string;
-  language: 'markdown' | 'html' | 'json';
+  language: SourceLanguage;
   /** Accessible name of the editor ("Source of Webhook retry design"). */
   label: string;
   onChange: (value: string) => void;

@@ -13,14 +13,14 @@ API). Source: [../raw/build-brief.md](../raw/build-brief.md), "Artifacts integra
 <repo>/.oide/artifacts/<slug>/     location "repo": shared with the team through git
 <app-data>/artifacts/<slug>/       location "app-data": personal
   artifact.json                    ArtifactMeta (id, slug, title, kind, projectId, location, version, entry, importedFrom?, times)
-  index.html | doc.md | board.excalidraw      entry file by kind
+  index.html | App.jsx | doc.md | board.excalidraw      entry file (a design: index.html, or App.jsx for React)
   .versions/versions.json          ArtifactVersion[] (version, ts, author, note)
   .versions/<n>/<entry>            snapshot of version n
 ```
 
 | Kind | Entry | New content |
 | --- | --- | --- |
-| design | `index.html` | minimal HTML5 page with the title |
+| design | `index.html` (HTML, SVG) or `App.jsx` (React, [ADR 0013](../../adr/0013-react-designs-with-a-bundled-offline-runtime.md)) | minimal HTML5 page with the title |
 | doc | `doc.md` | Markdown with front matter (`title`, `kind`, `importedFrom`) added when missing |
 | whiteboard | `board.excalidraw` | empty Excalidraw scene; saves must be a JSON object |
 
@@ -46,20 +46,40 @@ for MCP uses), so an open editor can say "Updated by <agent>" without a refetch.
   history and agents holding the id keep working. A rename is not a version.
 - `delete(id)`: removes the folder (all versions), the index row and the uses log; `false` if unknown.
 - `versions(id)` (newest first), `readVersion(id, n)`, `dirOf(id)` (for preview and path checks), `root(location, projectId?)`.
-- `importUrl({ url, content?, title?, kind?, projectId?, location? })`: only `https://claude.ai` (and `claude.site`) links,
-  no user name or password in them (`claudeImportUrl`, `ArtifactError` `invalid_input`). oIDE cannot fetch claude.ai
-  content (no public API, and it never uses the user's claude.ai sign-in), so the user pastes what they copied there as
-  `content` (10 MB limit). With content: the kind follows it unless given (`inferKindFromContent`: an HTML page or
-  fragment → design, but Markdown that opens with an HTML banner stays a doc; Excalidraw JSON → whiteboard; else doc),
-  the title comes from `<title>`/`<h1>`, or a front-matter `title:` or the first `# heading` outside code fences, unless
-  given (`titleFromContent`), and a design must hold HTML (`looksLikeHtml`; React or other code artifacts are refused with
-  `invalid_input` because the preview has no network to load them). Without content (or only whitespace): a link-only
-  stub (kind defaults to doc) whose note says how to paste the content. The link is kept as `importedFrom` either way;
-  "Open in claude.ai" uses it. The three helpers live in `@oide/protocol` (`artifacts.ts`) so the dialog uses the same
-  rules; they skip leading comments with `indexOf` and use patterns with one way to match, so a 10 MB paste stays linear.
-- `importFile({ filePath, url?, title?, kind?, ... })`: `.html/.htm` → design, `.md/.markdown/.txt` → doc, `.excalidraw` or
-  Excalidraw `.json` → whiteboard; 10 MB limit. `url` (the claude.ai link the file was downloaded from) becomes
-  `importedFrom`. A non-HTML file picked as a design is refused like pasted content; an `.html` file is taken as a page.
+- `importUrl({ url, content, title?, kind?, projectId?, location? })`: **never creates an artifact without its
+  content**. oIDE cannot fetch claude.ai content (no public API, and it never uses the user's claude.ai sign-in; even a
+  public artifact's page is an empty shell that loads the design from a sandbox frame in the browser), so the user pastes
+  what they copied there as `content` (10 MB limit). Everything is checked before anything is written; a refusal is an
+  `ArtifactError` `invalid_input` with a `reason` (telemetry only):
+  - the link (`claudeImportUrl` → `classifyClaudeLink`): https, no user name or password, claude.ai (or a subdomain) with
+    `/artifact/<id>`, `/code/artifact/<id>`, `/public/artifacts/<id>` or `/design/…`, or claude.site `/artifacts/<id>`
+    (id: 22 characters or a UUID, optional `<title>-` prefix). A chat link (`/chat/…`) or any other page is refused with a
+    reason that says what to copy instead (`bad_link`).
+  - content present and not blank (`no_content`, message `IMPORT_NEEDS_CONTENT`), at most 10 MB (`too_large`), not the
+    placeholder older versions stored for link-only imports (`isImportStubContent`, `stub_content`), and fitting the kind
+    (`wrong_kind`): a design is an HTML page or fragment, or React component source (`isDesignContent`); a whiteboard is
+    Excalidraw JSON.
+  - The kind follows the content unless given (`inferKindFromContent`: an HTML page or fragment → design, but Markdown
+    that opens with an HTML banner stays a doc; React source → design; Excalidraw JSON → whiteboard; else doc), the title
+    comes from `<title>`/`<h1>`, or a front-matter `title:` or the first `# heading` outside code fences, unless given
+    (`titleFromContent`). The link is kept as `importedFrom` ("Open in claude.ai" uses it).
+  The helpers live in `@oide/protocol` (`artifacts.ts`) so the dialog uses the same rules; they skip leading comments with
+  `indexOf`, scan at most 256 KB with bounded patterns, so a 10 MB paste stays linear.
+- `importFile({ filePath, url?, title?, kind?, ... })`: `.html/.htm/.svg/.jsx/.tsx` → design, `.md/.markdown/.txt` → doc,
+  `.excalidraw` or Excalidraw `.json` → whiteboard; 10 MB limit. `url` (the claude.ai link the file was downloaded from)
+  becomes `importedFrom`. Checked like pasted content (an empty file or the old placeholder is refused; a non-HTML,
+  non-React file picked as a design is refused); an `.html` file is otherwise taken as a page.
+- `brokenImport` (derived on `read`/`get`/`list`/`rename`, never stored): an artifact with `importedFrom`, still at
+  version 1, whose content is the old link-only placeholder ("Imported from <link>. oIDE cannot fetch claude.ai
+  artifacts: open the link…", or the first wording "…artifacts; paste or drop the exported content…", at most 8 KB; `list` doesn't read bigger files) or, for a whiteboard, oIDE's own empty
+  board (older versions stored that for a link-only whiteboard import). The Artifacts screen asks for the real content; the MCP
+  `artifacts_read` answers `content: null`, `status: 'import-has-no-content'` so agents don't build from the notice.
+  Saving real content (v2) clears it.
+- React designs: `create` and `save` pick the design entry from the content (`designEntryFor`: `App.jsx` for React,
+  else `index.html`); a save that changes the format writes the new entry and removes the old one, so the preview never
+  serves a stale page. `readVersion` reads a version under either design entry. The entry is always one of the fixed
+  names (`entryFileOf`), never a path from `artifact.json`. `metaOf(id)` gives the indexed meta without file access
+  (the preview scheme).
 - `rescan(projects)` re-indexes folders found on disk (repo artifacts teammates committed), assigns
   repo artifacts to the scanning project and drops index rows whose folder is gone. Run at startup.
 - Uses: `recordUse(artifactId, agentId, op)`, `uses(id)`, `usesByAgent(agentId)` ("Agents using it",
@@ -76,8 +96,24 @@ implements it in v1.
 
 `artifacts.list`, `get`, `create`, `save` (`baseVersion?`, refused with `conflict`), `rename` (Zod: trimmed,
 1 to 200 characters), `delete`, `import`, `uses`, `readVersion`, `previewUrl`
-(`apps/desktop/src/main/handlers/artifacts.ts`). Tests: `packages/store/test/artifacts-editing.test.ts`,
+(`apps/desktop/src/main/handlers/artifacts.ts`). `artifacts.import` needs pasted `content` (with `url`) or a `filePath`
+picked with `dialog.pickFile` or dropped (Zod refine, then the store); a link alone is `invalid_input`. Refusals
+carry their reason to the router's `observeFailure` (`artifact_import_refused`). Tests:
+`packages/store/test/artifacts-editing.test.ts`, `packages/store/test/secrets-artifacts.test.ts`,
 `test/integration/artifact-handlers.test.ts`.
+
+## React design preview
+
+[ADR 0013](../../adr/0013-react-designs-with-a-bundled-offline-runtime.md). `artifacts.previewUrl` is
+`oide-artifact://<id>/index.html` for every design. For an `App.jsx` design main
+(`services/artifact-preview.ts`, `resolveArtifactRequest`) answers with a generated page: the source as JSON in
+`<script type="application/json" id="oide-src">` (`<`, U+2028, U+2029 escaped) and
+`<script src="/__oide/react-runtime.js">`. The runtime (`apps/desktop/src/artifact-runtime/`, built by
+`vite.runtime.config.ts` into `out/artifact-runtime/`, an extra resource in packaged builds) bundles React,
+ReactDOM, Sucrase, lucide-react, recharts and Tailwind's browser build; it compiles the JSX/TSX, runs it through
+an inline script (no eval), resolves imports only from those libraries, renders the default export, and shows a
+readable message for an unsupported import or an error. The artifact CSP and sandbox are unchanged (no network).
+Tests: `apps/desktop/src/artifact-runtime/compile.test.ts`, `apps/desktop/src/main/services/artifact-preview.test.ts`.
 
 ## MCP tools and UI
 

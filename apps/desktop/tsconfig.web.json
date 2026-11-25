@@ -8,5 +8,5 @@
     "jsx": "react-jsx",
     "types": ["vite/client"]
   },
-  "include": ["src/renderer/**/*", "../../packages/ui/src/**/*"]
+  "include": ["src/renderer/**/*", "src/artifact-runtime/**/*", "../../packages/ui/src/**/*"]
 }

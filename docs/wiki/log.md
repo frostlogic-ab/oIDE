@@ -728,3 +728,26 @@ Security review of the session "Always" rules: the protected-path check now fail
 name folding (case, trailing dots/spaces, `:` streams, `~` short names), and edits are auto-allowed
 only inside the agent's worktree with no symlink, junction (dangling included) or hard-linked file on
 the way. Page: [agent-supervisor](pages/agent-supervisor.md).
+
+## [2026-11-25] decision | claude.ai imports never create an artifact without content; React designs render offline
+
+Two "oIDE website design" imports (links `MyEmjmATV3mpUv6SZmFj4T`, `NFaggV4JC9X6prTgKhobKm`) were made with
+"Import link only", so v1 of each was oIDE's own "cannot fetch claude.ai artifacts" notice; an agent then
+tried to build the docs site from it. Checked on the second link after it was made public: a plain GET is a
+41 KB app shell (the design loads in the browser from `<uuid>.frame.claudeusercontent.com`), the Claude Docs
+connector refuses both the 22-character id and the frame UUID, and DesignSync answers 404. There is no
+supported way to read a chat artifact's code, even a public one; only Claude Docs and Claude Design links can
+be read, by an agent through its own claude.ai connectors.
+- Import is checked before anything is created (`classifyClaudeLink`, content present, not the old
+  placeholder, fits the kind); a link alone is refused in Zod and in the store. Old link-only imports are
+  `brokenImport` (derived): the screen asks for the content, MCP `artifacts_read` returns
+  `status: 'import-has-no-content'` with `content: null`.
+- "Fetch with an agent" hands a Docs / Design link to an agent that creates the artifact only with real
+  content.
+- React designs (`App.jsx`) are previewed with a bundled offline runtime (React, Sucrase, lucide-react,
+  recharts, Tailwind browser) at `oide-artifact://<id>/__oide/react-runtime.js`; CSP unchanged
+  ([ADR 0013](../adr/0013-react-designs-with-a-bundled-offline-runtime.md)).
+- Telemetry: `artifact_imported.format`, `artifact_import_refused { reason }`,
+  `artifact_fetch_with_agent_started`; the IPC router gained `observeFailure` (codes and Zod issue paths only).
+Pages: [artifacts](pages/artifacts.md), [screen-artifacts](pages/screen-artifacts.md),
+[mcp-server](pages/mcp-server.md), [security](pages/security.md), [telemetry](pages/telemetry.md).

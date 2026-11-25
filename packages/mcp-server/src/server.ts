@@ -106,18 +106,20 @@ const TOOLS = {
   },
   artifacts_read: {
     name: 'artifacts_read',
-    description: 'Read an oIDE artifact by id. Returns its metadata and content.',
+    description:
+      "Read an oIDE artifact by id. Returns its metadata and content. status 'import-has-no-content' means a claude.ai import whose content never arrived: content is null, do not build from it.",
     inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
     annotations: { readOnlyHint: true },
   },
   artifacts_write: {
     name: 'artifacts_write',
-    description: 'Write a new version of an oIDE artifact (full content).',
+    description: 'Write a new version of an oIDE artifact (full content). A design is HTML or React component source (JSX, export default).',
     inputSchema: { type: 'object', properties: { id: { type: 'string' }, content: { type: 'string' }, note: { type: 'string' } }, required: ['id', 'content'] },
   },
   artifacts_create: {
     name: 'artifacts_create',
-    description: 'Create a new oIDE artifact. kind: design (HTML), doc (Markdown) or whiteboard (Excalidraw JSON). shared=true stores it in the repo.',
+    description:
+      'Create a new oIDE artifact. kind: design (HTML, or React component source with export default), doc (Markdown) or whiteboard (Excalidraw JSON). shared=true stores it in the repo.',
     inputSchema: {
       type: 'object',
       properties: { title: { type: 'string' }, kind: { type: 'string', enum: ['design', 'doc', 'whiteboard'] }, content: { type: 'string' }, shared: { type: 'boolean' } },
@@ -125,6 +127,16 @@ const TOOLS = {
     },
   },
 } as const;
+
+/** What an agent is told when it reads a claude.ai import that never got its content. */
+export function brokenImportMessage(link: string | undefined): string {
+  return (
+    `This artifact was imported from ${link ?? 'claude.ai'} without its content: it holds only a placeholder notice, so do not build from it. ` +
+    "Ask the user to open it in oIDE (Artifacts) and paste the artifact's code or drop the file they downloaded from claude.ai. " +
+    'If the link is a Claude Doc or a Claude Design project, you may instead read it with your claude.ai connectors and save it with artifacts_write. ' +
+    'Chat artifacts cannot be fetched, even public ones.'
+  );
+}
 
 interface AgentEntry extends RegisteredAgent {
   handlers: AgentToolHandlers;
@@ -465,13 +477,36 @@ export class OideMcpServer {
         if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
         const list = await backend.list(ctx, { ...(r.data.kind ? { kind: r.data.kind } : {}), ...(r.data.query ? { query: r.data.query } : {}) });
         this.logUse(agent, '*', 'list');
-        return text(JSON.stringify(list.map((a) => ({ id: a.id, title: a.title, kind: a.kind, version: a.version, location: a.location }))));
+        return text(
+          JSON.stringify(
+            list.map((a) => ({
+              id: a.id,
+              title: a.title,
+              kind: a.kind,
+              version: a.version,
+              location: a.location,
+              ...(a.importedFrom ? { importedFrom: a.importedFrom } : {}),
+              ...(a.brokenImport ? { brokenImport: true } : {}),
+            })),
+          ),
+        );
       }
       case 'artifacts_read': {
         const r = ReadInput.safeParse(args);
         if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
         const out = await backend.read(ctx, r.data.id);
         this.logUse(agent, r.data.id, 'read');
+        if (out.meta.brokenImport) {
+          // A link-only import from an older oIDE: its only version is a placeholder notice, not the artifact.
+          return text(
+            JSON.stringify({
+              meta: out.meta,
+              content: null,
+              status: 'import-has-no-content',
+              message: brokenImportMessage(out.meta.importedFrom),
+            }),
+          );
+        }
         return text(JSON.stringify({ meta: out.meta, content: out.content }));
       }
       case 'artifacts_write': {

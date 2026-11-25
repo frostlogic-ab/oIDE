@@ -38,17 +38,31 @@ Every agent gets oIDE's own MCP server, with the tools `artifacts_list`, `artifa
 ## claude.ai
 
 There is no public API for claude.ai artifacts, so there is no sync, and oIDE can't download an
-artifact for you (it never uses your claude.ai sign-in). **Import from claude.ai** stores a copy:
+artifact for you, not even a public one (it never uses your claude.ai sign-in). **Import from
+claude.ai** stores a copy, and it always needs the artifact's real content: oIDE never creates an
+artifact from a link alone.
 
-- **Paste a link**: paste the artifact's link, click **Open** to view it on claude.ai, copy the
-  artifact's code there and paste it into **Artifact content**. oIDE picks the kind from the content
-  (an HTML page becomes a design) and the title from its heading. Leave the content empty to keep
-  only the link.
-- **Pick a file**: choose a file you downloaded from claude.ai (.html, .md or .excalidraw), and
-  optionally paste its link.
+- **Paste a link**: paste the artifact's link, click **Open** to view it on claude.ai, use **Copy**
+  (or **Download**) there and paste the code into **Artifact content**. **Import** stays disabled
+  until there is code, and says why. oIDE picks the kind from the content (an HTML page or a React
+  component becomes a design) and the title from its heading. Chat links are refused with a reason:
+  open the artifact in the chat and copy its own link, or just paste its code.
+- **Pick a file**: choose a file you downloaded from claude.ai (.html, .jsx, .tsx, .svg, .md or
+  .excalidraw), or drop it on the dialog. Dropping a file on the Artifacts grid opens the dialog with
+  it chosen. You can add the link too, so **Open in claude.ai** appears on the copy.
+- **Fetch with an agent**: for a valid link, this starts an agent that reads the artifact with its
+  own claude.ai connectors and creates it only if it gets the real content. It works for Claude Docs
+  and Claude Design projects. Chat artifacts can't be fetched, even public ones: ask Claude on
+  claude.ai to save the design as a Doc to make this automatic.
 
-Designs are HTML pages previewed with no network. A React artifact can't run there: ask Claude on
-claude.ai for one self-contained HTML file, or import the code as a doc. **Open in claude.ai**
-appears only for artifacts that came from there.
+Designs are HTML pages or React components. React runs in the same sandboxed preview as HTML,
+offline and without network access, using a runtime that ships with oIDE; the editor shows it as
+JavaScript. Older versions of the preview or unsaved React edits show a short notice instead: save to
+preview the change, and use **Compare** for older versions.
+
+An import made by an older oIDE from a link alone has no content. Its card says **Import has no
+content**, and opening it shows a panel to paste the code, choose or drop the downloaded file (which
+replaces the empty import), or delete it. **Open in claude.ai** appears only for artifacts that came
+from there.
 
 Details: [screen-artifacts](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/screen-artifacts.md).

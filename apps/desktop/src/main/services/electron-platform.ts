@@ -6,7 +6,8 @@ import { utilityProcessFork } from '@oide/extension-host';
 import type { ArtifactStore } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { trustPromptText } from '../security/confirm.js';
-import { ARTIFACT_CSP, ARTIFACT_SCHEME, resolveArtifactUrl } from './core.js';
+import { resolveArtifactRequest } from './artifact-preview.js';
+import { ARTIFACT_CSP, ARTIFACT_SCHEME } from './core.js';
 import { EXTENSION_SCHEME, resolveExtensionUrl, type ExtensionUiLookup } from './extension-ui.js';
 import type { Platform } from './platform.js';
 import type { TerminalService } from './terminals.js';
@@ -45,15 +46,26 @@ export function handleExtensionScheme(lookup: ExtensionUiLookup): void {
 }
 
 /**
- * Serve `oide-artifact://<id>/<file>`: only files inside that artifact's folder, with a CSP that
- * blocks all network access. The renderer shows it in `<iframe sandbox="allow-scripts">`.
+ * The bundled React preview runtime (ADR 0013): `<resources>/artifact-runtime/` when packaged,
+ * `apps/desktop/out/artifact-runtime/` in dev and e2e (built by the desktop `build` / `dev` scripts).
  */
-export function handleArtifactScheme(artifacts: ArtifactStore): void {
+export function artifactRuntimeFile(): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, 'artifact-runtime', 'react-runtime.js')
+    : join(devRepoRoot(app.getAppPath()), 'apps', 'desktop', 'out', 'artifact-runtime', 'react-runtime.js');
+}
+
+/**
+ * Serve `oide-artifact://<id>/<file>`: only files inside that artifact's folder, the generated page of a
+ * React design and the bundled runtime (artifact-preview.ts), with a CSP that blocks all network
+ * access. The renderer shows it in `<iframe sandbox="allow-scripts">`.
+ */
+export function handleArtifactScheme(artifacts: ArtifactStore, runtimeFile: string = artifactRuntimeFile()): void {
   protocol.handle(ARTIFACT_SCHEME, async (req) => {
     if (req.method !== 'GET') return new Response('Method not allowed', { status: 405 });
-    const hit = resolveArtifactUrl(artifacts, req.url);
+    const hit = await resolveArtifactRequest(artifacts, req.url, existsSync(runtimeFile) ? runtimeFile : undefined);
     if (!hit) return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } });
-    const body = await readFile(hit.file);
+    const body = 'body' in hit ? hit.body : await readFile(hit.file);
     return new Response(body, {
       status: 200,
       headers: {

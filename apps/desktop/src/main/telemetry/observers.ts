@@ -240,12 +240,18 @@ export class TelemetryObservers {
         return;
       }
       case 'artifacts.import': {
-        // Never the link, title or content: how it came in and the kind only.
+        // Never the link, title or content: how it came in, the kind and the format only.
         const i = input as { url?: string; content?: string; filePath?: string };
-        const kind = (output as { kind?: unknown }).kind;
+        const out = output as { kind?: unknown; entry?: unknown };
+        const kind = out.kind;
         if (kind !== 'design' && kind !== 'doc' && kind !== 'whiteboard') return;
-        const source = i.filePath ? 'file' : i.content?.trim() ? 'link_content' : 'link';
-        this.sink.track('artifact_imported', { source, kind, linked: !!i.url });
+        if (!i.filePath && !i.content?.trim()) return; // refused by main; never created
+        const source = i.filePath ? 'file' : 'link_content';
+        const svg = i.filePath
+          ? /\.svg$/i.test(i.filePath)
+          : /^\s*(?:<\?xml[^>]{0,200}>\s*)?(?:<!doctype\s+svg[^>]{0,400}>\s*)?<svg[\s>]/i.test(i.content?.slice(0, 4096) ?? '');
+        const format = kind === 'doc' ? 'markdown' : kind === 'whiteboard' ? 'excalidraw' : out.entry === 'App.jsx' ? 'react' : svg ? 'svg' : 'html';
+        this.sink.track('artifact_imported', { source, kind, linked: !!i.url, format });
         return;
       }
       case 'extensions.install': {
@@ -286,6 +292,25 @@ export class TelemetryObservers {
     if (s.timer) clearTimeout(s.timer);
     s.timer = setTimeout(() => this.closeSearch(kind), this.o.searchIdleMs ?? 4_000);
     (s.timer as { unref?: () => void }).unref?.();
+  }
+
+  /**
+   * A command main refused (IpcRouter `observeFailure`): codes, reasons and issue paths only, never the
+   * input. Used for claude.ai imports refused before anything was created.
+   */
+  commandFailed(name: CommandName, failure: { code: string; reason?: string; issues?: Array<{ path: string; code: string }> }): void {
+    if (name !== 'artifacts.import') return;
+    const reasons = ['no_content', 'bad_link', 'wrong_kind', 'too_large', 'stub_content'] as const;
+    type Reason = (typeof reasons)[number] | 'other';
+    let reason: Reason = 'other';
+    if (failure.reason && (reasons as readonly string[]).includes(failure.reason)) reason = failure.reason as Reason;
+    else if (failure.issues?.length) {
+      const first = failure.issues[0]!;
+      if (first.path === 'url') reason = 'bad_link';
+      else if (first.path === 'content' && first.code === 'too_big') reason = 'too_large';
+      else if (first.path === '' && first.code === 'custom') reason = 'no_content';
+    }
+    this.sink.track('artifact_import_refused', { reason });
   }
 
   /** One `file_search_used` per run of queries (typing in quick open fires one query per keystroke). */

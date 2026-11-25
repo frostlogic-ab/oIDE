@@ -32,6 +32,9 @@ extraResources:
       - "!**/tsconfig*.json"
   - from: ../../tools/marketplace-index/bundled/index.json
     to: marketplace/index.json
+  # Offline preview runtime for React designs (ADR 0013), served at oide-artifact://<id>/__oide/react-runtime.js.
+  - from: out/artifact-runtime
+    to: artifact-runtime
   # Licence of oIDE and the generated notices for every shipped third-party package
   # (pnpm licenses:notices; CI fails when it is stale). Electron adds LICENSES.chromium.html itself.
   - from: ../../LICENSE

@@ -5,8 +5,16 @@ import {
   ArtifactMeta,
   ArtifactUse,
   ArtifactVersion,
+  classifyClaudeLink,
+  designEntryFor,
+  HTML_DESIGN_ENTRY,
+  IMPORT_NEEDS_CONTENT,
   inferKindFromContent,
-  looksLikeHtml,
+  isDesignContent,
+  isEmptyOideBoard,
+  isImportStubContent,
+  LEGACY_IMPORT_STUB_MAX_BYTES,
+  REACT_DESIGN_ENTRY,
   titleFromContent,
   type ArtifactContent,
   type ArtifactKind,
@@ -22,7 +30,7 @@ import { newId, num, pathKey, type Row } from './util.js';
  *   <repo>/.oide/artifacts/<slug>/     shared with the team through git (location "repo")
  *   <app-data>/artifacts/<slug>/       personal (location "app-data")
  *     artifact.json                    ArtifactMeta
- *     index.html | doc.md | board.excalidraw   the entry file
+ *     index.html | App.jsx | doc.md | board.excalidraw   the entry file (App.jsx: a React design)
  *     .versions/versions.json          ArtifactVersion[]
  *     .versions/<n>/<entry>            snapshot of each version
  *
@@ -33,7 +41,14 @@ import { newId, num, pathKey, type Row } from './util.js';
 export const ENTRY_FILES: Record<ArtifactKind, string> = { design: 'index.html', doc: 'doc.md', whiteboard: 'board.excalidraw' };
 const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
 const VERSIONS_DIR = '.versions';
-const ALLOWED_IMPORT_HOSTS = [/^(.+\.)?claude\.ai$/i, /^(.+\.)?claude\.site$/i];
+
+/**
+ * Entry file of an artifact: always one of a fixed set, never a name taken from `artifact.json` (a
+ * cloned repo could point it outside the folder). Designs are `index.html` or, for React, `App.jsx`.
+ */
+export function entryFileOf(kind: ArtifactKind, entry?: string): string {
+  return kind === 'design' && entry === REACT_DESIGN_ENTRY ? REACT_DESIGN_ENTRY : ENTRY_FILES[kind];
+}
 
 export interface ArtifactStoreOptions {
   db: Database;
@@ -62,13 +77,19 @@ export interface SaveOptions {
 
 export const MAX_TITLE_LENGTH = 200;
 
+/** Why an import was refused (a telemetry reason; never the link or the content). */
+export type ImportRefusal = 'no_content' | 'bad_link' | 'wrong_kind' | 'too_large' | 'stub_content';
+
 /** Error with a machine-readable code (`conflict`, `invalid_input`), mapped to an IPC error code by main. */
 export class ArtifactError extends Error {
   readonly code: 'conflict' | 'invalid_input';
-  constructor(message: string, code: 'conflict' | 'invalid_input') {
+  /** Set when an import is refused before anything is created. */
+  readonly reason: ImportRefusal | undefined;
+  constructor(message: string, code: 'conflict' | 'invalid_input', reason?: ImportRefusal) {
     super(message);
     this.name = 'ArtifactError';
     this.code = code;
+    this.reason = reason;
   }
 }
 
@@ -101,7 +122,7 @@ export function slugifyTitle(title: string): string {
 
 export function inferKind(fileName: string, content?: string): ArtifactKind | undefined {
   const ext = extname(fileName).toLowerCase();
-  if (ext === '.html' || ext === '.htm') return 'design';
+  if (ext === '.html' || ext === '.htm' || ext === '.jsx' || ext === '.tsx' || ext === '.svg') return 'design';
   if (ext === '.md' || ext === '.markdown' || ext === '.txt') return 'doc';
   if (ext === '.excalidraw') return 'whiteboard';
   if (ext === '.json' && content) {
@@ -150,17 +171,14 @@ function validateContent(kind: ArtifactKind, content: string): void {
   }
 }
 
-/** A claude.ai / claude.site https link, normalised; anything else is refused (`invalid_input`). */
+/**
+ * A claude.ai / claude.site artifact link, normalised; anything else (another host, a chat link, a
+ * page that is not an artifact) is refused (`invalid_input`) with the reason from classifyClaudeLink.
+ */
 export function claudeImportUrl(raw: string): string {
-  let u: URL;
-  try {
-    u = new URL(raw.trim());
-  } catch {
-    throw new ArtifactError('Not a valid URL.', 'invalid_input');
-  }
-  if (u.protocol !== 'https:' || !ALLOWED_IMPORT_HOSTS.some((re) => re.test(u.hostname))) throw new ArtifactError('Only https://claude.ai links can be imported.', 'invalid_input');
-  if (u.username || u.password) throw new ArtifactError('The link must not contain a user name or password.', 'invalid_input');
-  return u.toString();
+  const link = classifyClaudeLink(raw);
+  if (!link.ok) throw new ArtifactError(link.reason, 'invalid_input', 'bad_link');
+  return link.url;
 }
 
 function stripBom(s: string): string {
@@ -168,25 +186,35 @@ function stripBom(s: string): string {
 }
 
 function checkImportSize(content: string): void {
-  if (Buffer.byteLength(content, 'utf8') > MAX_IMPORT_BYTES) throw new ArtifactError('The content is larger than 10 MB.', 'invalid_input');
+  if (Buffer.byteLength(content, 'utf8') > MAX_IMPORT_BYTES) throw new ArtifactError('The content is larger than 10 MB.', 'invalid_input', 'too_large');
 }
 
 /**
- * Imported content must fit its kind. A design is previewed as an HTML page with no network, so React
- * (or other code) artifacts cannot run there: say so instead of storing a page that shows source text.
+ * Imported content must be real and fit its kind, checked before anything is created: never the
+ * placeholder older oIDE versions stored for a link-only import; a design is an HTML page or React
+ * component source (previewed offline); a whiteboard is Excalidraw JSON.
  */
 function checkImportContent(kind: ArtifactKind, content: string): void {
-  if (kind === 'design' && !looksLikeHtml(content)) {
+  if (!content.trim()) throw new ArtifactError(IMPORT_NEEDS_CONTENT, 'invalid_input', 'no_content');
+  if (isImportStubContent(content)) {
     throw new ArtifactError(
-      "This isn't an HTML page, so it can't be a design. oIDE previews designs as plain HTML with no network, so React and other code artifacts don't run here. Ask Claude on claude.ai for a single self-contained HTML file, or import this as a doc.",
+      "This is oIDE's old placeholder notice, not the artifact. Open the link on claude.ai and copy the artifact's own code, or download it.",
       'invalid_input',
+      'stub_content',
+    );
+  }
+  if (kind === 'design' && !isDesignContent(content)) {
+    throw new ArtifactError(
+      "This isn't an HTML page or a React component, so it can't be a design. Copy the artifact's code on claude.ai, or import this as a doc.",
+      'invalid_input',
+      'wrong_kind',
     );
   }
   if (kind === 'whiteboard') {
     try {
       validateContent(kind, content);
     } catch (e) {
-      throw new ArtifactError((e as Error).message, 'invalid_input');
+      throw new ArtifactError((e as Error).message, 'invalid_input', 'wrong_kind');
     }
   }
 }
@@ -198,6 +226,28 @@ async function writeAtomic(path: string, content: string): Promise<void> {
 }
 
 const VersionsFile = z.array(ArtifactVersion);
+
+/** Only a never-edited claude.ai import can still hold the old link-only placeholder. */
+function mayBeBrokenImport(meta: ArtifactMeta): boolean {
+  return !!meta.importedFrom && meta.version === 1;
+}
+
+/**
+ * `brokenImport` is derived from the content each time it is read, never stored: the placeholder older
+ * versions wrote for a link-only import (designs and docs), or their empty board (whiteboards).
+ */
+function withBrokenFlag(meta: ArtifactMeta, content: string): ArtifactMeta {
+  const { brokenImport: _stored, ...rest } = meta;
+  void _stored;
+  if (!mayBeBrokenImport(rest)) return rest;
+  const broken = rest.kind === 'whiteboard' ? isEmptyOideBoard(content) : isImportStubContent(content);
+  return broken ? { ...rest, brokenImport: true } : rest;
+}
+
+/** The other design entry (a design is `index.html` or `App.jsx`). */
+function otherDesignEntry(entry: string): string {
+  return entry === REACT_DESIGN_ENTRY ? HTML_DESIGN_ENTRY : REACT_DESIGN_ENTRY;
+}
 
 export class ArtifactStore {
   private readonly d: Database;
@@ -234,12 +284,13 @@ export class ArtifactStore {
   }
 
   /**
-   * Path of an artifact's entry file (or a version snapshot of it). The file name always comes from the
-   * kind, never from `artifact.json`, and the result must stay inside the artifact folder.
+   * Path of an artifact's entry file (or a version snapshot of it). The file name is one of the fixed
+   * entry names (`entryFileOf`), never a name from `artifact.json`, and must stay inside the folder.
    */
-  private async contentPath(id: string, meta: ArtifactMeta, version?: number): Promise<string> {
+  private async contentPath(id: string, meta: ArtifactMeta, version?: number, entry = meta.entry): Promise<string> {
     const dir = resolve(this.dirOf(id));
-    const parts = version === undefined ? [ENTRY_FILES[meta.kind]] : [VERSIONS_DIR, String(version), ENTRY_FILES[meta.kind]];
+    const name = entryFileOf(meta.kind, entry);
+    const parts = version === undefined ? [name] : [VERSIONS_DIR, String(version), name];
     const file = resolve(join(dir, ...parts));
     const rel = relative(dir, file);
     if (!rel || rel.startsWith('..') || isAbsolute(rel)) throw new Error('Artifact path escapes its folder');
@@ -300,8 +351,15 @@ export class ArtifactStore {
         try {
           const parsed = ArtifactMeta.safeParse(JSON.parse(await readFile(join(dir, 'artifact.json'), 'utf8')));
           if (!parsed.success) continue;
-          // Never trust `entry` from disk (a cloned repo could point it outside the folder): derive it from the kind.
-          const meta: ArtifactMeta = { ...parsed.data, entry: ENTRY_FILES[parsed.data.kind], slug: name, location, projectId: location === 'repo' ? projectId : parsed.data.projectId };
+          // Never trust `entry` from disk (a cloned repo could point it outside the folder): one of the fixed
+          // names. `brokenImport` is derived when read, so a value on disk is dropped.
+          const { brokenImport: _derived, ...onDisk } = parsed.data;
+          void _derived;
+          let entry = entryFileOf(onDisk.kind, onDisk.entry);
+          // A design whose entry file is missing but has the other one (an interrupted format switch,
+          // or a teammate's oIDE that wrote the other format): use the file that is there.
+          if (onDisk.kind === 'design' && !existsSync(join(dir, entry)) && existsSync(join(dir, otherDesignEntry(entry)))) entry = otherDesignEntry(entry);
+          const meta: ArtifactMeta = { ...onDisk, entry, slug: name, location, projectId: location === 'repo' ? projectId : parsed.data.projectId };
           // An id already indexed at a different folder keeps its folder; a copied artifact.json can't hijack it.
           const sameId = this.d.db.prepare('SELECT dir_key FROM artifacts WHERE id = ?').get(meta.id) as Row | undefined;
           if (sameId && String(sameId.dir_key) !== pathKey(dir) && existsSync(join(this.dirOf(meta.id), 'artifact.json'))) continue;
@@ -339,14 +397,44 @@ export class ArtifactStore {
       args.push(filter.kind);
     }
     const rows = this.d.db.prepare(`SELECT meta FROM artifacts ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY updated_at DESC`).all(...args) as Row[];
-    return rows.map((r) => ArtifactMeta.parse(fromJson(r.meta)));
+    const metas = rows.map((r) => ArtifactMeta.parse(fromJson(r.meta)));
+    return Promise.all(metas.map((m) => this.flagBroken(m)));
+  }
+
+  /**
+   * `withBrokenFlag` without reading big files: only a never-edited import can be a broken one, and
+   * the placeholder was small, so a bigger entry file is real content and is not read.
+   */
+  private async flagBroken(meta: ArtifactMeta): Promise<ArtifactMeta> {
+    if (!mayBeBrokenImport(meta)) return meta;
+    try {
+      const path = await this.contentPath(meta.id, meta);
+      if ((await stat(path)).size > LEGACY_IMPORT_STUB_MAX_BYTES) return meta;
+      return withBrokenFlag(meta, await readFile(path, 'utf8'));
+    } catch {
+      return meta;
+    }
   }
 
   async read(id: string, agentId?: string): Promise<ArtifactContent> {
-    const meta = this.metaFromIndex(id);
-    const content = await readFile(await this.contentPath(id, meta), 'utf8');
+    let meta = this.metaFromIndex(id);
+    let content: string;
+    try {
+      content = await readFile(await this.contentPath(id, meta), 'utf8');
+    } catch (e) {
+      // A design whose entry is missing but has the other format's file (an interrupted switch).
+      if (meta.kind !== 'design' || (e as NodeJS.ErrnoException).code !== 'ENOENT') throw e;
+      const other = otherDesignEntry(entryFileOf('design', meta.entry));
+      content = await readFile(await this.contentPath(id, meta, undefined, other), 'utf8');
+      meta = { ...meta, entry: other };
+    }
     if (agentId) this.recordUse(id, agentId, 'read');
-    return { meta, content };
+    return { meta: withBrokenFlag(meta, content), content };
+  }
+
+  /** Meta from the index, without reading files (the preview scheme needs the entry file). */
+  metaOf(id: string): ArtifactMeta {
+    return this.metaFromIndex(id);
   }
 
   async get(id: string): Promise<ArtifactDetail> {
@@ -364,11 +452,21 @@ export class ArtifactStore {
     }
   }
 
-  /** Content of an older version (History). */
+  /** Content of an older version (History). A design's version is HTML or React (`App.jsx`). */
   async readVersion(id: string, version: number): Promise<string> {
     const meta = this.metaFromIndex(id);
     if (!Number.isInteger(version) || version < 1) throw new Error('Bad version');
-    return readFile(await this.contentPath(id, meta, version), 'utf8');
+    const current = entryFileOf(meta.kind, meta.entry);
+    const entries = meta.kind === 'design' ? [current, current === REACT_DESIGN_ENTRY ? HTML_DESIGN_ENTRY : REACT_DESIGN_ENTRY] : [current];
+    let last: unknown;
+    for (const entry of entries) {
+      try {
+        return await readFile(await this.contentPath(id, meta, version, entry), 'utf8');
+      } catch (e) {
+        last = e;
+      }
+    }
+    throw last;
   }
 
   /* -------------------------------------------------------------- write */
@@ -392,7 +490,7 @@ export class ArtifactStore {
       projectId: input.projectId,
       location,
       version: 1,
-      entry: ENTRY_FILES[input.kind],
+      entry: input.kind === 'design' && input.content !== undefined ? designEntryFor(input.content) : ENTRY_FILES[input.kind],
       createdAt: ts,
       updatedAt: ts,
       importedFrom: input.importedFrom,
@@ -420,7 +518,10 @@ export class ArtifactStore {
       const dir = this.dirOf(id);
       const ts = this.now();
       const version = cur.version + 1;
-      const meta = ArtifactMeta.parse({ ...cur, version, updatedAt: ts });
+      // A design follows its content: React source is stored as App.jsx, HTML as index.html.
+      const entry = cur.kind === 'design' ? designEntryFor(content) : entryFileOf(cur.kind);
+      const oldEntry = entryFileOf(cur.kind, cur.entry);
+      const meta = ArtifactMeta.parse({ ...cur, entry, version, updatedAt: ts });
       await this.contentPath(id, meta, version); // refuse symlinked .versions before creating anything
       await mkdir(join(dir, VERSIONS_DIR, String(version)), { recursive: true });
       await writeFile(await this.contentPath(id, meta, version), content, 'utf8');
@@ -431,6 +532,9 @@ export class ArtifactStore {
       await writeAtomic(join(dir, VERSIONS_DIR, 'versions.json'), JSON.stringify(versions, null, 2) + '\n');
       await writeAtomic(join(dir, 'artifact.json'), JSON.stringify(meta, null, 2) + '\n');
       this.index(meta, dir);
+      // Only once meta and index point at the new entry: the other format's file goes, so the preview
+      // never serves a stale page (a failure before this leaves both files, never neither).
+      if (entry !== oldEntry) await rm(await this.contentPath(id, cur), { force: true }).catch(() => undefined);
       this.onChange?.(id, { change: 'saved', version, author: opts.author ?? 'user' });
       return meta;
     });
@@ -446,12 +550,12 @@ export class ArtifactStore {
     if (next.length > MAX_TITLE_LENGTH) throw new ArtifactError(`Titles can be at most ${MAX_TITLE_LENGTH} characters.`, 'invalid_input');
     return this.withLock(id, async () => {
       const cur = this.metaFromIndex(id);
-      if (cur.title === next) return cur;
+      if (cur.title === next) return this.flagBroken(cur);
       const meta = ArtifactMeta.parse({ ...cur, title: next, updatedAt: this.now() });
       await writeAtomic(join(this.dirOf(id), 'artifact.json'), JSON.stringify(meta, null, 2) + '\n');
       this.index(meta, this.dirOf(id));
       this.onChange?.(id, { change: 'renamed', version: meta.version });
-      return meta;
+      return this.flagBroken(meta);
     });
   }
 
@@ -477,35 +581,27 @@ export class ArtifactStore {
    * "Import from claude.ai" with a pasted link. claude.ai has no public API for artifact content, and
    * oIDE never uses the user's claude.ai sign-in, so main cannot fetch it: the user pastes the content
    * they copied on claude.ai (`content`), and the link is kept as `importedFrom` (Open in claude.ai).
-   * The kind follows the content when none is given. Without content this stores a link-only stub.
+   * The kind follows the content when none is given. Everything is checked before anything is
+   * created: a link alone, a link that is not an artifact link, or content that does not fit is refused.
    */
   async importUrl(
-    input: { url: string; content?: string; title?: string; kind?: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data' },
+    input: { url?: string; content?: string; title?: string; kind?: ArtifactKind; projectId?: string; location?: 'repo' | 'app-data' },
     author = 'user',
   ): Promise<ArtifactMeta> {
-    const url = claudeImportUrl(input.url);
-    const pasted = input.content !== undefined && input.content.trim() ? stripBom(input.content) : undefined;
-    if (pasted !== undefined) {
-      checkImportSize(pasted);
-      const kind = input.kind ?? inferKindFromContent(pasted);
-      checkImportContent(kind, pasted);
-      const title = input.title?.trim() || titleFromContent(kind, pasted) || 'Imported from claude.ai';
-      return this.create({ title, kind, content: pasted, projectId: input.projectId, location: input.location, importedFrom: url }, author);
-    }
-    const kind = input.kind ?? 'doc';
-    const title = input.title?.trim() || 'Imported from claude.ai';
-    const note = `Imported from ${url}. oIDE cannot fetch claude.ai artifacts: open the link, copy the artifact's code and paste it here to keep a local copy.`;
-    const content =
-      kind === 'doc'
-        ? note + '\n'
-        : kind === 'design'
-          ? `<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head>\n<body>\n<p>${escapeHtml(note)}</p>\n</body>\n</html>\n`
-          : undefined;
-    return this.create({ title, kind, content, projectId: input.projectId, location: input.location, importedFrom: url }, author);
+    // Without a link the pasted code is imported with no origin (an old import's link may no longer pass).
+    const url = input.url !== undefined ? claudeImportUrl(input.url) : undefined;
+    if (input.content === undefined || !input.content.trim()) throw new ArtifactError(IMPORT_NEEDS_CONTENT, 'invalid_input', 'no_content');
+    const pasted = stripBom(input.content);
+    checkImportSize(pasted);
+    const kind = input.kind ?? inferKindFromContent(pasted);
+    checkImportContent(kind, pasted);
+    const title = input.title?.trim() || titleFromContent(kind, pasted) || 'Imported from claude.ai';
+    return this.create({ title, kind, content: pasted, projectId: input.projectId, location: input.location, ...(url ? { importedFrom: url } : {}) }, author);
   }
 
   /**
-   * Import a dropped or exported file (HTML → design, Markdown → doc, Excalidraw → whiteboard).
+   * Import a dropped or downloaded file (HTML, JSX/TSX or SVG → design, Markdown → doc, Excalidraw →
+   * whiteboard), checked like pasted content before anything is created.
    * `url` is the claude.ai link the file was downloaded from, kept as `importedFrom` when given.
    */
   async importFile(
@@ -515,12 +611,16 @@ export class ArtifactStore {
     const importedFrom = input.url ? claudeImportUrl(input.url) : undefined;
     const st = await stat(input.filePath);
     if (!st.isFile()) throw new Error('Not a file.');
-    if (st.size > MAX_IMPORT_BYTES) throw new Error('File is larger than 10 MB.');
+    if (st.size > MAX_IMPORT_BYTES) throw new ArtifactError('The file is larger than 10 MB.', 'invalid_input', 'too_large');
     const content = stripBom(await readFile(input.filePath, 'utf8'));
     const kind = input.kind ?? inferKind(input.filePath, content);
-    if (!kind) throw new Error('Unknown artifact type. Use an .html, .md or .excalidraw file.');
-    // An .html file is a page by its name; other files picked as a design must hold HTML.
-    if (!(kind === 'design' && /\.html?$/i.test(input.filePath))) checkImportContent(kind, content);
+    if (!kind) throw new ArtifactError('Unknown artifact type. Use an .html, .jsx, .tsx, .svg, .md or .excalidraw file.', 'invalid_input', 'wrong_kind');
+    // An .html file is a page by its name (any content but empty or the old placeholder); other files
+    // picked as a design must hold HTML or React.
+    if (kind === 'design' && /\.html?$/i.test(input.filePath)) {
+      if (!content.trim()) throw new ArtifactError('The file is empty.', 'invalid_input', 'no_content');
+      if (isImportStubContent(content)) checkImportContent(kind, content);
+    } else checkImportContent(kind, content);
     const title = input.title?.trim() || basename(input.filePath, extname(input.filePath));
     return this.create({ title, kind, content, projectId: input.projectId, location: input.location, ...(importedFrom ? { importedFrom } : {}) }, author);
   }

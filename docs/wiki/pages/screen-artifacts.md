@@ -14,10 +14,15 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
 - **Grid**: `repeat(auto-fill, minmax(220px, 1fr))`, 12px gap. Each card is a `<button>` with the
   design's stylised kind thumbnail (grey blocks, not real content), title, "Kind · project" and a
   use line: "Being written by an agent" (green), "Written by an agent · 1h ago", "Read by 2
-  agents", "Not used by agents". Selected card = accent border. Double-click opens it.
+  agents", "Not used by agents". Selected card = accent border. Double-click opens it. A **broken
+  import** (`meta.brokenImport`: a link-only import made by an older oIDE, whose only version is the
+  old notice) shows a red `Import has no content` badge (alert icon plus text, not colour alone) in
+  place of the use line. Dropping one file on the grid opens the Import dialog on "Pick a file" with
+  it chosen.
 - **Detail pane** (320–380px, `panel`): 190px live preview, title with Rename and Delete (trash
   icon) beside it, "Kind · project · origin", Open, Give to an agent, Open in claude.ai, AGENTS USING
-  IT, HISTORY (with "Compare versions").
+  IT, HISTORY (with "Compare versions"). For a broken import the preview is replaced by the **fix
+  panel** (`FixImportPanel.tsx`, below).
 - **Open (Viewer.tsx)**: back button, title, "Kind · project · vN", Unsaved changes badge, view tabs,
   Save, and a "More actions" menu (Rename, Delete). Tabs: docs and designs Edit / Preview / Compare;
   whiteboards Board / Compare. Editors are lazy chunks:
@@ -25,7 +30,7 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
   | Kind | Edit | Preview |
   | --- | --- | --- |
   | Doc | Monaco (Markdown, word wrap) beside the rendered Markdown, live as you type | Rendered Markdown |
-  | Design | Monaco (HTML) beside the sandboxed preview of the **saved** version, which reloads on save ("Showing v3. Save to refresh the preview.") | Sandboxed preview |
+  | Design | Monaco (HTML, or JavaScript when `meta.entry` is `App.jsx`) beside the sandboxed preview of the **saved** version, which reloads on save ("Showing v3. Save to refresh the preview.") | Sandboxed preview |
   | Whiteboard | Embedded Excalidraw (`WhiteboardEditor.tsx`), dark theme on the oIDE tokens | (the board is the view) |
 
   Monaco reuses the Files screen setup (`screens/Files/monaco/setup.ts`: local package, `oide-dark`
@@ -33,6 +38,20 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
   Ctrl/Cmd+S saves in every editor. Plain keys typed in an editor stay there (`keepKeysInEditor`):
   Monaco types through an EditContext element and Excalidraw through its canvas, which the keymap
   does not see as editable, so J / K / N / Esc would otherwise also run app shortcuts.
+- **Broken import** (`FixImportPanel.tsx`, in the detail pane and, full width with the paste box
+  focused, in the open view in place of the tabs and editors): heading "This import has no content",
+  "oIDE can't download claude.ai artifacts, so the link came in without the design.", **Open on
+  claude.ai** (only for claude.ai links), a labelled "Paste the artifact's code" text area, **Save**,
+  **Choose downloaded file…**, a drop zone ("Replaces this empty import with the file."), and
+  **Delete**. Save checks the paste like the import dialog (`importContentError`: not blank, not the
+  old notice, a design is HTML or React, a whiteboard is JSON) and then takes one of two paths
+  (`fixImportPlan`): content that fits the artifact's kind is saved in place with
+  `artifacts.save({ id, content, note: 'Imported from claude.ai', baseVersion })` (main switches the
+  entry to `App.jsx` for React and, since v2 is real content, `brokenImport` goes away); content of
+  another kind (legacy link-only imports defaulted to Doc, so a pasted design is the common case)
+  creates a new artifact with `artifacts.import({ content, url: importedFrom, title, projectId,
+  location })` and deletes the empty one after it worked, with a line saying so. A chosen or dropped
+  file always takes the second path with `filePath`. The new artifact is selected.
 - **Compare**: From / To selects (every version, plus "Your unsaved changes" when dirty) over a
   read-only Monaco diff (`VersionDiff.tsx`, same theme as the Review split view) with a "+N −M
   lines" count. Whiteboard JSON is pretty-printed first so the diff is per property.
@@ -43,7 +62,7 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
 | --- | --- |
 | Grid | `artifacts.list({})`, then `artifacts.uses({ ids })` (one call for all use lines); both reload on `artifacts.changed` |
 | Detail | `artifacts.get({ id })` (meta, content, uses, versions), reloaded on `artifacts.changed` for that id |
-| Design preview | `artifacts.previewUrl` → `oide-artifact://<id>/index.html` in `<iframe sandbox="allow-scripts">` (opaque origin, main serves it with a no-network CSP). Without a URL (dev mock), and for past versions or unsaved edits, the HTML goes in through `srcdoc` with `sandbox=""` (no scripts) |
+| Design preview | `artifacts.previewUrl` → `oide-artifact://<id>/index.html` in `<iframe sandbox="allow-scripts">` (opaque origin, main serves it with a no-network CSP). React designs (`entry: App.jsx`) use the same URL: main serves a generated page that runs the bundled offline runtime, under the same no-network CSP. Without a URL (dev mock), and for past versions, **HTML** goes in through `srcdoc` with `sandbox=""` (no scripts). **React source never goes into `srcdoc`** (`looksLikeReact` on the content): the frame shows "Save to preview React changes. Use Compare to see older versions." (or, without a URL, "React designs preview in the desktop app.") |
 | Doc preview | `marked` → DOMPurify (no `script`, `style`, `iframe`, `form`, `style=`); link clicks never navigate the window, https links go to `shell.openExternal` |
 | Whiteboard preview | Read-only SVG render of the Excalidraw JSON (`Whiteboard.tsx`: rectangle, ellipse, diamond, line, arrow, freedraw, text) so the detail pane never loads Excalidraw. Colours are stored as Excalidraw stores them (light theme) and drawn through Excalidraw's dark-theme filter (`invert(93%) hue-rotate(180deg)`), so it matches the editor |
 | Open | Editors per kind (above). Save → `artifacts.save({ id, content, note: 'Edited by you', baseVersion })`, a new numbered version. Whiteboards save `serializeAsJSON(elements, appState, files, 'local')`; selecting, zooming and panning are not edits (the first serialisation after loading is the baseline). Esc / Artifacts goes back, with a "Discard your changes?" confirm when dirty |
@@ -54,7 +73,8 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
 | Open in claude.ai | Only when `importedFrom` is an https link on claude.ai (`canOpenClaudeLink`); `shell.openExternal`. Hidden for claude.site imports: that host is not on the external-link allow-list, since anyone can publish there |
 | Agents using it | Uses grouped per agent: "writes" if it ever wrote or created, else "reads"; status dot and title from the agents store; click → Focus |
 | History | `versions` newest first: "v4 · edited by you · 11:20", "v3 · Window shell layout agent · added a focus view · 10:52". Click a past version → `artifacts.readVersion` → previewed with "Viewing v2 (current is v4)", **Restore** (saves it as a new version) and **Back to latest** |
-| Import from claude.ai | Dialog with "Paste a link" or "Pick a file". Paste a link: the claude.ai link (must be https claude.ai), an **Open** button (`shell.openExternal`, accessible name "Open the link on claude.ai"; disabled for `claude.site` links, which are not on the external-link allow-list because anyone can publish there) and an "Artifact content" text area for the code the user copied there (main cannot fetch it: no public content API, and oIDE never uses the claude.ai sign-in) → `artifacts.import({ url, content })`. The kind follows the pasted content until the user picks one; React or other non-HTML code as a design is refused inline before sending (a `role="alert"` line under the field; the instructions stay visible; the check is memoised so a multi-MB paste is not re-scanned on each keystroke). With no content the button reads "Import link only" and main stores a link-only stub. Pick a file: `dialog.pickFile`, then `artifacts.import({ filePath, url? })` with an optional link kept as the origin; main only accepts a path picked in this session. Title (from the content or file name when empty), kind, project, where it lives (Personal by default). Copy says it is a copy, not synced |
+| Import from claude.ai | Dialog with "Paste a link" or "Pick a file". **Nothing is imported without content**: oIDE can't download claude.ai artifacts (no public content API; it never uses the claude.ai sign-in), not even public ones, and main refuses a link alone. Paste a link: the link is checked with `classifyClaudeLink` (artifact, public artifact, claude.site and design links; a chat link or another page gets the classifier's reason inline, `role="alert"` and `aria-invalid` on the field), an **Open** button (`shell.openExternal`, accessible name "Open the link on claude.ai"; disabled for `claude.site` links, which are not on the external-link allow-list because anyone can publish there) and an "Artifact content" text area under the steps "1. Open the link. 2. On claude.ai, use Copy (or Download). 3. Paste the code here, or drop the downloaded file." → `artifacts.import({ url, content })`. **Import** is disabled until there is content (link tab) or a file (file tab); the reason sits beside it and is its `aria-describedby` ("Paste the artifact's code first. oIDE can't download claude.ai artifacts, even public ones."). Content is checked before sending (`importContentError`, memoised so a multi-MB paste is not re-scanned on each keystroke): the old placeholder text, plain text as a design (a design is `isDesignContent`: HTML or React), whiteboard JSON, over 10 MB. The kind follows the content (`inferKindFromContent`, React is a design) until the user picks one. **Fetch with an agent** (shown for a valid link): `trackFetchWithAgent()` (opt-in telemetry event, no props) then `navigate('spawn', { projectId, goal })`; the goal asks an agent to read the link with its claude.ai connectors (Claude Docs read, DesignSync for Claude Design), create it with `artifacts_create` only if it got the real content, and otherwise create nothing and say the code should be pasted. Copy under it: works for Claude Docs and Claude Design; chat artifacts can't be fetched, even public ones. Pick a file: `dialog.pickFile` (filter html, htm, jsx, tsx, svg, md, markdown, txt, excalidraw, json), then `artifacts.import({ filePath, url? })` with an optional link kept as the origin; main only accepts a path picked in this session. **Drag and drop**: one file dropped on the dialog or on the Artifacts grid goes through the preload drop bridge (`window.oide.attachDropped`, the one prompt inputs use; `drop.ts`): preload reads the real path, main registers it as picked and a non-image file comes back as `{ kind: 'file', path }`, which is what `artifacts.import({ filePath })` accepts. No new IPC. `.svg`, `.jsx` and `.tsx` are not images to main (it recognises only png, jpeg, gif and webp, by name and by content), so they come back as files. An image has no path, so it is refused with "Images can't be imported as artifacts. Drop an .html, .jsx, .svg, .md or .excalidraw file."; several files get "Drop one file at a time."; outside the desktop app (dev mock) "Choose a file" is the way. Title (from the content or file name when empty), kind, project, where it lives (Personal by default). Copy says it is a copy, not synced |
+| Fix a broken import | `FixImportPanel` (see Layout): `artifacts.save` or, when the paste does not fit the artifact's kind or a file is chosen or dropped, `artifacts.import` then `artifacts.delete` of the empty one |
 | New artifact | Title (required, `aria-invalid`), kind, project (or none), where it lives: "In the project's repo" (`.oide/artifacts/`, shared through git; needs a project) or "Personal" (app data) → `artifacts.create` |
 
 The Project select is the shared project scope (`useScope`): choosing a project here also scopes the
@@ -95,6 +115,9 @@ route (`artifacts.artifactId`, via `replace`).
 ## Deviations from the design
 
 - Search is in the header (see Layout); the design has no search.
+- There is no "Import link only": it stored a placeholder as v1. The dialog needs the code or a file,
+  offers **Fetch with an agent** instead, and the grid and detail pane flag imports that predate this
+  rule (the badge and fix panel are additions).
 - The meta line says "imported from claude.ai" instead of "synced from claude.ai": v1 has no sync.
   A line under the buttons says it is a copy, not synced.
 - Open in claude.ai is hidden for artifacts that did not come from claude.ai.
@@ -103,10 +126,17 @@ route (`artifacts.artifactId`, via `replace`).
 
 ## Tests
 
-`model.test.ts` (filters, use lines, reads/writes grouping, version labels, claude.ai link check,
-front matter, whiteboard validation, `liveDecision`, author labels, diff text, rename titles),
+`model.test.ts` (filters, use lines, reads/writes grouping, version labels, claude.ai host check and
+`importLinkError`, `importContentError`, `fixImportPlan`, file kinds, Monaco language per entry, front
+matter, whiteboard validation, `liveDecision`, author labels, diff text, rename titles),
 `Artifacts.test.tsx` (kind / scope / search filtering, Give to an agent route with the context chip,
-Open in claude.ai only for claude.ai imports, DOMPurify strips scripts from docs), `Editors.test.tsx`
+Open in claude.ai only for claude.ai imports, DOMPurify strips scripts from docs; the import dialog:
+Import disabled without content with its reason, chat-link reason, old placeholder and plain-text
+design refused, React accepted as a design, Fetch with an agent opens Spawn with the goal, a file
+dropped on the dialog or on the grid imports by `filePath`, an image or several files refused; broken
+imports: badge, fix panel paste saves with `artifacts.save`, kind mismatch and chosen file import
+then delete, focus in the open view; React design: saved version by URL and a notice for a past
+version, never `srcdoc`), `Editors.test.tsx`
 (Monaco, Excalidraw and the diff editor stubbed: doc edit with live preview saved as v2 with
 `baseVersion`, agent write loaded with "Updated by", conflict banner with Compare / Keep mine / Use
 theirs, a `conflict` save error, whiteboard dirty tracking and reload, rename, delete with confirm,
@@ -125,4 +155,8 @@ packaged-CSP build and save v2 with bundled fonts and no CSP violations.
 - The app keymap treats Monaco's EditContext element as non-editable (`lib/keymap.ts`
   `isEditableTarget`); the Artifacts editors stop plain keys themselves, other Monaco hosts (Files)
   may still see J / K / N shortcuts fire while typing.
-- Dropping a file onto the screen is not supported (sandboxed renderer has no file paths).
+- Dropping a file works only in the desktop app (the preload bridge reads the path); the dev mock
+  has no `attachDropped`, so use Choose a file there.
+- React designs preview only as the saved current version; an older version or unsaved edit shows a
+  notice (use Compare). A pasted fix of a broken import that changes its kind creates a new artifact
+  (new id), so agents that knew the old id must be pointed at the new one.

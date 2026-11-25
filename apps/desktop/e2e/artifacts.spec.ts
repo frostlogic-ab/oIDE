@@ -129,3 +129,73 @@ test('a whiteboard opens in Excalidraw with bundled fonts and no CSP violations'
   expect(violations).toEqual([]);
   expect(failed.filter((f) => /woff2|esm\.sh/.test(f))).toEqual([]);
 });
+
+test('a claude.ai link alone is refused and creates nothing', async () => {
+  const { page } = ctx;
+  const out = await page.evaluate(async () => {
+    const oide = (window as unknown as { oide: { invoke: Invoke } }).oide;
+    const before = ((await oide.invoke('artifacts.list', {})) as unknown[]).length;
+    let error = '';
+    try {
+      await oide.invoke('artifacts.import', { url: 'https://claude.ai/artifact/NFaggV4JC9X6prTgKhobKm' });
+    } catch (e) {
+      error = (e as Error).message;
+    }
+    let chat = '';
+    try {
+      await oide.invoke('artifacts.import', { url: 'https://claude.ai/chat/0f8fad5b-d9cb-469f-a165-70867728950e', content: '<p>x</p>' });
+    } catch (e) {
+      chat = (e as Error).message;
+    }
+    const after = ((await oide.invoke('artifacts.list', {})) as unknown[]).length;
+    return { before, after, error, chat };
+  });
+  expect(out.error).toMatch(/invalid_input.*Paste the artifact's code/);
+  expect(out.chat).toMatch(/chat link/);
+  expect(out.after).toBe(out.before);
+});
+
+test('a pasted claude.ai React design renders offline in the preview frame', async () => {
+  const { page } = ctx;
+  const violations: string[] = [];
+  page.on('console', (m) => /Content Security Policy/.test(m.text()) && violations.push(m.text()));
+  const jsx = [
+    "import React, { useState } from 'react';",
+    "import { Camera } from 'lucide-react';",
+    '',
+    'export default function Pricing() {',
+    '  const [n] = useState(3);',
+    '  return (',
+    '    <div className="p-4">',
+    '      <Camera size={20} />',
+    '      <h1 className="text-red-500">Plans {n}</h1>',
+    '    </div>',
+    '  );',
+    '}',
+    '',
+  ].join('\n');
+  const { url, entry } = await page.evaluate(async (content) => {
+    const oide = (window as unknown as { oide: { invoke: Invoke } }).oide;
+    const meta = (await oide.invoke('artifacts.import', { url: 'https://claude.ai/artifact/NFaggV4JC9X6prTgKhobKm', content })) as { id: string; entry: string };
+    const { url } = (await oide.invoke('artifacts.previewUrl', { id: meta.id })) as { url: string };
+    return { url, entry: meta.entry };
+  }, jsx);
+  expect(entry).toBe('App.jsx');
+  // The same frame the Artifacts screen uses: sandboxed, opaque origin.
+  await page.evaluate((src) => {
+    const f = document.createElement('iframe');
+    f.id = 'e2e-react-preview';
+    f.setAttribute('sandbox', 'allow-scripts');
+    f.src = src;
+    f.style.cssText = 'position:fixed;right:0;bottom:0;width:480px;height:320px;background:#fff;z-index:99999';
+    document.body.appendChild(f);
+  }, url);
+  const frame = page.frameLocator('#e2e-react-preview');
+  await expect(frame.getByRole('heading', { name: 'Plans 3' })).toBeVisible({ timeout: 20_000 });
+  await expect(frame.locator('svg.lucide-camera')).toHaveCount(1);
+  // Tailwind's browser build styled the utility class offline.
+  await expect(frame.getByRole('heading', { name: 'Plans 3' })).not.toHaveCSS('color', 'rgb(0, 0, 0)');
+  await page.screenshot({ path: join(shots, 'artifact-react-preview.png') });
+  await page.evaluate(() => document.getElementById('e2e-react-preview')?.remove());
+  expect(violations).toEqual([]);
+});

@@ -20,6 +20,7 @@ import { toast } from '../../stores/ui';
 import { ExtensionArtifactView } from '../../extensions/ExtensionArtifactView';
 import { artifactTypeOf } from '../../extensions/model';
 import { useExtensions } from '../../extensions/store';
+import { FixImportPanel } from './FixImportPanel';
 import { DesignFrame, MarkdownView } from './Preview';
 import {
   KIND_LABEL,
@@ -48,6 +49,8 @@ export interface ViewerProps {
   compare?: { from: CompareSide; to: CompareSide };
   onClose: () => void;
   onSaved: (meta: ArtifactMeta, content: string) => void;
+  /** A broken import was replaced by a new artifact (the empty one is deleted). */
+  onReplaced: (meta: ArtifactMeta) => void;
   onRename: () => void;
   onDelete: () => void;
 }
@@ -65,6 +68,7 @@ export function Viewer({
   compare: initialCompare,
   onClose,
   onSaved,
+  onReplaced,
   onRename,
   onDelete,
 }: ViewerProps) {
@@ -97,7 +101,12 @@ export function Viewer({
   const live = useRef({ base, dirty });
   live.current = { base, dirty };
 
-  useEffect(() => headingRef.current?.focus(), []);
+  // A broken import puts the cursor in its paste box instead.
+  useEffect(() => {
+    if (!meta.brokenImport) headingRef.current?.focus();
+    // On open only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const authorOf = (version: number) => detail.versions.find((v) => v.version === version)?.author;
 
@@ -140,6 +149,15 @@ export function Viewer({
       requestClose();
     },
   });
+
+  // Pasted code saved from the fix panel: it is our own version, and the editor starts from it.
+  const fixed = (next: ArtifactMeta, content: string) => {
+    own.current.add(next.version);
+    setBase({ version: next.version, content });
+    setDraft(content);
+    setBaseline(content);
+    onSaved(next, content);
+  };
 
   const save = async () => {
     if (!dirty || saving) return;
@@ -215,10 +233,12 @@ export function Viewer({
         </div>
         {dirty && <Badge tone="warn">Unsaved changes</Badge>}
         <div className="flex-1" />
-        <Tabs label="View" idPrefix="viewer" variant="pill" tabs={tabs} value={mode} onChange={setMode} />
-        <Button size={32} variant="primary" onClick={() => void save()} disabled={!dirty || saving}>
-          {saving ? 'Saving…' : 'Save'}
-        </Button>
+        {!meta.brokenImport && <Tabs label="View" idPrefix="viewer" variant="pill" tabs={tabs} value={mode} onChange={setMode} />}
+        {!meta.brokenImport && (
+          <Button size={32} variant="primary" onClick={() => void save()} disabled={!dirty || saving}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
+        )}
         <Menu
           label={`More actions for ${meta.title}`}
           align="end"
@@ -278,6 +298,13 @@ export function Viewer({
         </div>
       )}
 
+      {meta.brokenImport ? (
+        <div className="flex-1 min-h-0 overflow-auto p-4">
+          <div className="max-w-[720px] mx-auto">
+            <FixImportPanel meta={meta} autoFocus onSaved={fixed} onReplaced={onReplaced} onDelete={onDelete} />
+          </div>
+        </div>
+      ) : (
       <div {...tabPanelProps('viewer', mode)} className="flex-1 min-h-0 flex gap-4 p-4 outline-none">
         <Suspense fallback={<Loading />}>
           {mode === 'edit' && kind === 'whiteboard' && (
@@ -302,7 +329,7 @@ export function Viewer({
               <div className="flex-1 min-w-0 min-h-0 flex flex-col">
                 <SourceEditor
                   value={draft}
-                  language={sourceLanguage(kind)}
+                  language={sourceLanguage(kind, meta.entry)}
                   label={`Source of ${meta.title}`}
                   onChange={(v) => {
                     setDraft(v);
@@ -334,6 +361,7 @@ export function Viewer({
           )}
         </Suspense>
       </div>
+      )}
 
       <Dialog
         open={confirmClose}
@@ -537,7 +565,7 @@ function Compare({ detail, draft, sides, onSides, agentTitle }: CompareProps) {
         <VersionDiff
           original={contentForDiff(meta.kind, a)}
           modified={contentForDiff(meta.kind, b)}
-          language={sourceLanguage(meta.kind)}
+          language={sourceLanguage(meta.kind, meta.entry)}
           label={`Changes from ${name(cur.from)} to ${name(cur.to)}`}
           onStats={setStats}
         />

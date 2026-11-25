@@ -92,8 +92,10 @@ project MCP servers or turn on extensions. See [Security model](/guide/security-
 ## Can I sync artifacts with claude.ai?
 
 Not today: there is no public API for claude.ai artifacts, and oIDE never uses your claude.ai
-sign-in, so it can't download them. You can import a copy: paste the link together with the
-artifact's code, or pick a file you downloaded. See [Artifacts](/guide/screens/artifacts).
+sign-in, so it can't download them, not even public ones. You can import a copy: paste the link
+together with the artifact's code, or pick or drop a file you downloaded. An import without content
+is refused. For Claude Docs and Claude Design links, **Fetch with an agent** lets an agent read them
+with its own claude.ai connectors. See [Artifacts](/guide/screens/artifacts#claude-ai).
 
 ## How do I report a security problem?
 

@@ -1,16 +1,17 @@
 /**
  * Artifact previews:
  * - design: sandboxed <iframe> on `artifacts.previewUrl` (oide-artifact:// served by main with a
- *   no-network CSP). `sandbox="allow-scripts"` without `allow-same-origin` keeps it an opaque
- *   origin. When main has no preview URL (dev:web mock, or a past version) the HTML goes in via
- *   `srcdoc` with an empty sandbox (no scripts at all).
+ *   no-network CSP; HTML as is, React through main's generated page and the bundled offline
+ *   runtime). `sandbox="allow-scripts"` without `allow-same-origin` keeps it an opaque origin. When
+ *   main has no preview URL (dev:web mock, or a past version) HTML goes in via `srcdoc` with an
+ *   empty sandbox (no scripts at all); React source never does, a short notice shows instead.
  * - doc: Markdown rendered with `marked`, sanitised with DOMPurify.
  * - whiteboard: read-only SVG render of the Excalidraw JSON (v1; no embedded Excalidraw editor).
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
-import type { ArtifactKind } from '@oide/protocol';
+import { looksLikeReact, type ArtifactKind } from '@oide/protocol';
 import { cn } from '@oide/ui';
 import { invokeOr, oide } from '../../lib/bridge';
 import { stripFrontMatter } from './model';
@@ -97,13 +98,28 @@ export function DesignFrame({ artifactId, title, html, forceInline, scaled, vers
     tabIndex: scaled ? -1 : 0,
   };
 
+  // React needs the runtime that main serves with the saved version: it never goes into srcdoc.
+  const inline = forceInline || url === null;
+  const react = useMemo(() => inline && looksLikeReact(html), [inline, html]);
+
   return (
     <div ref={ref} className={cn('relative overflow-hidden', className)}>
-      {forceInline || url === null ? (
+      {react ? (
+        <ReactNotice text={forceInline ? 'Only the saved version of a React design can be previewed. Save your changes, or use Compare to see older versions.' : 'React designs preview in the desktop app.'} scaled={scaled} />
+      ) : inline ? (
         <iframe {...common} sandbox="" srcDoc={html} />
       ) : url ? (
         <iframe key={`${url}#${version ?? 0}`} {...common} sandbox="allow-scripts" src={url} />
       ) : null}
+    </div>
+  );
+}
+
+/** Stands in for a React design's preview where only the saved version can run (past versions). */
+function ReactNotice({ text, scaled }: { text: string; scaled?: boolean }) {
+  return (
+    <div role="note" className={cn('absolute inset-0 flex items-center justify-center bg-raised text-ink-2 text-center', scaled ? 'p-4 text-[12.5px]' : 'p-6 text-[13px]')}>
+      {text}
     </div>
   );
 }
