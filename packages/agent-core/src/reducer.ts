@@ -31,6 +31,8 @@ export interface ReducerOptions {
 
 const EPHEMERAL = new Set(['Thinking…', 'Writing…']);
 const MAX_LINE = 90;
+/** The window assumed when a request outgrows the table's guess (the largest window the CLI reports today). */
+const LARGE_WINDOW = 1_000_000;
 
 function clip(s: string, n = MAX_LINE): string {
   const one = s.replace(/\s+/g, ' ').trim();
@@ -292,6 +294,9 @@ export class AgentReducer {
           if (used > 0) {
             s.contextUsed = used;
             s.contextBaseline ??= used;
+            // A request larger than the window proves the window is wrong (an unverified model on the
+            // 200k fallback before its first result). Assume the next size up until the CLI reports it.
+            if (used > s.contextWindow && !this.windows.has(s.model)) s.contextWindow = LARGE_WINDOW;
           }
         }
         break;

@@ -105,7 +105,8 @@ subagent gets its own `contextUsed` and `contextWindow` from its own tagged mess
 own `/context` total exactly (tests in `packages/agent-core/src/context.test.ts` against real fixtures).
 Window: a `ContextWindowBook` shared by the supervisor learns `result.contextWindows[model]` (the lead
 model's entry, `[1m]` stripped) and `/context`'s `raw_max_tokens`; before any report it falls back to
-`contextWindowFor(model)` (1M for the 5.5 models and aliases, 200k for unverified ones). A restored summary
+`contextWindowFor(model)` (1M for the 5.5 models, `claude-fable-5-2` and the family aliases, 200k for
+unverified ones). A lead request larger than an unlearned window lifts it to 1M. A restored summary
 seeds the book with a stored window larger than the table's. `/compact` sets `contextUsed` to `post_tokens`;
 a `context-usage` event (from `/context`) sets both values. `contextBaseline` is the first lead request;
 the ring tooltip reads "N of W tokens (P%) · includes system prompt and tools" and, when the baseline is at
