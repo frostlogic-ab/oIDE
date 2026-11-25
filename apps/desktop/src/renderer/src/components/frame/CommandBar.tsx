@@ -3,6 +3,7 @@ import { Icon, Kbd, StatusDot, agentStatusMeta, cn } from '@oide/ui';
 import type { AgentSummary } from '@oide/protocol';
 import { commands, fuzzyFilter } from '../../lib/commands';
 import { buildCommandBarRows, openQuickOpenResult, recentRows, useQuickOpenFiles, useQuickOpenRoots, type CommandBarRow } from '../../lib/quickOpen';
+import { trackCommand } from '../../lib/telemetry';
 import { useKeymapScope } from '../../lib/useKeymap';
 import { useFiles } from '../../screens/Files/filesStore';
 import { agentsInScope, useAgents } from '../../stores/agents';
@@ -78,6 +79,7 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
       openQuickOpenResult(row);
       return;
     }
+    trackCommand(row.command.id, row.command.source);
     const result = await row.command.run();
     if (!(result && typeof result === 'object' && result.keepOpen)) close();
   };

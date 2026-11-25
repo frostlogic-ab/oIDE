@@ -7,6 +7,7 @@ import { CommitInfo, FileDiff, FileNode, OverlapWarning, Project, ReviewComment,
 import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settings.js';
 import { UpdateStatus } from './updates.js';
 import { FindByNameInput, FindByNameOutput, ReplaceInput, ReplaceOutput, SearchContentInput, SearchResultsEvent } from './search.js';
+import { TelemetryConsentInput, TelemetryStatus, TelemetryTrackInput } from './telemetry.js';
 
 /**
  * The IPC contract. Every renderer → main command is a request/response pair, validated with Zod
@@ -53,6 +54,15 @@ export const Commands = {
   'app.openLogsFolder': cmd(Void, Ok),
   /** A screen's error boundary caught an error; main writes it (redacted) to the main log. No props, state, prompts or code. */
   'app.reportError': cmd(z.object({ screen: z.string().max(60), name: z.string().max(120), message: z.string().max(2000), stack: z.string().max(8000).optional(), componentStack: z.string().max(8000).optional() }), Ok),
+  /**
+   * Opt-in telemetry (ADR 0011). `track`: the renderer reports a screen view, a renderer catalogue event,
+   * an error or web vitals; main validates it against the catalogue (packages/protocol/src/telemetry.ts),
+   * applies consent and may drop it. Always answers ok, sent or not.
+   */
+  'telemetry.track': cmd(TelemetryTrackInput, Ok),
+  'telemetry.status': cmd(Void, TelemetryStatus),
+  /** The first-run question: `shown` when it appears, then `accept` / `decline` / `later` (closed without a choice). */
+  'telemetry.consent': cmd(TelemetryConsentInput, TelemetryStatus),
   'cli.detect': cmd(Void, CliInfo),
   'cli.openSignIn': cmd(Void, z.object({ terminalId: Id })),
 

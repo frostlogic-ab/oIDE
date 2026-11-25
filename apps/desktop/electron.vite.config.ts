@@ -6,6 +6,7 @@ import tailwindcss from '@tailwindcss/vite';
 import type { Plugin } from 'vite';
 import { excalidrawAssets } from './excalidraw-assets';
 import { buildCsp } from './src/main/security/csp';
+import { OFFICIAL_UMAMI_HOST, OFFICIAL_UMAMI_WEBSITE_ID } from '../../packages/protocol/src/distribution';
 
 const root = import.meta.dirname;
 const pkg = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as {
@@ -42,9 +43,19 @@ const publishDefines = {
   __OIDE_PUBLISH_REPO__: JSON.stringify(process.env.OIDE_PUBLISH_REPO ?? ''),
 };
 
+/**
+ * Opt-in telemetry endpoint (ADR 0011, packages/protocol/src/distribution.ts). Official builds use the
+ * defaults; forks set `OIDE_UMAMI_HOST` / `OIDE_UMAMI_WEBSITE_ID` to their own Umami, or either to an
+ * empty string to compile telemetry out (no question, no network).
+ */
+const telemetryDefines = {
+  __OIDE_UMAMI_HOST__: JSON.stringify(process.env.OIDE_UMAMI_HOST ?? OFFICIAL_UMAMI_HOST),
+  __OIDE_UMAMI_WEBSITE_ID__: JSON.stringify(process.env.OIDE_UMAMI_WEBSITE_ID ?? OFFICIAL_UMAMI_WEBSITE_ID),
+};
+
 export default defineConfig({
   main: {
-    define: publishDefines,
+    define: { ...publishDefines, ...telemetryDefines },
     build: {
       outDir: 'out/main',
       externalizeDeps: { include: runtimeDeps, exclude: [] },

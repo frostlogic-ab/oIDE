@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { AppFrame } from './components/frame/AppFrame';
+import { TelemetryConsent } from './components/TelemetryConsent';
 import { startStores } from './lib/boot';
 import { useKeymapScope } from './lib/useKeymap';
 import { commands } from './lib/commands';
@@ -17,5 +18,10 @@ export function App() {
     'agent.nextNeedsYou': () => void commands.run('oide.nextNeedsYou'),
   });
 
-  return <AppFrame />;
+  return (
+    <>
+      <AppFrame />
+      <TelemetryConsent />
+    </>
+  );
 }

@@ -26,6 +26,8 @@ export async function launchApp(extraEnv: Record<string, string> = {}, opts: { u
   const env: Record<string, string> = {};
   for (const [k, v] of Object.entries(process.env)) if (v !== undefined && k !== 'ELECTRON_RENDERER_URL') env[k] = v;
   env.OIDE_USER_DATA = userData;
+  // Telemetry is always off in e2e (no first-run question, no network) unless a test opts in with a file sink.
+  env.OIDE_TELEMETRY = '0';
   Object.assign(env, extraEnv);
   const app = await electron.launch({
     args: [join(appDir, 'out/main/index.js'), ...(process.platform === 'linux' ? ['--no-sandbox'] : [])],

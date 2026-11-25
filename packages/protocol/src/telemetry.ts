@@ -1,0 +1,537 @@
+import { z } from 'zod';
+import { Effort, PermissionMode, WorkIn } from './agent.js';
+
+/**
+ * Opt-in usage analytics and error reports (docs/wiki/pages/telemetry.md, ADR 0011).
+ *
+ * This file is the ONE allow-list. Main is the only sender: it drops any event whose name is not in
+ * `TELEMETRY_EVENTS`, strips any property the event does not declare, and drops the event when a
+ * declared property has a value outside its schema. Values are enums, booleans, bounded numbers and
+ * buckets, never free text. To add an event: add it here (with the product question it answers),
+ * emit it from main (or list it as `from: 'renderer'`), and add it to the wiki page in the same change.
+ *
+ * Never send: file paths, project / repo / branch names, agent titles or goals, prompts, model
+ * output, tool inputs, commit messages, artifact contents, extension settings, env values, URLs the
+ * user visits, Claude account information, or ids of custom / local extensions.
+ */
+
+// ------------------------------------------------------------------------------------ buckets
+
+export const COUNT_BUCKETS = ['0', '1', '2-5', '6-20', '21-100', '100+'] as const;
+export const CountBucket = z.enum(COUNT_BUCKETS);
+export type CountBucket = z.infer<typeof CountBucket>;
+export function countBucket(n: number): CountBucket {
+  if (!Number.isFinite(n) || n <= 0) return '0';
+  if (n < 2) return '1';
+  if (n <= 5) return '2-5';
+  if (n <= 20) return '6-20';
+  if (n <= 100) return '21-100';
+  return '100+';
+}
+
+export const DURATION_BUCKETS = ['<10s', '10s-1m', '1-5m', '5-15m', '15-60m', '1h+'] as const;
+export const DurationBucket = z.enum(DURATION_BUCKETS);
+export type DurationBucket = z.infer<typeof DurationBucket>;
+export function durationBucket(ms: number): DurationBucket {
+  const s = Number.isFinite(ms) ? ms / 1000 : 0;
+  if (s < 10) return '<10s';
+  if (s < 60) return '10s-1m';
+  if (s < 300) return '1-5m';
+  if (s < 900) return '5-15m';
+  if (s < 3600) return '15-60m';
+  return '1h+';
+}
+
+export const TOKEN_BUCKETS = ['<10k', '10k-100k', '100k-1M', '1M-10M', '10M+'] as const;
+export const TokenBucket = z.enum(TOKEN_BUCKETS);
+export type TokenBucket = z.infer<typeof TokenBucket>;
+export function tokenBucket(n: number): TokenBucket {
+  if (!Number.isFinite(n) || n < 10_000) return '<10k';
+  if (n < 100_000) return '10k-100k';
+  if (n < 1_000_000) return '100k-1M';
+  if (n < 10_000_000) return '1M-10M';
+  return '10M+';
+}
+
+export const MEMORY_BUCKETS = ['<256MB', '256-512MB', '512MB-1GB', '1-2GB', '2GB+'] as const;
+export const MemoryBucket = z.enum(MEMORY_BUCKETS);
+export type MemoryBucket = z.infer<typeof MemoryBucket>;
+export function memoryBucket(bytes: number): MemoryBucket {
+  const mb = Number.isFinite(bytes) ? bytes / (1024 * 1024) : 0;
+  if (mb < 256) return '<256MB';
+  if (mb < 512) return '256-512MB';
+  if (mb < 1024) return '512MB-1GB';
+  if (mb < 2048) return '1-2GB';
+  return '2GB+';
+}
+
+/** `2.1.325` → `2.1`; anything that is not a version → `unknown`. */
+export const CliVersionBucket = z.string().regex(/^(?:\d{1,3}\.\d{1,3}|unknown|none)$/);
+export function cliVersionBucket(v: string | undefined | null): string {
+  const m = /^(\d{1,3})\.(\d{1,3})(?:\.|$)/.exec((v ?? '').trim());
+  return m ? `${m[1]}.${m[2]}` : 'unknown';
+}
+
+/** Screen size rounded down to 100 px steps (`1920x1080` → `1900x1000`): enough for layout questions. */
+export function screenBucket(width: number, height: number): string {
+  const r = (n: number) =>
+    Math.max(0, Math.min(99_900, Math.floor((Number.isFinite(n) ? n : 0) / 100) * 100));
+  return `${r(width)}x${r(height)}`;
+}
+
+/** An app version such as `0.1.0` or `0.2.0-beta.3`. */
+export const AppVersion = z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,6}(?:-[0-9A-Za-z.]{1,20})?$/);
+
+// ------------------------------------------------------------------------------- enum helpers
+
+export const MODEL_FAMILY_VALUES = ['opus', 'sonnet', 'haiku', 'fable', 'custom', 'other'] as const;
+export const ModelFamilyValue = z.enum(MODEL_FAMILY_VALUES);
+export type ModelFamilyValue = z.infer<typeof ModelFamilyValue>;
+/** `opus`, `claude-opus-5-5`, `claude-opus-5-5[1m]` → `opus`. Never the raw id of a custom model. */
+export function modelFamilyOf(model: string | undefined, custom = false): ModelFamilyValue {
+  if (custom) return 'custom';
+  const m = /(opus|sonnet|haiku|fable)/i.exec(model ?? '');
+  return m ? (m[1]!.toLowerCase() as ModelFamilyValue) : 'other';
+}
+
+/** Tool categories for permission answers. MCP tools are only ever `mcp` (never the server or tool name). */
+export const TOOL_CATEGORIES = [
+  'Bash',
+  'Edit',
+  'Write',
+  'Read',
+  'Search',
+  'Web',
+  'Task',
+  'Plan',
+  'Notebook',
+  'mcp',
+  'other',
+] as const;
+export const ToolCategory = z.enum(TOOL_CATEGORIES);
+export type ToolCategory = z.infer<typeof ToolCategory>;
+export function toolCategoryOf(toolName: string | undefined): ToolCategory {
+  const t = toolName ?? '';
+  if (t.startsWith('mcp__')) return 'mcp';
+  if (t === 'Bash' || t === 'BashOutput' || t === 'KillShell' || t === 'KillBash') return 'Bash';
+  if (t === 'Edit' || t === 'MultiEdit') return 'Edit';
+  if (t === 'Write') return 'Write';
+  if (t === 'Read') return 'Read';
+  if (t === 'Glob' || t === 'Grep' || t === 'LS') return 'Search';
+  if (t === 'WebFetch' || t === 'WebSearch') return 'Web';
+  if (t === 'Task' || t === 'Agent') return 'Task';
+  if (t === 'ExitPlanMode' || t === 'TodoWrite') return 'Plan';
+  if (t === 'NotebookEdit') return 'Notebook';
+  return 'other';
+}
+
+/** Built-in command bar commands (renderer `lib/coreCommands.ts`). Extension commands are never sent. */
+export const BUILTIN_COMMAND_IDS = [
+  'oide.spawn',
+  'oide.jumpToSession',
+  'oide.nextNeedsYou',
+  'oide.askAgent',
+  'oide.go.wall',
+  'oide.go.artifacts',
+  'oide.go.files',
+  'oide.files.search',
+  'oide.go.sourceControl',
+  'oide.go.marketplace',
+  'oide.go.settings',
+  'oide.scope.all',
+  'oide.openProject',
+  'oide.theme.next',
+] as const;
+
+/** Built-in Claude Code CLI slash commands. Skills, plugin and MCP commands are sent as `other`, never by name. */
+export const BUILTIN_SLASH_COMMANDS = [
+  'compact',
+  'context',
+  'init',
+  'clear',
+  'cost',
+  'review',
+  'security-review',
+  'pr-comments',
+  'release-notes',
+  'model',
+  'memory',
+  'status',
+  'todos',
+  'usage',
+  'help',
+  'agents',
+  'hooks',
+  'mcp',
+  'permissions',
+  'doctor',
+  'export',
+  'add-dir',
+] as const;
+export function slashCommandOf(command: string): (typeof BUILTIN_SLASH_COMMANDS)[number] | 'other' {
+  const name = /^\/?([a-z][\w-]*)/i.exec(command.trim())?.[1]?.toLowerCase() ?? '';
+  return (BUILTIN_SLASH_COMMANDS as readonly string[]).includes(name)
+    ? (name as (typeof BUILTIN_SLASH_COMMANDS)[number])
+    : 'other';
+}
+
+/**
+ * Settings whose changes are counted (`setting_changed` carries the key, never the value). Keys not
+ * listed here (custom models, techniques, permission rules, paths, the marketplace URL's value…) are
+ * not reported at all.
+ */
+export const TELEMETRY_SETTING_KEYS = [
+  'claude.cliPath',
+  'claude.defaultMode',
+  'claude.allowBypass',
+  'claude.extraFlags',
+  'models.defaultPresetId',
+  'models.defaultEffort',
+  'models.versions',
+  'agents.maxRunning',
+  'agents.worktreeLocation',
+  'agents.cleanup',
+  'agents.contextWarnAt',
+  'agents.contextSuggestCompactAt',
+  'agents.notifications',
+  'agents.fetchIntervalMinutes',
+  'permissions.defaults',
+  'ui.accent',
+  'ui.crashReports',
+  'updates.channel',
+  'updates.checkAutomatically',
+  'marketplace.indexUrl',
+  'keybindings',
+] as const;
+export type TelemetrySettingKey = (typeof TELEMETRY_SETTING_KEYS)[number];
+
+/** Allow-listed setting keys a `settings.update` patch touches (most specific first, de-duplicated). */
+export function settingKeysOf(patch: unknown): TelemetrySettingKey[] {
+  const out = new Set<TelemetrySettingKey>();
+  const walk = (v: unknown, path: string, depth: number) => {
+    const hit = TELEMETRY_SETTING_KEYS.find((k) => k === path);
+    if (hit) {
+      out.add(hit);
+      return;
+    }
+    if (depth >= 2 || !v || typeof v !== 'object' || Array.isArray(v)) return;
+    for (const k of Object.keys(v as Record<string, unknown>))
+      walk((v as Record<string, unknown>)[k], path ? `${path}.${k}` : k, depth + 1);
+  };
+  walk(patch, '', 0);
+  return [...out];
+}
+
+/** npm-style package names (marketplace ids). Only sent for extensions from the official index. */
+export const MarketplaceExtensionId = z
+  .string()
+  .regex(/^(?:@[a-z0-9][a-z0-9._-]{0,50}\/)?[a-z0-9][a-z0-9._-]{0,80}$/);
+
+/** CLI stream-json event types oIDE did not recognise (`system/foo`), counted per type. */
+export const CliEventType = z.string().regex(/^[a-z][a-z0-9_]{0,39}(?:\/[a-z][a-z0-9_]{0,39})?$/);
+
+// ---------------------------------------------------------------------------------- screens
+
+/** Settings sections (renderer `screens/Settings/index.tsx`), for `/settings/<section>` pageviews. */
+export const SETTINGS_SECTION_IDS = [
+  'cli',
+  'models',
+  'agents',
+  'tech',
+  'perms',
+  'projects',
+  'artifacts',
+  'ext',
+  'keys',
+  'look',
+  'privacy',
+  'updates',
+  'diag',
+] as const;
+export const TELEMETRY_SCREENS = [
+  'wall',
+  'focus',
+  'spawn',
+  'source-control',
+  'review',
+  'files',
+  'artifacts',
+  'marketplace',
+  'settings',
+  'extension',
+] as const;
+export const TelemetryScreen = z.enum(TELEMETRY_SCREENS);
+export type TelemetryScreen = z.infer<typeof TelemetryScreen>;
+
+/** The synthetic pageview URL of a screen: `/wall`, `/settings/privacy`. Never ids or names. */
+export function screenPath(screen: TelemetryScreen, section?: string): string {
+  if (screen === 'settings')
+    return (SETTINGS_SECTION_IDS as readonly string[]).includes(section ?? '')
+      ? `/settings/${section}`
+      : '/settings/cli';
+  return `/${screen}`;
+}
+/** Every pageview path oIDE can send (docs and tests). */
+export const TELEMETRY_PATHS: string[] = TELEMETRY_SCREENS.flatMap((s) =>
+  s === 'settings' ? SETTINGS_SECTION_IDS.map((x) => `/settings/${x}`) : [`/${s}`],
+);
+
+// -------------------------------------------------------------------------------- catalogue
+
+const Ms = z.number().int().min(0).max(86_400_000);
+const SmallCount = z.number().int().min(0).max(10_000);
+
+interface EventDef<S extends z.ZodObject> {
+  /** Who may report it: main observes it itself, or the renderer reports it over `telemetry.track`. */
+  from: 'main' | 'renderer';
+  /** The product question this event answers (every event must answer one). */
+  question: string;
+  props: S;
+}
+const def = <S extends z.ZodObject>(d: EventDef<S>): EventDef<S> => d;
+
+export const TELEMETRY_EVENTS = {
+  app_started: def({
+    from: 'main',
+    question: 'How fast does oIDE start, on which CLI versions, and how big are real workspaces?',
+    props: z.object({
+      cold_start_ms: Ms,
+      cli_found: z.boolean(),
+      cli_version: CliVersionBucket,
+      projects: CountBucket,
+      agents: CountBucket,
+    }),
+  }),
+  update_installed: def({
+    from: 'main',
+    question: 'Do people move to new versions, and from which ones?',
+    props: z.object({ from_version: AppVersion, to_version: AppVersion }),
+  }),
+  telemetry_opt_in: def({
+    from: 'main',
+    question:
+      'Where do people opt in (the first-run prompt or Settings)? Sent only on opt-in, never on opt-out.',
+    props: z.object({ source: z.enum(['prompt', 'settings']), errors: z.boolean() }),
+  }),
+  agent_spawned: def({
+    from: 'main',
+    question:
+      'Which models, efforts, permission modes and isolation do people pick, and do they use parallel attempts and attachments?',
+    props: z.object({
+      model: ModelFamilyValue,
+      effort: z.union([Effort, z.literal('default')]),
+      strategy: z.enum(['single', 'subagent-model', 'routed']),
+      mode: PermissionMode,
+      work_in: WorkIn,
+      attempts: z.number().int().min(1).max(6),
+      has_attachments: z.boolean(),
+      has_context: z.boolean(),
+      techniques: SmallCount,
+      extensions: SmallCount,
+    }),
+  }),
+  agent_finished: def({
+    from: 'main',
+    question:
+      'How do agent runs end, how long do they take, how fast is the first output, and how many subagents and tokens do they use?',
+    props: z.object({
+      outcome: z.enum(['ready-for-review', 'done', 'error', 'stopped']),
+      duration: DurationBucket,
+      duration_ms: Ms,
+      first_output_ms: Ms.optional(),
+      subagents: CountBucket,
+      tokens: TokenBucket,
+      turns: CountBucket.optional(),
+      error_code: z.enum(['auth', 'model_not_found', 'api_error', 'spawn', 'protocol', 'other']).optional(),
+    }),
+  }),
+  permission_answered: def({
+    from: 'main',
+    question: 'Which kinds of tools ask for permission, how do people answer, and how long do agents wait?',
+    props: z.object({
+      decision: z.enum(['allow', 'always', 'deny']),
+      tool: ToolCategory,
+      wait: DurationBucket,
+    }),
+  }),
+  agent_merged: def({
+    from: 'main',
+    question: 'How often does agent work get merged locally, and how often does it conflict?',
+    props: z.object({ result: z.enum(['merged', 'conflicts']) }),
+  }),
+  agent_discarded: def({
+    from: 'main',
+    question: 'How often is agent work thrown away rather than merged?',
+    props: z.object({ worktree_deleted: z.boolean() }),
+  }),
+  agent_archived: def({
+    from: 'main',
+    question:
+      'Do people archive finished agents instead of removing them? (Hook lands with the Archived agents feature.)',
+    props: z.object({}),
+  }),
+  pr_opened: def({
+    from: 'main',
+    question: 'How often does agent work leave as a pull request instead of a local merge?',
+    props: z.object({}),
+  }),
+  compact_requested: def({
+    from: 'main',
+    question: 'Do people compact context by hand (the context ring, /compact)?',
+    props: z.object({}),
+  }),
+  slash_command_used: def({
+    from: 'main',
+    question: 'Which built-in CLI slash commands are used from the composer?',
+    props: z.object({ command: z.enum([...BUILTIN_SLASH_COMMANDS, 'other']) }),
+  }),
+  attachments_sent: def({
+    from: 'main',
+    question: 'Do people attach images and files to prompts, and where?',
+    props: z.object({
+      where: z.enum(['spawn', 'message']),
+      images: z.number().int().min(0).max(50),
+      files: z.number().int().min(0).max(50),
+    }),
+  }),
+  file_search_used: def({
+    from: 'main',
+    question:
+      'Is Files search used (quick open by name, content search, replace), and does it find anything?',
+    props: z.object({
+      kind: z.enum(['name', 'content', 'replace']),
+      results: CountBucket,
+      queries: SmallCount,
+      regex: z.boolean().optional(),
+      engine: z.enum(['git-grep', 'scan', 'mixed']).optional(),
+    }),
+  }),
+  extension_installed: def({
+    from: 'main',
+    question:
+      'Which marketplace extensions do people install? (Official index only; custom and local extensions are never named.)',
+    props: z.object({ extension: MarketplaceExtensionId, source: z.enum(['marketplace', 'builtin']) }),
+  }),
+  setting_changed: def({
+    from: 'main',
+    question: 'Which settings do people change? (The key only, never the value.)',
+    props: z.object({ key: z.enum(TELEMETRY_SETTING_KEYS) }),
+  }),
+  cli_unknown_event: def({
+    from: 'main',
+    question: 'Which CLI stream-json events does oIDE not understand yet (protocol drift)?',
+    props: z.object({ event_type: CliEventType, count: z.number().int().min(1).max(1_000_000) }),
+  }),
+  command_palette_used: def({
+    from: 'renderer',
+    question: 'Which built-in command bar commands are used?',
+    props: z.object({ command: z.enum(BUILTIN_COMMAND_IDS) }),
+  }),
+  perf_summary: def({
+    from: 'renderer',
+    question:
+      'Is the UI fast: IPC round trips, long tasks, memory, and Wall render time at a given number of agents?',
+    props: z.object({
+      window_min: z.number().int().min(1).max(1440),
+      ipc_samples: SmallCount,
+      ipc_p50_ms: Ms.optional(),
+      ipc_p95_ms: Ms.optional(),
+      long_tasks: SmallCount,
+      memory: MemoryBucket.optional(),
+      wall_render_ms: Ms.optional(),
+      wall_agents: CountBucket.optional(),
+    }),
+  }),
+} as const;
+
+export type TelemetryEventName = keyof typeof TELEMETRY_EVENTS;
+export type TelemetryEventProps<K extends TelemetryEventName> = z.input<
+  (typeof TELEMETRY_EVENTS)[K]['props']
+>;
+export const TELEMETRY_EVENT_NAMES = Object.keys(TELEMETRY_EVENTS) as TelemetryEventName[];
+
+export function isTelemetryEventName(name: unknown): name is TelemetryEventName {
+  return typeof name === 'string' && Object.prototype.hasOwnProperty.call(TELEMETRY_EVENTS, name);
+}
+
+/** A value Umami event data may hold after validation. */
+export type TelemetryValue = string | number | boolean;
+
+/**
+ * Validate one event against the catalogue. Returns the cleaned properties (unknown properties
+ * removed), or null when the name is unknown, the event may not come from `from`, or a declared
+ * property is invalid. Never throws.
+ */
+export function validateTelemetryEvent(
+  name: unknown,
+  props: unknown,
+  from?: 'main' | 'renderer',
+): { name: TelemetryEventName; props: Record<string, TelemetryValue> } | null {
+  if (!isTelemetryEventName(name)) return null;
+  const d = TELEMETRY_EVENTS[name];
+  // The renderer may only report renderer events; main may emit any (it observes the rest itself).
+  if (from === 'renderer' && d.from !== 'renderer') return null;
+  const r = d.props.safeParse(props ?? {});
+  if (!r.success) return null;
+  const out: Record<string, TelemetryValue> = {};
+  for (const [k, v] of Object.entries(r.data as Record<string, unknown>)) {
+    if (typeof v === 'string' || typeof v === 'boolean' || (typeof v === 'number' && Number.isFinite(v)))
+      out[k] = v;
+  }
+  return { name, props: out };
+}
+
+// ---------------------------------------------------------------------------- IPC contract
+
+const Vital = z.number().nonnegative().max(60_000);
+
+/** What the renderer may report (`telemetry.track`). Main validates again and decides; it may drop anything. */
+export const TelemetryTrackInput = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('pageview'), screen: TelemetryScreen, section: z.string().max(40).optional() }),
+  z.object({
+    type: z.literal('event'),
+    name: z.string().min(1).max(50),
+    props: z.record(z.string().max(50), z.union([z.string().max(200), z.number(), z.boolean()])).default({}),
+  }),
+  z.object({
+    type: z.literal('error'),
+    source: z.enum(['window', 'unhandledrejection', 'boundary']),
+    name: z.string().max(120),
+    message: z.string().max(2000),
+    stack: z.string().max(8000).optional(),
+  }),
+  /** Web vitals of one screen visit, as Umami's tracker measures them (`performance` payloads). */
+  z.object({
+    type: z.literal('vitals'),
+    screen: TelemetryScreen,
+    section: z.string().max(40).optional(),
+    fcp: Vital.optional(),
+    lcp: Vital.optional(),
+    cls: z.number().nonnegative().max(100).optional(),
+    inp: Vital.optional(),
+    ttfb: Vital.optional(),
+  }),
+]);
+export type TelemetryTrackInput = z.infer<typeof TelemetryTrackInput>;
+
+/** Why telemetry cannot be turned on in this run. */
+export const TelemetryUnavailableReason = z.enum(['compiled-out', 'do-not-track', 'env', 'test']);
+export type TelemetryUnavailableReason = z.infer<typeof TelemetryUnavailableReason>;
+
+export const TelemetryStatus = z.object({
+  /** False when this build or run can never send (no endpoint compiled in, DO_NOT_TRACK, OIDE_TELEMETRY=0, tests). */
+  available: z.boolean(),
+  reason: TelemetryUnavailableReason.optional(),
+  usageAnalytics: z.boolean(),
+  errorReports: z.boolean(),
+  /** Show the first-run question now (not answered yet, asked fewer than `MAX_CONSENT_PROMPTS` times). */
+  showPrompt: z.boolean(),
+});
+export type TelemetryStatus = z.infer<typeof TelemetryStatus>;
+
+/** `shown`: the question is on screen (counted once per launch); `later`: closed without choosing. */
+export const TelemetryConsentInput = z.object({ choice: z.enum(['shown', 'accept', 'decline', 'later']) });
+export type TelemetryConsentInput = z.infer<typeof TelemetryConsentInput>;
+
+/** The first-run question is shown on at most this many launches when closed without a choice, then never again. */
+export const MAX_CONSENT_PROMPTS = 2;

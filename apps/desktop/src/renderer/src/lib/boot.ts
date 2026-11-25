@@ -10,6 +10,7 @@ import { isNotImplemented, oide } from './bridge';
 import { connectCommands, registerCoreCommands } from './coreCommands';
 import { connectExtensions } from '../extensions/store';
 import { connectKeybindings } from './keybindings';
+import { connectTelemetry } from './telemetry';
 
 /** Agent summaries stream while agents work; one `usage.summary` per this window is plenty. */
 export const USAGE_REFRESH_DEBOUNCE_MS = 2_000;
@@ -82,6 +83,7 @@ export function startStores(): () => void {
     registerCoreCommands(),
     connectCommands(),
     connectExtensions(),
+    connectTelemetry(),
   ];
 
   void quiet(useSettings.getState().load());
