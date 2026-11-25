@@ -104,6 +104,7 @@ const FLAG_FEATURES = [
   'setting-sources',
   'strict-mcp-config',
   'settings',
+  'allow-dangerously-skip-permissions',
 ];
 
 /** Parse `claude --help` into feature flags (`effort`, `mode:auto`, …). */

@@ -48,7 +48,11 @@ which agent or subagent asks, and exactly what (the command, the file, the URL).
 
 - **Allow once**: this call only.
 - **Always in &lt;project&gt;**: saves a rule such as `Bash(npm test)` to the project's
-  `.oide/permissions.json`, so future agents in this project are not asked again.
+  `.oide/permissions.json`, so future agents in this project are not asked again. Agents already
+  running in the project stop asking for it too, from that moment (prompts already waiting for the
+  same rule are allowed at once). The button is greyed out when no rule can be saved: a command with
+  `:`, `*`, `,`, quotes or parentheses, a tool marked "asks first" or covered by an ask rule, and
+  edits to `.oide/`, `.claude/` or `.mcp.json`, which always ask.
 - **Deny**: the CLI is told no and continues.
 
 An answer is accepted only for the exact pending request. When oIDE quits, every pending prompt is

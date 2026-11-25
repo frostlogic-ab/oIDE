@@ -16,6 +16,7 @@ import {
   type InstalledExtension,
   type MessageAttachment,
   type PermissionAnswer,
+  type PermissionMode,
   type SearchResultsEvent,
   type TelemetryEventName,
   type TelemetryEventProps,
@@ -96,6 +97,8 @@ export class TelemetryObservers {
   private readonly prUrls = new Set<string>();
   private readonly prState = new Map<string, string>();
   private readonly archived = new Map<string, ArchiveReason>();
+  /** Mode per agent from its summaries, and the one before it (the summary may change before setMode returns). */
+  private readonly modes = new Map<string, { now: PermissionMode; before?: PermissionMode }>();
   /** Merge predictions already reported (agent + both commits), so re-opening the dialog counts once. */
   private readonly predicted = new Set<string>();
   /** Agents resolving merge conflicts oIDE sent them, and since when. */
@@ -152,6 +155,13 @@ export class TelemetryObservers {
           tool: p?.tool ?? 'other',
           wait: durationBucket(p ? this.now - p.at : 0),
         });
+        return;
+      }
+      case 'agents.setMode': {
+        const { agentId, mode } = input as { agentId: string; mode: PermissionMode };
+        const m = this.modes.get(agentId);
+        const from = !m ? 'unknown' : m.now === mode ? (m.before ?? 'unknown') : m.now;
+        if (from !== mode) this.sink.track('agent_mode_changed', { from, to: mode });
         return;
       }
       case 'agents.compact':
@@ -424,14 +434,24 @@ export class TelemetryObservers {
       this.sink.track('pr_merged_detected', {});
   }
 
+  private noteMode(summary: { id?: string; mode?: PermissionMode }): void {
+    if (!summary.id || !summary.mode) return;
+    const m = this.modes.get(summary.id);
+    if (m?.now === summary.mode) return;
+    this.modes.set(summary.id, { now: summary.mode, ...(m ? { before: m.now } : {}) });
+    if (this.modes.size > 5000) this.modes.delete(this.modes.keys().next().value!);
+  }
+
   emitted(event: EventName, payload: unknown): void {
     if (event === 'agents.summary' || event === 'agents.archived') {
       const s = payload as {
         id?: string;
+        mode?: PermissionMode;
         pr?: { url: string; state: string };
         archived?: { reason: ArchiveReason };
       };
       this.notePr(s);
+      this.noteMode(s);
       if (
         event === 'agents.archived' &&
         s.id &&

@@ -84,9 +84,13 @@ export function PermissionPrompt({ agentId, request, projectName, subagentName, 
       <Button
         variant="warn-outline"
         size={32}
-        disabled={busy}
+        disabled={busy || !request.suggestedRule}
         onClick={() => answer('always')}
-        title={request.suggestedRule ? `Saves the rule ${request.suggestedRule} to .oide/permissions.json` : undefined}
+        title={
+          request.suggestedRule
+            ? `Allows it now and from now on: saves the rule ${request.suggestedRule} to .oide/permissions.json`
+            : 'No rule can be saved for this request: allow it once or deny it'
+        }
       >
         Always in {projectName}
       </Button>

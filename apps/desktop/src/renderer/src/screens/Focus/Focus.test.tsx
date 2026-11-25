@@ -105,6 +105,14 @@ describe('PermissionPrompt', () => {
     expect(calls('agents.answerPermission')[2]).toEqual({ agentId: 'a-bridge', answer: { requestId: 'perm-44', behavior: 'deny', message: 'Denied by user' } });
   });
 
+  it('offers no "Always" when the request carries no rule to save', () => {
+    const { suggestedRule: _none, ...noRule } = request;
+    render(<PermissionPrompt agentId="a-bridge" request={noRule} projectName="oide" />);
+    const always = screen.getByRole('button', { name: 'Always in oide' }) as HTMLButtonElement;
+    expect(always.disabled).toBe(true);
+    expect(always.title).toMatch(/No rule can be saved/);
+  });
+
   it('answers with Y / D once per request, even when pressed twice', async () => {
     render(<PermissionPrompt agentId="a-bridge" request={request} projectName="oide" />);
     fireEvent.keyDown(window, { key: 'y' });
@@ -236,6 +244,39 @@ describe('FocusScreen', () => {
     fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
     await waitFor(() => expect(calls('agents.setMode')).toHaveLength(2));
     expect(calls('agents.setMode')[1]).toEqual({ agentId: 'a-bridge', mode: 'auto' });
+  });
+
+  it('picks any permission mode from the header menu, e.g. Manual straight to Auto or Bypass', async () => {
+    act(() => useAgents.getState().applySummary({ ...bridge, mode: 'default' }));
+    render(<FocusScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /^Permission mode: Manual mode/ }));
+    const menu = screen.getByRole('menu');
+    const items = screen.getAllByRole('menuitemradio');
+    expect(items.map((i) => i.textContent)).toEqual(['Auto mode', 'Manual mode', 'Edit automatically', 'Plan mode', 'Bypass modeOff in Settings']);
+    expect(items.find((i) => i.getAttribute('aria-checked') === 'true')?.textContent).toBe('Manual mode');
+    expect((items[4] as HTMLButtonElement).disabled).toBe(true);
+    // The list is portalled out of the clipping meta line.
+    expect(menu.parentElement).toBe(document.body);
+    fireEvent.click(items[0]!);
+    await waitFor(() => expect(calls('agents.setMode')).toEqual([{ agentId: 'a-bridge', mode: 'auto' }]));
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    act(() => useSettings.setState((st) => ({ settings: { ...st.settings!, claude: { ...st.settings!.claude, allowBypass: true } } })));
+    fireEvent.click(screen.getByRole('button', { name: /^Permission mode: Manual mode/ }));
+    const bypass = screen.getByRole('menuitemradio', { name: 'Bypass mode' }) as HTMLButtonElement;
+    expect(bypass.disabled).toBe(false);
+    fireEvent.click(bypass);
+    await waitFor(() => expect(calls('agents.setMode')[1]).toEqual({ agentId: 'a-bridge', mode: 'bypassPermissions' }));
+  });
+
+  it('does not offer Bypass to an agent working in the project folder', () => {
+    act(() => useSettings.setState((st) => ({ settings: { ...st.settings!, claude: { ...st.settings!.claude, allowBypass: true } } })));
+    act(() => useAgents.getState().applySummary({ ...bridge, workIn: 'project-folder' }));
+    render(<FocusScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /^Permission mode:/ }));
+    const bypass = screen.getByRole('menuitemradio', { name: /Bypass mode/ }) as HTMLButtonElement;
+    expect(bypass.disabled).toBe(true);
+    expect(bypass.textContent).toContain('Worktree only');
   });
 
   it('opens a subagent with its own header, task and Stop subagent', async () => {

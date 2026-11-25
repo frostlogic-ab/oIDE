@@ -306,6 +306,24 @@ describe('archived agents and the PR lifecycle', () => {
     expect(JSON.stringify(events)).not.toMatch(/ACME|Secret/);
   });
 
+  it('agent_mode_changed: from and to modes only, right even when the summary changed before setMode returned', () => {
+    const { o, events } = make();
+    o.command('agents.setMode', { agentId: 'a1', mode: 'auto' }, { ok: true });
+    o.emitted('agents.summary', { id: 'a1', mode: 'plan', title: 'Secret title' });
+    o.emitted('agents.summary', { id: 'a1', mode: 'default' }); // the CLI left plan mode
+    o.command('agents.setMode', { agentId: 'a1', mode: 'bypassPermissions' }, { ok: true });
+    o.emitted('agents.summary', { id: 'a1', mode: 'bypassPermissions' });
+    o.emitted('agents.summary', { id: 'a1', mode: 'bypassPermissions' });
+    // The summary already says auto when the command returns: `from` is the mode before it.
+    o.emitted('agents.summary', { id: 'a1', mode: 'auto' });
+    o.command('agents.setMode', { agentId: 'a1', mode: 'auto' }, { ok: true });
+    expect(events.filter((e) => e.name === 'agent_mode_changed').map((e) => e.props)).toEqual([
+      { from: 'unknown', to: 'auto' },
+      { from: 'default', to: 'bypassPermissions' },
+      { from: 'bypassPermissions', to: 'auto' },
+    ]);
+  });
+
   it('pr_opened says whether the PR already existed; View PR is counted without its URL', () => {
     const { o, events } = make();
     o.command(

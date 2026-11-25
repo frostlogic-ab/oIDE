@@ -1,5 +1,5 @@
-import { existsSync, statSync } from 'node:fs';
-import { delimiter, isAbsolute, posix, win32 } from 'node:path';
+import { existsSync, lstatSync, realpathSync, statSync } from 'node:fs';
+import { delimiter, isAbsolute, posix, relative, resolve, win32 } from 'node:path';
 import { isValidPermissionRule } from '@oide/protocol';
 import type { AgentSpec, CliInfo, CustomModel, Effort, MessageAttachment, ModelSlot, ModelStrategy, PermissionMode, Settings, SubagentTier, Technique } from '@oide/protocol';
 import { describeContext, textMessage, type ArtifactResolver, type StreamJsonUserMessage } from './messages.js';
@@ -64,6 +64,11 @@ export interface LaunchPlan {
   /** What was passed to `--model` and `--permission-mode`. */
   model: string;
   mode: string;
+  /**
+   * Tools and rules that always ask (extension tools marked "asks first", the project's ask rules).
+   * An "Always" answer never pre-allows them, not even for the rest of the session.
+   */
+  askRules: string[];
   warnings: string[];
 }
 
@@ -367,6 +372,11 @@ export function hasFeature(cli: CliInfo, feature: string): boolean {
   return Object.keys(f).length === 0;
 }
 
+/** Bypass is allowed only when Settings › Allow Bypass is on and the agent works in a worktree. */
+export function bypassAllowed(spec: Pick<AgentSpec, 'workIn'>, settings: Pick<Settings, 'claude'>): boolean {
+  return settings.claude.allowBypass && spec.workIn !== 'project-folder';
+}
+
 export function cliPermissionMode(mode: PermissionMode, cli: CliInfo, warnings: string[]): string {
   if (mode === 'auto' && !hasFeature(cli, 'mode:auto')) {
     warnings.push('This CLI has no auto permission mode; using default plus oIDE allow rules');
@@ -533,6 +543,104 @@ export function targetsProtectedPath(rule: string): boolean {
   return !!m && /(^|[\\/])\.(oide|claude)([\\/]|$)|(^|[\\/])\.mcp\.json$/i.test(m[1]!.replace(/\*+/g, 'x'));
 }
 
+const EDIT_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
+
+/** The paths an edit tool call writes, or undefined for a tool that is not an edit tool. */
+export function editPaths(toolName: string, input: unknown): string[] | undefined {
+  if (!EDIT_TOOLS.has(toolName)) return undefined;
+  const rec = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
+  return [rec.file_path, rec.notebook_path, rec.path].filter((v): v is string => typeof v === 'string');
+}
+
+/**
+ * True when a path may name a protected location. Fails closed on forms Windows folds onto another
+ * name (trailing dots or spaces in a component, `:` streams after the drive, `~` short names), and
+ * matches case-insensitively.
+ */
+function pathMayBeProtected(p: string): boolean {
+  if (/~/.test(p) || /:/.test(p.replace(/^[A-Za-z]:/, ''))) return true;
+  const parts = p.split(/[\\/]+/).filter((c) => c !== '' && c !== '.' && c !== '..');
+  if (parts.some((c) => /[. ]$/.test(c))) return true;
+  const lower = parts.map((c) => c.toLowerCase());
+  return lower.some((c) => c === '.oide' || c === '.claude') || lower[lower.length - 1] === '.mcp.json';
+}
+
+/**
+ * True when a tool call edits one of the protected paths (SEC-12): the CLI always asks for these,
+ * and oIDE must never answer them on the user's behalf (an earlier "Always" for `Edit` included).
+ */
+export function requestTargetsProtectedPath(toolName: string, input: unknown): boolean {
+  const paths = editPaths(toolName, input);
+  if (!paths) return false;
+  // No path we can check: treat it as protected, so it is always asked.
+  if (!paths.length) return true;
+  return paths.some(pathMayBeProtected);
+}
+
+/** `p` relative to `base` when it sits strictly inside it (lexically), else undefined. */
+function inside(base: string, p: string): string | undefined {
+  const rel = relative(base, p);
+  return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? undefined : rel;
+}
+
+/**
+ * True when every path of an edit tool call sits inside `root` with no link on the way: any
+ * existing component that is a symlink or junction (dangling ones included), or an existing file
+ * with more than one hard link, fails closed, since its real target could be anywhere, `.oide/`
+ * included. The part below `root` must not name a protected path either (the root's own folders may
+ * be named anything). Non-edit tools are true; UNC paths, the root itself and edits with no path are false.
+ */
+export function editStaysInside(toolName: string, input: unknown, root: string | undefined): boolean {
+  const paths = editPaths(toolName, input);
+  if (!paths) return true;
+  if (!root || !paths.length) return false;
+  const literal = resolve(root);
+  let real: string;
+  try {
+    real = realpathSync.native(literal);
+  } catch {
+    return false;
+  }
+  return paths.every((p) => {
+    if (/^[\\/]{2}/.test(p)) return false;
+    const abs = resolve(literal, p);
+    const rel = inside(literal, abs) ?? inside(real, abs);
+    if (!rel || pathMayBeProtected(rel)) return false;
+    let cur = real;
+    for (const part of rel.split(/[\\/]+/)) {
+      cur = resolve(cur, part);
+      let st;
+      try {
+        st = lstatSync(cur);
+      } catch (err) {
+        // Nothing exists from here down, so no link can be on the way.
+        return (err as NodeJS.ErrnoException).code === 'ENOENT';
+      }
+      if (st.isSymbolicLink() || (st.isFile() && st.nlink > 1)) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * True when an "always ask" rule may cover this tool call, so an "Always" answer must not.
+ * Conservative: `Tool` and `mcp__server` cover every call of it; `Bash(git push:*)` covers commands
+ * starting with `git push`; any other specifier on the same tool counts as covering it.
+ */
+export function askRuleCovers(rule: string, toolName: string, input: unknown): boolean {
+  const m = /^([^()]+)(?:\((.*)\))?$/s.exec(rule.trim());
+  if (!m) return false;
+  const [, tool, spec] = m;
+  if (tool !== toolName && !(tool!.startsWith('mcp__') && !tool!.slice(5).includes('__') && toolName.startsWith(`${tool}__`))) return false;
+  if (spec === undefined || spec.trim() === '' || spec.trim() === '*') return true;
+  if ((toolName === 'Bash' || toolName === 'PowerShell') && spec.endsWith(':*')) {
+    const cmd = input && typeof input === 'object' ? (input as Record<string, unknown>).command : undefined;
+    if (typeof cmd !== 'string') return true;
+    return cmd.trim().startsWith(spec.slice(0, -2).trim());
+  }
+  return true;
+}
+
 export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
   const warnings: string[] = [];
   const { cli, settings } = ctx;
@@ -561,6 +669,12 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
   }
   const mode = cliPermissionMode(spec.mode, cli, warnings);
   args.push('--permission-mode', mode);
+  // The CLI refuses a live switch to bypass (`set_permission_mode`) unless the session was launched
+  // with bypass or this flag (verified on 2.1.332: error_code `bypass_not_launched`). Only where
+  // bypass is allowed anyway, so the Focus mode menu can switch without restarting the turn.
+  if (mode !== 'bypassPermissions' && bypassAllowed(spec, settings) && hasFeature(cli, 'allow-dangerously-skip-permissions')) {
+    args.push('--allow-dangerously-skip-permissions');
+  }
 
   // Untrusted project (SEC-02): `claude -p` skips the CLI's own trust dialog, so without this the
   // repo's committed .claude/settings.json (hooks, permissions, env, apiKeyHelper, plugins) and
@@ -657,6 +771,7 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
     appendSystemPrompt,
     model,
     mode,
+    askRules: [...askTools],
     warnings,
   };
 }

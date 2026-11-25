@@ -47,7 +47,7 @@ Regenerate everything after a geometry or colour change: `node tools/brand/build
 
 App icon (Windows `.ico`, macOS `.icns`, Linux PNG set), the runtime window/taskbar icon in dev and
 unpackaged runs too (`apps/desktop/src/main/app-icon.ts`, plus `app.setAppUserModelId('dev.oide.app')` on
-Windows), the header logo (`Header.tsx`), the screen error panel (`ErrorBoundary.tsx`), the renderer
+Windows and the oIDE icon on Electron's notification shortcut, see [packaging](../wiki/pages/packaging.md)), the header logo (`Header.tsx`), the screen error panel (`ErrorBoundary.tsx`), the renderer
 favicon (inlined in `apps/desktop/src/renderer/index.html`), the docs site (nav logo, hero image, favicon,
 `og:image`), the README header and the GitHub social preview. Built-in extensions have no icon field in
 their manifest today, so they carry no logo.

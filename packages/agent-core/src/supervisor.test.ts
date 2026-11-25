@@ -23,7 +23,7 @@ afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();
 });
 
-async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup?: WorktreeProvider['runSetup']; attachments?: AttachmentProvider }): Promise<Harness> {
+async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup?: WorktreeProvider['runSetup']; attachments?: AttachmentProvider; ask?: string[] }): Promise<Harness> {
   const settings = testSettings({ extraFlags: opts.extraFlags, maxRunning: opts.maxRunning ?? 3 });
   const mcp = new OideMcpServer({ appDataDir: tempDir('oide-app-') });
   await mcp.start();
@@ -49,7 +49,7 @@ async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup
   const provider: SettingsProvider = {
     get: () => settings,
     cli: () => fakeCli,
-    project: () => ({ path: '/repo', trusted: true, rules: { allow: [], deny: [] } }),
+    project: () => ({ path: '/repo', trusted: true, rules: { allow: [], deny: [], ...(opts.ask ? { ask: opts.ask } : {}) } }),
     addAllowRule: (p, r) => void rules.push([p, r]),
   };
   const sup = new Supervisor({ worktrees, sink, settings: provider, broker: mcp, ...(opts.attachments ? { attachments: opts.attachments } : {}) });
@@ -90,12 +90,55 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     const done1 = await status(h, a!.id, 'has-question');
     expect(done1.lastMessage).toMatch(/Tests ran/);
 
-    const s2 = await status(h, b!.id, 'needs-permission');
-    await h.sup.answerPermission(b!.id, { requestId: s2.pendingPermission!.requestId, behavior: 'deny', message: 'Not now' });
-    expect((await status(h, b!.id, 'has-question')).lastMessage).toMatch(/could not run the tests: Not now/);
+    // Same project: the "Always" rule covers b's `npm test` too, so it runs without a prompt.
+    expect((await status(h, b!.id, 'has-question')).lastMessage).toMatch(/Tests ran/);
+    expect(h.events.some((e) => e.agentId === b!.id && e.type === 'permission-request')).toBe(false);
+
+    // Another project still asks; deny reaches the agent.
+    const [c] = await h.sup.spawn(spec({ projectId: 'p2' }));
+    const s2 = await status(h, c!.id, 'needs-permission');
+    await h.sup.answerPermission(c!.id, { requestId: s2.pendingPermission!.requestId, behavior: 'deny', message: 'Not now' });
+    expect((await status(h, c!.id, 'has-question')).lastMessage).toMatch(/could not run the tests: Not now/);
     expect(h.events.some((e) => e.type === 'permission-resolved' && e.behavior === 'deny')).toBe(true);
     expect(h.raw.some((r) => r.includes('"subtype":"init"'))).toBe(true);
     expect(h.saved.get(a!.id)?.status).toBe('has-question');
+  });
+
+  it('"Always" covers the rest of the session: the next matching request runs without a prompt', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario permission' });
+    const [a] = await h.sup.spawn(spec());
+    const p = await status(h, a!.id, 'needs-permission');
+    await h.sup.answerPermission(a!.id, { requestId: p.pendingPermission!.requestId, behavior: 'allow', always: true });
+    await status(h, a!.id, 'has-question');
+    const asked = () => h.events.filter((e) => e.agentId === a!.id && e.type === 'permission-request').length;
+    expect(asked()).toBe(1);
+    // Second turn runs `npm test` again in the same process.
+    h.sup.send(a!.id, { kind: 'text', text: 'Run them again.' });
+    await waitFor(() => h.events.filter((e) => e.agentId === a!.id && e.type === 'result').length >= 2, 10_000, 'second result');
+    expect(asked()).toBe(1);
+    expect(h.get(a!.id).lastMessage).toMatch(/Tests ran/);
+  });
+
+  it('"Always" also allows prompts already waiting in the same project', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario permission', maxRunning: 2 });
+    const [a, b] = await h.sup.spawn(spec({ attempts: 2 }));
+    const pa = await status(h, a!.id, 'needs-permission');
+    await status(h, b!.id, 'needs-permission');
+    await h.sup.answerPermission(a!.id, { requestId: pa.pendingPermission!.requestId, behavior: 'allow', always: true });
+    expect((await status(h, b!.id, 'has-question')).lastMessage).toMatch(/Tests ran/);
+    expect(h.events.some((e) => e.agentId === b!.id && e.type === 'permission-resolved' && e.behavior === 'allow')).toBe(true);
+  });
+
+  it('a project ask rule wins over "Always": no rule is offered and every call still asks', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario permission', ask: ['Bash(npm:*)'] });
+    const [a] = await h.sup.spawn(spec());
+    const p = await status(h, a!.id, 'needs-permission');
+    expect(p.pendingPermission!.suggestedRule).toBeUndefined();
+    await h.sup.answerPermission(a!.id, { requestId: p.pendingPermission!.requestId, behavior: 'allow', always: true });
+    await status(h, a!.id, 'has-question');
+    expect(h.rules).toEqual([]);
+    h.sup.send(a!.id, { kind: 'text', text: 'Again.' });
+    await status(h, a!.id, 'needs-permission');
   });
 
   it('a queued spawn publishes its summary before it starts (m1)', async () => {
@@ -244,6 +287,98 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     expect(h.get(b!.id).mode).toBe('plan');
     h.sup.send(b!.id, { kind: 'text', text: 'continue' });
     await waitFor(() => h.get(b!.id).lastMessage?.startsWith('Resumed session'), 10_000, 'resumed with new mode');
+  }, 30_000);
+
+  it('switches to bypass live when Allow Bypass is on (launched with the allow flag), without restarting', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic' });
+    h.settings.claude.allowBypass = true;
+    const [a] = await h.sup.spawn(spec({ mode: 'plan' }));
+    await status(h, a!.id, 'has-question');
+    await h.sup.setMode(a!.id, 'bypassPermissions');
+    await waitFor(() => h.get(a!.id).mode === 'bypassPermissions', 5000, 'mode bypass');
+    expect(h.events.some((e) => e.agentId === a!.id && e.type === 'exit')).toBe(false);
+    await h.sup.setMode(a!.id, 'auto');
+    await waitFor(() => h.get(a!.id).mode === 'auto', 5000, 'mode auto');
+    expect(h.events.some((e) => e.agentId === a!.id && e.type === 'exit')).toBe(false);
+
+    // Without Allow Bypass at launch the CLI refuses the live switch: refused in the supervisor first.
+    h.settings.claude.allowBypass = false;
+    await expect(h.sup.setMode(a!.id, 'bypassPermissions')).rejects.toThrow(/not allowed/);
+    expect(h.get(a!.id).mode).toBe('auto');
+  }, 30_000);
+
+  it('Allow Bypass turned on after launch: the refused live switch falls back to --resume in bypass', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic' });
+    const [a] = await h.sup.spawn(spec({ mode: 'default' }));
+    await status(h, a!.id, 'has-question');
+    h.settings.claude.allowBypass = true;
+    await h.sup.setMode(a!.id, 'bypassPermissions');
+    await waitFor(() => h.events.some((e) => e.agentId === a!.id && e.type === 'exit'), 10_000, 'old process exited');
+    h.sup.send(a!.id, { kind: 'text', text: 'continue' });
+    await waitFor(() => h.get(a!.id).lastMessage?.startsWith('Resumed session'), 10_000, 'resumed');
+    expect(h.get(a!.id).mode).toBe('bypassPermissions');
+  }, 30_000);
+
+  it('overlapping mode changes run in order: a slow fallback cannot overtake the last pick', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic' });
+    const [a] = await h.sup.spawn(spec({ mode: 'plan' }));
+    await status(h, a!.id, 'has-question');
+    h.settings.claude.allowBypass = true; // after launch: no allow flag, so bypass needs the fallback
+    const first = h.sup.setMode(a!.id, 'bypassPermissions');
+    const second = h.sup.setMode(a!.id, 'auto');
+    await Promise.all([first, second]);
+    expect(h.sup.spec(a!.id)!.mode).toBe('auto');
+    expect(h.get(a!.id).mode).toBe('auto');
+    h.sup.send(a!.id, { kind: 'text', text: 'continue' });
+    await waitFor(() => h.get(a!.id).lastMessage?.startsWith('Resumed session'), 10_000, 'resumed');
+    expect(h.get(a!.id).mode).toBe('auto');
+    expect(h.sup.spec(a!.id)!.mode).toBe('auto');
+    // A refused pick does not block the next one.
+    h.settings.claude.allowBypass = false;
+    await expect(h.sup.setMode(a!.id, 'bypassPermissions')).rejects.toThrow(/not allowed/);
+    await h.sup.setMode(a!.id, 'default');
+    await waitFor(() => h.get(a!.id).mode === 'default', 5000, 'mode default');
+  }, 30_000);
+
+  it('a mode picked while the agent is starting is not undone by the new process', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic' });
+    const [a] = await h.sup.spawn(spec({ mode: 'plan' }));
+    await h.sup.setMode(a!.id, 'acceptEdits');
+    await status(h, a!.id, 'has-question');
+    await waitFor(() => h.get(a!.id).mode === 'acceptEdits', 5000, 'mode acceptEdits');
+    expect(h.sup.spec(a!.id)!.mode).toBe('acceptEdits');
+  }, 30_000);
+
+  it('summaries carry workIn from the spec (spawn and restore)', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic' });
+    const [a] = await h.sup.spawn(spec({ workIn: 'project-folder' }));
+    expect(h.get(a!.id).workIn).toBe('project-folder');
+    const h2 = await harness({ extraFlags: '--fake-scenario basic' });
+    const { workIn: _drop, ...old } = h.get(a!.id);
+    void _drop;
+    h2.sup.restore([{ spec: h.sup.spec(a!.id)!, summary: { ...old, status: 'stopped' } }]);
+    expect(h2.get(a!.id).workIn).toBe('project-folder');
+  }, 30_000);
+
+  it('the spec follows the CLI leaving plan mode, so a resume relaunches in Manual, not Plan', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario exit-plan,basic' });
+    const [a] = await h.sup.spawn(spec({ mode: 'plan' }));
+    await waitFor(() => h.get(a!.id).lastMessage === 'Plan approved; implementing.', 10_000, 'plan approved');
+    expect(h.get(a!.id).mode).toBe('default');
+    expect(h.sup.spec(a!.id)!.mode).toBe('default');
+    await h.sup.stop(a!.id);
+    await h.sup.resume(a!.id);
+    h.sup.send(a!.id, { kind: 'text', text: '[fake-scenario:basic] go on' });
+    await waitFor(() => h.get(a!.id).lastMessage?.startsWith('Resumed session'), 10_000, 'resumed');
+    expect(h.get(a!.id).mode).toBe('default');
+
+    // Restore: a spec saved before this fix still says plan; the summary's mode wins.
+    const h2 = await harness({ extraFlags: '--fake-scenario basic' });
+    h2.sup.restore([{ spec: { ...h.sup.spec(a!.id)!, mode: 'plan' }, summary: { ...h.get(a!.id), status: 'stopped' }, lastSeq: 500 }]);
+    expect(h2.sup.spec(a!.id)!.mode).toBe('default');
+    h2.sup.send(a!.id, { kind: 'text', text: 'hello again' });
+    await waitFor(() => h2.get(a!.id).lastMessage?.startsWith('Resumed session'), 10_000, 'restored reply');
+    expect(h2.get(a!.id).mode).toBe('default');
   }, 30_000);
 
   it('pause holds messages until resume; compact sends /compact; remove fires removed', async () => {

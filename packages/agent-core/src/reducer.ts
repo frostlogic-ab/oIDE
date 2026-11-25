@@ -8,6 +8,7 @@ import {
   type AgentSummary,
   type SubagentInfo,
   type TokenUsage,
+  type WorkIn,
 } from '@oide/protocol';
 import { z } from 'zod';
 import type { TierInfo } from './args.js';
@@ -109,6 +110,7 @@ export interface NewSummaryInput {
   status?: AgentStatus;
   attemptGroup?: string;
   sessionId?: string;
+  workIn?: WorkIn;
   now?: number;
 }
 
@@ -123,6 +125,7 @@ export function createSummary(input: NewSummaryInput): AgentSummary {
     model: input.model,
     ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     ...(input.attemptGroup ? { attemptGroup: input.attemptGroup } : {}),
+    ...(input.workIn ? { workIn: input.workIn } : {}),
     activity: [],
     contextUsed: 0,
     contextWindow: contextWindowFor(input.model),

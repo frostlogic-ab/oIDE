@@ -1,4 +1,5 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from './cn.js';
 import { Icon, type IconName } from './Icon.js';
 
@@ -11,6 +12,10 @@ export interface MenuItem {
   danger?: boolean;
   /** Shortcut hint shown on the right. */
   hint?: ReactNode;
+  /** Set on every item of a pick-one menu: the item becomes `menuitemradio` and the checked one shows a tick. */
+  checked?: boolean;
+  /** Longer explanation on hover (why an item is disabled, for example). */
+  title?: string;
 }
 
 export interface MenuProps {
@@ -18,17 +23,27 @@ export interface MenuProps {
   trigger: ReactNode;
   /** Accessible label for the trigger (required when the trigger is icon-only). */
   label?: string;
+  /** Native hover hint on the trigger (works inside clipping boxes, unlike Tooltip). */
+  triggerTitle?: string;
   items: ReadonlyArray<MenuItem>;
   align?: 'start' | 'end';
   triggerClassName?: string;
   className?: string;
+  /**
+   * Render the list in `document.body` at a fixed position under the trigger, for triggers inside
+   * a box that clips (`overflow: hidden`). It closes when the window resizes or a box holding the
+   * trigger scrolls, instead of drifting; other scrollers leave it open.
+   */
+  portal?: boolean;
 }
 
 /** Dropdown menu button: role="menu", arrow keys / Home / End, Enter selects, Esc closes. */
-export function Menu({ trigger, label, items, align = 'start', triggerClassName, className }: MenuProps) {
+export function Menu({ trigger, label, triggerTitle, items, align = 'start', triggerClassName, className, portal = false }: MenuProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
+  const [pos, setPos] = useState<CSSProperties>({});
   const wrap = useRef<HTMLDivElement>(null);
+  const list = useRef<HTMLDivElement>(null);
   const btn = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const menuId = useId();
@@ -36,11 +51,31 @@ export function Menu({ trigger, label, items, align = 'start', triggerClassName,
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      if (wrap.current?.contains(t) || list.current?.contains(t)) return;
+      setOpen(false);
     };
     document.addEventListener('mousedown', onDown);
-    return () => document.removeEventListener('mousedown', onDown);
-  }, [open]);
+    if (!portal) return () => document.removeEventListener('mousedown', onDown);
+    // A fixed list would drift away from its trigger: close when the trigger itself moves (the window
+    // resizes, or a box holding the trigger scrolls). Other scrollers, like a transcript that follows
+    // streamed text, leave it open.
+    const onMove = (e: Event) => {
+      if (e.type === 'scroll') {
+        const t = e.target;
+        const holdsTrigger = t === document || t === window || (t instanceof Node && !!btn.current && t.contains(btn.current));
+        if (!holdsTrigger) return;
+      }
+      setOpen(false);
+    };
+    window.addEventListener('resize', onMove);
+    window.addEventListener('scroll', onMove, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('resize', onMove);
+      window.removeEventListener('scroll', onMove, true);
+    };
+  }, [open, portal]);
 
   useEffect(() => {
     if (open) itemRefs.current[active]?.focus();
@@ -55,7 +90,13 @@ export function Menu({ trigger, label, items, align = 'start', triggerClassName,
   };
 
   const openMenu = (focusLast = false) => {
-    setActive(focusLast ? (enabledIdx[enabledIdx.length - 1] ?? 0) : (enabledIdx[0] ?? 0));
+    if (portal && btn.current) {
+      const r = btn.current.getBoundingClientRect();
+      setPos(align === 'end' ? { top: r.bottom + 4, right: window.innerWidth - r.right } : { top: r.bottom + 4, left: r.left });
+    }
+    // A pick-one menu opens on the current choice (also with ArrowUp, by design).
+    const checked = items.findIndex((it) => it.checked && !it.disabled);
+    setActive(checked >= 0 ? checked : focusLast ? (enabledIdx[enabledIdx.length - 1] ?? 0) : (enabledIdx[0] ?? 0));
     setOpen(true);
   };
 
@@ -70,11 +111,62 @@ export function Menu({ trigger, label, items, align = 'start', triggerClassName,
     else if (e.key === 'Home') setActive(enabledIdx[0] ?? 0);
     else if (e.key === 'End') setActive(enabledIdx[enabledIdx.length - 1] ?? 0);
     else if (e.key === 'Escape') close();
-    else if (e.key === 'Tab') close(false);
-    else return;
+    else if (e.key === 'Tab') {
+      // Back to the trigger, then let Tab move on from there (focus never drops to <body>).
+      close();
+      return;
+    } else return;
     e.preventDefault();
     e.stopPropagation();
   };
+
+  const popup = (
+    <div
+      ref={list}
+      id={menuId}
+      role="menu"
+      aria-label={label}
+      onKeyDown={onMenuKey}
+      style={portal ? pos : undefined}
+      className={cn(
+        'z-40 min-w-[180px] py-1 rounded-md border border-line-3 bg-card shadow-dialog',
+        portal ? 'fixed' : cn('absolute top-[calc(100%+4px)]', align === 'end' ? 'right-0' : 'left-0'),
+      )}
+    >
+      {items.map((it, i) => (
+        <button
+          key={it.id}
+          ref={(el) => {
+            itemRefs.current[i] = el;
+          }}
+          type="button"
+          role={it.checked === undefined ? 'menuitem' : 'menuitemradio'}
+          aria-checked={it.checked}
+          title={it.title}
+          tabIndex={i === active ? 0 : -1}
+          disabled={it.disabled}
+          onMouseEnter={() => !it.disabled && setActive(i)}
+          onClick={() => {
+            close();
+            it.onSelect();
+          }}
+          className={cn(
+            'w-full flex items-center gap-2 h-8 px-3 border-0 text-left text-[12.5px] bg-transparent disabled:opacity-50',
+            i === active ? 'bg-selected' : '',
+            it.danger ? 'text-bad' : 'text-ink',
+          )}
+        >
+          {it.checked !== undefined ? (
+            <Icon name="check" size={14} className={it.checked ? 'text-accent' : 'invisible'} />
+          ) : (
+            it.icon && <Icon name={it.icon} size={14} className="text-ink-3" />
+          )}
+          <span className="flex-1">{it.label}</span>
+          {it.hint && <span className="text-ink-3 text-[11px]">{it.hint}</span>}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div ref={wrap} className={cn('relative inline-flex', className)}>
@@ -85,6 +177,7 @@ export function Menu({ trigger, label, items, align = 'start', triggerClassName,
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         aria-label={label}
+        title={triggerTitle}
         onClick={() => (open ? close() : openMenu())}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -99,45 +192,7 @@ export function Menu({ trigger, label, items, align = 'start', triggerClassName,
       >
         {trigger}
       </button>
-      {open && (
-        <div
-          id={menuId}
-          role="menu"
-          aria-label={label}
-          onKeyDown={onMenuKey}
-          className={cn(
-            'absolute top-[calc(100%+4px)] z-40 min-w-[180px] py-1 rounded-md border border-line-3 bg-card shadow-dialog',
-            align === 'end' ? 'right-0' : 'left-0',
-          )}
-        >
-          {items.map((it, i) => (
-            <button
-              key={it.id}
-              ref={(el) => {
-                itemRefs.current[i] = el;
-              }}
-              type="button"
-              role="menuitem"
-              tabIndex={i === active ? 0 : -1}
-              disabled={it.disabled}
-              onMouseEnter={() => !it.disabled && setActive(i)}
-              onClick={() => {
-                close();
-                it.onSelect();
-              }}
-              className={cn(
-                'w-full flex items-center gap-2 h-8 px-3 border-0 text-left text-[12.5px] bg-transparent disabled:opacity-50',
-                i === active ? 'bg-selected' : '',
-                it.danger ? 'text-bad' : 'text-ink',
-              )}
-            >
-              {it.icon && <Icon name={it.icon} size={14} className="text-ink-3" />}
-              <span className="flex-1">{it.label}</span>
-              {it.hint && <span className="text-ink-3 text-[11px]">{it.hint}</span>}
-            </button>
-          ))}
-        </div>
-      )}
+      {open && (portal ? createPortal(popup, document.body) : popup)}
     </div>
   );
 }

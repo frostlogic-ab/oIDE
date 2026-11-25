@@ -115,14 +115,14 @@ describe('main services (plain Node, fake-claude)', () => {
       return evs.filter((e) => e.type === 'user-text').length >= 2 && evs;
     }, 'feedback delivered');
     expect(JSON.stringify(userTexts)).toContain('Review feedback');
-    // The second turn runs the same scenario (the live process keeps its launch-time allow rules).
-    const again = await status(h, a!.id, 'needs-permission');
-    expect(again.pendingPermission!.requestId).not.toBe(asking.pendingPermission!.requestId);
-    await h.call('agents.answerPermission', { agentId: a!.id, answer: { requestId: again.pendingPermission!.requestId, behavior: 'allow' } });
+    // The second turn runs the same scenario. The live process keeps its launch-time --allowedTools,
+    // but "Always" already covers `npm test` for the rest of the session: no second prompt.
     await waitFor(async () => {
       const s = await agent(h, a!.id);
       return s?.status === 'ready-for-review' && (s.review?.submittedAt ?? 0) > ready.review!.submittedAt && s;
     }, 'second review');
+    const prompts = (await h.call('agents.events', { agentId: a!.id, limit: 500 })).filter((e) => e.type === 'permission-request');
+    expect(prompts).toHaveLength(1);
 
     // The agent's work is committed in its worktree (as agents do), then merged locally.
     git(ready.worktreePath!, 'add', '-A');

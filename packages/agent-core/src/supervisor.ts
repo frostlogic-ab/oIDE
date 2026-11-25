@@ -14,7 +14,7 @@ import {
   type PermissionRequest,
   type UserMessage,
 } from '@oide/protocol';
-import { buildLaunch, cliPermissionMode, subagentTiers, LaunchError } from './args.js';
+import { askRuleCovers, buildLaunch, cliPermissionMode, editStaysInside, requestTargetsProtectedPath, subagentTiers, LaunchError } from './args.js';
 import { ClaudeCliDriver, rawJsonOf, type AgentDriver, type AgentHandle } from './driver.js';
 import { ContextWindowBook } from './context-window.js';
 import { AgentReducer, createSummary } from './reducer.js';
@@ -83,10 +83,14 @@ interface AgentRecord {
   /** Messages held while paused or while the process is (re)starting. */
   held: UserMessage[];
   pendingPermissions: Map<string, PermissionRequest>;
+  /** Rules this agent's launch marked "always ask" (never answered by an "Always"). */
+  askRules: string[];
   /** Status to show after a resume spawn that has nothing to send. */
   idleStatus: AgentStatus;
   /** Spawn's attachments for the first message. Kept in memory only (never in the stored spec), dropped once sent. */
   firstAttachments?: MessageAttachment[];
+  /** Mode changes run one at a time, so a slow fallback cannot overtake a later pick. */
+  modeChain?: Promise<void>;
 }
 
 export interface RestoreEntry {
@@ -115,6 +119,12 @@ export class Supervisor {
   private readonly driver: AgentDriver;
   /** Context windows the CLI reported, shared so one agent's result fixes the next agent's first turn. */
   private readonly contextWindows = new ContextWindowBook();
+  /**
+   * Rules the user approved with "Always in <project>", per project. The CLI reads `--allowedTools`
+   * only at launch, so a rule saved to .oide/permissions.json reaches running agents through this:
+   * their next matching request is allowed without a prompt.
+   */
+  private readonly alwaysAllowed = new Map<string, Set<string>>();
   private pumping = false;
   private pumpAgain = false;
   private closed = false;
@@ -195,6 +205,7 @@ export class Supervisor {
         model,
         status: 'queued',
         sessionId: randomUUID(),
+        workIn: s.workIn,
         ...(attemptGroup ? { attemptGroup } : {}),
       });
       const rec = this.newRecord(s, summary, 0, false);
@@ -227,6 +238,7 @@ export class Supervisor {
       ...(summary.worktreePath ? { worktree: { path: summary.worktreePath, ...(summary.branch ? { branch: summary.branch } : {}), ...(summary.baseRef ? { baseRef: summary.baseRef } : {}) } } : {}),
       held: [],
       pendingPermissions: new Map(),
+      askRules: [],
       idleStatus: IDLE_AFTER_RESUME,
     };
   }
@@ -310,6 +322,7 @@ export class Supervisor {
         const cwd = rec.worktree.path;
         firstAttachments = this.deps.attachments ? await this.deps.attachments.materialize({ agentId: rec.id, projectId: rec.spec.projectId, cwd, attachments: rec.firstAttachments }) : rec.firstAttachments;
       }
+      const launchedMode = rec.spec.mode;
       const plan = buildLaunch(rec.spec, {
         agentId: rec.id,
         sessionId: rec.sessionId,
@@ -330,6 +343,7 @@ export class Supervisor {
         ...(this.deps.settings.resolveArtifact ? { resolveArtifact: this.deps.settings.resolveArtifact } : {}),
         ...(firstAttachments ? { firstAttachments } : {}),
       });
+      rec.askRules = plan.askRules;
       for (const w of plan.warnings) this.emitDraft(rec, { type: 'stderr', text: `[oide] ${w}` });
       const handle = await this.driver.start(rec.spec, {
         agentId: rec.id,
@@ -342,6 +356,11 @@ export class Supervisor {
         ...(this.deps.log ? { log: this.deps.log } : {}),
       });
       rec.handle = handle;
+      // A mode picked while the process was starting: apply it now, or the new process's init would undo it.
+      if (rec.spec.mode !== launchedMode) {
+        const picked = rec.spec.mode;
+        this.setMode(rec.id, picked).catch((err) => this.deps.log?.('mode change after launch failed', (err as Error).message));
+      }
       // Running again: no longer "Interrupted" (the next status event publishes this).
       delete rec.reducer.summary.interrupted;
       const wasStarted = rec.started;
@@ -380,7 +399,8 @@ export class Supervisor {
   // ------------------------------------------------------------------ event plumbing
 
   private ingest(rec: AgentRecord, e: AgentEvent, raw?: string): void {
-    if (!this.agents.has(rec.id)) return;
+    // A record replaced by unarchive (same id) must not publish from its stale reducer.
+    if (this.agents.get(rec.id) !== rec) return;
     const prevStatus = rec.reducer.summary.status;
     try {
       const p = this.deps.sink.append(e, raw);
@@ -390,6 +410,11 @@ export class Supervisor {
     }
     const res = rec.reducer.apply(e);
     if (e.type === 'init' && e.sessionId) rec.sessionId = e.sessionId;
+    // The CLI changes mode on its own (plan → manual after the plan is approved). Keep the spec in
+    // step so a resume relaunches in the mode the agent is really in, not the one it was spawned with.
+    if ((e.type === 'init' || e.type === 'mode-changed') && rec.reducer.summary.mode !== rec.spec.mode) {
+      rec.spec = { ...rec.spec, mode: rec.reducer.summary.mode };
+    }
     this.fire('event', e);
     for (const sub of res.subagents) this.emitDraft(rec, { type: 'subagent', subagent: sub });
     if (res.changed) this.publishSummary(rec);
@@ -422,8 +447,14 @@ export class Supervisor {
   private onPermissionRequest(rec: AgentRecord, req: PermissionRequest): void {
     const subagentId = req.subagentId ?? rec.reducer.tracker.ownerOfToolUse(req.toolUseId);
     const request: PermissionRequest = { ...req, agentId: rec.id, ...(subagentId ? { subagentId } : {}) };
+    // No rule to offer when "Always" could not cover this request: the tile then offers no "Always".
+    if (request.suggestedRule && !this.canAlwaysAllow(rec, request)) delete request.suggestedRule;
     if (subagentId && rec.reducer.tracker.isStopRequested(subagentId)) {
       this.deps.broker.answer(req.requestId, { requestId: req.requestId, behavior: 'deny', message: 'Stopped by the user. Do not continue; report back to the lead agent now.' });
+      return;
+    }
+    if (this.alwaysAllows(rec, request)) {
+      this.deps.broker.answer(req.requestId, { requestId: req.requestId, behavior: 'allow', always: false });
       return;
     }
     const first = rec.pendingPermissions.size === 0;
@@ -444,14 +475,44 @@ export class Supervisor {
     const pending = rec.pendingPermissions.get(answer.requestId);
     if (!pending) return false;
     const ok = this.deps.broker.answer(answer.requestId, answer);
-    if (ok && answer.behavior === 'allow' && answer.always && pending.suggestedRule) {
+    const rule = pending.suggestedRule;
+    if (ok && answer.behavior === 'allow' && answer.always && rule && this.canAlwaysAllow(rec, pending)) {
+      const projectId = rec.spec.projectId;
+      let rules = this.alwaysAllowed.get(projectId);
+      if (!rules) this.alwaysAllowed.set(projectId, (rules = new Set()));
+      rules.add(rule);
+      this.allowWaiting(projectId);
       try {
-        await this.deps.settings.addAllowRule?.(rec.spec.projectId, pending.suggestedRule);
+        await this.deps.settings.addAllowRule?.(projectId, rule);
       } catch (err) {
         this.deps.log?.('saving always-allow rule failed', err);
       }
     }
     return ok;
+  }
+
+  /** A request "Always" may cover: not an always-ask tool or rule, not an edit of .oide/, .claude/ or .mcp.json. */
+  private canAlwaysAllow(rec: AgentRecord, req: PermissionRequest): boolean {
+    if (!req.suggestedRule || requestTargetsProtectedPath(req.toolName, req.input)) return false;
+    for (const r of rec.askRules) if (askRuleCovers(r, req.toolName, req.input)) return false;
+    return true;
+  }
+
+  /** Answered without a prompt: an "Always" rule covers it, and an edit stays inside the agent's worktree. */
+  private alwaysAllows(rec: AgentRecord, req: PermissionRequest): boolean {
+    const rules = this.alwaysAllowed.get(rec.spec.projectId);
+    if (!req.suggestedRule || !rules?.has(req.suggestedRule) || !this.canAlwaysAllow(rec, req)) return false;
+    return editStaysInside(req.toolName, req.input, rec.worktree?.path);
+  }
+
+  /** After a new "Always" rule: allow every waiting prompt in the project it covers. */
+  private allowWaiting(projectId: string): void {
+    for (const rec of this.agents.values()) {
+      if (rec.spec.projectId !== projectId) continue;
+      for (const req of [...rec.pendingPermissions.values()]) {
+        if (this.alwaysAllows(rec, req)) this.deps.broker.answer(req.requestId, { requestId: req.requestId, behavior: 'allow', always: false });
+      }
+    }
   }
 
   // ------------------------------------------------------------------ tile controls
@@ -515,9 +576,18 @@ export class Supervisor {
     this.send(agentId, { kind: 'command', command: '/compact' });
   }
 
-  /** Shift+Tab: control request; falls back to interrupt + `--resume` with the new mode. */
+  /**
+   * Focus mode menu / Shift+Tab: control request; falls back to interrupt + `--resume` with the new
+   * mode. Calls for one agent run in order, so the last pick wins even when an earlier one falls back.
+   */
   async setMode(agentId: string, mode: PermissionMode): Promise<void> {
     const rec = this.require(agentId);
+    const run = (rec.modeChain ?? Promise.resolve()).then(() => this.applyMode(rec, mode));
+    rec.modeChain = run.catch(() => {});
+    await run;
+  }
+
+  private async applyMode(rec: AgentRecord, mode: PermissionMode): Promise<void> {
     const settings = await this.deps.settings.get();
     if (mode === 'bypassPermissions' && (!settings.claude.allowBypass || rec.spec.workIn === 'project-folder')) {
       throw new LaunchError('Bypass mode is not allowed for this agent');
@@ -712,7 +782,9 @@ export class Supervisor {
     if (entry.resumeBlocked) s.resumeBlocked = entry.resumeBlocked;
     else delete s.resumeBlocked;
     s.updatedAt = Date.now();
-    const rec = this.newRecord(AgentSpec.parse(entry.spec), s, (entry.lastSeq ?? -1) + 1, Boolean(s.sessionId));
+    const parsed = AgentSpec.parse({ ...entry.spec, mode: s.mode });
+    s.workIn = parsed.workIn;
+    const rec = this.newRecord(parsed, s, (entry.lastSeq ?? -1) + 1, Boolean(s.sessionId));
     this.agents.set(rec.id, rec);
     this.publishSummary(rec);
     return rec.reducer.summary;
@@ -740,7 +812,10 @@ export class Supervisor {
       // on the Wall until it runs again. A clean quit already saved these as stopped.
       if (ACTIVE.has(s.status) || interruption) s.interrupted = { at: now, reason: interruption ?? 'restart' };
       if (ACTIVE.has(s.status) || s.status === 'paused') s.status = 'stopped';
-      const rec = this.newRecord(AgentSpec.parse(spec), s, (lastSeq ?? -1) + 1, started);
+      // Saved before the spec followed the CLI's own mode changes: the summary's mode is the real one.
+      const parsed = AgentSpec.parse({ ...spec, mode: s.mode });
+      s.workIn = parsed.workIn;
+      const rec = this.newRecord(parsed, s, (lastSeq ?? -1) + 1, started);
       this.agents.set(rec.id, rec);
       if (wasQueued) this.queue.push({ id: rec.id, resume: false });
     }
