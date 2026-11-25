@@ -141,6 +141,8 @@ case, trailing dots or spaces in a component, `:` streams, `~` short names) and 
 rules (`LaunchPlan.askRules`: extension tools marked "asks first" and project ask rules, matched
 conservatively by `askRuleCovers`). For those the supervisor strips `suggestedRule` from the
 request, and the tile and Focus grey out the button. An edit is answered without a prompt only when
-every path resolves inside the agent's worktree, symlinks followed (`editStaysInside`; UNC paths and
-`..` escapes ask) and its real path is not protected either (a link such as `src/cfg → ../.oide` is caught), because the saved rule for edits is the bare tool name (`Edit`).
+every path sits inside the agent's worktree with no link on the way (`editStaysInside`): any
+existing component that is a symlink or junction (dangling ones included) or a file with more than
+one hard link fails closed, as do UNC paths and `..` escapes, and the part below the worktree must
+not name a protected path. This matters because the saved rule for edits is the bare tool name (`Edit`).
 

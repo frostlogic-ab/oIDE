@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AgentSpec, CliInfo, Technique } from '@oide/protocol';
 import { allowListEnv, askRuleCovers, buildLaunch, editStaysInside, requestTargetsProtectedPath, customModelEnv, disallowedModelEnvKeys, filterExtraFlags, isAllowedModelEnvEntry, isAllowedModelEnvKey, LaunchError, shellSplit, type LaunchContext } from './args.js';
-import { mkdirSync, symlinkSync } from 'node:fs';
+import { linkSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tempDir, testSettings } from '../test/helpers.js';
 
@@ -348,6 +348,25 @@ describe('"Always" guards', () => {
     expect(editStaysInside('Write', { file_path: join(root, '.claude', 'settings.json') }, root)).toBe(false);
     expect(editStaysInside('Write', { file_path: join(root, 'src', 'a.ts') }, root)).toBe(true);
     expect(editStaysInside('Write', { file_path: root }, root)).toBe(false);
+  });
+
+  it('editStaysInside: dangling links and hard-linked files fail closed', () => {
+    const root = tempDir('oide-root-');
+    mkdirSync(join(root, '.oide'));
+    mkdirSync(join(root, 'src'));
+    writeFileSync(join(root, '.oide', 'permissions.json'), '{}');
+    // Hard links need no special rights.
+    linkSync(join(root, '.oide', 'permissions.json'), join(root, 'src', 'h.json'));
+    expect(editStaysInside('Write', { file_path: join(root, 'src', 'h.json') }, root)).toBe(false);
+    let dangling = false;
+    try {
+      symlinkSync(join(root, '.oide', 'missing'), join(root, 'src', 'd'), 'junction');
+      dangling = true;
+    } catch {
+      /* no symlink rights on this machine */
+    }
+    if (dangling) expect(editStaysInside('Write', { file_path: join(root, 'src', 'd', 'setup') }, root)).toBe(false);
+    expect(editStaysInside('Write', { file_path: join(root, 'src', 'new', 'deep', 'x.ts') }, root)).toBe(true);
   });
 
   it('askRuleCovers: whole tools, MCP servers, Bash prefixes, and any other specifier on the same tool', () => {

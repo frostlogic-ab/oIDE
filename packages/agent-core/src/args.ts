@@ -1,5 +1,5 @@
-import { existsSync, realpathSync, statSync } from 'node:fs';
-import { delimiter, dirname, isAbsolute, posix, relative, resolve, win32 } from 'node:path';
+import { existsSync, lstatSync, realpathSync, statSync } from 'node:fs';
+import { delimiter, isAbsolute, posix, relative, resolve, win32 } from 'node:path';
 import { isValidPermissionRule } from '@oide/protocol';
 import type { AgentSpec, CliInfo, CustomModel, Effort, MessageAttachment, ModelSlot, ModelStrategy, PermissionMode, Settings, SubagentTier, Technique } from '@oide/protocol';
 import { describeContext, textMessage, type ArtifactResolver, type StreamJsonUserMessage } from './messages.js';
@@ -572,39 +572,48 @@ export function requestTargetsProtectedPath(toolName: string, input: unknown): b
   return paths.some(pathMayBeProtected);
 }
 
-/** Real path of `p`, or of its nearest existing ancestor joined with the rest (symlinks followed). */
-function realish(p: string): string {
-  let cur = p;
-  const rest: string[] = [];
-  for (;;) {
-    try {
-      return resolve(realpathSync.native(cur), ...rest.reverse());
-    } catch {
-      const up = dirname(cur);
-      if (up === cur) return p;
-      rest.push(cur.slice(up.length).replace(/^[\\/]+/, ''));
-      cur = up;
-    }
-  }
+/** `p` relative to `base` when it sits strictly inside it (lexically), else undefined. */
+function inside(base: string, p: string): string | undefined {
+  const rel = relative(base, p);
+  return rel === '' || rel.startsWith('..') || isAbsolute(rel) ? undefined : rel;
 }
 
 /**
- * True when every path of an edit tool call resolves (symlinks followed) inside `root`, and its
- * real path is not a protected one either (a link such as `src/cfg → ../.oide` passes the literal
- * check but not this one). Non-edit tools are true; UNC paths, and edits with no path, are false.
+ * True when every path of an edit tool call sits inside `root` with no link on the way: any
+ * existing component that is a symlink or junction (dangling ones included), or an existing file
+ * with more than one hard link, fails closed, since its real target could be anywhere, `.oide/`
+ * included. The part below `root` must not name a protected path either (the root's own folders may
+ * be named anything). Non-edit tools are true; UNC paths, the root itself and edits with no path are false.
  */
 export function editStaysInside(toolName: string, input: unknown, root: string | undefined): boolean {
   const paths = editPaths(toolName, input);
   if (!paths) return true;
   if (!root || !paths.length) return false;
-  const base = realish(resolve(root));
+  const literal = resolve(root);
+  let real: string;
+  try {
+    real = realpathSync.native(literal);
+  } catch {
+    return false;
+  }
   return paths.every((p) => {
     if (/^[\\/]{2}/.test(p)) return false;
-    const real = realish(resolve(base, p));
-    const rel = relative(base, real);
-    if (rel === '' || rel.startsWith('..') || isAbsolute(rel)) return false;
-    // Inside `base`, so the real path is `base` + `rel`: check `rel` (the base's own folders may be named anything).
-    return !pathMayBeProtected(rel);
+    const abs = resolve(literal, p);
+    const rel = inside(literal, abs) ?? inside(real, abs);
+    if (!rel || pathMayBeProtected(rel)) return false;
+    let cur = real;
+    for (const part of rel.split(/[\\/]+/)) {
+      cur = resolve(cur, part);
+      let st;
+      try {
+        st = lstatSync(cur);
+      } catch (err) {
+        // Nothing exists from here down, so no link can be on the way.
+        return (err as NodeJS.ErrnoException).code === 'ENOENT';
+      }
+      if (st.isSymbolicLink() || (st.isFile() && st.nlink > 1)) return false;
+    }
+    return true;
   });
 }
 
