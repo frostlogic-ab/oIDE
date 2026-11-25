@@ -141,10 +141,19 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
 
 ## Icon, licences and the docs site
 
-- Icon: `apps/desktop/build/icon.svg` (rounded-square outline in `#7AA2F7` on `#0E1013` with "oI"),
-  rendered by `pnpm icons` (`tools/icons/build-icons.mjs`, @resvg/resvg-js, build-time only) to
-  `icon.png` (1024), `icons/<n>x<n>.png` (Linux, `linux.icon: build/icons`), `icon.ico` and
-  `icon.icns` (containers written by the script). electron-builder picks them up from `build/`.
+- Icon: the Signal mark on a dark rounded tile ([docs/brand](../../brand/README.md)). Sources
+  `apps/desktop/build/icon.svg` (48 px and up) and `icon-small.svg` (16-32 px: heavier ring, larger
+  agent, tighter tile), both written by `node tools/brand/build-brand.mjs`. `pnpm icons`
+  (`tools/icons/build-icons.mjs`, @resvg/resvg-js, build-time only) rasterises them to `icon.png` (1024),
+  `icons/<n>x<n>.png` (Linux, `linux.icon: build/icons`), `icon.ico` and `icon.icns` (containers
+  written by the script), using `icon-small.svg` for every entry up to 32 px. electron-builder picks
+  them up from `build/`.
+- Runtime icon (`apps/desktop/src/main/app-icon.ts`): unpackaged runs (`pnpm dev`, e2e) set
+  `BrowserWindow({ icon })` to `build/icon.ico` (Windows) or `build/icons/512x512.png` (Linux) and
+  `app.dock.setIcon(build/icon.png)` on macOS, so the taskbar/dock no longer shows Electron's icon.
+  Packaged Windows/macOS use the exe/bundle icon; packaged Linux reads `<resources>/icon.png`
+  (`linux.extraResources`). On Windows `app.setAppUserModelId('dev.oide.app')` (= `appId`) runs before
+  ready so dev and installed windows group under the oIDE icon.
 - Licences: `pnpm licenses:notices` (`tools/licenses/notices.mjs`) writes `THIRD_PARTY_NOTICES.md` for
   everything a packaged build ships (desktop `dependencies`, libraries bundled into `out/`, Electron);
   `pnpm licenses:check` fails on a licence outside the MIT-compatible allow-list or a stale file.

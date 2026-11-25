@@ -116,6 +116,10 @@ linux:
   category: Development
   # PNG set from tools/icons/build-icons.mjs (Windows uses build/icon.ico, macOS build/icon.icns).
   icon: build/icons
+  # BrowserWindow icon on Linux (main/app-icon.ts reads <resources>/icon.png); Windows/macOS use the exe/bundle icon.
+  extraResources:
+    - from: build/icons/512x512.png
+      to: icon.png
   maintainer: oIDE contributors
   synopsis: Run many Claude Code CLI agents in parallel, in one window.
   artifactName: ${productName}-${version}-linux-${arch}.${ext}

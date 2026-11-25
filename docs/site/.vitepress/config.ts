@@ -13,12 +13,17 @@ export default defineConfig({
   lastUpdated: true,
   appearance: 'dark',
   head: [
+    // Brand assets: docs/brand (copied to docs/site/public by tools/brand/build-brand.mjs).
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/oide/favicon.svg' }],
     ['meta', { name: 'theme-color', content: '#0E1013' }],
+    ['meta', { property: 'og:image', content: 'https://oide-dev.github.io/oide/social-preview.png' }],
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { property: 'og:title', content: 'oIDE' }],
     ['meta', { property: 'og:description', content: 'Run many Claude Code CLI agents in parallel, in one window. Open source, MIT.' }],
   ],
   themeConfig: {
     siteTitle: 'oIDE',
+    logo: { light: '/logo-mark-light.svg', dark: '/logo-mark.svg', alt: '' },
     nav: [
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },
       { text: 'Extensions', link: '/extensions/', activeMatch: '/extensions/' },

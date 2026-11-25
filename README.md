@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo-wordmark.svg">
+    <img alt="oIDE" src="docs/brand/logo-wordmark-light.svg" width="280">
+  </picture>
+</p>
+
 # oIDE
 
 **Mission Control for coding agents.** oIDE is an open-source desktop app (Electron + TypeScript +

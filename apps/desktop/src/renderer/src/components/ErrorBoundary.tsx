@@ -1,5 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
-import { Button } from '@oide/ui';
+import { Button, Logo } from '@oide/ui';
 import { oide } from '../lib/bridge';
 import { buildErrorReport, type ErrorReport } from '../lib/errorReport';
 
@@ -65,9 +65,12 @@ export class ScreenErrorBoundary extends Component<Props, State> {
     return (
       <div className="flex-1 min-w-0 flex items-center justify-center p-6" data-testid="screen-error">
         <section role="alert" aria-labelledby="screen-error-title" className="max-w-[520px] w-full p-5 rounded-xl border border-line-2 bg-card flex flex-col gap-3">
-          <h1 id="screen-error-title" className="m-0 text-[16px] font-semibold">
-            This screen ran into a problem
-          </h1>
+          <div className="flex items-center gap-2.5">
+            <Logo size={24} />
+            <h1 id="screen-error-title" className="m-0 text-[16px] font-semibold">
+              This screen ran into a problem
+            </h1>
+          </div>
           <p className="m-0 text-[13px] text-ink-2 leading-normal">Your agents keep running in the background; nothing was lost. Try again, or reload the window.</p>
           {report && <p className="m-0 font-mono text-[12px] text-ink-3 break-words">{`${report.name}: ${report.message}`}</p>}
           <div className="flex gap-2 flex-wrap">

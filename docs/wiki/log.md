@@ -496,3 +496,18 @@ a brief-conformance review, a publication-readiness review and a final end-to-en
 under Reviews in the index. Final gate on `main`: 700 unit/integration/gate tests, 25 Playwright e2e,
 typecheck, lint, wiki lint and licence check all green. What remains needs the maintainer: see
 [pages/review-publication.md](pages/review-publication.md) and [pages/open-questions.md](pages/open-questions.md).
+
+## [2026-11-25] build | Logo and brand
+
+Four logo concepts (Orbit, Facet, Constellation, Signal) drawn and compared at 16-128 px on dark and light
+(`docs/brand/concepts.png`); **Signal** chosen (open o, lead agent in its opening, hub at the centre) for
+its 16 px read and originality, then refined (circular bite, blue → violet ring, lit orbs, highlight,
+heavier 16-32 px geometry). One generator, `tools/brand/build-brand.mjs`, writes the brand set in
+`docs/brand/` (mark, light, mono, wordmark as outlines, social preview 1280×640, README with usage rules),
+the app icon sources (`apps/desktop/build/icon.svg`, `icon-small.svg` for ≤32 px entries), the docs site
+assets and `packages/ui/src/logoGeometry.ts`. Applied: app icons (`pnpm icons`), runtime window/taskbar
+icon in dev and unpackaged runs (`main/app-icon.ts`, AUMID `dev.oide.app`, macOS dock in dev, Linux
+`extraResources`), header (`<Logo variant="wordmark">` in `@oide/ui`, fixed brand colours, not the
+accent), screen error panel, renderer favicon, docs site (nav logo, hero, favicon, og:image), README
+header. Open question 18 added (trademark). See [design-system](pages/design-system.md#brand),
+[packaging](pages/packaging.md).

@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <title>oIDE logo concept: Signal (light)</title>
+  <defs><linearGradient id="concept4lg" gradientUnits="userSpaceOnUse" x1="10" y1="8" x2="54" y2="56"><stop offset="0" stop-color="#3B6FE6"/><stop offset=".55" stop-color="#8A5CC8"/><stop offset="1" stop-color="#2C9A73"/></linearGradient></defs><path d="M50.711 28.701A19 19 0 1 1 35.299 13.289" fill="none" stroke="url(#concept4lg)" stroke-width="8.5"/><circle cx="45.435" cy="18.565" r="8.6" fill="none" stroke="#2C9A73" stroke-width="1.4" opacity=".45"/><circle cx="45.435" cy="18.565" r="5.2" fill="#2C9A73"/><circle cx="32" cy="32" r="4.2" fill="#3B6FE6"/>
+</svg>

@@ -5,6 +5,10 @@ hero:
   name: oIDE
   text: Mission Control for coding agents
   tagline: Run many Claude Code CLI agents in parallel, across many projects, in one window. Each agent is your own, unmodified claude CLI in its own git worktree.
+  image:
+    light: /logo-mark-light.svg
+    dark: /logo-mark.svg
+    alt: oIDE logo
   actions:
     - theme: brand
       text: Get started

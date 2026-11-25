@@ -3,6 +3,7 @@ import './security/early-env.js';
 // Must stay before the rest: silences the node:sqlite ExperimentalWarning before anything loads it.
 import './warnings.js';
 
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, screen, shell } from 'electron';
@@ -10,17 +11,24 @@ import { openStore, type Store } from '@oide/store';
 import type { MainContext } from './context.js';
 import { createAgentEventBatcher, createEmitter } from './ipc/emit.js';
 import { attachRouter, IpcRouter, type Logger } from './ipc/router.js';
+import { attachDropChannel } from './handlers/dialog.js';
 import { registerAllHandlers } from './handlers/index.js';
 import { createServices } from './services/index.js';
 import { registerArtifactScheme } from './services/electron-platform.js';
 import { hardenApp } from './security/hardening.js';
 import { AllowedRoots } from './security/roots.js';
 import { loadWindowState, MIN_HEIGHT, MIN_WIDTH, trackWindowState } from './window-state.js';
+import { APP_USER_MODEL_ID, resolveAppIcon } from './app-icon.js';
 import { CrashReports, LogManager, openWithRecovery, parseLevel, readCrashReportsPref, Redactor, runShutdown, watchRenderer, writeCrashReportsPref, type ReliabilityContext } from './reliability/index.js';
 
 // Tests and portable setups can point userData elsewhere. Must happen before the lock below,
 // which is scoped to the userData folder.
 if (process.env.OIDE_USER_DATA) app.setPath('userData', process.env.OIDE_USER_DATA);
+
+// The oIDE icon in the taskbar/dock, also in dev and unpackaged runs (main/app-icon.ts). The AppUserModelID
+// matches electron-builder's appId so Windows groups dev and installed windows under the oIDE icon.
+if (process.platform === 'win32') app.setAppUserModelId(APP_USER_MODEL_ID);
+const appIcon = resolveAppIcon({ packaged: app.isPackaged, platform: process.platform, appPath: join(import.meta.dirname, '..', '..'), resourcesPath: process.resourcesPath, exists: existsSync });
 
 // ---------------------------------------------------------------- logs and crash reports (before ready)
 
@@ -139,6 +147,7 @@ async function start(): Promise<void> {
   });
 
   await app.whenReady();
+  if (appIcon.dock) app.dock?.setIcon(appIcon.dock);
 
   await hardenApp({ isAppUrl, dev: Boolean(devServerUrl) });
   setMenu();
@@ -203,6 +212,8 @@ async function start(): Promise<void> {
   });
   registerAllHandlers(router, services, ctx);
   attachRouter(router, ipcMain, isAppUrl);
+  // Paths of files dropped or pasted on a prompt input, sent only by preload (webUtils.getPathForFile).
+  attachDropChannel(ipcMain, services, isAppUrl);
 
   const loadApp = (win: BrowserWindow): Promise<void> => (devServerUrl ? win.loadURL(devServerUrl) : win.loadFile(join(rendererDir, 'index.html')));
   /**
@@ -277,6 +288,7 @@ function createWindow(userDataDir: string): BrowserWindow {
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     backgroundColor: '#0E1013',
+    ...(appIcon.window ? { icon: appIcon.window } : {}),
     show: false,
     autoHideMenuBar: true,
     webPreferences: {

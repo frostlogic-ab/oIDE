@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { Icon, Kbd, SegmentedControl, StatusDot } from '@oide/ui';
+import { Icon, Kbd, Logo, SegmentedControl, StatusDot } from '@oide/ui';
 import type { Scope } from '@oide/protocol';
 import { useAgentCounts } from '../../stores/agents';
 import { useProjects } from '../../stores/projects';
@@ -16,10 +16,7 @@ export function Header({ def }: { def: ScreenDef }) {
 
   return (
     <header className="h-header shrink-0 flex items-center gap-4 px-4 border-b border-line bg-chrome">
-      <div className="flex items-center gap-2 font-bold tracking-[-0.01em] text-[14px] shrink-0">
-        <span aria-hidden="true" className="w-5 h-5 rounded-sm border-2 border-accent box-border inline-block" />
-        oIDE
-      </div>
+      <Logo variant="wordmark" size={22} className="font-bold tracking-[-0.01em] text-[14px] shrink-0" />
 
       <div ref={titleRef} className="flex items-center gap-2 min-w-0 empty:hidden">
         {def.header === 'title' && !def.customTitle && <span className="text-ink text-[12.5px] whitespace-nowrap">{def.title}</span>}

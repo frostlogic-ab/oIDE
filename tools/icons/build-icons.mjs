@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Builds every app icon from apps/desktop/build/icon.svg (pnpm icons):
+// Builds every app icon from apps/desktop/build/icon.svg, and icon-small.svg for the 16-32 px entries
+// (heavier mark that survives rasterisation). Both are written by tools/brand/build-brand.mjs (pnpm icons):
 //   build/icon.png            1024×1024 (electron-builder fallback, docs)
 //   build/icons/<n>x<n>.png   Linux icon set
 //   build/icon.ico            Windows, PNG-encoded entries 16…256
@@ -15,11 +16,14 @@ import { Resvg } from '@resvg/resvg-js';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BUILD = join(ROOT, 'apps', 'desktop', 'build');
 const svg = readFileSync(join(BUILD, 'icon.svg'), 'utf8');
+const svgSmall = readFileSync(join(BUILD, 'icon-small.svg'), 'utf8');
+/** Sizes at or below this use icon-small.svg. */
+const SMALL_MAX = 32;
 
 const cache = new Map();
 function png(size) {
   if (!cache.has(size)) {
-    const r = new Resvg(svg, { fitTo: { mode: 'width', value: size }, background: 'rgba(0,0,0,0)', font: { loadSystemFonts: false } });
+    const r = new Resvg(size <= SMALL_MAX ? svgSmall : svg, { fitTo: { mode: 'width', value: size }, background: 'rgba(0,0,0,0)', font: { loadSystemFonts: false } });
     cache.set(size, Buffer.from(r.render().asPng()));
   }
   return cache.get(size);
