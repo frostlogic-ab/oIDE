@@ -763,3 +763,12 @@ tools and hands files back through `artifact_retrieval_add_files` / `artifact_re
 dialog (A link / Files / Blank) replaces the import dialog and "Fetch with an agent". Pages:
 [artifacts.md](pages/artifacts.md), [screen-artifacts.md](pages/screen-artifacts.md),
 [mcp-server.md](pages/mcp-server.md), [telemetry.md](pages/telemetry.md), open question 5 answered.
+
+## [2026-11-25] build | Artifacts: whole-version Restore, user guide rewrite
+`artifacts.restore { id, version, baseVersion? }` commits the full snapshot of a version (every file and
+the entry it had) as a new version noted "Restored v<n>", through the store's `commit` path; History >
+Restore uses it, which closes the "restores only the entry" gap. The Viewer's Keep mine / Use theirs only
+load a version into the editor and save through `save` / `writeFiles`, so they needed no change. The
+docs site Artifacts guide, FAQ and Settings text now describe the link flow (an agent retrieves it with the
+user's CLI), Update, the Files panel and history. Pages: [artifacts.md](pages/artifacts.md),
+[screen-artifacts.md](pages/screen-artifacts.md).
