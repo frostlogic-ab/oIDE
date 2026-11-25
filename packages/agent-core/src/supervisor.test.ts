@@ -297,6 +297,15 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     await waitFor(() => h.get(a!.id).mode === 'default', 5000, 'mode default');
   }, 30_000);
 
+  it('a mode picked while the agent is starting is not undone by the new process', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic' });
+    const [a] = await h.sup.spawn(spec({ mode: 'plan' }));
+    await h.sup.setMode(a!.id, 'acceptEdits');
+    await status(h, a!.id, 'has-question');
+    await waitFor(() => h.get(a!.id).mode === 'acceptEdits', 5000, 'mode acceptEdits');
+    expect(h.sup.spec(a!.id)!.mode).toBe('acceptEdits');
+  }, 30_000);
+
   it('summaries carry workIn from the spec (spawn and restore)', async () => {
     const h = await harness({ extraFlags: '--fake-scenario basic' });
     const [a] = await h.sup.spawn(spec({ workIn: 'project-folder' }));

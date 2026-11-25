@@ -313,6 +313,7 @@ export class Supervisor {
         const cwd = rec.worktree.path;
         firstAttachments = this.deps.attachments ? await this.deps.attachments.materialize({ agentId: rec.id, projectId: rec.spec.projectId, cwd, attachments: rec.firstAttachments }) : rec.firstAttachments;
       }
+      const launchedMode = rec.spec.mode;
       const plan = buildLaunch(rec.spec, {
         agentId: rec.id,
         sessionId: rec.sessionId,
@@ -345,6 +346,11 @@ export class Supervisor {
         ...(this.deps.log ? { log: this.deps.log } : {}),
       });
       rec.handle = handle;
+      // A mode picked while the process was starting: apply it now, or the new process's init would undo it.
+      if (rec.spec.mode !== launchedMode) {
+        const picked = rec.spec.mode;
+        this.setMode(rec.id, picked).catch((err) => this.deps.log?.('mode change after launch failed', (err as Error).message));
+      }
       // Running again: no longer "Interrupted" (the next status event publishes this).
       delete rec.reducer.summary.interrupted;
       const wasStarted = rec.started;
@@ -383,7 +389,8 @@ export class Supervisor {
   // ------------------------------------------------------------------ event plumbing
 
   private ingest(rec: AgentRecord, e: AgentEvent, raw?: string): void {
-    if (!this.agents.has(rec.id)) return;
+    // A record replaced by unarchive (same id) must not publish from its stale reducer.
+    if (this.agents.get(rec.id) !== rec) return;
     const prevStatus = rec.reducer.summary.status;
     try {
       const p = this.deps.sink.append(e, raw);

@@ -31,7 +31,8 @@ export interface MenuProps {
   className?: string;
   /**
    * Render the list in `document.body` at a fixed position under the trigger, for triggers inside
-   * a box that clips (`overflow: hidden`). It closes on scroll and resize instead of drifting.
+   * a box that clips (`overflow: hidden`). It closes when the window resizes or a box holding the
+   * trigger scrolls, instead of drifting; other scrollers leave it open.
    */
   portal?: boolean;
 }
@@ -93,7 +94,7 @@ export function Menu({ trigger, label, triggerTitle, items, align = 'start', tri
       const r = btn.current.getBoundingClientRect();
       setPos(align === 'end' ? { top: r.bottom + 4, right: window.innerWidth - r.right } : { top: r.bottom + 4, left: r.left });
     }
-    // A pick-one menu opens on the current choice.
+    // A pick-one menu opens on the current choice (also with ArrowUp, by design).
     const checked = items.findIndex((it) => it.checked && !it.disabled);
     setActive(checked >= 0 ? checked : focusLast ? (enabledIdx[enabledIdx.length - 1] ?? 0) : (enabledIdx[0] ?? 0));
     setOpen(true);

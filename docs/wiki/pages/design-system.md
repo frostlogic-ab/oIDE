@@ -135,7 +135,7 @@ colours come from `agentStatusMeta(status)` / `subagentStatusMeta(status)` (`lab
 | `DiffStat` | "7 files · +214 −37" | U+2212 minus |
 | `Kbd` | Ctrl K, J, K, N, Esc | tones `default`, `on-fill`, `warn` |
 | `Dialog` | Compact this session?, Spawn | `role="dialog"` + `aria-modal`, focus trap, Esc, focus restore; `position` `center` / `top`; `icon`, `footer` |
-| `Menu` | dropdowns | menu button, `role="menu"`, arrow keys, Esc; `checked` makes pick-one items `menuitemradio` with a tick; `portal` renders the list in `document.body` for triggers inside clipping boxes |
+| `Menu` | dropdowns | menu button, `role="menu"`, arrow keys, Esc; `checked` makes pick-one items `menuitemradio` with a tick; `portal` renders the list in `document.body` for triggers inside clipping boxes (closes on window resize or when a box holding the trigger scrolls); pick-one menus open on the checked item; `triggerTitle` is a native hover hint |
 | `Tooltip` | `.tip` bubbles | light bubble, hover and keyboard focus, sets `aria-describedby` |
 | `EmptyState`, `Spinner` | empty lists, loading | |
 
