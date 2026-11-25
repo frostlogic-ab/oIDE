@@ -94,6 +94,9 @@ export function retrievalGoal(input: { url: string; artifactId: string; title: s
   ].join('\n');
 }
 
+/** Staging removal retries: on Windows a scanner or a closing handle can hold a file for a moment (EBUSY, EPERM). */
+const RM_OPTS = { recursive: true, force: true, maxRetries: 5, retryDelay: 50 } as const;
+
 /** Folder-safe name for an id (artifact ids from a cloned repo can be any string). */
 const slot = (id: string) => createHash('sha256').update(id).digest('hex').slice(0, 32);
 
@@ -181,7 +184,7 @@ export class ArtifactRetrievalService {
     }
     // Staging of retrievals that are not running any more.
     try {
-      for (const name of await readdir(this.o.stagingRoot)) if (!keep.has(name)) await rm(join(this.o.stagingRoot, name), { recursive: true, force: true }).catch(() => undefined);
+      for (const name of await readdir(this.o.stagingRoot)) if (!keep.has(name)) await rm(join(this.o.stagingRoot, name), RM_OPTS).catch(() => undefined);
     } catch {
       /* no staging yet */
     }
@@ -219,7 +222,7 @@ export class ArtifactRetrievalService {
       });
       if (!agent) throw new IpcError('The retrieval agent could not be started.', 'internal');
       this.byAgent.set(agent.id, artifactId);
-      await rm(this.stagingOf(artifactId), { recursive: true, force: true }).catch(() => undefined);
+      await rm(this.stagingOf(artifactId), RM_OPTS).catch(() => undefined);
       const retrieval: ArtifactRetrieval = {
         status: 'retrieving',
         agentId: agent.id,
@@ -289,7 +292,7 @@ export class ArtifactRetrievalService {
           author: `agent:${agentId}`,
           retrieval: { status: 'ready', agentId, trigger: r.trigger, startedAt: r.startedAt, finishedAt: ts, retrievedAt: ts },
         });
-        await rm(this.stagingOf(artifactId), { recursive: true, force: true }).catch(() => undefined);
+        await rm(this.stagingOf(artifactId), RM_OPTS).catch(() => undefined);
         this.o.track?.('artifact_retrieval_finished', { trigger: r.trigger, outcome: 'ready', kind: out.kind, files: countBucket(out.fileCount ?? 0) });
         this.scheduleCleanup(agentId);
         return { status: 'ready', version: out.version, entry: out.entry };
@@ -341,7 +344,7 @@ export class ArtifactRetrievalService {
     });
     if (agentId) this.byAgent.delete(agentId);
     this.o.track?.('artifact_retrieval_finished', { trigger: r?.trigger ?? 'import', outcome, kind: meta.kind, files: countBucket(0) });
-    await rm(this.stagingOf(artifactId), { recursive: true, force: true }).catch(() => undefined);
+    await rm(this.stagingOf(artifactId), RM_OPTS).catch(() => undefined);
     return out;
   }
 

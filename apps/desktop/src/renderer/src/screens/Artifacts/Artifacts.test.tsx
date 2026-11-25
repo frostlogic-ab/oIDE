@@ -368,12 +368,15 @@ describe('New artifact from files dropped on the grid', () => {
     render(<ArtifactsScreen />);
     await screen.findByRole('heading', { name: 'Main window v2', level: 2 });
     dropOn(screen.getByRole('main'), [new File(['x'], 'pricing.html'), new File(['y'], 'site.css')]);
-    const dialog = await screen.findByRole('dialog', { name: 'New artifact' });
-    expect(within(dialog).getByRole('radio', { name: 'Files' }).getAttribute('aria-checked')).toBe('true');
-    expect(within(dialog).getByText('2 files')).toBeTruthy();
+    // The dialog is a lazy chunk and the dropped files arrive after the bridge answers: wait for both,
+    // with room for a loaded machine running the whole suite.
+    const slow = { timeout: 5000 };
+    const dialog = await screen.findByRole('dialog', { name: 'New artifact' }, slow);
+    await waitFor(() => expect(within(dialog).getByRole('radio', { name: 'Files' }).getAttribute('aria-checked')).toBe('true'), slow);
+    expect(await within(dialog).findByText('2 files', {}, slow)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create' }));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith('artifacts.importFiles', expect.objectContaining({ filePaths: ['/Users/you/Downloads/pricing.html', '/Users/you/Downloads/site.css'] })));
-    await waitFor(() => expect(useRouter.getState().route).toEqual({ screen: 'artifacts', params: { artifactId: 'a-new' } }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('artifacts.importFiles', expect.objectContaining({ filePaths: ['/Users/you/Downloads/pricing.html', '/Users/you/Downloads/site.css'] })), slow);
+    await waitFor(() => expect(useRouter.getState().route).toEqual({ screen: 'artifacts', params: { artifactId: 'a-new' } }), slow);
   });
 });
 

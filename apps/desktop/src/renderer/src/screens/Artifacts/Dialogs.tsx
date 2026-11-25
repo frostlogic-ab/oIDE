@@ -13,7 +13,7 @@
  * The primary button stays disabled until the choice can go, with the reason beside it as its
  * `aria-describedby`.
  */
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { classifyClaudeLink, type ArtifactKind, type ArtifactMeta, type Project } from '@oide/protocol';
 import { Button, Dialog, IconButton, SegmentedControl, Select, TextField } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
@@ -129,7 +129,8 @@ export function NewArtifactDialog({ open, onClose, projects, defaultProjectId, o
 
   // Start each use from the current scope (the dialog stays mounted between uses). The last
   // "Start from" choice is kept: someone making several blank docs doesn't pick it each time.
-  useEffect(() => {
+  // A layout effect, so a drop opens straight on Files instead of flashing the last choice first.
+  useLayoutEffect(() => {
     if (!open) return;
     const p = defaultProjectId ?? '';
     setProjectId(p);
