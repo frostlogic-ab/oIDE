@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AgentSpec, AgentStatus, AgentSummary, GitRef, Id, MessageAttachments, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
-import { ArtifactKind, ArtifactMeta, ArtifactUse, ArtifactVersion } from './artifacts.js';
+import { ArtifactKind, ArtifactMeta, ArtifactUse, ArtifactVersion, IMPORT_NEEDS_CONTENT } from './artifacts.js';
 import { AgentEvent } from './events.js';
 import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
 import { CommitInfo, FileDiff, FileNode, MergePrediction, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
@@ -285,20 +285,23 @@ export const Commands = {
   /** New title (the folder slug stays, so links and git history keep working). */
   'artifacts.rename': cmd(z.object({ id: Id, title: z.string().trim().min(1).max(200) }), ArtifactMeta),
   /**
-   * Import from claude.ai. `url` alone stores a link-only stub; `url` + `content` stores the content
-   * the user copied on claude.ai (main cannot fetch it); `filePath` (picked with dialog.pickFile)
-   * imports an exported file, with `url` kept as its claude.ai origin when given.
+   * Import from claude.ai. `url` + `content` stores the content the user copied on claude.ai (main
+   * cannot fetch it: no public content API, and oIDE never uses the claude.ai sign-in); `filePath`
+   * (picked with dialog.pickFile or dropped) imports a downloaded file, with `url` kept as its origin.
+   * A link alone is refused: nothing is created without the artifact's real content.
    */
   'artifacts.import': cmd(
-    z.object({
-      url: z.string().url().max(2048).optional(),
-      content: z.string().max(10 * 1024 * 1024).optional(),
-      filePath: z.string().optional(),
-      title: z.string().max(200).optional(),
-      kind: ArtifactKind.optional(),
-      projectId: Id.optional(),
-      location: z.enum(['repo', 'app-data']).optional(),
-    }),
+    z
+      .object({
+        url: z.string().url().max(2048).optional(),
+        content: z.string().max(10 * 1024 * 1024).optional(),
+        filePath: z.string().optional(),
+        title: z.string().max(200).optional(),
+        kind: ArtifactKind.optional(),
+        projectId: Id.optional(),
+        location: z.enum(['repo', 'app-data']).optional(),
+      })
+      .refine((i) => !!i.filePath || (!!i.url && !!i.content?.trim()), { message: IMPORT_NEEDS_CONTENT }),
     ArtifactMeta,
   ),
   /** Uses log for several artifacts at once (the grid's "Read by 2 agents" lines), keyed by artifact id. */

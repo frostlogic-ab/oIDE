@@ -465,8 +465,23 @@ export const TELEMETRY_EVENTS = {
   artifact_imported: def({
     from: 'main',
     question:
-      'How do people bring claude.ai artifacts in (a link with pasted content, a link only, or an exported file), and which kinds?',
-    props: z.object({ source: z.enum(['link', 'link_content', 'file']), kind: ArtifactKind, linked: z.boolean() }),
+      'How do people bring claude.ai artifacts in (a link with pasted content, or an exported file), which kinds, and how many are React?',
+    props: z.object({
+      source: z.enum(['link_content', 'file']),
+      kind: ArtifactKind,
+      linked: z.boolean(),
+      format: z.enum(['html', 'react', 'svg', 'markdown', 'excalidraw']),
+    }),
+  }),
+  artifact_import_refused: def({
+    from: 'main',
+    question: 'Why are claude.ai imports refused before anything is created (no content, a bad link, the wrong kind)?',
+    props: z.object({ reason: z.enum(['no_content', 'bad_link', 'wrong_kind', 'too_large', 'stub_content', 'other']) }),
+  }),
+  artifact_fetch_with_agent_started: def({
+    from: 'renderer',
+    question: 'Do people hand a claude.ai link to an agent to fetch (Claude Docs or Claude Design links)?',
+    props: z.object({}),
   }),
   extension_installed: def({
     from: 'main',

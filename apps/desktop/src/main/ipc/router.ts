@@ -43,6 +43,8 @@ export class IpcError extends Error {
   constructor(
     message: string,
     readonly code: IpcErrorCode = 'internal',
+    /** Machine-readable reason for observers (telemetry); never sent to the renderer. */
+    readonly reason?: string,
   ) {
     super(message);
     this.name = 'IpcError';
@@ -64,6 +66,20 @@ export interface RouterOptions {
    * commands here, main/telemetry/observers.ts). Must not throw; errors are swallowed.
    */
   observe?: (command: CommandName, input: unknown, output: unknown) => void;
+  /**
+   * Called after each failed command (invalid input or a handler error) with the error code and,
+   * when the handler gave one, its `reason`, or the Zod issues for invalid input. Never the input.
+   * Must not throw; errors are swallowed.
+   */
+  observeFailure?: (command: CommandName, failure: CommandFailure) => void;
+}
+
+/** What `observeFailure` sees: codes and issue paths only, never input values or messages. */
+export interface CommandFailure {
+  code: string;
+  reason?: string;
+  /** For invalid input: each issue's path and Zod code (`too_big`, `custom`, …). */
+  issues?: Array<{ path: string; code: string }>;
 }
 
 const silentLog: Logger = { debug: () => {}, warn: () => {}, error: () => {} };
@@ -89,11 +105,22 @@ export class IpcRouter {
   private readonly validateOutput: boolean;
   private readonly log: Logger;
   private readonly observe: RouterOptions['observe'];
+  private readonly observeFailure: RouterOptions['observeFailure'];
 
   constructor(opts: RouterOptions = {}) {
     this.validateOutput = opts.validateOutput ?? true;
     this.log = opts.log ?? silentLog;
     this.observe = opts.observe;
+    this.observeFailure = opts.observeFailure;
+  }
+
+  private failed(command: CommandName, failure: CommandFailure): void {
+    if (!this.observeFailure) return;
+    try {
+      this.observeFailure(command, failure);
+    } catch (err) {
+      this.log.debug(`[ipc] failure observer failed for ${command}`, (err as Error)?.message);
+    }
   }
 
   private observed(command: CommandName, input: unknown, output: unknown): void {
@@ -140,6 +167,7 @@ export class IpcRouter {
     const parsed = schema.input.safeParse(input);
     if (!parsed.success) {
       this.log.warn(`[ipc] invalid input for ${command}: ${summarizeIssues(parsed.error)}`);
+      this.failed(command, { code: 'invalid_input', issues: parsed.error.issues.slice(0, 20).map((i) => ({ path: i.path.map(String).join('.'), code: String(i.code) })) });
       return fail(`Invalid input for ${command}: ${summarizeIssues(parsed.error)}`, 'invalid_input');
     }
 
@@ -151,6 +179,8 @@ export class IpcRouter {
       const message = err instanceof Error ? err.message : String(err);
       if (code === 'internal') this.log.error(`[ipc] ${command} failed:`, err);
       else this.log.debug(`[ipc] ${command} → ${code}: ${message}`);
+      const reason = (err as { reason?: unknown })?.reason;
+      this.failed(command, { code, ...(typeof reason === 'string' ? { reason } : {}) });
       return fail(message, code);
     }
 

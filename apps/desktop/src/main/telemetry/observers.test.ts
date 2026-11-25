@@ -323,21 +323,40 @@ describe('archived agents and the PR lifecycle', () => {
     expect(JSON.stringify(events)).not.toMatch(/acme|github/);
   });
 
-  it('artifact_imported says how it came in and the kind, never the link, title or content', () => {
+  it('artifact_imported says how it came in, the kind and the format, never the link, title or content', () => {
     const { o, events } = make();
     const url = 'https://claude.ai/artifact/SecretId';
-    o.command('artifacts.import', { url, content: '<p>Secret</p>', title: 'Secret' }, { kind: 'design' });
+    o.command('artifacts.import', { url, content: '<p>Secret</p>', title: 'Secret' }, { kind: 'design', entry: 'index.html' });
+    o.command('artifacts.import', { url, content: 'export default function Secret() {}' }, { kind: 'design', entry: 'App.jsx' });
+    o.command('artifacts.import', { url, content: '<svg viewBox="0 0 1 1"></svg>' }, { kind: 'design', entry: 'index.html' });
     o.command('artifacts.import', { url, content: '  ' }, { kind: 'doc' });
     o.command('artifacts.import', { filePath: 'C:\\ACME\\x.md', url }, { kind: 'doc' });
     o.command('artifacts.import', { filePath: 'C:\\ACME\\b.excalidraw' }, { kind: 'whiteboard' });
+    o.command('artifacts.import', { filePath: 'C:\\ACME\\logo.svg' }, { kind: 'design', entry: 'index.html' });
     o.command('artifacts.import', { url }, { kind: 'bogus' });
     expect(events).toEqual([
-      { name: 'artifact_imported', props: { source: 'link_content', kind: 'design', linked: true } },
-      { name: 'artifact_imported', props: { source: 'link', kind: 'doc', linked: true } },
-      { name: 'artifact_imported', props: { source: 'file', kind: 'doc', linked: true } },
-      { name: 'artifact_imported', props: { source: 'file', kind: 'whiteboard', linked: false } },
+      { name: 'artifact_imported', props: { source: 'link_content', kind: 'design', linked: true, format: 'html' } },
+      { name: 'artifact_imported', props: { source: 'link_content', kind: 'design', linked: true, format: 'react' } },
+      { name: 'artifact_imported', props: { source: 'link_content', kind: 'design', linked: true, format: 'svg' } },
+      { name: 'artifact_imported', props: { source: 'file', kind: 'doc', linked: true, format: 'markdown' } },
+      { name: 'artifact_imported', props: { source: 'file', kind: 'whiteboard', linked: false, format: 'excalidraw' } },
+      { name: 'artifact_imported', props: { source: 'file', kind: 'design', linked: false, format: 'svg' } },
     ]);
     expect(JSON.stringify(events)).not.toMatch(/ACME|Secret|claude/);
+  });
+
+  it('artifact_import_refused gives the reason only, for imports refused before anything is created', () => {
+    const { o, events } = make();
+    o.commandFailed('artifacts.import', { code: 'invalid_input', issues: [{ path: '', code: 'custom' }] });
+    o.commandFailed('artifacts.import', { code: 'invalid_input', issues: [{ path: 'url', code: 'invalid_format' }] });
+    o.commandFailed('artifacts.import', { code: 'invalid_input', issues: [{ path: 'content', code: 'too_big' }] });
+    o.commandFailed('artifacts.import', { code: 'invalid_input', reason: 'stub_content' });
+    o.commandFailed('artifacts.import', { code: 'invalid_input', reason: 'wrong_kind' });
+    o.commandFailed('artifacts.import', { code: 'forbidden_path' });
+    o.commandFailed('artifacts.import', { code: 'invalid_input', reason: 'C:\\ACME\\secret' });
+    o.commandFailed('artifacts.save', { code: 'conflict' });
+    expect(events.map((e) => e.props.reason)).toEqual(['no_content', 'bad_link', 'too_large', 'stub_content', 'wrong_kind', 'other', 'other']);
+    expect(events.every((e) => e.name === 'artifact_import_refused')).toBe(true);
   });
 
   it('pr_merged_detected when a known PR turns merged, once', () => {

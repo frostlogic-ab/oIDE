@@ -261,7 +261,12 @@ async function start(): Promise<void> {
     reliability,
   };
 
-  const router = new IpcRouter({ log, validateOutput: true, observe: (c, i, o) => observers?.command(c, i, o) });
+  const router = new IpcRouter({
+    log,
+    validateOutput: true,
+    observe: (c, i, o) => observers?.command(c, i, o),
+    observeFailure: (c, f) => observers?.commandFailed(c, f),
+  });
   const services = await createServices(ctx, { store });
 
   // Telemetry: consent from settings; the network only through its own session (or the e2e file sink).

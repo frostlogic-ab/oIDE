@@ -1,3 +1,4 @@
+import { HTML_DESIGN_ENTRY } from '@oide/protocol';
 import { ENTRY_FILES } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
@@ -11,7 +12,9 @@ function wrap<T>(p: Promise<T>): Promise<T> {
   return p.catch((err: Error) => {
     if (/^Unknown artifact/.test(err.message)) throw new IpcError(err.message, 'not_found');
     const code = (err as unknown as { code?: unknown }).code;
-    throw new IpcError(err.message, typeof code === 'string' && !/^E[A-Z]+$/.test(code) ? code : 'artifact_failed');
+    // An import refused before anything was created carries its reason (telemetry only, never shown).
+    const reason = (err as unknown as { reason?: unknown }).reason;
+    throw new IpcError(err.message, typeof code === 'string' && !/^E[A-Z]+$/.test(code) ? code : 'artifact_failed', typeof reason === 'string' ? reason : undefined);
   });
 }
 
@@ -37,9 +40,10 @@ export function registerArtifactHandlers(router: IpcRouter, s: Services, ctx: Ma
     return OK;
   });
   router.register('artifacts.readVersion', async ({ id, version }) => ({ content: await wrap(a.readVersion(id, version)) }));
-  // A file import must be a file the user picked with dialog.pickFile (never an arbitrary renderer path).
-  // Main never fetches the link: claude.ai has no public content API and oIDE never uses the user's
-  // claude.ai sign-in, so content comes from the user (pasted, or an exported file).
+  // A file import must be a file the user picked with dialog.pickFile or dropped (never an arbitrary
+  // renderer path). Main never fetches the link: claude.ai has no public content API and oIDE never uses
+  // the user's claude.ai sign-in, so content comes from the user (pasted, or a downloaded file). A link
+  // alone is refused (Zod, then the store): nothing is created without the artifact's content.
   router.register('artifacts.import', async ({ url, content, filePath, title, kind, projectId, location }) => {
     if (projectId) s.projects.require(projectId);
     if (location === 'repo' && !projectId) throw new IpcError('Repo artifacts need a project', 'invalid_input');
@@ -52,7 +56,7 @@ export function registerArtifactHandlers(router: IpcRouter, s: Services, ctx: Ma
     } else if (url) {
       meta = await wrap(a.importUrl({ url, ...(content !== undefined ? { content } : {}), ...where }));
     } else {
-      throw new IpcError('Give a claude.ai link or pick a file', 'invalid_input');
+      throw new IpcError("Paste the artifact's code or pick the file you downloaded.", 'invalid_input', 'no_content');
     }
     registerRoot(meta.location === 'repo' ? meta.projectId : undefined);
     return meta;
@@ -64,6 +68,8 @@ export function registerArtifactHandlers(router: IpcRouter, s: Services, ctx: Ma
   });
   router.register('artifacts.previewUrl', async ({ id }) => {
     const { meta } = await wrap(a.get(id));
-    return { url: `${ARTIFACT_SCHEME}://${encodeURIComponent(meta.id)}/${ENTRY_FILES[meta.kind]}` };
+    // A React design (App.jsx) is previewed through a page main generates at index.html (core.ts).
+    const page = meta.kind === 'design' ? HTML_DESIGN_ENTRY : ENTRY_FILES[meta.kind];
+    return { url: `${ARTIFACT_SCHEME}://${encodeURIComponent(meta.id)}/${page}` };
   });
 }

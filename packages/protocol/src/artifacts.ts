@@ -13,9 +13,14 @@ export const ArtifactMeta = z.object({
   projectId: Id.optional(),
   location: z.enum(['repo', 'app-data']),
   version: z.number().int().positive(),
-  /** Entry file relative to the artifact folder (index.html, doc.md, board.excalidraw). */
+  /** Entry file relative to the artifact folder (index.html or App.jsx, doc.md, board.excalidraw). */
   entry: z.string(),
   importedFrom: z.string().url().optional(),
+  /**
+   * Derived when read, never stored: a link-only import made by an older oIDE, whose only version
+   * holds the "cannot fetch" placeholder instead of the artifact. The UI asks for the real content.
+   */
+  brokenImport: z.boolean().optional(),
   /**
    * Extension artifact type (`contributes.artifactTypes`) as `<extension name>:<type id>`. The kind
    * still decides the storage format; the extension's viewer iframe shows and edits the content.
@@ -102,6 +107,91 @@ export function looksLikeHtml(content: string): boolean {
   return htmlStart(content) !== null;
 }
 
+/** Entry file of a React (JSX/TSX) design, rendered by the bundled offline preview runtime. */
+export const REACT_DESIGN_ENTRY = 'App.jsx';
+/** Entry file of an HTML design. */
+export const HTML_DESIGN_ENTRY = 'index.html';
+
+/**
+ * True for React component source, the usual shape of a claude.ai design artifact: it imports from
+ * `react` and has an `export default` or JSX, or it has an `export default` and JSX. HTML is never
+ * React. Only the first 256 KB are scanned, with bounded patterns, so hostile input stays linear.
+ */
+export function looksLikeReact(content: string): boolean {
+  const text = stripBom(content).trimStart().slice(0, 256 * 1024);
+  if (!text || htmlStart(text) !== null) return false;
+  const importsReact = /^[ \t]*import[ \t][^\n;]{0,400}from[ \t]*['"]react['"]/m.test(text);
+  const exportsDefault = /^[ \t]*export[ \t]+default[ \t]/m.test(text);
+  const hasJsx = /(?:return|=>)[ \t\r\n]{0,40}\(?[ \t\r\n]{0,40}<[A-Za-z>]/.test(text);
+  return (importsReact && (exportsDefault || hasJsx)) || (exportsDefault && hasJsx);
+}
+
+/** The design entry file that fits the content: `App.jsx` for React, else `index.html`. */
+export function designEntryFor(content: string): typeof REACT_DESIGN_ENTRY | typeof HTML_DESIGN_ENTRY {
+  return looksLikeReact(content) ? REACT_DESIGN_ENTRY : HTML_DESIGN_ENTRY;
+}
+
+/** True when the content fits a design: an HTML page or fragment, or React component source. */
+export function isDesignContent(content: string): boolean {
+  return looksLikeHtml(content) || looksLikeReact(content);
+}
+
+/**
+ * Text of the placeholder older oIDE versions stored for a link-only import. Content holding it is
+ * not an artifact: it is refused on import, and stored artifacts holding it are `brokenImport`.
+ */
+export const LEGACY_IMPORT_STUB_MARKER = 'oIDE cannot fetch claude.ai artifacts';
+
+export function isImportStubContent(content: string): boolean {
+  return content.length < 64 * 1024 && content.includes(LEGACY_IMPORT_STUB_MARKER);
+}
+
+/** Shown when an import has a link but no content. */
+export const IMPORT_NEEDS_CONTENT =
+  "Paste the artifact's code or pick the file you downloaded. oIDE can't download claude.ai artifacts, even public ones, so a link alone isn't imported.";
+
+export type ClaudeLinkInfo =
+  | { ok: true; url: string; type: 'artifact' | 'public-artifact' | 'claude-site' | 'design' }
+  | { ok: false; reason: string };
+
+const CLAUDE_AI_HOST = /^(?:[a-z0-9-]+\.)*claude\.ai$/i;
+const CLAUDE_SITE_HOST = /^(?:[a-z0-9-]+\.)*claude\.site$/i;
+/** An artifact id path segment: an optional `<title>-` prefix, then a 22-character id or a UUID. */
+const ARTIFACT_ID = /^(?:[\w%.~-]{0,300}-)?(?:[A-Za-z0-9]{22}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+
+/**
+ * Checks a claude.ai link before anything is imported: https only, no user name or password, and a
+ * known artifact shape (`/artifact/<id>`, `/code/artifact/<id>`, `/public/artifacts/<id>`,
+ * claude.site `/artifacts/<id>`, `/design/…`). A chat link or another page is refused with a reason.
+ */
+export function classifyClaudeLink(raw: string): ClaudeLinkInfo {
+  if (raw.length > 2048) return { ok: false, reason: 'The link is too long.' };
+  let u: URL;
+  try {
+    u = new URL(raw.trim());
+  } catch {
+    return { ok: false, reason: 'Not a valid link.' };
+  }
+  const site = CLAUDE_SITE_HOST.test(u.hostname);
+  if (u.protocol !== 'https:' || (!site && !CLAUDE_AI_HOST.test(u.hostname))) return { ok: false, reason: 'Only https links on claude.ai can be imported.' };
+  if (u.username || u.password) return { ok: false, reason: 'The link must not contain a user name or password.' };
+  const parts = u.pathname.split('/').filter(Boolean);
+  const url = u.toString();
+  const idAt = (i: number) => parts.length === i + 1 && ARTIFACT_ID.test(parts[i]!);
+  if (site) {
+    if (parts[0] === 'artifacts' && idAt(1)) return { ok: true, url, type: 'claude-site' };
+    return { ok: false, reason: "This isn't a claude.site artifact link." };
+  }
+  if (parts[0] === 'artifact' && idAt(1)) return { ok: true, url, type: 'artifact' };
+  if (parts[0] === 'code' && parts[1] === 'artifact' && idAt(2)) return { ok: true, url, type: 'artifact' };
+  if (parts[0] === 'public' && parts[1] === 'artifacts' && idAt(2)) return { ok: true, url, type: 'public-artifact' };
+  if (parts[0] === 'design' && parts.length >= 2) return { ok: true, url, type: 'design' };
+  if (parts[0] === 'chat') {
+    return { ok: false, reason: 'This is a chat link, not an artifact link. Open the artifact in the chat and copy its own link, or paste its code.' };
+  }
+  return { ok: false, reason: "This isn't a claude.ai artifact link." };
+}
+
 /**
  * Kind of pasted content: an HTML page or fragment → design, Excalidraw JSON → whiteboard, anything
  * else → doc. Markdown that opens with HTML (a README's centred `<div>` banner) stays a doc.
@@ -111,6 +201,7 @@ export function inferKindFromContent(content: string): ArtifactKind {
   const html = htmlStart(text);
   if (html === 'document') return 'design';
   if (html === 'fragment' && !/^#{1,6}[ \t]/m.test(text.slice(0, 256 * 1024))) return 'design';
+  if (looksLikeReact(text)) return 'design';
   if (text.startsWith('{')) {
     try {
       if ((JSON.parse(text) as { type?: unknown }).type === 'excalidraw') return 'whiteboard';

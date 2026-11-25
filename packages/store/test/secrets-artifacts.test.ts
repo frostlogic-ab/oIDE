@@ -106,25 +106,33 @@ describe('ArtifactStore', () => {
     expect(await store.delete(created.id)).toBe(false);
   });
 
-  it('imports claude.ai links as stubs and dropped files by type', async () => {
+  it('never creates an artifact from a link alone, and imports dropped files by type', async () => {
     const { store, p } = setup();
-    const link = await store.importUrl({ url: 'https://claude.ai/public/artifacts/abc-123', title: 'Pricing page' });
-    expect(link).toMatchObject({ importedFrom: 'https://claude.ai/public/artifacts/abc-123', kind: 'doc' });
-    expect((await store.read(link.id)).content).toMatch(/importedFrom: "https:\/\/claude.ai\/public\/artifacts\/abc-123"/);
-    await expect(store.importUrl({ url: 'https://evil.example.com/x' })).rejects.toThrow(/claude.ai/);
-    await expect(store.importUrl({ url: 'http://claude.ai/x' })).rejects.toThrow();
+    const url = 'https://claude.ai/public/artifacts/0f8fad5b-d9cb-469f-a165-70867728950e';
+    // A link alone (or with blank content) is refused before anything is written.
+    await expect(store.importUrl({ url, title: 'Pricing page' })).rejects.toMatchObject({ code: 'invalid_input', reason: 'no_content', message: /Paste the artifact's code/ });
+    await expect(store.importUrl({ url, content: '  \n', kind: 'design' })).rejects.toMatchObject({ reason: 'no_content' });
+    await expect(store.importUrl({ url: 'https://evil.example.com/x', content: '# x' })).rejects.toMatchObject({ reason: 'bad_link', message: /claude.ai/ });
+    await expect(store.importUrl({ url: 'http://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T', content: '# x' })).rejects.toThrow();
+    await expect(store.importUrl({ url: 'https://claude.ai/chat/0f8fad5b-d9cb-469f-a165-70867728950e', content: '# x' })).rejects.toMatchObject({ reason: 'bad_link', message: /chat link/ });
+    await expect(store.importUrl({ url: 'https://claude.ai/settings', content: '# x' })).rejects.toMatchObject({ reason: 'bad_link', message: /isn't a claude.ai artifact link/ });
+    expect(await store.list()).toHaveLength(0);
+    expect(existsSync(store.root('app-data'))).toBe(false);
 
     const dir = tempDir();
     const html = join(dir, 'Invoice page.html');
     writeFileSync(html, '<!doctype html><p>hi</p>');
     const imported = await store.importFile({ filePath: html, projectId: p.id });
-    expect(imported).toMatchObject({ title: 'Invoice page', kind: 'design', projectId: p.id });
+    expect(imported).toMatchObject({ title: 'Invoice page', kind: 'design', projectId: p.id, entry: 'index.html' });
     const ex = join(dir, 'board.json');
     writeFileSync(ex, JSON.stringify({ type: 'excalidraw', elements: [] }));
     expect((await store.importFile({ filePath: ex })).kind).toBe('whiteboard');
     writeFileSync(join(dir, 'x.bin'), 'x');
     await expect(store.importFile({ filePath: join(dir, 'x.bin') })).rejects.toThrow(/Unknown artifact type/);
     expect(inferKind('a.MD')).toBe('doc');
+    expect(inferKind('App.jsx')).toBe('design');
+    expect(inferKind('App.tsx')).toBe('design');
+    expect(inferKind('logo.svg')).toBe('design');
   });
 
   it('imports a claude.ai link with the pasted content, the kind and title following the content', async () => {
@@ -132,7 +140,7 @@ describe('ArtifactStore', () => {
     const url = 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T#open';
     const page = '<!doctype html>\n<html><head><title>Checkout &amp; pay</title></head><body><h1>Pay</h1></body></html>\n';
     const design = await store.importUrl({ url, content: page, projectId: p.id, location: 'repo' });
-    expect(design).toMatchObject({ kind: 'design', title: 'Checkout & pay', importedFrom: url, location: 'repo' });
+    expect(design).toMatchObject({ kind: 'design', title: 'Checkout & pay', importedFrom: url, location: 'repo', entry: 'index.html' });
     expect((await store.read(design.id)).content).toBe(page);
     expect(readFileSync(join(store.dirOf(design.id), 'index.html'), 'utf8')).toBe(page);
 
@@ -145,23 +153,79 @@ describe('ArtifactStore', () => {
     const board = await store.importUrl({ url, content: JSON.stringify({ type: 'excalidraw', elements: [] }) });
     expect(board).toMatchObject({ kind: 'whiteboard', title: 'Imported from claude.ai' });
 
-    // A title the user typed wins; whitespace-only content is the link-only stub.
+    // A title the user typed wins.
     expect(await store.importUrl({ url, content: page, title: 'Mine' })).toMatchObject({ title: 'Mine', kind: 'design' });
-    const stub = await store.importUrl({ url, content: '  \n', kind: 'design' });
-    expect((await store.read(stub.id)).content).toMatch(/oIDE cannot fetch claude.ai artifacts/);
   });
 
-  it('refuses pasted content that does not fit the kind, and links with credentials', async () => {
+  it('imports React artifacts as designs (App.jsx) and switches the entry when the format changes', async () => {
     const { store } = setup();
-    const url = 'https://claude.ai/artifact/abc';
-    const jsx = "import { useState } from 'react';\nexport default function App() { return <div>Hi</div>; }\n";
-    await expect(store.importUrl({ url, content: jsx, kind: 'design' })).rejects.toMatchObject({ code: 'invalid_input', message: /isn't an HTML page/ });
-    expect(await store.importUrl({ url, content: jsx })).toMatchObject({ kind: 'doc' });
-    await expect(store.importUrl({ url, content: '{"type":', kind: 'whiteboard' })).rejects.toMatchObject({ code: 'invalid_input' });
-    await expect(store.importUrl({ url, content: 'x'.repeat(10 * 1024 * 1024 + 1) })).rejects.toThrow(/larger than 10 MB/);
-    await expect(store.importUrl({ url: 'https://user:pw@claude.ai/artifact/abc' })).rejects.toMatchObject({ code: 'invalid_input' });
-    await expect(store.importUrl({ url: 'https://claude.ai.evil.example/x', content: '<p>x</p>' })).rejects.toThrow(/claude.ai/);
-    expect(await store.list()).toHaveLength(1);
+    const url = 'https://claude.ai/artifact/NFaggV4JC9X6prTgKhobKm#page-dcb81aee8d83';
+    const jsx = "import React, { useState } from 'react';\n\nexport default function Pricing() {\n  return <h1 className=\"text-xl\">Plans</h1>;\n}\n";
+    const design = await store.importUrl({ url, content: jsx });
+    expect(design).toMatchObject({ kind: 'design', entry: 'App.jsx', title: 'Plans', importedFrom: url });
+    const dir = store.dirOf(design.id);
+    expect(readFileSync(join(dir, 'App.jsx'), 'utf8')).toBe(jsx);
+    expect(existsSync(join(dir, 'index.html'))).toBe(false);
+    expect((await store.read(design.id)).content).toBe(jsx);
+
+    // Saving HTML over React stores index.html, removes App.jsx, and keeps v1 readable.
+    const page = '<!doctype html><p>Plans</p>';
+    const v2 = await store.save(design.id, page);
+    expect(v2).toMatchObject({ version: 2, entry: 'index.html' });
+    expect(existsSync(join(dir, 'App.jsx'))).toBe(false);
+    expect((await store.read(design.id)).content).toBe(page);
+    expect(await store.readVersion(design.id, 1)).toBe(jsx);
+    expect(await store.readVersion(design.id, 2)).toBe(page);
+    const v3 = await store.save(design.id, jsx);
+    expect(v3).toMatchObject({ version: 3, entry: 'App.jsx' });
+    expect(existsSync(join(dir, 'index.html'))).toBe(false);
+    expect(JSON.parse(readFileSync(join(dir, 'artifact.json'), 'utf8')).entry).toBe('App.jsx');
+
+    const files = tempDir();
+    writeFileSync(join(files, 'Dashboard.jsx'), jsx);
+    expect(await store.importFile({ filePath: join(files, 'Dashboard.jsx') })).toMatchObject({ kind: 'design', entry: 'App.jsx', title: 'Dashboard' });
+    writeFileSync(join(files, 'notes.jsx'), 'just some words');
+    await expect(store.importFile({ filePath: join(files, 'notes.jsx') })).rejects.toMatchObject({ reason: 'wrong_kind' });
+  });
+
+  it('refuses pasted content that does not fit the kind, the old placeholder, and links with credentials', async () => {
+    const { store } = setup();
+    const url = 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T';
+    await expect(store.importUrl({ url, content: 'Just some notes', kind: 'design' })).rejects.toMatchObject({ code: 'invalid_input', reason: 'wrong_kind', message: /isn't an HTML page or a React component/ });
+    await expect(store.importUrl({ url, content: '{"type":', kind: 'whiteboard' })).rejects.toMatchObject({ code: 'invalid_input', reason: 'wrong_kind' });
+    await expect(store.importUrl({ url, content: 'x'.repeat(10 * 1024 * 1024 + 1) })).rejects.toMatchObject({ reason: 'too_large', message: /larger than 10 MB/ });
+    const stub = `<!doctype html><p>Imported from ${url}. oIDE cannot fetch claude.ai artifacts: open the link, copy the artifact's code and paste it here.</p>`;
+    await expect(store.importUrl({ url, content: stub })).rejects.toMatchObject({ reason: 'stub_content' });
+    const files = tempDir();
+    writeFileSync(join(files, 'stub.html'), stub);
+    await expect(store.importFile({ filePath: join(files, 'stub.html') })).rejects.toMatchObject({ reason: 'stub_content' });
+    writeFileSync(join(files, 'empty.html'), '  ');
+    await expect(store.importFile({ filePath: join(files, 'empty.html') })).rejects.toMatchObject({ reason: 'no_content' });
+    await expect(store.importUrl({ url: 'https://user:pw@claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T', content: '# x' })).rejects.toMatchObject({ code: 'invalid_input' });
+    await expect(store.importUrl({ url: 'https://claude.ai.evil.example/artifact/MyEmjmATV3mpUv6SZmFj4T', content: '<p>x</p>' })).rejects.toThrow(/claude.ai/);
+    expect(await store.list()).toHaveLength(0);
+  });
+
+  it('flags a link-only import made by an older oIDE as brokenImport until real content is saved', async () => {
+    const { store } = setup();
+    const url = 'https://claude.ai/artifact/NFaggV4JC9X6prTgKhobKm';
+    // What older versions stored for "Import link only" (written through create, as they did).
+    const notice = `<!doctype html>\n<html lang="en">\n<head><meta charset="utf-8"><title>oIDE website design</title></head>\n<body>\n<p>Imported from ${url}. oIDE cannot fetch claude.ai artifacts: open the link, copy the artifact&#39;s code and paste it here to keep a local copy.</p>\n</body>\n</html>\n`;
+    const old = await store.create({ title: 'oIDE website design', kind: 'design', content: notice, importedFrom: url });
+    const plain = await store.create({ title: 'Mine', kind: 'design', content: notice });
+    expect((await store.read(old.id)).meta.brokenImport).toBe(true);
+    expect((await store.get(old.id)).meta.brokenImport).toBe(true);
+    expect((await store.list()).find((m) => m.id === old.id)?.brokenImport).toBe(true);
+    // Not an import (no link): not flagged.
+    expect((await store.read(plain.id)).meta.brokenImport).toBeUndefined();
+    // Never stored.
+    expect(JSON.parse(readFileSync(join(store.dirOf(old.id), 'artifact.json'), 'utf8')).brokenImport).toBeUndefined();
+
+    const fixed = await store.save(old.id, "export default function Site() { return <main>oIDE</main>; }\n");
+    expect(fixed).toMatchObject({ version: 2, entry: 'App.jsx' });
+    expect(fixed.brokenImport).toBeUndefined();
+    expect((await store.read(old.id)).meta.brokenImport).toBeUndefined();
+    expect((await store.list()).find((m) => m.id === old.id)?.brokenImport).toBeUndefined();
   });
 
   it('keeps the claude.ai link of an imported file, and checks non-HTML files picked as a design', async () => {
@@ -169,11 +233,11 @@ describe('ArtifactStore', () => {
     const dir = tempDir();
     const html = join(dir, 'Pricing.html');
     writeFileSync(html, 'Plain text in an .html file');
-    const imported = await store.importFile({ filePath: html, url: 'https://claude.ai/artifact/xyz' });
-    expect(imported).toMatchObject({ kind: 'design', importedFrom: 'https://claude.ai/artifact/xyz', title: 'Pricing' });
+    const imported = await store.importFile({ filePath: html, url: 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T' });
+    expect(imported).toMatchObject({ kind: 'design', importedFrom: 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T', title: 'Pricing' });
     const md = join(dir, 'notes.md');
     writeFileSync(md, '# Notes');
-    await expect(store.importFile({ filePath: md, kind: 'design' })).rejects.toThrow(/isn't an HTML page/);
+    await expect(store.importFile({ filePath: md, kind: 'design' })).rejects.toThrow(/isn't an HTML page or a React component/);
     await expect(store.importFile({ filePath: md, url: 'https://example.com/x' })).rejects.toThrow(/claude.ai/);
     expect((await store.importFile({ filePath: md })).importedFrom).toBeUndefined();
   });

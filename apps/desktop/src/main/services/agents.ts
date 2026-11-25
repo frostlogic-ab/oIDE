@@ -3,7 +3,7 @@ import { isAbsolute, relative, resolve } from 'node:path';
 import { LaunchError, Supervisor, WORKTREE_GONE, type AgentDriver, type EventSink, type PermissionBroker, type SecretProvider, type SettingsProvider, type WorktreeProvider } from '@oide/agent-core';
 import { Git, isInside, pathKey, samePath, type WorktreeManager } from '@oide/git';
 import type { OideMcpServer } from '@oide/mcp-server';
-import { ENTRY_FILES, readOideFile, type SecretStore, type SettingsService, type Store } from '@oide/store';
+import { ENTRY_FILES, entryFileOf, readOideFile, type SecretStore, type SettingsService, type Store } from '@oide/store';
 import { repairAgentSummary, type AgentEvent, type AgentSpecInput, type AgentStatus, type AgentSummary, type ArchiveReason, type ArtifactKind, type PermissionAnswer, type PermissionMode, type UserMessage } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
@@ -380,9 +380,15 @@ export class AgentsService {
         await o.settings.saveProjectPermissions(p.path, { allow: [...cur.value.allow, rule], ask: cur.value.ask, deny: cur.value.deny });
       },
       resolveArtifact: (id) => {
-        const r = o.store.database.db.prepare('SELECT title, kind, dir FROM artifacts WHERE id = ?').get(id) as { title: string; kind: string; dir: string } | undefined;
+        const r = o.store.database.db.prepare('SELECT title, kind, dir, meta FROM artifacts WHERE id = ?').get(id) as { title: string; kind: string; dir: string; meta: string } | undefined;
         if (!r) return undefined;
-        const entry = ENTRY_FILES[r.kind as ArtifactKind];
+        let stored: string | undefined;
+        try {
+          stored = (JSON.parse(r.meta) as { entry?: unknown }).entry as string | undefined;
+        } catch {
+          stored = undefined;
+        }
+        const entry = ENTRY_FILES[r.kind as ArtifactKind] ? entryFileOf(r.kind as ArtifactKind, typeof stored === 'string' ? stored : undefined) : undefined;
         return { id, title: r.title, ...(entry ? { path: resolve(r.dir, entry) } : {}) };
       },
     };
