@@ -695,3 +695,15 @@ telemetry event `agent_mode_changed {from, to}`. fake-claude enforces `bypass_no
 `exit-plan` scenario. Pages: [screen-focus](pages/screen-focus.md), [cli-integration](pages/cli-integration.md),
 [agent-supervisor](pages/agent-supervisor.md), [testing](pages/testing.md),
 [design-system](pages/design-system.md), [telemetry](pages/telemetry.md).
+
+## [2026-11-25] review | Mode menu review fixes
+
+Reviewer findings fixed: the portalled `Menu` closed whenever any box scrolled (a streaming
+transcript closed the mode menu); it now closes only when a box holding the trigger scrolls or the
+window resizes. Tab in a menu returns focus to the trigger (it dropped to `<body>`, which let the
+next Shift+Tab cycle the mode). Pick-one menus open on the checked item; `triggerTitle` gives a
+native hint (`Change mode (Shift+Tab cycles)`). `Supervisor.setMode` calls run one at a time per
+agent, so a slow `--resume` fallback cannot overtake a later pick. `AgentSummary.workIn` (from the
+spec, set on spawn, restore and unarchive) lets the Focus menu disable Bypass for project-folder
+agents instead of offering what main refuses. Pages: [screen-focus](pages/screen-focus.md),
+[design-system](pages/design-system.md), [agent-supervisor](pages/agent-supervisor.md).

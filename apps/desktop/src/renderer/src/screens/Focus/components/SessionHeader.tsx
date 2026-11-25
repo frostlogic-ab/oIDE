@@ -58,6 +58,7 @@ function ModeMenu({ current, modes, shortcut, onSetMode }: { current: Permission
     <Menu
       portal
       label={`Permission mode: ${MODE_LABEL[current]}. Change mode (${shortcut} cycles)`}
+      triggerTitle={`Change mode (${shortcut} cycles)`}
       className="shrink-0"
       triggerClassName="!h-auto !px-0 !border-0 !bg-transparent !text-ink-3 !text-[12px] hover:!text-ink hover:underline !gap-0.5"
       trigger={

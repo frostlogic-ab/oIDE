@@ -97,7 +97,8 @@ export default function FocusScreen() {
   const go = useCallback((a: AgentSummary | undefined) => a && replace('focus', { agentId: a.id }), [replace]);
   const selectSub = useCallback((id: string | undefined) => agentId && replace('focus', id ? { agentId, subagentId: id } : { agentId }), [agentId, replace]);
 
-  const inWorktree = !!agent?.worktreePath;
+  // Bypass only where main accepts it: never in the project folder (older summaries lack workIn).
+  const inWorktree = agent ? (agent.workIn ? agent.workIn !== 'project-folder' : !!agent.worktreePath) : false;
   const autoOk = hasAuto !== false;
   const modes = useMemo(() => modeChoices({ allowBypass, inWorktree, hasAuto: autoOk }), [allowBypass, inWorktree, autoOk]);
   const agentKey = agent?.id;

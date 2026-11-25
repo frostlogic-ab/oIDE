@@ -23,6 +23,8 @@ export interface MenuProps {
   trigger: ReactNode;
   /** Accessible label for the trigger (required when the trigger is icon-only). */
   label?: string;
+  /** Native hover hint on the trigger (works inside clipping boxes, unlike Tooltip). */
+  triggerTitle?: string;
   items: ReadonlyArray<MenuItem>;
   align?: 'start' | 'end';
   triggerClassName?: string;
@@ -35,7 +37,7 @@ export interface MenuProps {
 }
 
 /** Dropdown menu button: role="menu", arrow keys / Home / End, Enter selects, Esc closes. */
-export function Menu({ trigger, label, items, align = 'start', triggerClassName, className, portal = false }: MenuProps) {
+export function Menu({ trigger, label, triggerTitle, items, align = 'start', triggerClassName, className, portal = false }: MenuProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const [pos, setPos] = useState<CSSProperties>({});
@@ -54,9 +56,15 @@ export function Menu({ trigger, label, items, align = 'start', triggerClassName,
     };
     document.addEventListener('mousedown', onDown);
     if (!portal) return () => document.removeEventListener('mousedown', onDown);
-    // A fixed list would drift away from its trigger: close instead (scrolls inside the list are fine).
+    // A fixed list would drift away from its trigger: close when the trigger itself moves (the window
+    // resizes, or a box holding the trigger scrolls). Other scrollers, like a transcript that follows
+    // streamed text, leave it open.
     const onMove = (e: Event) => {
-      if (e.type === 'scroll' && list.current?.contains(e.target as Node)) return;
+      if (e.type === 'scroll') {
+        const t = e.target;
+        const holdsTrigger = t === document || t === window || (t instanceof Node && !!btn.current && t.contains(btn.current));
+        if (!holdsTrigger) return;
+      }
       setOpen(false);
     };
     window.addEventListener('resize', onMove);
@@ -85,7 +93,9 @@ export function Menu({ trigger, label, items, align = 'start', triggerClassName,
       const r = btn.current.getBoundingClientRect();
       setPos(align === 'end' ? { top: r.bottom + 4, right: window.innerWidth - r.right } : { top: r.bottom + 4, left: r.left });
     }
-    setActive(focusLast ? (enabledIdx[enabledIdx.length - 1] ?? 0) : (enabledIdx[0] ?? 0));
+    // A pick-one menu opens on the current choice.
+    const checked = items.findIndex((it) => it.checked && !it.disabled);
+    setActive(checked >= 0 ? checked : focusLast ? (enabledIdx[enabledIdx.length - 1] ?? 0) : (enabledIdx[0] ?? 0));
     setOpen(true);
   };
 
@@ -100,8 +110,11 @@ export function Menu({ trigger, label, items, align = 'start', triggerClassName,
     else if (e.key === 'Home') setActive(enabledIdx[0] ?? 0);
     else if (e.key === 'End') setActive(enabledIdx[enabledIdx.length - 1] ?? 0);
     else if (e.key === 'Escape') close();
-    else if (e.key === 'Tab') close(false);
-    else return;
+    else if (e.key === 'Tab') {
+      // Back to the trigger, then let Tab move on from there (focus never drops to <body>).
+      close();
+      return;
+    } else return;
     e.preventDefault();
     e.stopPropagation();
   };
@@ -163,6 +176,7 @@ export function Menu({ trigger, label, items, align = 'start', triggerClassName,
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
         aria-label={label}
+        title={triggerTitle}
         onClick={() => (open ? close() : openMenu())}
         onKeyDown={(e) => {
           if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {

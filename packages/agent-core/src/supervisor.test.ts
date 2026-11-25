@@ -276,6 +276,38 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     expect(h.get(a!.id).mode).toBe('bypassPermissions');
   }, 30_000);
 
+  it('overlapping mode changes run in order: a slow fallback cannot overtake the last pick', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic' });
+    const [a] = await h.sup.spawn(spec({ mode: 'plan' }));
+    await status(h, a!.id, 'has-question');
+    h.settings.claude.allowBypass = true; // after launch: no allow flag, so bypass needs the fallback
+    const first = h.sup.setMode(a!.id, 'bypassPermissions');
+    const second = h.sup.setMode(a!.id, 'auto');
+    await Promise.all([first, second]);
+    expect(h.sup.spec(a!.id)!.mode).toBe('auto');
+    expect(h.get(a!.id).mode).toBe('auto');
+    h.sup.send(a!.id, { kind: 'text', text: 'continue' });
+    await waitFor(() => h.get(a!.id).lastMessage?.startsWith('Resumed session'), 10_000, 'resumed');
+    expect(h.get(a!.id).mode).toBe('auto');
+    expect(h.sup.spec(a!.id)!.mode).toBe('auto');
+    // A refused pick does not block the next one.
+    h.settings.claude.allowBypass = false;
+    await expect(h.sup.setMode(a!.id, 'bypassPermissions')).rejects.toThrow(/not allowed/);
+    await h.sup.setMode(a!.id, 'default');
+    await waitFor(() => h.get(a!.id).mode === 'default', 5000, 'mode default');
+  }, 30_000);
+
+  it('summaries carry workIn from the spec (spawn and restore)', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic' });
+    const [a] = await h.sup.spawn(spec({ workIn: 'project-folder' }));
+    expect(h.get(a!.id).workIn).toBe('project-folder');
+    const h2 = await harness({ extraFlags: '--fake-scenario basic' });
+    const { workIn: _drop, ...old } = h.get(a!.id);
+    void _drop;
+    h2.sup.restore([{ spec: h.sup.spec(a!.id)!, summary: { ...old, status: 'stopped' } }]);
+    expect(h2.get(a!.id).workIn).toBe('project-folder');
+  }, 30_000);
+
   it('the spec follows the CLI leaving plan mode, so a resume relaunches in Manual, not Plan', async () => {
     const h = await harness({ extraFlags: '--fake-scenario exit-plan,basic' });
     const [a] = await h.sup.spawn(spec({ mode: 'plan' }));

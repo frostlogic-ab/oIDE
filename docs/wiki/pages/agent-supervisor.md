@@ -44,7 +44,7 @@ sup.on('event' | 'summary' | 'removed', fn) → unsubscribe
 await sup.spawn(spec)            // N attempts (spec.attempts) sharing attemptGroup; each starts 'queued'
 sup.send(agentId, userMessage)   // held while paused/queued; respawns a dead process with --resume
 await sup.answerPermission(agentId, answer)  // exact pending id only; "Always" → settings.addAllowRule
-await sup.setMode(agentId, mode) // control request, fallback interrupt + --resume; the spec follows the CLI's own mode changes
+await sup.setMode(agentId, mode) // control request, fallback interrupt + --resume; calls run in order per agent; the spec follows the CLI's own mode changes
 await sup.stop / pause / resume(agentId); sup.compact(agentId); await sup.remove(agentId, { deleteWorktree })
 sup.stopSubagent(agentId, subagentId)
 sup.restore([{ spec, summary, lastSeq }])    // after an app restart

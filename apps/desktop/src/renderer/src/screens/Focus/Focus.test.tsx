@@ -261,6 +261,16 @@ describe('FocusScreen', () => {
     await waitFor(() => expect(calls('agents.setMode')[1]).toEqual({ agentId: 'a-bridge', mode: 'bypassPermissions' }));
   });
 
+  it('does not offer Bypass to an agent working in the project folder', () => {
+    act(() => useSettings.setState((st) => ({ settings: { ...st.settings!, claude: { ...st.settings!.claude, allowBypass: true } } })));
+    act(() => useAgents.getState().applySummary({ ...bridge, workIn: 'project-folder' }));
+    render(<FocusScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /^Permission mode:/ }));
+    const bypass = screen.getByRole('menuitemradio', { name: /Bypass mode/ }) as HTMLButtonElement;
+    expect(bypass.disabled).toBe(true);
+    expect(bypass.textContent).toContain('Worktree only');
+  });
+
   it('opens a subagent with its own header, task and Stop subagent', async () => {
     render(<FocusScreen />);
     fireEvent.click(screen.getByRole('button', { name: 'Open subagent Parser tests' }));
