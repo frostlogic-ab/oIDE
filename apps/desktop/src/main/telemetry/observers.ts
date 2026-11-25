@@ -173,7 +173,13 @@ export class TelemetryObservers {
         });
         return;
       case 'git.mergeLocal':
-        this.sink.track('agent_merged', { result: (output as { ok?: boolean }).ok ? 'merged' : 'conflicts' });
+      {
+        const o = output as { ok?: boolean; autoStash?: { restored: boolean } };
+        this.sink.track('agent_merged', {
+          result: o.ok ? 'merged' : 'conflicts',
+          local_changes: !o.autoStash ? 'none' : o.autoStash.restored ? 'stashed_restored' : 'stashed_kept',
+        });
+      }
         return;
       case 'git.predictMerge': {
         const o = output as { agentId: string; status: string; files?: string[]; binary?: string[]; submodules?: string[]; target?: { sha: string }; branchSha?: string };

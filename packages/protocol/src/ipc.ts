@@ -150,7 +150,18 @@ export const Commands = {
   'git.worktrees': cmd(z.object({ projectId: Id }), z.array(WorktreeInfo)),
   'git.overlaps': cmd(z.object({ projectId: Id }), z.array(OverlapWarning)),
   'git.diff': cmd(z.object({ agentId: Id }), z.array(FileDiff)),
-  'git.mergeLocal': cmd(z.object({ agentId: Id }), z.object({ ok: z.boolean(), conflicts: z.array(z.string()).default([]) })),
+  /**
+   * Merge the agent branch into the main checkout. Uncommitted main-checkout files in the way are
+   * stashed and put back (`autoStash`); `restored: false` means they clashed and stay in the stash (`note` says how to get them).
+   */
+  'git.mergeLocal': cmd(
+    z.object({ agentId: Id }),
+    z.object({
+      ok: z.boolean(),
+      conflicts: z.array(z.string()).default([]),
+      autoStash: z.object({ files: z.array(z.string()), restored: z.boolean(), note: z.string() }).optional(),
+    }),
+  ),
   /**
    * Would merging the agent branch into the main checkout conflict? `git merge-tree`, no checkout touched;
    * cached per (HEAD, branch) commits unless `refresh`. `withMainStatus` adds the main checkout's uncommitted files.

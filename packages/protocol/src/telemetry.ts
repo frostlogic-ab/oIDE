@@ -360,8 +360,12 @@ export const TELEMETRY_EVENTS = {
   }),
   agent_merged: def({
     from: 'main',
-    question: 'How often does agent work get merged locally, and how often does it conflict?',
-    props: z.object({ result: z.enum(['merged', 'conflicts']) }),
+    question:
+      'How often does agent work get merged locally, and how often does it conflict? How often were uncommitted main-checkout files in the way (stashed, and put back or kept in the stash)?',
+    props: z.object({
+      result: z.enum(['merged', 'conflicts']),
+      local_changes: z.enum(['none', 'stashed_restored', 'stashed_kept']).optional(),
+    }),
   }),
   merge_conflict_predicted: def({
     from: 'main',

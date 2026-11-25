@@ -155,6 +155,7 @@ describe('commands', () => {
   it('merge, discard, PR and compact', () => {
     const { o, events } = make();
     o.command('git.mergeLocal', { agentId: 'a1' }, { ok: false, conflicts: ['src/x.ts'] });
+    o.command('git.mergeLocal', { agentId: 'a1' }, { ok: true, conflicts: [], autoStash: { files: ['README.md'], restored: false, note: 'kept' } });
     o.command('agents.remove', { agentId: 'a1', deleteWorktree: true }, { ok: true });
     o.command(
       'git.openPr',
@@ -163,7 +164,8 @@ describe('commands', () => {
     );
     o.command('agents.compact', { agentId: 'a1' }, { ok: true });
     expect(events).toEqual([
-      { name: 'agent_merged', props: { result: 'conflicts' } },
+      { name: 'agent_merged', props: { result: 'conflicts', local_changes: 'none' } },
+      { name: 'agent_merged', props: { result: 'merged', local_changes: 'stashed_kept' } },
       { name: 'agent_discarded', props: { worktree_deleted: true } },
       { name: 'pr_opened', props: { existing: false } },
       { name: 'compact_requested', props: {} },
