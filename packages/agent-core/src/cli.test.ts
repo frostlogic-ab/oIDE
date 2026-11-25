@@ -21,6 +21,7 @@ describe('CLI detection', () => {
       'mode:dontAsk': true,
       'mode:bypassPermissions': true,
       'effort:xhigh': true,
+      'allow-dangerously-skip-permissions': true,
     });
     expect(parseHelpFeatures('Usage: claude\n  --model <model>')).toMatchObject({ effort: false, 'mode:auto': false });
   });

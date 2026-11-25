@@ -123,7 +123,7 @@ export function ClaudeCodeSection({ settings, goModels }: { settings: Settings; 
           </button>
         )}
       </Row>
-      <Row title="Default mode" desc="The permission mode new agents start in. Shift + Tab switches it on a running agent.">
+      <Row title="Default mode" desc="The permission mode new agents start in. Change it on a running agent from the mode menu in its header, or with Shift + Tab.">
         {({ titleId, descId }) => (
           <select
             aria-labelledby={titleId}

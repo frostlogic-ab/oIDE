@@ -367,6 +367,11 @@ export function hasFeature(cli: CliInfo, feature: string): boolean {
   return Object.keys(f).length === 0;
 }
 
+/** Bypass is allowed only when Settings › Allow Bypass is on and the agent works in a worktree. */
+export function bypassAllowed(spec: Pick<AgentSpec, 'workIn'>, settings: Pick<Settings, 'claude'>): boolean {
+  return settings.claude.allowBypass && spec.workIn !== 'project-folder';
+}
+
 export function cliPermissionMode(mode: PermissionMode, cli: CliInfo, warnings: string[]): string {
   if (mode === 'auto' && !hasFeature(cli, 'mode:auto')) {
     warnings.push('This CLI has no auto permission mode; using default plus oIDE allow rules');
@@ -561,6 +566,12 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
   }
   const mode = cliPermissionMode(spec.mode, cli, warnings);
   args.push('--permission-mode', mode);
+  // The CLI refuses a live switch to bypass (`set_permission_mode`) unless the session was launched
+  // with bypass or this flag (verified on 2.1.332: error_code `bypass_not_launched`). Only where
+  // bypass is allowed anyway, so the Focus mode menu can switch without restarting the turn.
+  if (mode !== 'bypassPermissions' && bypassAllowed(spec, settings) && hasFeature(cli, 'allow-dangerously-skip-permissions')) {
+    args.push('--allow-dangerously-skip-permissions');
+  }
 
   // Untrusted project (SEC-02): `claude -p` skips the CLI's own trust dialog, so without this the
   // repo's committed .claude/settings.json (hooks, permissions, env, apiKeyHelper, plugins) and

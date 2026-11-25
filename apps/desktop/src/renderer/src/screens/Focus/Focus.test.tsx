@@ -238,6 +238,39 @@ describe('FocusScreen', () => {
     expect(calls('agents.setMode')[1]).toEqual({ agentId: 'a-bridge', mode: 'auto' });
   });
 
+  it('picks any permission mode from the header menu, e.g. Manual straight to Auto or Bypass', async () => {
+    act(() => useAgents.getState().applySummary({ ...bridge, mode: 'default' }));
+    render(<FocusScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /^Permission mode: Manual mode/ }));
+    const menu = screen.getByRole('menu');
+    const items = screen.getAllByRole('menuitemradio');
+    expect(items.map((i) => i.textContent)).toEqual(['Auto mode', 'Manual mode', 'Edit automatically', 'Plan mode', 'Bypass modeOff in Settings']);
+    expect(items.find((i) => i.getAttribute('aria-checked') === 'true')?.textContent).toBe('Manual mode');
+    expect((items[4] as HTMLButtonElement).disabled).toBe(true);
+    // The list is portalled out of the clipping meta line.
+    expect(menu.parentElement).toBe(document.body);
+    fireEvent.click(items[0]!);
+    await waitFor(() => expect(calls('agents.setMode')).toEqual([{ agentId: 'a-bridge', mode: 'auto' }]));
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    act(() => useSettings.setState((st) => ({ settings: { ...st.settings!, claude: { ...st.settings!.claude, allowBypass: true } } })));
+    fireEvent.click(screen.getByRole('button', { name: /^Permission mode: Manual mode/ }));
+    const bypass = screen.getByRole('menuitemradio', { name: 'Bypass mode' }) as HTMLButtonElement;
+    expect(bypass.disabled).toBe(false);
+    fireEvent.click(bypass);
+    await waitFor(() => expect(calls('agents.setMode')[1]).toEqual({ agentId: 'a-bridge', mode: 'bypassPermissions' }));
+  });
+
+  it('does not offer Bypass to an agent working in the project folder', () => {
+    act(() => useSettings.setState((st) => ({ settings: { ...st.settings!, claude: { ...st.settings!.claude, allowBypass: true } } })));
+    act(() => useAgents.getState().applySummary({ ...bridge, workIn: 'project-folder' }));
+    render(<FocusScreen />);
+    fireEvent.click(screen.getByRole('button', { name: /^Permission mode:/ }));
+    const bypass = screen.getByRole('menuitemradio', { name: /Bypass mode/ }) as HTMLButtonElement;
+    expect(bypass.disabled).toBe(true);
+    expect(bypass.textContent).toContain('Worktree only');
+  });
+
   it('opens a subagent with its own header, task and Stop subagent', async () => {
     render(<FocusScreen />);
     fireEvent.click(screen.getByRole('button', { name: 'Open subagent Parser tests' }));

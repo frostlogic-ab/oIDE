@@ -4,7 +4,7 @@
 // Tests never need a login. See docs/wiki/pages/testing.md.
 //
 // Scenario: --fake-scenario <name[,name…]> or FAKE_CLAUDE_SCENARIO. One name per user turn; the last repeats.
-//   basic | tools | permission | review | subagents | rate-limit | crash | slow | auth | replay:<fixture.jsonl>
+//   basic | exit-plan | tools | permission | review | subagents | rate-limit | crash | slow | auth | replay:<fixture.jsonl>
 //   commit-work | address-feedback | commit-all | mcp-tool | artifacts   (milestone gate tests, test/gates)
 //   artifact-update (reads the {"id":"…"} artifact in the message and writes a new version)
 //   resolve-conflicts (runs the `git merge <ref>` an oIDE merge-conflicts message names, keeps both sides, commits,
@@ -94,6 +94,8 @@ const sessionId = resumeId ?? (typeof flags['--session-id'] === 'string' ? flags
 const modelFlag = typeof flags['--model'] === 'string' ? flags['--model'] : 'sonnet';
 const model = MODEL_ALIASES[modelFlag] ?? modelFlag;
 let mode = typeof flags['--permission-mode'] === 'string' ? flags['--permission-mode'] : 'default';
+// As the real CLI (2.1.332): a live switch to bypass needs a bypass launch or the allow flag.
+const bypassAvailable = mode === 'bypassPermissions' || Boolean(flags['--dangerously-skip-permissions'] || flags['--allow-dangerously-skip-permissions']);
 const partials = Boolean(flags['--include-partial-messages']);
 const forwardSubagents = Boolean(flags['--forward-subagent-text']);
 const allowed = splitRules(flags['--allowedTools'] ?? flags['--allowed-tools'] ?? []);
@@ -458,6 +460,17 @@ const SCENARIOS = {
     const reply = resumeId && turnNo === 1 ? `Resumed session ${sessionId}.` : `Hello from fake-claude. You said: ${userText.slice(0, 80)}${imageNote()}`;
     await assistant([{ type: 'text', text: reply }], { streamText: reply });
     await rateLimitAllowed();
+    await result(reply);
+  },
+
+  /** The plan was approved: the CLI leaves plan mode on its own and says so (as after ExitPlanMode). */
+  async 'exit-plan'() {
+    if (mode === 'plan') {
+      mode = 'default';
+      await emit({ type: 'system', subtype: 'status', status: null, permissionMode: mode, session_id: sessionId, uuid: uuid() });
+    }
+    const reply = 'Plan approved; implementing.';
+    await assistant([{ type: 'text', text: reply }], { streamText: reply });
     await result(reply);
   },
 
@@ -828,6 +841,9 @@ function handleControl(msg) {
     reply({ still_queued: [] });
   } else if (sub === 'set_permission_mode') {
     if (!MODES.includes(msg.request.mode)) return fail(`Invalid permission mode: ${msg.request.mode}`);
+    if (msg.request.mode === 'bypassPermissions' && !bypassAvailable) {
+      return out({ type: 'control_response', response: { subtype: 'error', request_id: msg.request_id, error: 'Cannot set permission mode to bypassPermissions because the session was not launched with --dangerously-skip-permissions', error_code: 'bypass_not_launched' } });
+    }
     mode = msg.request.mode;
     reply({ mode });
     out({ type: 'system', subtype: 'status', status: null, permissionMode: mode, session_id: sessionId, uuid: uuid() });

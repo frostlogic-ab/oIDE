@@ -68,14 +68,39 @@ export function agentListLine(a: AgentSummary): { text: string; tone: 'warn' | '
   }
 }
 
-// ---------- mode (Shift+Tab) ----------
+// ---------- mode (header menu, Shift+Tab) ----------
 
 export const MODE_CYCLE: readonly PermissionMode[] = ['auto', 'default', 'acceptEdits', 'plan'];
 
+export interface ModeOptions {
+  allowBypass?: boolean;
+  inWorktree?: boolean;
+  hasAuto?: boolean;
+}
+
+export interface ModeChoice {
+  mode: PermissionMode;
+  /** Set when the mode cannot be picked for this agent; the short form shows in the menu. */
+  disabled?: { hint: string; reason: string };
+}
+
+/**
+ * Every mode an agent can switch to while it runs, in Shift+Tab order. Bypass is listed but
+ * disabled (with the reason) unless Settings allow it and the agent works in a worktree.
+ */
+export function modeChoices(opts: ModeOptions = {}): ModeChoice[] {
+  const out: ModeChoice[] = MODE_CYCLE.filter((m) => m !== 'auto' || opts.hasAuto !== false).map((mode) => ({ mode }));
+  if (!opts.allowBypass) out.push({ mode: 'bypassPermissions', disabled: { hint: 'Off in Settings', reason: 'Turn on Settings › Claude Code › Allow Bypass permissions to use Bypass mode.' } });
+  else if (!opts.inWorktree) out.push({ mode: 'bypassPermissions', disabled: { hint: 'Worktree only', reason: 'Bypass mode runs only in a worktree, never in the project folder.' } });
+  else out.push({ mode: 'bypassPermissions' });
+  return out;
+}
+
 /** Next mode for Shift+Tab. Bypass joins the cycle only when Settings allow it and the agent is in a worktree. */
-export function nextMode(current: PermissionMode, opts: { allowBypass?: boolean; inWorktree?: boolean; hasAuto?: boolean } = {}): PermissionMode {
-  const cycle: PermissionMode[] = MODE_CYCLE.filter((m) => m !== 'auto' || opts.hasAuto !== false);
-  if (opts.allowBypass && opts.inWorktree) cycle.push('bypassPermissions');
+export function nextMode(current: PermissionMode, opts: ModeOptions = {}): PermissionMode {
+  const cycle = modeChoices(opts)
+    .filter((c) => !c.disabled)
+    .map((c) => c.mode);
   const i = cycle.indexOf(current);
   return cycle[(i + 1) % cycle.length]!;
 }

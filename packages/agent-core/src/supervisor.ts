@@ -87,6 +87,8 @@ interface AgentRecord {
   idleStatus: AgentStatus;
   /** Spawn's attachments for the first message. Kept in memory only (never in the stored spec), dropped once sent. */
   firstAttachments?: MessageAttachment[];
+  /** Mode changes run one at a time, so a slow fallback cannot overtake a later pick. */
+  modeChain?: Promise<void>;
 }
 
 export interface RestoreEntry {
@@ -195,6 +197,7 @@ export class Supervisor {
         model,
         status: 'queued',
         sessionId: randomUUID(),
+        workIn: s.workIn,
         ...(attemptGroup ? { attemptGroup } : {}),
       });
       const rec = this.newRecord(s, summary, 0, false);
@@ -310,6 +313,7 @@ export class Supervisor {
         const cwd = rec.worktree.path;
         firstAttachments = this.deps.attachments ? await this.deps.attachments.materialize({ agentId: rec.id, projectId: rec.spec.projectId, cwd, attachments: rec.firstAttachments }) : rec.firstAttachments;
       }
+      const launchedMode = rec.spec.mode;
       const plan = buildLaunch(rec.spec, {
         agentId: rec.id,
         sessionId: rec.sessionId,
@@ -342,6 +346,11 @@ export class Supervisor {
         ...(this.deps.log ? { log: this.deps.log } : {}),
       });
       rec.handle = handle;
+      // A mode picked while the process was starting: apply it now, or the new process's init would undo it.
+      if (rec.spec.mode !== launchedMode) {
+        const picked = rec.spec.mode;
+        this.setMode(rec.id, picked).catch((err) => this.deps.log?.('mode change after launch failed', (err as Error).message));
+      }
       // Running again: no longer "Interrupted" (the next status event publishes this).
       delete rec.reducer.summary.interrupted;
       const wasStarted = rec.started;
@@ -380,7 +389,8 @@ export class Supervisor {
   // ------------------------------------------------------------------ event plumbing
 
   private ingest(rec: AgentRecord, e: AgentEvent, raw?: string): void {
-    if (!this.agents.has(rec.id)) return;
+    // A record replaced by unarchive (same id) must not publish from its stale reducer.
+    if (this.agents.get(rec.id) !== rec) return;
     const prevStatus = rec.reducer.summary.status;
     try {
       const p = this.deps.sink.append(e, raw);
@@ -390,6 +400,11 @@ export class Supervisor {
     }
     const res = rec.reducer.apply(e);
     if (e.type === 'init' && e.sessionId) rec.sessionId = e.sessionId;
+    // The CLI changes mode on its own (plan → manual after the plan is approved). Keep the spec in
+    // step so a resume relaunches in the mode the agent is really in, not the one it was spawned with.
+    if ((e.type === 'init' || e.type === 'mode-changed') && rec.reducer.summary.mode !== rec.spec.mode) {
+      rec.spec = { ...rec.spec, mode: rec.reducer.summary.mode };
+    }
     this.fire('event', e);
     for (const sub of res.subagents) this.emitDraft(rec, { type: 'subagent', subagent: sub });
     if (res.changed) this.publishSummary(rec);
@@ -515,9 +530,18 @@ export class Supervisor {
     this.send(agentId, { kind: 'command', command: '/compact' });
   }
 
-  /** Shift+Tab: control request; falls back to interrupt + `--resume` with the new mode. */
+  /**
+   * Focus mode menu / Shift+Tab: control request; falls back to interrupt + `--resume` with the new
+   * mode. Calls for one agent run in order, so the last pick wins even when an earlier one falls back.
+   */
   async setMode(agentId: string, mode: PermissionMode): Promise<void> {
     const rec = this.require(agentId);
+    const run = (rec.modeChain ?? Promise.resolve()).then(() => this.applyMode(rec, mode));
+    rec.modeChain = run.catch(() => {});
+    await run;
+  }
+
+  private async applyMode(rec: AgentRecord, mode: PermissionMode): Promise<void> {
     const settings = await this.deps.settings.get();
     if (mode === 'bypassPermissions' && (!settings.claude.allowBypass || rec.spec.workIn === 'project-folder')) {
       throw new LaunchError('Bypass mode is not allowed for this agent');
@@ -712,7 +736,9 @@ export class Supervisor {
     if (entry.resumeBlocked) s.resumeBlocked = entry.resumeBlocked;
     else delete s.resumeBlocked;
     s.updatedAt = Date.now();
-    const rec = this.newRecord(AgentSpec.parse(entry.spec), s, (entry.lastSeq ?? -1) + 1, Boolean(s.sessionId));
+    const parsed = AgentSpec.parse({ ...entry.spec, mode: s.mode });
+    s.workIn = parsed.workIn;
+    const rec = this.newRecord(parsed, s, (entry.lastSeq ?? -1) + 1, Boolean(s.sessionId));
     this.agents.set(rec.id, rec);
     this.publishSummary(rec);
     return rec.reducer.summary;
@@ -740,7 +766,10 @@ export class Supervisor {
       // on the Wall until it runs again. A clean quit already saved these as stopped.
       if (ACTIVE.has(s.status) || interruption) s.interrupted = { at: now, reason: interruption ?? 'restart' };
       if (ACTIVE.has(s.status) || s.status === 'paused') s.status = 'stopped';
-      const rec = this.newRecord(AgentSpec.parse(spec), s, (lastSeq ?? -1) + 1, started);
+      // Saved before the spec followed the CLI's own mode changes: the summary's mode is the real one.
+      const parsed = AgentSpec.parse({ ...spec, mode: s.mode });
+      s.workIn = parsed.workIn;
+      const rec = this.newRecord(parsed, s, (lastSeq ?? -1) + 1, started);
       this.agents.set(rec.id, rec);
       if (wasQueued) this.queue.push({ id: rec.id, resume: false });
     }

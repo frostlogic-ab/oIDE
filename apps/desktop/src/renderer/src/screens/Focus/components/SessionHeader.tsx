@@ -1,10 +1,10 @@
-import type { AgentSummary, SubagentInfo } from '@oide/protocol';
-import { Badge, Button, ContextRing, ContextRingButton, Icon, Tooltip, contextFraction, contextPercent, contextTooltip, modelFamily, subagentStatusMeta } from '@oide/ui';
+import type { AgentSummary, PermissionMode, SubagentInfo } from '@oide/protocol';
+import { Badge, Button, ContextRing, ContextRingButton, Icon, Menu, Tooltip, contextFraction, contextPercent, contextTooltip, modelFamily, subagentStatusMeta } from '@oide/ui';
 import { ARCHIVE_REASON_LABEL, formatEnded } from '../../../stores/archive';
 import { canArchive } from '../../Wall/logic';
 import { PrLink } from '../../../components/PrLink';
 import { formatTokens } from '../../../lib/format';
-import { MODE_LABEL, isSubagentActive, modelEffort, routeLabel, runningText, subagentStatusText, tokenCount } from '../model/focus';
+import { MODE_LABEL, type ModeChoice, isSubagentActive, modelEffort, routeLabel, runningText, subagentStatusText, tokenCount } from '../model/focus';
 
 const SEP = (
   <span aria-hidden="true" className="text-ink-3 shrink-0">
@@ -31,7 +31,9 @@ export interface LeadHeaderProps {
   warnAt?: number;
   dangerAt?: number;
   modeShortcut: string;
-  onCycleMode(): void;
+  /** The modes the menu offers (modeChoices), in Shift+Tab order. */
+  modes: readonly ModeChoice[];
+  onSetMode(mode: PermissionMode): void;
   onCompact(): void;
   onRawTerminal(): void;
   onPause(): void;
@@ -47,7 +49,36 @@ export interface LeadHeaderProps {
 const RESUMABLE = new Set(['paused', 'stopped', 'error', 'rate-limited']);
 const STOPPABLE = new Set(['running', 'starting', 'needs-permission', 'queued']);
 
-export function LeadHeader({ agent, project, now, warnAt, dangerAt, modeShortcut, onCycleMode, onCompact, onRawTerminal, onPause, onResume, onStop, onArchive, onUnarchive, onDelete }: LeadHeaderProps) {
+/**
+ * The permission mode in the meta line: a menu of every mode, so any mode can be picked at any
+ * time (Plan, then Manual after the plan is approved, then Auto or Bypass). Shift+Tab still cycles.
+ */
+function ModeMenu({ current, modes, shortcut, onSetMode }: { current: PermissionMode; modes: readonly ModeChoice[]; shortcut: string; onSetMode(mode: PermissionMode): void }) {
+  return (
+    <Menu
+      portal
+      label={`Permission mode: ${MODE_LABEL[current]}`}
+      triggerTitle={`Change mode (${shortcut} cycles)`}
+      className="shrink-0"
+      triggerClassName="!h-auto !px-0 !border-0 !bg-transparent !text-ink-3 !text-[12px] hover:!text-ink hover:underline !gap-0.5"
+      trigger={
+        <>
+          {MODE_LABEL[current]}
+          <Icon name="chevron-down" size={12} />
+        </>
+      }
+      items={modes.map((c) => ({
+        id: c.mode,
+        label: MODE_LABEL[c.mode],
+        checked: c.mode === current,
+        ...(c.disabled ? { disabled: true, hint: c.disabled.hint, title: c.disabled.reason } : {}),
+        onSelect: () => c.mode !== current && onSetMode(c.mode),
+      }))}
+    />
+  );
+}
+
+export function LeadHeader({ agent, project, now, warnAt, dangerAt, modeShortcut, modes, onSetMode, onCompact, onRawTerminal, onPause, onResume, onStop, onArchive, onUnarchive, onDelete }: LeadHeaderProps) {
   const worktree = agent.branch ? agent.branch.split('/').pop() : undefined;
   const resumable = RESUMABLE.has(agent.status) && !agent.resumeBlocked;
   if (agent.archived) return <ArchivedHeader agent={agent} project={project} worktree={worktree} onUnarchive={onUnarchive} onDelete={onDelete} />;
@@ -69,16 +100,7 @@ export function LeadHeader({ agent, project, now, warnAt, dangerAt, modeShortcut
             </>
           )}
           {SEP}
-          <Tooltip content={`Switch mode (${modeShortcut})`} placement="bottom-start">
-            <button
-              type="button"
-              onClick={onCycleMode}
-              aria-label={`${MODE_LABEL[agent.mode]}. Switch permission mode`}
-              className="shrink-0 border-0 bg-transparent p-0 text-ink-3 text-[12px] hover:text-ink hover:underline"
-            >
-              {MODE_LABEL[agent.mode]}
-            </button>
-          </Tooltip>
+          <ModeMenu current={agent.mode} modes={modes} shortcut={modeShortcut} onSetMode={onSetMode} />
           <span className="contents @max-[700px]:hidden">
             {SEP}
             <span className="shrink-0">{modelFamily(agent.model)}</span>
