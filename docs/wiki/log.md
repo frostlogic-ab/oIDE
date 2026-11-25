@@ -681,6 +681,12 @@ rest of `ui`), so they survive restarts; Settings › Appearance has Reset
 sidebar widths. Pages: [design-system](pages/design-system.md), [desktop-shell](pages/desktop-shell.md),
 [screen-settings](pages/screen-settings.md).
 
+## [2026-11-25] build | Windows dev taskbar showed Electron's logo
+Cause: Electron writes a Start Menu shortcut (`Electron.lnk` → `electron.exe`, AUMID `dev.oide.app`, no icon)
+for toast notifications, and Windows draws windows with that AUMID with the shortcut's icon. Unpackaged
+Windows runs now set `build/icon.ico` on that shortcut (`brandAppShortcuts` in `apps/desktop/src/main/app-icon.ts`).
+See [packaging](pages/packaging.md).
+
 ## [2026-11-25] build | "Always in <project>" now applies to running agents
 
 "Always" saved the rule to `.oide/permissions.json`, but running CLIs only read `--allowedTools` at
@@ -693,4 +699,5 @@ be saved. Pages: [agent-supervisor](pages/agent-supervisor.md), [screen-wall](pa
 
 Security review of the session "Always" rules: the protected-path check now fails closed on Windows
 name folding (case, trailing dots/spaces, `:` streams, `~` short names), and edits are auto-allowed
-only inside the agent's worktree (symlinks followed). Page: [agent-supervisor](pages/agent-supervisor.md).
+only inside the agent's worktree with no symlink, junction (dangling included) or hard-linked file on
+the way. Page: [agent-supervisor](pages/agent-supervisor.md).
