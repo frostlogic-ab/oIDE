@@ -89,7 +89,7 @@ export default function SpawnScreen() {
   const [projectDefaults, setProjectDefaults] = useState<{ projectId: string; defaultMode: PermissionMode; presetId: string } | null>(null);
   const [errors, setErrors] = useState<Partial<Record<SpawnField, string>>>({});
   const [busy, setBusy] = useState(false);
-  const [advOpen, setAdvOpen] = useState(true);
+  const [advOpen, setAdvOpen] = useState(false);
   const [techOpen, setTechOpen] = useState(false);
   const [techniques, setTechniques] = useState<Technique[]>(settings?.techniques ?? []);
   const [extensions, setExtensions] = useState<InstalledExtension[]>([]);
@@ -161,14 +161,21 @@ export default function SpawnScreen() {
       cancelled = true;
     };
   }, []);
+  // Starts from the last selection (settings.spawn.lastExtensions); choices made in this dialog stay.
+  const lastExtensions = settings?.spawn?.lastExtensions;
+  const extTouched = useRef(false);
   useEffect(() => {
-    setForm((f) => ({ ...f, extensions: defaultExtensions(extensions, f.projectId) }));
-  }, [extensions, form.projectId]);
+    setForm((f) => {
+      const next = defaultExtensions(extensions, f.projectId, lastExtensions);
+      return { ...f, extensions: extTouched.current ? { ...next, ...pick(f.extensions, Object.keys(next)) } : next };
+    });
+  }, [extensions, form.projectId, lastExtensions]);
 
   const update = (patch: Partial<SpawnForm>) => {
     touched.current = true;
     if ('mode' in patch) modeTouched.current = true;
     if ('kind' in patch || 'slots' in patch || 'customPicked' in patch) strategyTouched.current = true;
+    if ('extensions' in patch) extTouched.current = true;
     setForm((f) => ({ ...f, ...patch }));
     setErrors((e) => {
       const next = { ...e };
@@ -201,7 +208,10 @@ export default function SpawnScreen() {
       for (const a of created) agents.applySummary(a);
       void useSettings
         .getState()
-        .update({ models: { lastUsedStrategy: res.spec.strategy } })
+        .update({
+          models: { lastUsedStrategy: res.spec.strategy },
+          ...(toolsSupported && Object.keys(form.extensions).length ? { spawn: { lastExtensions: form.extensions } } : {}),
+        })
         .catch(() => {});
       const sc = useScope.getState().scope;
       if (sc !== 'all' && sc !== res.spec.projectId) void useScope.getState().setScope(res.spec.projectId);

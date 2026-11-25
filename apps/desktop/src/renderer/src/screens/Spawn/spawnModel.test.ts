@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AgentSpec, CliInfo, Settings } from '@oide/protocol';
+import { AgentSpec, CliInfo, Settings, type InstalledExtension } from '@oide/protocol';
 import { projects } from '../../lib/mock/fixtures';
 import {
   FALLBACK_PRESETS,
@@ -8,6 +8,7 @@ import {
   availableModes,
   availableStrategies,
   buildSpec,
+  defaultExtensions,
   initialForm,
   matchPreset,
   slotsFromStrategy,
@@ -154,5 +155,28 @@ describe('CLI feature gating', () => {
     expect(availableEfforts(cli({ effort: false, agents: true }))).toEqual([]);
     expect(availableStrategies(c)).not.toContain('routed');
     expect(initialForm({ settings, projects, scope: 'all', params: {}, cli: c }).mode).toBe('default');
+  });
+});
+
+describe('defaultExtensions', () => {
+  const ext = (id: string, o: Partial<InstalledExtension> = {}) =>
+    ({
+      id,
+      enabledGlobally: true,
+      enabledProjects: [],
+      disabledProjects: [],
+      disabledTools: [],
+      manifest: { oide: { mcpServers: { s: { tools: { t: { risk: 'read' } } } } } },
+      ...o,
+    }) as unknown as InstalledExtension;
+  const list = [ext('a'), ext('b', { enabledGlobally: false }), ext('none', { manifest: { oide: { mcpServers: {} } } } as Partial<InstalledExtension>)];
+
+  it('offers extensions with tools, on when enabled for the project', () => {
+    expect(defaultExtensions(list, 'p1')).toEqual({ a: true, b: false });
+  });
+
+  it('starts from the last selection, falling back to the project default for new ones', () => {
+    expect(defaultExtensions(list, 'p1', { a: false, b: true, gone: true })).toEqual({ a: false, b: true });
+    expect(defaultExtensions(list, 'p1', { b: true })).toEqual({ a: true, b: true });
   });
 });

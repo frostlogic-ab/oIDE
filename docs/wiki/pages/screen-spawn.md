@@ -20,7 +20,7 @@ A 720px dialog over the Wall (`overlay: true` in `screens/registry.tsx`). Design
 | Advanced model settings | `strategy` | How agents pick models (one / separate subagent model / routed), a row per slot (model pills, effort), Model versions (Latest alias or a pinned version per family) |
 | Advanced techniques | `techniques[]` (Settings order) | `settings.forProject({projectId})` (global + `.oide/techniques.json` + extensions; `settings.techniques` without a project); default on = `enabledByDefault`; placement badge (First message / System prompt) and the text when on |
 | Parallel attempts 1–6 | `attempts`, `attemptGroup` | group id generated when > 1 |
-| Tools from extensions | `extensions[]` | `extensions.installed` with tools; checked when enabled for the project; "asks first" / "read only" labels |
+| Tools from extensions | `extensions[]` | `extensions.installed` with tools; checked as in the last spawn (`settings.spawn.lastExtensions`, saved on spawn), else when enabled for the project; "asks first" / "read only" labels |
 
 Spawn: button, or Ctrl/Cmd+Enter anywhere in the dialog (keymap `composer.send`, modal scope).
 `buildSpec()` validates with `AgentSpec.safeParse` plus oIDE rules, then `agents.spawn`; returned
@@ -49,7 +49,7 @@ section without `mcp-config`.
 
 ## Decisions
 
-- The Advanced model settings panel starts open, as drawn; Advanced techniques starts closed.
+- The Advanced model settings panel starts closed (the canvas draws it open; users asked for a shorter dialog) and opens when Custom is picked; Advanced techniques starts closed.
 - Version pinning is one "Model versions" row (one select per family in use) rather than a select
   per slot: per-slot selects did not fit the 720px dialog, and Settings pins per family too.
 - Footer copy "Runs claude CLI in its own terminal" is kept from the canvas although agents use

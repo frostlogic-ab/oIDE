@@ -816,3 +816,6 @@ and again right before `submit_for_review`, resolving conflicts, re-running chec
 "Up to date with <base>" check. The supervisor passes the worktree's `baseRef` into `buildLaunch`. No telemetry
 change: this is prompt text, and the existing review/merge events already cover the outcome.
 See [agent-supervisor](pages/agent-supervisor.md).
+
+## [2026-11-25] build | Collapsed defaults; Spawn remembers extension tools
+Source control: "Recent commits on <branch>" starts collapsed on every project card. Spawn: "Advanced model settings" starts closed (opens when Custom is picked); "Tools from extensions" starts from the last spawn's picks, saved as `settings.spawn.lastExtensions` (new protocol field, defaulted so older settings parse). No telemetry change.

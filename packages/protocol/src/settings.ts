@@ -92,6 +92,13 @@ export const Settings = z.object({
     fetchIntervalMinutes: z.number().int().min(0).default(10),
   }),
   techniques: z.array(Technique).default([]),
+  /** Spawn's remembered choices. Defaulted as a whole so older settings files parse. */
+  spawn: z
+    .object({
+      /** "Tools from extensions" as last spawned: extension id → on. Ids not listed use the project default. */
+      lastExtensions: z.record(z.string().min(1).max(214), z.boolean()).default({}),
+    })
+    .default({ lastExtensions: {} }),
   permissions: z.object({
     alwaysAllowed: z.array(z.string()).default([]),
     alwaysDenied: z.array(z.string()).default([]),
