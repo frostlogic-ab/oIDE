@@ -329,6 +329,7 @@ export class Supervisor {
         resume: resume || rec.started,
         cwd: rec.worktree.path,
         ...(rec.worktree.branch ? { branch: rec.worktree.branch } : {}),
+        ...(rec.worktree.baseRef ? { baseRef: rec.worktree.baseRef } : {}),
         cli,
         settings,
         techniques: (await this.deps.settings.techniques?.(rec.spec.projectId)) ?? settings.techniques,

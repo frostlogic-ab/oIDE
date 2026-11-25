@@ -399,3 +399,36 @@ describe('"Always" guards', () => {
     expect(plan.askRules).toEqual(['Bash(git push:*)']);
   });
 });
+
+describe('keep-in-sync contract', () => {
+  const prompt = (patch: Partial<LaunchContext> = {}) => flagValue(buildLaunch(spec(), ctx(patch)).args, '--append-system-prompt');
+
+  it('tells a worktree agent to merge its base before starting and before submit_for_review', () => {
+    const p = prompt({ baseRef: 'main' });
+    expect(p).toContain('Before you start on a new task, make sure your branch is up to date with `main`');
+    expect(p).toContain('Right before you call submit_for_review, check again');
+    expect(p).toContain('`git merge main`');
+    expect(p).toContain('"Up to date with main"');
+    expect(p).not.toContain('git fetch');
+  });
+
+  it('fetches first when the base is a remote-tracking branch', () => {
+    const p = prompt({ baseRef: 'origin/main' });
+    expect(p).toContain('`git fetch origin`');
+    expect(p).toContain('`git merge origin/main`');
+  });
+
+  it('treats a slashed local branch as local', () => {
+    const p = prompt({ baseRef: 'feature/login' });
+    expect(p).toContain('`git merge feature/login`');
+    expect(p).not.toContain('git fetch');
+  });
+
+  it('adds nothing without a branch, without a base, or when the base is a bare sha', () => {
+    for (const patch of [{ baseRef: 'main', branch: undefined }, {}, { baseRef: '0f8d94e1a2b3c4d5e6f708192a3b4c5d6e7f8091' }] as Partial<LaunchContext>[]) {
+      const p = prompt(patch);
+      expect(p).not.toContain('up to date with');
+      expect(p).toContain('oIDE contract:');
+    }
+  });
+});

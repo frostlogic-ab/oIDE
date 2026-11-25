@@ -25,6 +25,8 @@ export interface LaunchContext {
   /** The agent's worktree (or project folder). */
   cwd: string;
   branch?: string;
+  /** Ref the worktree branch was created from (`main`, `origin/main`, a sha). The agent keeps its branch up to date with it. */
+  baseRef?: string;
   cli: CliInfo;
   settings: Settings;
   /** Techniques available to this agent, in Settings order. `spec.techniques` picks which apply. */
@@ -446,7 +448,31 @@ export const SUBAGENT_MODEL_ENV = 'CLAUDE_CODE_SUBAGENT_MODEL';
 
 // ---------------------------------------------------------------- system prompt contract
 
-export function oideContract(opts: { agentName: string; agentId: string; cwd: string; branch?: string; routed: boolean }): string {
+/** A base the agent can merge by name: a branch like `main` or `origin/main`, not a bare commit sha. */
+function syncableBase(baseRef: string | undefined): string | undefined {
+  if (!baseRef || /^[0-9a-f]{7,64}$/i.test(baseRef)) return undefined;
+  return baseRef;
+}
+
+/**
+ * Keep-in-sync rules: bring the base branch in before starting and again right before
+ * submit_for_review, so the branch is ready to merge. Only for worktree agents with a named base.
+ */
+export function syncContract(opts: { branch?: string; baseRef?: string }): string[] {
+  const base = syncableBase(opts.baseRef);
+  if (!opts.branch || !base) return [];
+  // Worktrees fall back to `origin/<default>` when the default branch has no local copy.
+  const remote = base.startsWith('origin/') ? 'origin' : undefined;
+  const fetch = remote
+    ? `run \`git fetch ${remote}\` (if it fails, for example offline, say so and carry on with what you have), then`
+    : 'run';
+  return [
+    `- Before you start on a new task, make sure your branch is up to date with \`${base}\`: ${fetch} \`git merge ${base}\` in your worktree. If there are conflicts, resolve them now, keeping both sides' intent, and commit the merge. Skip this when you are resuming work you already started.`,
+    `- Right before you call submit_for_review, check again: commit your work, ${remote ? `run \`git fetch ${remote}\`, then ` : ''}run \`git merge ${base}\`. If it brings in changes, resolve every conflict, commit the merge, and re-run the project's checks (typecheck, tests, lint) so the branch is ready to merge cleanly into \`${base}\`. Report this as a check named "Up to date with ${base}". Never rebase or force-push, and never modify \`${base}\` itself or the main checkout; only merge into your own branch.`,
+  ];
+}
+
+export function oideContract(opts: { agentName: string; agentId: string; cwd: string; branch?: string; baseRef?: string; routed: boolean }): string {
   const lines = [
     `You are running inside oIDE as the agent "${opts.agentName}" (oIDE agent id ${opts.agentId}).`,
     `You work in ${opts.branch ? `your own git worktree on branch ${opts.branch}` : 'this directory'} (${opts.cwd}). Other agents work in parallel in their own worktrees; stay inside yours.`,
@@ -456,6 +482,7 @@ export function oideContract(opts: { agentName: string; agentId: string; cwd: st
     '- If you cannot finish without an answer from the user, ask one clear question and end your turn without calling submit_for_review.',
     `- Commit your work as you go with clear messages. End every commit message with this trailer line: Oide-Agent: ${opts.agentName}`,
     '- oIDE artifacts (designs, docs, whiteboards) are available through mcp__oide__artifacts_list, mcp__oide__artifacts_read, mcp__oide__artifacts_write and mcp__oide__artifacts_create.',
+    ...syncContract(opts),
   ];
   if (opts.routed) {
     lines.push(
@@ -700,7 +727,7 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
   const routed = spec.strategy.kind === 'routed';
   const agentName = ctx.agentName ?? spec.title;
   const systemParts = [
-    oideContract({ agentName, agentId: ctx.agentId, cwd: ctx.cwd, ...(ctx.branch ? { branch: ctx.branch } : {}), routed }),
+    oideContract({ agentName, agentId: ctx.agentId, cwd: ctx.cwd, ...(ctx.branch ? { branch: ctx.branch } : {}), ...(ctx.baseRef ? { baseRef: ctx.baseRef } : {}), routed }),
     ...picked.filter((t) => t.placement === 'system-prompt').map((t) => t.text.trim()),
   ];
   const appendSystemPrompt = systemParts.filter(Boolean).join('\n\n');
