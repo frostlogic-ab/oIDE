@@ -29,6 +29,7 @@ export async function createServices(ctx: MainContext, opts: { store?: Store } =
     emit: (status) => ctx.emit('updates.changed', status),
     log: ctx.log,
     stateFile: join(ctx.userDataDir, 'updates.json'),
+    onChecked: (e) => void ctx.telemetry?.service.track('update_checked', e),
   });
   services.updates.start();
   ctx.onQuit(() => services.updates?.dispose(), 'updates');

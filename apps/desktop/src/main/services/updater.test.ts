@@ -82,6 +82,7 @@ function make(over: Partial<UpdaterOptions> = {}, settings = settingsStub()) {
     load: async () => updater,
     env: {},
     hasUpdateConfig: () => true,
+    isWindowsInstall: () => true,
     isMacSigned: async () => true,
     background: false,
     now: () => 1_700_000_000_000,
@@ -129,6 +130,63 @@ it('is off unless the build was given a release feed (no default org), and never
     expect(make({ platform: 'linux', env: { APPIMAGE: '/x/oIDE.AppImage' } }).svc.getStatus().state).toBe('idle');
     expect(make({ hasUpdateConfig: () => false }).svc.getStatus().disabledReason).toMatch(/no update configuration/);
     expect(make({ env: { OIDE_DISABLE_UPDATES: '1' } }).svc.getStatus().state).toBe('disabled');
+  });
+
+  it('is off for the Windows portable zip, which carries app-update.yml but has no installer to update', async () => {
+    const load = vi.fn(async () => updater);
+    const { svc } = make({ platform: 'win32', isWindowsInstall: () => false, load });
+    expect(svc.getStatus()).toMatchObject({ state: 'disabled', disabledReason: expect.stringMatching(/portable zip/), canInstall: false });
+    expect((await svc.check()).state).toBe('disabled');
+    expect(load).not.toHaveBeenCalled();
+    // Only Windows asks: macOS and AppImage builds have no NSIS uninstaller.
+    expect(make({ platform: 'darwin', isWindowsInstall: () => false }).svc.getStatus().state).toBe('idle');
+    expect(make({ platform: 'linux', env: { APPIMAGE: '/x/oIDE.AppImage' }, isWindowsInstall: () => false }).svc.getStatus().state).toBe('idle');
+  });
+
+  it('no published release yet is "no newer version", not an error', async () => {
+    const { svc } = make();
+    const err = Object.assign(new Error('No published versions on GitHub'), { code: 'ERR_UPDATER_NO_PUBLISHED_VERSIONS' });
+    // electron-updater emits 'error' and also rejects checkForUpdates() with the same error.
+    updater.checkForUpdates.mockImplementationOnce(async () => {
+      updater.emit('checking-for-update');
+      updater.emit('error', err);
+      throw err;
+    });
+    expect(await svc.check()).toMatchObject({ state: 'not-available', releaseUrl: RELEASES_URL });
+    expect(svc.getStatus().error).toBeUndefined();
+    expect(emitted.map((e) => e.state)).not.toContain('error');
+  });
+
+  it('reports each finished check to onChecked with a bounded outcome and the channel only', async () => {
+    const seen: unknown[] = [];
+    const { svc } = make({ onChecked: (e) => seen.push(e) });
+    const withCode = (code: string) => Object.assign(new Error(code), { code });
+    await svc.check(); // the fake resolves without an update
+    updater.checkForUpdates.mockImplementationOnce(async () => (updater.emit('update-available', info), null));
+    await svc.check();
+    updater.checkForUpdates.mockRejectedValueOnce(withCode('ERR_UPDATER_NO_PUBLISHED_VERSIONS'));
+    await svc.check();
+    updater.checkForUpdates.mockRejectedValueOnce(withCode('ERR_UPDATER_CHANNEL_FILE_NOT_FOUND'));
+    await svc.check();
+    updater.checkForUpdates.mockRejectedValueOnce(new Error('net::ERR_INTERNET_DISCONNECTED'));
+    await svc.check();
+    expect(seen).toEqual(['not_available', 'available', 'no_release', 'feed_missing', 'error'].map((outcome) => ({ outcome, channel: 'stable' })));
+    // A throwing observer never breaks the check.
+    const { svc: other } = make({ onChecked: () => { throw new Error('boom'); } });
+    expect((await other.check()).state).toBe('not-available');
+  });
+
+  it('a release whose update file is not public yet gets a clear message', async () => {
+    const { svc } = make();
+    const err = Object.assign(new Error('Cannot find latest.yml in the latest release artifacts (https://github.com/o/r/releases/download/v0.3.0/latest.yml): HttpError: 404'), {
+      code: 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND',
+    });
+    updater.checkForUpdates.mockImplementationOnce(async () => {
+      updater.emit('error', err);
+      throw err;
+    });
+    expect(await svc.check()).toMatchObject({ state: 'error', error: expect.stringMatching(/no update file for this platform yet/) });
+    expect((await svc.check()).state).toBe('not-available');
   });
 
   it('never downloads or installs on its own: autoDownload and autoInstallOnAppQuit are off', async () => {
