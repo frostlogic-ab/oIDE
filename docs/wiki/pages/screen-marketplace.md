@@ -65,7 +65,7 @@ starts on the scrim itself, so a text selection dragged out of the dialog never 
 | --- | --- |
 | From a URL | Connect / Check again → `custom.probeUrl`. "What oIDE found": "Reached **name** · transport · server vX" (or the error), auth row (`needsAuth`: "Sign in in your browser" saves a draft with `custom.save` then `custom.authorize({ id })`; "Use a token instead" reveals header + password token; otherwise "No sign-in needed"), "N tools found · M turned on". Tool rows with risk from annotations (`readOnlyHint` → read only; `destructiveHint` or no hint → asks first), clickable to flip; on/off per tool. Name, Save it in, Turn on for. Add tool → `custom.save` (auth `oauth` / `header` / `none`), then `custom.setHeaderToken` when a token was entered. Cancel after a draft save → `custom.remove`. |
 | Found on this computer · N | `custom.scanImports` runs when the dialog opens (gives the tab count). Rows: checkbox, name, mono display, source, note ("already added" disabled, "remote" for http). Save it in + Turn on for. Import N → `custom.importSelected`, then a review step with each imported server's tools (risk + on/off), saved with `custom.save` on Done. |
-| Local command or JSON | Fill in (Name, Command split with a quote-aware splitter, env rows with password values, a trash button per row ("Remove variable KEY", or "Remove variable N" while unnamed; removing the last row leaves one empty row), "+ Add variable") or Paste JSON (standard `mcpServers`, parsed client-side with a green "Recognised N servers…" or a red error and `aria-invalid`). Test it → `custom.probeCommand` per server → tool rows. Add tool → `custom.save` per server (stdio transport, `envKeys`, `secrets` = env values); env values are then cleared. |
+| Local command or JSON | Fill in (Name, Command split with a quote-aware splitter, env rows with password values, a trash button per row ("Remove variable KEY", or "Remove variable N" while unnamed; removing the last row leaves one empty row; focus moves to the remove button of the row that took its place, or the new last row), "+ Add variable") or Paste JSON (standard `mcpServers`, parsed client-side with a green "Recognised N servers…" or a red error and `aria-invalid`). Test it → `custom.probeCommand` per server → tool rows. Add tool → `custom.save` per server (stdio transport, `envKeys`, `secrets` = env values); env values are then cleared. |
 | Extension from folder or git | "Choose an extension folder" box with Choose a folder… → `extensions.addFromFolder({ devMode })`; git URL + Fetch → `extensions.addFromGit({ url })`; "Developer mode: reload when its files change" (default on). Shows the manifest's tools (risk read-only: "Risk labels come from the extension's manifest"), capabilities and "not reviewed". Install extension → `extensions.setEnabled` (global when every project is ticked, else per project). Cancel → `extensions.uninstall`. |
 
 Placement for every route: "My settings (all my projects)" sets `allProjects` when every open
@@ -96,8 +96,9 @@ project is ticked; "Project .mcp.json (shared through git)" saves `projects` = t
   whether a remote server needs sign-in until it is probed.
 - No drop zone: a sandboxed renderer cannot read a dropped folder's path, and main accepts
   `extensions.addFromFolder({ path })` only for a path picked in the native dialog. The box reads
-  "Choose an extension folder"; dropping something on it shows "Dropping a folder here is not
-  supported yet. Use Choose a folder instead." and opens nothing. Making drops work needs a preload
+  "Choose an extension folder"; dragging something over it refuses the drop (`dropEffect = 'none'`,
+  so no copy cursor) and an always-mounted `role="status"` line says "Dropping a folder here is not
+  supported yet. Use Choose a folder instead."; nothing opens. Making drops work needs a preload
   helper that registers the dropped folder as picked (as the attachment drop bridge does).
 - Monograms are computed (first letters), so the sample "Postgres inspector" shows "Pi", not "Pg".
 

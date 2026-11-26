@@ -68,6 +68,17 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
   const [cmdMode, setCmdMode] = useState<'form' | 'json'>('form');
   const [cmdLine, setCmdLine] = useState('');
   const [env, setEnv] = useState<Array<{ key: string; value: string }>>([{ key: '', value: '' }]);
+  // After a row is removed its button is gone: move focus to the row that took its place (or the
+  // last one), so keyboard focus never falls out of the dialog.
+  const envRef = useRef<HTMLFieldSetElement>(null);
+  const [envFocus, setEnvFocus] = useState<number | null>(null);
+  useEffect(() => {
+    if (envFocus === null) return;
+    const rows = envRef.current?.querySelectorAll<HTMLElement>('[data-env-remove]');
+    const target = rows?.[Math.min(envFocus, rows.length - 1)];
+    target?.focus();
+    setEnvFocus(null);
+  }, [envFocus]);
   const [json, setJson] = useState('');
   const [cmdProbe, setCmdProbe] = useState<Record<string, { tools: EditableTool[]; error?: string }> | null>(null);
 
@@ -647,7 +658,7 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
                       />
                     </div>
                   </div>
-                  <fieldset className="m-0 p-0 border-0 flex flex-col gap-1.5">
+                  <fieldset ref={envRef} className="m-0 p-0 border-0 flex flex-col gap-1.5">
                     <legend className="text-[12px] text-ink-2 p-0 mb-1.5">Environment variables</legend>
                     {env.map((row, i) => (
                       <div key={i} className="flex gap-2">
@@ -671,7 +682,11 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
                           icon="trash"
                           size={32}
                           aria-label={row.key.trim() ? `Remove variable ${row.key.trim()}` : `Remove variable ${i + 1}`}
-                          onClick={() => setEnv(env.length > 1 ? env.filter((_, j) => j !== i) : [{ key: '', value: '' }])}
+                          data-env-remove
+                          onClick={() => {
+                            setEnv(env.length > 1 ? env.filter((_, j) => j !== i) : [{ key: '', value: '' }]);
+                            setEnvFocus(i);
+                          }}
                         />
                       </div>
                     ))}
@@ -743,7 +758,12 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
               */}
               <div
                 className="flex flex-col items-center gap-2 p-[22px] rounded-xl border-[1.5px] border-dashed border-line-hover text-center text-ink-2"
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => {
+                  // Refuse the drop (no "copy" cursor) and say why while something is dragged over.
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'none';
+                  setDropNote(true);
+                }}
                 onDrop={(e) => {
                   e.preventDefault();
                   setDropNote(true);
@@ -754,11 +774,10 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
                 <Button size={32} onClick={() => { setDropNote(false); void loadFolder(); }} disabled={busy} data-autofocus>
                   Choose a folder…
                 </Button>
-                {dropNote && (
-                  <span role="status" className="text-[12px] text-warn">
-                    Dropping a folder here is not supported yet. Use Choose a folder instead.
-                  </span>
-                )}
+                {/* Always mounted so screen readers announce the text when it appears. */}
+                <span role="status" className="text-[12px] text-warn empty:hidden">
+                  {dropNote ? 'Dropping a folder here is not supported yet. Use Choose a folder instead.' : ''}
+                </span>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor={gitId} className="text-[12px] text-ink-2">

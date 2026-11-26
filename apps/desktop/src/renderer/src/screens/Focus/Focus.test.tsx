@@ -12,7 +12,7 @@ import { useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useSettings } from '../../stores/settings';
 import { Composer } from './components/Composer';
-import { clearDraft, getDraft } from './composerDrafts';
+import { clearDraft, getDraft, resetDrafts } from './composerDrafts';
 import { PermissionPrompt } from './components/PermissionPrompt';
 import FocusScreen from './index';
 
@@ -74,6 +74,7 @@ let detach: () => void;
 const calls = (command: string) => invoke.mock.calls.filter((c) => c[0] === command).map((c) => c[1]);
 
 beforeEach(() => {
+  resetDrafts();
   invoke.mockClear();
   useAgents.setState({ byId: { [bridge.id]: bridge }, order: [bridge.id], events: {}, loaded: true });
   useProjects.setState({ list: projects, loaded: true });

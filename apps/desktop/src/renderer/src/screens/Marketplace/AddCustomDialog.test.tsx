@@ -183,6 +183,17 @@ describe('Add custom › Local command environment variables', () => {
 
     expect(screen.queryByLabelText('Variable 2 name')).toBeNull();
     expect((screen.getByLabelText('Variable 1 name') as HTMLInputElement).value).toBe('TWO');
+    // Focus moves to the row that took the removed one's place, not to the page body.
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove variable TWO' }));
+  });
+
+  it('moves focus to the new last row when the last of several rows is removed', () => {
+    openCmd();
+    fireEvent.click(screen.getByRole('button', { name: '+ Add variable' }));
+    fireEvent.change(screen.getByLabelText('Variable 1 name'), { target: { value: 'ONE' } });
+    fireEvent.change(screen.getByLabelText('Variable 2 name'), { target: { value: 'TWO' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove variable TWO' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove variable ONE' }));
   });
 
   it('leaves one empty row when the last one is removed, labelled by position when it has no name', () => {
@@ -203,6 +214,12 @@ describe('Add custom › Extension from folder', () => {
     render(<AddCustomDialog projects={projects} onSaved={vi.fn()} onClose={vi.fn()} initialTab="ext" />);
     expect(screen.queryByText(/Drop an extension folder/)).toBeNull();
     const zone = screen.getByText('Choose an extension folder').parentElement as HTMLElement;
+    // The live region is there before anything is dropped, so the note is announced when it appears.
+    expect(screen.getByRole('status').textContent).toBe('');
+    const dataTransfer = { files: [], dropEffect: 'copy' };
+    fireEvent.dragOver(zone, { dataTransfer });
+    expect(dataTransfer.dropEffect).toBe('none');
+    expect(screen.getByRole('status').textContent).toMatch(/not supported/);
     fireEvent.drop(zone, { dataTransfer: { files: [] } });
     expect(screen.getByRole('status').textContent).toMatch(/not supported/);
     expect(invoke).not.toHaveBeenCalledWith('extensions.addFromFolder', expect.anything());

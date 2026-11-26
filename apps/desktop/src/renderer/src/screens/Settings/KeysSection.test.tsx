@@ -98,6 +98,18 @@ describe('Settings › Keyboard shortcuts', () => {
     expect(patches()).toEqual([{ keybindings: { 'agent.next': ['L'] } }]);
   });
 
+  it('still cancels on Escape after Tab moved focus on to Save or Cancel', () => {
+    render(<KeysSection km={km} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Change shortcut for Next agent' }));
+    fireEvent.keyDown(screen.getByRole('button', { name: 'New shortcut for Next agent' }), { key: 'l' });
+    const save = screen.getByRole('button', { name: 'Save' });
+    save.focus();
+    expect(fireEvent.keyDown(save, { key: 'Escape' })).toBe(false);
+    expect(screen.queryByRole('button', { name: 'New shortcut for Next agent' })).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Change shortcut for Next agent' }));
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
   it('keeps Shift+Tab recordable because it is the Switch permission mode shortcut', () => {
     render(<KeysSection km={km} />);
     fireEvent.click(screen.getByRole('button', { name: 'Change shortcut for Next agent' }));

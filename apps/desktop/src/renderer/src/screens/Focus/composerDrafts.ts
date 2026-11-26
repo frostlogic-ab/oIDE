@@ -20,6 +20,11 @@ export function clearDraft(agentId: string): void {
   drafts.delete(agentId);
 }
 
+/** Forget every draft (tests: the map is module-level and outlives each render). */
+export function resetDrafts(): void {
+  drafts.clear();
+}
+
 // An agent that is removed or archived leaves the store; its draft goes with it.
 useAgents.subscribe((state, prev) => {
   if (drafts.size === 0) return;

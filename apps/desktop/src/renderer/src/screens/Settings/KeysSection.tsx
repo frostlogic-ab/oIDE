@@ -85,7 +85,16 @@ export function KeysSection({ km = keymap }: { km?: Keymap }) {
           >
             {({ titleId, errorId }) =>
               rec ? (
-                <span className="flex items-center gap-1.5 flex-wrap justify-end">
+                <span
+                  className="flex items-center gap-1.5 flex-wrap justify-end"
+                  onKeyDown={(e) => {
+                    // Esc still cancels after Tab moved focus on to Save / Cancel (the recorder stops its own keys).
+                    if (e.key !== 'Escape' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setRecording(null);
+                  }}
+                >
                   <button
                     type="button"
                     autoFocus
