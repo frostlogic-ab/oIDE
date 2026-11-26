@@ -1021,3 +1021,8 @@ now needs the NSIS uninstaller next to the exe. The GitHub publisher writes no `
 read `latest*.yml` through electron-updater's fallback); docs and config corrected. New finalize gate
 `tools/release-feed/verify-feed.mjs`; new telemetry event `update_checked`. Pages: packaging,
 release-pipeline, telemetry.
+
+## [2026-11-26] build | "by Frostlogic" subtitle in the header
+The header lockup is now the mark beside "oIDE" with a "by [Frostlogic]" subtitle underneath. The Frostlogic
+wordmark is traced 1:1 from the company's vector logo into `FrostlogicLogo` (`@oide/ui`) and
+`docs/brand/frostlogic-wordmark.svg`. Updated [design-system](pages/design-system.md) and docs/brand/README.md.

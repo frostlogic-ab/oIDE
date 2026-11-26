@@ -80,4 +80,5 @@ export { Dialog, type DialogProps } from './Dialog.js';
 export { Menu, type MenuProps, type MenuItem } from './Menu.js';
 export { Tooltip, type TooltipProps, type TooltipPlacement } from './Tooltip.js';
 export { Logo, type LogoProps } from './Logo.js';
+export { FrostlogicLogo, FROSTLOGIC_BLUE, type FrostlogicLogoProps } from './FrostlogicLogo.js';
 export { LOGO_COLORS, LOGO_SHAPES, type LogoShapes } from './logoGeometry.js';
