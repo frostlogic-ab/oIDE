@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { collectDiagnostics, formatBytes, parseVersion, versionAtLeast, type DiagnosticsDeps } from './diagnostics.js';
+import { appDataLocation, collectDiagnostics, formatBytes, parseVersion, versionAtLeast, type DiagnosticsDeps } from './diagnostics.js';
 import { Redactor } from './redact.js';
 
 const HOME = '/home/jane';
@@ -18,6 +18,7 @@ function deps(over: Partial<DiagnosticsDeps> = {}): DiagnosticsDeps {
     homeRedactor: new Redactor({ home: HOME }),
     runVersion: async (tool) => ({ git: { path: '/usr/bin/git', output: 'git version 2.45.1' }, gh: null, node: { path: '/usr/bin/node', output: 'v22.11.0' } })[tool] ?? null,
     now: () => Date.UTC(2026, 10, 24),
+    realpath: (p) => p,
     ...over,
   };
 }
@@ -38,6 +39,36 @@ describe('diagnostics', () => {
     expect(d.report).toContain('oIDE diagnostics · 2026-11-24');
     expect(d.report).toContain('[warn] GitHub CLI (gh): Not found');
     expect(d.report).not.toContain(HOME);
+  });
+
+  it('never prints an app data folder outside home as a raw path (custom or temp userData)', async () => {
+    const userData = '/tmp/oide data ünï-x1';
+    const d = await collectDiagnostics(
+      deps({
+        userDataDir: userData,
+        logsDir: `${userData}/logs`,
+        dbFile: `${userData}/oide.db`,
+        redactor: new Redactor({ home: HOME, paths: { [userData]: '<userData>' } }),
+      }),
+    );
+    expect(byId(d, 'userData')).toMatchObject({ value: '<userData>', detail: expect.stringMatching(/outside the home folder/i) });
+    expect(byId(d, 'logs').value).toBe('<userData>/logs');
+    expect(d.report).not.toContain(userData);
+    expect(d.report).not.toContain('/tmp/');
+  });
+
+  it('expands a Windows 8.3 short home name before redacting the app data folder', () => {
+    const home = 'C:\\Users\\Jane Doe';
+    const short = 'C:\\Users\\JANEDO~1\\AppData\\Local\\Temp\\oide e2e data ünï-x1';
+    const long = 'C:\\Users\\Jane Doe\\AppData\\Local\\Temp\\oide e2e data ünï-x1';
+    const out = appDataLocation(short, new Redactor({ home }), (p) => (p === short ? long : p));
+    expect(out).toEqual({ value: '~\\AppData\\Local\\Temp\\oide e2e data ünï-x1' });
+    expect(JSON.stringify(out)).not.toContain('JANEDO~1');
+    // A path that cannot be resolved (missing folder) is used as given: it does not match home.
+    const unresolved = appDataLocation(short, new Redactor({ home }), () => {
+      throw new Error('ENOENT');
+    });
+    expect(unresolved.value).toBe('<userData>');
   });
 
   it('fails git older than 2.38 (merge-tree --write-tree), a missing CLI and a dead MCP server', async () => {

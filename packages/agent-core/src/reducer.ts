@@ -20,6 +20,8 @@ import { SubagentTracker } from './subagents.js';
  * Queued (supervisor), Running (a message was sent, no result yet), Needs permission (pending MCP prompt),
  * Has a question (result without submit_for_review), Ready for review (submit_for_review called),
  * Error (non-zero exit, auth error), Paused by plan limit (rate-limit event; no auto retry).
+ * One refinement (ADR 0016): a follow-up turn on an agent that already submitted for review goes back
+ * to Ready for review when its last message asks the user nothing (a status report, "CI is green").
  */
 
 export interface ReducerOptions {
@@ -37,6 +39,25 @@ const LARGE_WINDOW = 1_000_000;
 function clip(s: string, n = MAX_LINE): string {
   const one = s.replace(/\s+/g, ' ').trim();
   return one.length > n ? `${one.slice(0, n - 1)}…` : one;
+}
+
+const QUESTION_MARK = /\?(?=$|[\s"')\]*_.,:;!])/m;
+const ASKS_USER =
+  /\b(?:let me know|please (?:confirm|choose|decide|advise|tell me|reply|answer)|tell me (?:which|whether|if|what|how)|(?:waiting|wait) for your|your call|up to you|i need (?:you|your)|need your (?:input|answer|decision|go-ahead|approval))\b/i;
+
+/**
+ * Whether an agent's final message asks the user something: a question mark outside code and links,
+ * or a plain request for an answer ("Let me know which you prefer."). Errs towards yes, since a missed
+ * question leaves the user unaware the agent is waiting on them.
+ */
+export function asksUser(text: string | undefined): boolean {
+  if (!text?.trim()) return false;
+  const prose = text
+    .replace(/```[\s\S]*?(?:```|$)/g, ' ')
+    .replace(/`[^`\n]*`/g, ' ')
+    .replace(/\bhttps?:\/\/\S+/gi, ' ')
+    .replace(/\]\([^)\s]*\)/g, '] ');
+  return QUESTION_MARK.test(prose) || ASKS_USER.test(prose);
 }
 
 /** Show a path relative to the worktree, with forward slashes. */
@@ -430,6 +451,9 @@ export class AgentReducer {
     if (this.reviewSinceSend) return 'ready-for-review';
     if ((s.backgroundTasks ?? 0) > 0) return 'running';
     if (e.isError && e.subtype !== 'error_during_execution' && e.apiErrorStatus) return 'error';
+    // A follow-up turn after an earlier submit_for_review that only reports back (no question) leaves
+    // the submitted work standing: it is ready for review again, not waiting on an answer.
+    if (s.review && !e.isError && !asksUser(e.text ?? s.lastMessage)) return 'ready-for-review';
     return 'has-question';
   }
 }
