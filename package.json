@@ -1,7 +1,7 @@
 {
   "name": "oide-monorepo",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "oIDE: run many Claude Code CLI agents in parallel, across many projects, in one window.",
   "license": "MIT",
   "type": "module",

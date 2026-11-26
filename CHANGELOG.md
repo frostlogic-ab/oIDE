@@ -9,6 +9,42 @@ Conventional Commit titles of merged pull requests, in the release pull request 
 `main`. Do not add entries by hand; give your pull request a good title instead. The pipeline is
 described in [docs/wiki/pages/release-pipeline.md](docs/wiki/pages/release-pipeline.md).
 
+## [0.3.0](https://github.com/frostlogic-ab/oIDE/compare/v0.2.0...v0.3.0) (2026-11-26)
+
+
+### Added
+
+* **site:** download buttons link to the latest installer for each OS ([a76cf48](https://github.com/frostlogic-ab/oIDE/commit/a76cf48a207826d080133d533c557fc4f971305a))
+* **site:** download buttons link to the latest installer for each OS ([6b9d678](https://github.com/frostlogic-ab/oIDE/commit/6b9d67859d8e73d0bd93634ee41dae1a678021f6))
+* **source-control:** revert uncommitted changes on the main checkout ([66ddf27](https://github.com/frostlogic-ab/oIDE/commit/66ddf2773877ac63df6fa4a8673c4fa64a3789e2))
+* **source-control:** revert uncommitted changes on the main checkout ([71d32a6](https://github.com/frostlogic-ab/oIDE/commit/71d32a64681eb250bd2775d72eec0761902e84e1))
+
+
+### Fixed
+
+* address review findings on the usability fixes ([108d17c](https://github.com/frostlogic-ab/oIDE/commit/108d17c94a218366f4a0d4df184cad0b8d5ab869))
+* **agent-core:** never launch an agent whose custom model was removed ([01950f6](https://github.com/frostlogic-ab/oIDE/commit/01950f64aa64b383f5141e0ffc083b3eaea6a1c7))
+* **agent-core:** reject a removed custom model at spawn, before any worktree ([02510a2](https://github.com/frostlogic-ab/oIDE/commit/02510a24c1cc957afdfa1f29c4ad8b37f64a520e))
+* **files:** retry a folder that failed to load instead of staying broken ([9bf023a](https://github.com/frostlogic-ab/oIDE/commit/9bf023a1a1bdac7a413e1e4772cfe854995ef7f0))
+* **files:** unsaved edits keep their marker and close warning after leaving Files ([6a123ec](https://github.com/frostlogic-ab/oIDE/commit/6a123eca4dffb48e4f2685d02d83ca8764895092))
+* **focus:** artifact picker closes with Esc and its own button, returns focus ([a01c0e7](https://github.com/frostlogic-ab/oIDE/commit/a01c0e70dbc27bf9e50278360d45f1419a6002fa))
+* **focus:** explain why Resume is blocked and hide Pause where it does nothing ([a327b0f](https://github.com/frostlogic-ab/oIDE/commit/a327b0fe0d60f64530a8395183bee1360651be12))
+* **focus:** show the real allow/deny shortcuts on the permission prompt ([aec6dda](https://github.com/frostlogic-ab/oIDE/commit/aec6dda4afbe43c7b26d05bafaf973850d17d56a))
+* **licenses:** generate identical notices on every OS ([d36c311](https://github.com/frostlogic-ab/oIDE/commit/d36c3117657affe6a5414a27e1dcf279d65aa35a))
+* **licenses:** generate identical notices on every OS ([df949cf](https://github.com/frostlogic-ab/oIDE/commit/df949cfee1b692a01d01e6566d9f6618d19ad664))
+* **licenses:** make notices identical on every OS so the macOS release build passes ([2c734c3](https://github.com/frostlogic-ab/oIDE/commit/2c734c3b6e553e1df6b9c14e73292c0bc3c91631))
+* **review:** send-feedback button follows pending comments and cannot resend nothing ([2220424](https://github.com/frostlogic-ab/oIDE/commit/22204249efad8fdeae6908d738cbee0fbc309072))
+* **review:** show a retryable error when the diff fails instead of "No changes yet" ([f95f6c2](https://github.com/frostlogic-ab/oIDE/commit/f95f6c202442f401af86c0b1a71ab4e201867b6e))
+* **review:** show Push to pull request only when there is something to push ([93c0599](https://github.com/frostlogic-ab/oIDE/commit/93c0599c76ebada896f39de7a4992eb79db63dd8))
+* **review:** show Push to pull request only when there is something to push ([99a8dcc](https://github.com/frostlogic-ab/oIDE/commit/99a8dcc033be827363054e0c52928396cfe4e70d))
+* **settings:** confirm before removing a model, deleting a technique or resetting shortcuts ([64e4070](https://github.com/frostlogic-ab/oIDE/commit/64e407069acb27526d71d33599e3cc3118151f5d))
+* **shell:** command bar keeps a valid selection while file results load ([9590cf7](https://github.com/frostlogic-ab/oIDE/commit/9590cf73f518cccfe35978310b2e4b16f176b0f1))
+* **spawn:** keep the typed goal on stray clicks and Esc, wait for attachments ([43f7016](https://github.com/frostlogic-ab/oIDE/commit/43f7016b69e4acf0afcaee98a57575850650063c))
+* ten usability fixes across Focus, Spawn, Files, Review and Settings ([971241c](https://github.com/frostlogic-ab/oIDE/commit/971241ca20b296fd41d7e65862537f3a78f32a3b))
+* **updates:** address review: empty releases feed, stuck drafts, lockfile drift ([4967f4b](https://github.com/frostlogic-ab/oIDE/commit/4967f4b870f7843471b0d4afeaa6298d7a8365c6))
+* **updates:** keep the Windows portable zip off the updater; clearer check failures ([d30cb9a](https://github.com/frostlogic-ab/oIDE/commit/d30cb9aa3c6f735fd76479b231eb3b7cd451e3e5))
+* **updates:** unblock the macOS release build and verify the update feed before publishing ([89eaad8](https://github.com/frostlogic-ab/oIDE/commit/89eaad8aa8c1805e49984f0265bc55d2c5080978))
+
 ## [0.2.0](https://github.com/frostlogic-ab/oIDE/compare/v0.1.0...v0.2.0) (2026-11-26)
 
 
