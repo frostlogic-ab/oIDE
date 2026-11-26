@@ -892,3 +892,18 @@ claude.ai Design exports (`*.dc.html` + `_runtime/support.js`) compile their com
 which the artifact CSP blocked (red CSP error box over the preview). `ARTIFACT_CSP` now allows
 `'unsafe-eval'`; network, frames, workers and the sandbox are unchanged, and inline scripts already ran, so
 an artifact gains no new capability. Updated [artifacts.md](pages/artifacts.md); test pins the CSP.
+## [2026-11-26] decision | CI split: what runs on pull requests
+First runs on GitHub showed CI red on every OS (5 Vitest failures on Linux, 11 on macOS, 10 on
+Windows; platform path bugs that a Windows dev machine does not hit) and every CI and CodeQL run on
+`main` cancelled by the next push. `ci.yml` now runs typecheck and lint once (Linux), unit tests on
+all three OSes, e2e on Linux for PRs and on all three OSes for main, skips the heavy jobs for
+docs-only PRs, builds the docs site when `docs/site/**` changes, never cancels runs on main, and ends
+in one `CI ok` check for branch protection. CodeQL skips docs-only PRs and no longer cancels runs on
+main ([packaging](pages/packaging.md#ci-and-release-workflows)).
+
+## [2026-11-26] review | "Open pull request" failed with "title: expected string"
+Reported as `Invalid input for git.openPr: title: expected string, received undefined`. The schema on
+`main` was already right (`title`/`body` optional since the PR-conventions change); the running main
+process predated it. `electron-vite dev` hot-reloads the renderer but does not rebuild or restart main
+and preload, so after pulling, restart oIDE when `packages/protocol` or `src/main` change. A router
+test now pins `git.openPr` accepting just `{ agentId }` ([screen-review](pages/screen-review.md)).

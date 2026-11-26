@@ -108,11 +108,28 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
 
 ## CI and release workflows
 
-- `.github/workflows/ci.yml` (push to main, every PR): matrix ubuntu / windows / macos, Node 24,
-  pnpm from `packageManager`. Steps: `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm lint`,
-  `pnpm test` (Vitest), `pnpm wiki:lint` and `pnpm licenses:check` (Linux), `pnpm --filter @oide/desktop
-  build`, Playwright for Electron (under `xvfb-run` on Linux, where the e2e launcher adds
-  `--no-sandbox`). Playwright output is uploaded on failure.
+- `.github/workflows/ci.yml` (push to main, every PR, manual). Node 24, pnpm from `packageManager`,
+  `pnpm install --frozen-lockfile` in every job. What runs where:
+
+  | Job | Pull request | Push to main |
+  |---|---|---|
+  | `changes` | classifies the PR's files (GitHub API) into code / docs site / docs only | everything counts as code |
+  | `checks` (ubuntu) | `typecheck`, `lint` (skipped for docs-only PRs), `wiki:lint`, `licenses:check`, `docs:build` when `docs/site/**` changed | same, no docs build (`docs.yml` builds and deploys) |
+  | `test` | Vitest on ubuntu, windows, macos (skipped for docs-only PRs) | same |
+  | `e2e` | desktop build + Playwright on ubuntu under `xvfb-run` | on ubuntu, windows and macos |
+  | `CI ok` | the one check to require in branch protection: fails if any job failed or was cancelled, skipped jobs pass | same |
+
+  Why: typecheck and lint give the same answer on every OS, so they run once. Unit tests stay on
+  three OSes because path handling (worktrees, junctions, `PATHEXT`, macOS `/private/var`
+  realpaths) is core to oIDE and breaks per OS: the first runs on GitHub (2026-11-26) failed 5 tests
+  on Linux, 11 on macOS and 10 on Windows, all of which pass on a Windows dev machine. Windows and
+  macOS e2e are the slowest jobs and run on main only. "Docs only" means every changed file is under
+  `docs/` or is a root `*.md`, except `docs/wiki/pages/telemetry.md` (read by
+  `test/telemetry-docs.test.ts`). A new push to a PR cancels its older run; runs on main are never
+  cancelled (one concurrency group per commit), so every commit on main gets a full result.
+  Playwright output is uploaded on failure. `codeql.yml` (security-extended, no build) runs on PRs
+  except docs-only ones, on every push to main (the baseline PR alerts are compared against, also
+  never cancelled) and weekly.
 - `release-please.yml` (push to main): release-please keeps the release PR current; merging it
   creates a draft release + tag and calls `release.yml`. `pr-title.yml` checks that PR titles follow
   Conventional Commits. See [release-pipeline](release-pipeline.md).
