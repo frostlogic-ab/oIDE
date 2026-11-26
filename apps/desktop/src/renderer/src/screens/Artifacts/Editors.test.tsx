@@ -110,6 +110,7 @@ const SITE: FileSet = {
 let arts: Record<string, Art>;
 let listeners: Map<string, Set<(p: unknown) => void>>;
 let saveError: string | null;
+let listError: string | null;
 
 function seed() {
   const board = JSON.stringify({ type: 'excalidraw', version: 2, elements: [], appState: {} }, null, 2);
@@ -187,6 +188,7 @@ const invoke = vi.fn(async (command: string, input: unknown): Promise<unknown> =
   };
   switch (command) {
     case 'artifacts.list':
+      if (listError) throw new Error(listError);
       return Object.values(arts).map((a) => a.meta);
     case 'artifacts.uses':
       return {};
@@ -257,6 +259,7 @@ const calls = (command: string) =>
 beforeEach(() => {
   seed();
   saveError = null;
+  listError = null;
   listeners = new Map();
   const bridge: OideBridge = {
     invoke: invoke as unknown as OideBridge['invoke'],
@@ -496,6 +499,93 @@ describe('Unsaved edits survive leaving the screen', () => {
     const card = await screen.findByRole('button', { name: /Webhook retry design/ });
     expect(within(card).getByText('Unsaved')).toBeTruthy();
     expect(screen.queryByRole('region', { name: /\(open\)/ })).toBeNull();
+  });
+
+  const viaRail = () => useRouter.setState({ route: { screen: 'artifacts', params: {} }, back: [], forward: [] });
+  const viewerOpen = () => screen.queryByRole('region', { name: /\(open\)/ });
+  const gridCard = async (title: RegExp) => within(await screen.findByRole('tabpanel', { name: 'Artifacts' })).findByRole('button', { name: title });
+
+  it('reopens the open artifact when the rail (no artifact in the route) brings the screen back', async () => {
+    await typeAndLeave('half-written');
+    viaRail();
+    const viewer = await comeBack();
+    expect(((await within(viewer).findByLabelText('Source of Webhook retry design')) as HTMLTextAreaElement).value).toBe('half-written');
+    expect(useRouter.getState().route).toEqual({ screen: 'artifacts', params: { artifactId: 'a-doc' } });
+  });
+
+  it('Keep as draft goes back to the grid with the draft kept, and the grid stays browsable', async () => {
+    await typeAndLeave('draft text');
+    viaRail();
+    const viewer = await comeBack();
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Artifacts' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Discard your changes?' });
+    expect(within(confirm).getByRole('button', { name: 'Keep editing' })).toBeTruthy();
+    expect(within(confirm).getByRole('button', { name: 'Discard' })).toBeTruthy();
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Keep as draft' }));
+    await waitFor(() => expect(viewerOpen()).toBeNull());
+    expect(draftsOf()['a-doc']?.draft).toBe('draft text');
+    expect(within(await gridCard(/Webhook retry design/)).getByText('Unsaved')).toBeTruthy();
+    // Leaving and coming back by the rail lands on the grid, not in the editor again.
+    cleanup();
+    viaRail();
+    render(<ArtifactsScreen />);
+    const card = await gridCard(/Webhook retry design/);
+    expect(within(card).getByText('Unsaved')).toBeTruthy();
+    expect(viewerOpen()).toBeNull();
+    // The badge is the way back: the card opens the editor with the kept text.
+    fireEvent.click(card);
+    fireEvent.doubleClick(card);
+    const again = await screen.findByRole('region', { name: /\(open\)/ });
+    expect(((await within(again).findByLabelText('Source of Webhook retry design')) as HTMLTextAreaElement).value).toBe('draft text');
+  });
+
+  it('a Viewer without edits closes straight away, with no Keep as draft', async () => {
+    const viewer = await openArtifact(/Webhook retry design/);
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Artifacts' }));
+    await waitFor(() => expect(viewerOpen()).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Keep as draft' })).toBeNull();
+  });
+
+  it('keeps every draft when the first load of the list fails, and resumes once it works', async () => {
+    await typeAndLeave('draft text');
+    listError = 'disk is busy';
+    render(<ArtifactsScreen />);
+    await waitFor(() => expect(calls('artifacts.list').length).toBeGreaterThan(0));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(draftsOf()['a-doc']?.draft).toBe('draft text');
+    expect(viewerOpen()).toBeNull();
+    // A later successful load: the draft is still there and the route's artifact reopens with it.
+    listError = null;
+    emit('artifacts.changed', { id: 'a-doc', change: 'saved', version: 1, author: 'user' });
+    const viewer = await screen.findByRole('region', { name: /\(open\)/ });
+    expect(((await within(viewer).findByLabelText('Source of Webhook retry design')) as HTMLTextAreaElement).value).toBe('draft text');
+  });
+
+  it('still drops the draft of an artifact that no longer exists', async () => {
+    await typeAndLeave('draft text');
+    delete arts['a-doc'];
+    viaRail();
+    render(<ArtifactsScreen />);
+    await screen.findByRole('button', { name: /Session lifecycle/ });
+    await waitFor(() => expect(draftsOf()['a-doc']).toBeUndefined());
+  });
+
+  it('drops a draft whose artifact now opens on another page, with a notice, instead of writing it to the wrong file', async () => {
+    const viewer = await openArtifact(/Docs site/);
+    fireEvent.change(await within(viewer).findByLabelText('Source of Docs site'), { target: { value: '<h1>Home mine</h1>' } });
+    expect(draftsOf()['a-site']).toMatchObject({ entry: 'index.html', draft: '<h1>Home mine</h1>' });
+    cleanup();
+    // An agent made about.html the page while the screen was away.
+    const a = arts['a-site']!;
+    writeSet(a, { ...a.files![1]! }, 'about.html', 'agent:ag-fix');
+    render(<ArtifactsScreen />);
+    await screen.findByRole('button', { name: /Docs site/ });
+    await waitFor(() => expect(draftsOf()['a-site']).toBeUndefined());
+    expect(viewerOpen()).toBeNull();
+    expect(useUi.getState().toasts.map((t) => t.message)).toContain('Docs site now opens on another page, so your unsaved edits to the old one were discarded.');
+    expect(calls('artifacts.writeFiles')).toEqual([]);
   });
 
   it('Discard clears the stored draft', async () => {

@@ -103,7 +103,8 @@ export function Viewer({
   // on meanwhile, the draft keeps its old base and the conflict banner below takes over.
   const [resumed] = useState(() => {
     const d = useArtifactDrafts.getState().drafts[detail.meta.id];
-    return d && d.baseVersion <= detail.meta.version && d.draft !== d.baseline ? d : undefined;
+    // A draft of another entry file (an agent moved the artifact's page) is not this file's text.
+    return d && d.entry === detail.meta.entry && d.baseVersion <= detail.meta.version && d.draft !== d.baseline ? d : undefined;
   });
   const [base, setBase] = useState(resumed ? { version: resumed.baseVersion, content: resumed.baseContent } : { version: meta.version, content: detail.content });
   const [draft, setDraft] = useState(resumed ? resumed.draft : detail.content);
@@ -122,12 +123,14 @@ export function Viewer({
   const own = useRef(new Set<number>());
   const dirty = baseline !== null && draft !== baseline;
   const live = useRef({ base, dirty, entry: meta.entry });
+  /** The entry file the editor's text belongs to (`live.entry` moves as soon as an agent changes it). */
+  const draftEntry = useRef(meta.entry);
   live.current = { ...live.current, base, dirty };
   // Keep the unsaved entry edits outside this component so leaving the screen does not lose them.
   // Not cleared on unmount: that is the point. Save, "Use theirs" and Discard make it not dirty or clear it.
   useEffect(() => {
     const drafts = useArtifactDrafts.getState();
-    if (dirty && baseline !== null) drafts.set(meta.id, { baseVersion: base.version, baseContent: base.content, baseline, draft });
+    if (dirty && baseline !== null) drafts.set(meta.id, { baseVersion: base.version, baseContent: base.content, baseline, entry: draftEntry.current, draft });
     else drafts.clear(meta.id);
   }, [dirty, baseline, draft, base, meta.id]);
   const retrieval = useRetrieval(meta, onMeta);
@@ -203,6 +206,7 @@ export function Viewer({
 
   /** Replace the editor content with another saved version (an agent's, or "Use theirs"). */
   const loadOther = (o: Other, announce: boolean) => {
+    draftEntry.current = detail.meta.entry;
     setBase({ version: o.version, content: o.content });
     setDraft(o.content);
     setBaseline(kind === 'whiteboard' ? null : o.content);
@@ -238,6 +242,7 @@ export function Viewer({
         ? await oide.invoke('artifacts.writeFiles', { id: meta.id, files: [{ path: meta.entry, encoding: 'utf8', data: content }], note, baseVersion })
         : await oide.invoke('artifacts.save', { id: meta.id, content, note, baseVersion });
       own.current.add(next.version);
+      draftEntry.current = meta.entry;
       setBase({ version: next.version, content });
       setBaseline(content);
       setConflict(null);
@@ -513,12 +518,28 @@ export function Viewer({
         open={confirmClose}
         onClose={() => setConfirmClose(false)}
         title="Discard your changes?"
-        description={`Your edits to ${meta.title} are not saved.`}
+        description={
+          dirty
+            ? `Your edits to ${meta.title} are not saved. Keep them as a draft to come back to from the grid.${file.dirty ? ` Edits to ${otherPath} are not kept.` : ''}`
+            : `Your edits to ${otherPath ?? meta.title} are not saved.`
+        }
         footer={
           <>
             <Button size={32} onClick={() => setConfirmClose(false)}>
               Keep editing
             </Button>
+            {dirty && (
+              <Button
+                size={32}
+                onClick={() => {
+                  // The draft stays in the store (the grid card shows Unsaved); only the editor closes.
+                  setConfirmClose(false);
+                  onClose();
+                }}
+              >
+                Keep as draft
+              </Button>
+            )}
             <Button
               size={32}
               variant="danger"

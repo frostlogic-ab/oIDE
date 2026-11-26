@@ -19,7 +19,7 @@ import { navigate, useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { toast } from '../../stores/ui';
 import { DeleteDialog, NewArtifactDialog, RenameDialog } from './Dialogs';
-import { latestDraftId, useArtifactDrafts } from './draftStore';
+import { draftIdsKey, useArtifactDrafts } from './draftStore';
 import { useFileDrop, type DroppedFiles } from './drop';
 import { BrokenImportBadge, FixImportPanel } from './FixImportPanel';
 import { ArtifactPreview, KindThumb } from './Preview';
@@ -51,11 +51,14 @@ function useLibrary() {
   const [list, setList] = useState<ArtifactMeta[] | null>(null);
   const [uses, setUses] = useState<Record<string, ArtifactUse[]>>({});
   const [error, setError] = useState<string | null>(null);
+  /** True once a list came back from main. A failed first load leaves `list` empty but not `loaded`. */
+  const [loaded, setLoaded] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const l = await invokeOr('artifacts.list', {}, []);
       setList(l);
+      setLoaded(true);
       setError(null);
       if (l.length) setUses(await invokeOr('artifacts.uses', { ids: l.map((a) => a.id).slice(0, 500) }, {}));
     } catch (err) {
@@ -69,7 +72,7 @@ function useLibrary() {
     return oide.on('artifacts.changed', () => void load());
   }, [load]);
 
-  return { list, uses, error, reload: load };
+  return { list, loaded, uses, error, reload: load };
 }
 
 function useDetail(id: string | undefined) {
@@ -103,7 +106,7 @@ export default function ArtifactsScreen() {
   const setScope = useScope((s) => s.setScope);
   const projects = useProjects((s) => s.list);
   const agents = useAgents((s) => s.byId);
-  const { list, uses } = useLibrary();
+  const { list, loaded, uses } = useLibrary();
   const [kind, setKind] = useState<KindTab>('all');
   const [query, setQuery] = useState('');
   const [dialog, setDialog] = useState<'new' | 'rename' | 'delete' | null>(null);
@@ -123,23 +126,37 @@ export default function ArtifactsScreen() {
     setDetail((d) => (d && d.meta.id === m.id ? { ...d, meta: m } : d));
   };
 
-  // Back from another screen with unsaved edits (draftStore.ts): land on the artifact they belong to, in
-  // the editor. Only the route's artifact, or the most recent draft when the route names none.
+  // Back from another screen with unsaved edits (draftStore.ts): reopen the editor on the artifact the
+  // route names when it has a draft, or (the rail and Ctrl+K carry no artifact) on the one whose Viewer was
+  // open when the screen was left. Once, and not again after the user went back to the grid (that is what
+  // "Keep as draft" does: the card's Unsaved badge is the way back).
   const resume = useRef<string | undefined>(undefined);
   const resumed = useRef(false);
-  const drafts = useArtifactDrafts((s) => s.drafts);
+  const [leftOpen] = useState(() => useArtifactDrafts.getState().lastOpenId);
+  const draftIds = useArtifactDrafts(draftIdsKey);
+  const hasDraft = useMemo(() => new Set(draftIds.split(',')), [draftIds]);
   useEffect(() => {
-    if (!list) return;
-    useArtifactDrafts.getState().prune(new Set(list.map((a) => a.id)));
+    // Only after a list really came back: a failed load must not look like "every artifact is gone".
+    if (!list || !loaded) return;
+    const store = useArtifactDrafts.getState();
+    store.prune(new Set(list.map((a) => a.id)));
     if (resumed.current) return;
     resumed.current = true;
+    // An agent moved the artifact to another entry file while away: the old text is not that file's.
+    for (const a of list) {
+      const d = useArtifactDrafts.getState().drafts[a.id];
+      if (!d || d.entry === a.entry) continue;
+      store.clear(a.id);
+      toast(`${a.title} now opens on another page, so your unsaved edits to the old one were discarded.`, 'warning');
+    }
     const kept = useArtifactDrafts.getState().drafts;
-    const id = routeId ? (kept[routeId] ? routeId : undefined) : latestDraftId(kept);
+    const id = routeId ? (kept[routeId] ? routeId : undefined) : leftOpen && kept[leftOpen] ? leftOpen : undefined;
+    store.setLastOpen(id ?? null);
     if (!id) return;
     resume.current = id;
     if (id !== routeId) useRouter.getState().replace('artifacts', { artifactId: id });
     setOpened({});
-  }, [list, routeId]);
+  }, [list, loaded, routeId, leftOpen]);
   useEffect(() => {
     // The resume above changes the selection once; that is not the user picking another artifact.
     if (resume.current) {
@@ -148,6 +165,15 @@ export default function ArtifactsScreen() {
     }
     setOpened(false);
   }, [selectedId]);
+  // Remember which Viewer is open so leaving the screen mid-edit can bring it back; closing it to the grid forgets.
+  const openId = opened ? selectedId : undefined;
+  useEffect(() => {
+    if (openId) useArtifactDrafts.getState().setLastOpen(openId);
+  }, [openId]);
+  const closeViewer = () => {
+    setOpened(false);
+    useArtifactDrafts.getState().setLastOpen(null);
+  };
 
   const shown = detail?.meta.id === selectedId ? detail : null;
   const actionDialogs = shown && (
@@ -168,7 +194,7 @@ export default function ArtifactsScreen() {
         onClose={() => setDialog(null)}
         onDeleted={() => {
           setDialog(null);
-          setOpened(false);
+          closeViewer();
           setDetail(null);
           useArtifactDrafts.getState().clear(shown.meta.id);
           toast(`Deleted ${shown.meta.title}`, 'success');
@@ -202,11 +228,11 @@ export default function ArtifactsScreen() {
           projectName={shown.meta.projectId ? projectName(shown.meta.projectId) : ''}
           initialMode={opened.mode}
           compare={opened.compare}
-          onClose={() => setOpened(false)}
+          onClose={closeViewer}
           onSaved={(meta, content) => setDetail((d) => (d && d.meta.id === meta.id ? withSaved(d, meta, content) : d))}
           onMeta={applyMeta}
           onReplaced={(meta) => {
-            setOpened(false);
+            closeViewer();
             created(meta);
           }}
           onRename={() => setDialog('rename')}
@@ -291,7 +317,7 @@ export default function ArtifactsScreen() {
                   <div className="flex flex-col gap-[3px] px-3 py-2.5 w-full box-border">
                     <span className="flex items-center gap-1.5 min-w-0">
                       <span className="font-semibold truncate">{a.title}</span>
-                      {drafts[a.id] && <Badge tone="warn">Unsaved</Badge>}
+                      {hasDraft.has(a.id) && <Badge tone="warn">Unsaved</Badge>}
                     </span>
                     <span className="text-[12px] text-ink-3">
                       {KIND_LABEL[a.kind]} · {projectName(a.projectId)}
