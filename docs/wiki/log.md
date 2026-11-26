@@ -969,3 +969,16 @@ GitHub's Ubuntu runners), so the frozen renderer outlived the poll and the teard
 macOS terminate the process directly. The test now kills the renderer with SIGKILL on
 `getOSProcessId()`, which dumps nothing and behaves the same on every OS
 ([reliability](pages/reliability.md#tests)).
+
+## [2026-11-26] review | Auto-update verified against the v0.2.0 release
+
+Checked the first GitHub release (frostlogic-ab/oIDE v0.2.0) end to end: assets, the packaged
+Windows zip (`app-update.yml`, compiled feed `publishTarget("frostlogic-ab", "oIDE")`, electron-updater
+shipped) and electron-updater's own GitHub provider run against the live repo. Findings and fixes:
+v0.2.0 is still a **draft** (the macOS build failed `licenses:check` because `fsevents` installs only
+on macOS; finalize never ran), so every client sees no release. Fixed in `tools/licenses/platform.mjs`.
+The Windows portable zip carried `app-update.yml` and would have installed a second copy; the updater
+now needs the NSIS uninstaller next to the exe. The GitHub publisher writes no `beta*.yml` (beta users
+read `latest*.yml` through electron-updater's fallback); docs and config corrected. New finalize gate
+`tools/release/verify-feed.mjs`; new telemetry event `update_checked`. Pages: packaging,
+release-pipeline, telemetry.

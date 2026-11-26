@@ -262,7 +262,7 @@ export class UpdaterService {
       const u = await this.ensure();
       if (!u) return this.getStatus();
       this.set({ state: 'checking', error: undefined });
-      let outcome: UpdateCheckOutcome = 'error';
+      let outcome: UpdateCheckOutcome;
       try {
         await u.checkForUpdates();
         // The 'update-available' / 'update-not-available' / 'error' listeners set the state; a null

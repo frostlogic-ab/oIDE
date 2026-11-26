@@ -8,11 +8,13 @@ name: Release
 #      calls this workflow with `tag: vX.Y.Z`.
 #   2. verify: the tag must equal apps/desktop/package.json "version" (with a leading v); then
 #      typecheck, lint, test and licences.
-#   3. build: one job per OS; electron-builder uploads the installers and latest*.yml / beta*.yml to
-#      the draft release of that tag.
-#   4. finalize: SHA256SUMS (and GPG signatures when the key exists), then the release is published:
-#      marked latest for 0.2.0, pre-release for 0.2.0-beta.1 (the beta channel reads beta*.yml).
-#      If any build fails, the release stays a draft and nothing reaches users; re-run the failed jobs.
+#   3. build: one job per OS; electron-builder uploads the installers and the update feed
+#      (latest*.yml; its GitHub publisher writes no beta*.yml) to the draft release of that tag.
+#   4. finalize: SHA256SUMS (and GPG signatures when the key exists), then tools/release/verify-feed.mjs
+#      checks that every platform's latest*.yml is there and names only attached files, then the
+#      release is published: marked latest for 0.2.0, pre-release for 0.2.0-beta.1 (the beta channel
+#      takes the newest release, prerelease or not). If any build or the feed check fails, the release
+#      stays a draft and nothing reaches users; fix it and re-run the failed jobs.
 #
 # Manual run (Actions > Release > Run workflow): with a tag, (re)builds that tag into its release;
 # without one, builds the selected branch as workflow artifacts and publishes nothing.
@@ -303,7 +305,6 @@ jobs:
             apps/desktop/release/*/*.rpm
             apps/desktop/release/*/*.blockmap
             apps/desktop/release/*/latest*.yml
-            apps/desktop/release/*/beta*.yml
           if-no-files-found: error
           retention-days: 14
 
@@ -319,6 +320,12 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAG: v${{ needs.verify.outputs.version }}
     steps:
+      # Only tools/release (the feed check), from the workflow's own commit: plain Node, no install.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          sparse-checkout: tools/release
+          path: src
+
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: oide-*
@@ -363,6 +370,16 @@ jobs:
           files=(upload/SHA256SUMS)
           for f in upload/*.asc; do [[ -f "$f" ]] && files+=("$f"); done
           gh release upload "$TAG" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
+
+      # electron-updater reads these latest*.yml files from the published release and downloads the
+      # files they name; a missing platform feed or a wrong asset would break updates for that platform.
+      - name: Update feed is complete
+        shell: bash
+        run: |
+          feed="$RUNNER_TEMP/feed"
+          gh release download "$TAG" --pattern 'latest*.yml' --dir "$feed" --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view "$TAG" --json assets --jq '[.assets[] | {name, size}]' --repo "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/assets.json"
+          node src/tools/release/verify-feed.mjs --version "${TAG#v}" --feed "$feed" --assets "$RUNNER_TEMP/assets.json"
 
       # Only now, with every installer, update file and checksum attached, does the release become
       # visible: electron-updater cannot see drafts, so no user is offered a half-uploaded release.

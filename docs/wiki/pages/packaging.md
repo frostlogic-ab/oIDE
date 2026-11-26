@@ -68,10 +68,22 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   every 6 h; Check now at any time. `lastCheckedAt` is kept in `<userData>/updates.json`.
 - **Channels.** `settings.updates.channel`: `stable` → `channel = latest`, no prereleases; `beta` →
   `channel = beta`, `allowPrerelease`. `allowDowngrade` stays off on both, so moving from beta back to
-  stable waits for the next stable version above the installed beta. A tag with a prerelease part
-  (`v0.2.0-beta.1`) produces `beta*.yml`; `generateUpdatesFilesForAllChannels: true` makes stable tags
-  publish `beta*.yml` too, so beta users also get stable releases. Changing the channel forgets an
-  update that was found but not downloaded.
+  stable waits for the next stable version above the installed beta. Changing the channel forgets an
+  update that was found but not downloaded. How electron-updater's GitHub provider resolves them
+  (checked against electron-updater 6 / electron-builder 26 and the v0.2.0 release):
+  - stable asks `github.com/<owner>/<repo>/releases/latest` (published, non-prerelease releases
+    only) and reads that release's `latest.yml` / `latest-mac.yml` / `latest-linux.yml` /
+    `latest-linux-arm64.yml`.
+  - beta takes the newest entry of `releases.atom` (stable or prerelease), tries `beta*.yml` and
+    falls back to `latest*.yml`. electron-builder's GitHub publisher only ever writes `latest*.yml`
+    (it ignores `generateUpdatesFilesForAllChannels`, which oIDE therefore no longer sets), so the
+    fallback is what beta users read, for betas and stable releases alike.
+  - `releases.atom` lists a tag as soon as it exists, before its draft is published. Beta users who
+    check in that window get "no update file for this platform yet" (`ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`)
+    until finalize publishes the release. "No published versions on GitHub" is shown as no newer
+    version, not as an error.
+  - Windows picks the per-arch installer (`oIDE-X-win-x64.exe` / `-arm64.exe`, matched on
+    `process.arch`) from `latest.yml`, not the combined `oIDE-X-win.exe`.
 - **Release feed (build time).** `electron-builder.yml` keeps `publish: null`, so a local or
   default build writes no `app-update.yml` and its updater is off ("This build has no release
   feed"). The release workflow's "Release feed" step picks the feed: the repository variables
@@ -86,8 +98,13 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   `packages/protocol/src/distribution.ts`; `OIDE_UMAMI_HOST` / `OIDE_UMAMI_WEBSITE_ID` at build time
   override them, and an empty value compiles telemetry out ([telemetry](telemetry.md#forks-and-builds)).
 - **Off when:** no release feed was compiled in (above), development builds (`!app.isPackaged`), `OIDE_DISABLE_UPDATES=1`, builds without
-  `resources/app-update.yml` (portable zip), Linux installs that are not an AppImage (`APPIMAGE` unset:
+  `resources/app-update.yml`, the Windows portable zip, Linux installs that are not an AppImage (`APPIMAGE` unset:
   deb/rpm users update through their package manager). The state is `disabled` with a reason.
+  The Windows zip does carry `app-update.yml` (electron-builder packs it and the NSIS installer from
+  the same `win-unpacked` folder), so the service also requires `Uninstall oIDE.exe` next to the
+  exe, which only the NSIS installer writes; otherwise an update would install a second copy.
+- **Telemetry.** Each finished check sends `update_checked` (`outcome`, `channel`) when usage
+  analytics are on ([telemetry](telemetry.md)).
 - **Unsigned builds.**
   - Windows: NSIS updates install. Without signing, electron-updater has no `publisherName` to verify,
     so the download is checked only by the sha512 in `latest.yml` (fetched over HTTPS from GitHub);
@@ -204,6 +221,13 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   disagrees, a non-MIT-compatible licence without a recorded reason, and, when `out/renderer` exists,
   any built font file that matches no record. `release.yml` runs it again after `Build app` for that
   reason. Test: `tools/licenses/test/fonts.test.ts`.
+- Platform-only optional dependencies (`tools/licenses/platform.mjs`): an optional dependency that
+  installs only on some OSes (`os` / `cpu` / `libc`) and is not a `<parent>-<platform>` prebuild, such as
+  chokidar's `fsevents` (macOS), is listed on every OS from its `PLATFORM_ONLY` record and vendored
+  licence text, so the notices are byte-identical whichever OS generates them. The check compares the
+  record with the installed package (where present) and with `pnpm-lock.yaml` (everywhere), and fails
+  on any platform-only optional dependency without a record, so the Linux CI job catches what only
+  macOS or Windows would install. Test: `tools/licenses/test/platform.test.ts`.
 - Docs site: VitePress 2 (alpha, matches the repo's vite 8) in `docs/site/`, `pnpm docs:dev` /
   `pnpm docs:build`, base `/` for the custom domain `getoide.com`. Holds the user guide, the extension
   author guide, the security model and the FAQ; it links here for internals. Home page and theme:
