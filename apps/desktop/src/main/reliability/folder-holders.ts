@@ -58,7 +58,12 @@ export interface FindHoldersOptions {
   env?: NodeJS.ProcessEnv;
 }
 
-export const HOLDER_TIMEOUT_MS = 10_000;
+/**
+ * Budget for one scan. On Windows the script's own handle scan stops after 8 s and prints what it
+ * found; the rest is PowerShell start-up and the `Add-Type` compile, which took well over 2 s on
+ * GitHub's Windows runners, so a 10 s budget killed the script before it printed anything.
+ */
+export const HOLDER_TIMEOUT_MS = 25_000;
 
 // ----------------------------------------------------------------------------- names
 

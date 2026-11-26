@@ -53,7 +53,7 @@ describe.skipIf(process.platform !== 'win32')('deleting a worktree a program hol
       expect((await h.call('agents.getArchived', { agentId: a!.id })).archived?.reason).toBe('discarded');
       expect(existsSync(wt)).toBe(true);
 
-      const notice = await waitFor(() => h.eventsOf('notify').find((n) => /still has this folder open/.test(n.message)), 'holder notice', 20_000);
+      const notice = await waitFor(() => h.eventsOf('notify').find((n) => /still has this folder open/.test(n.message)), 'holder notice', 45_000);
       expect(notice.message).toBe(`Could not delete the worktree folder ${wt}. Node.js (node.exe) still has this folder open. Quit it, and oIDE will finish removing the folder.`);
       expect(tracked).toContainEqual(['worktree_delete_failed', { holder: 'node' }]);
 
@@ -77,5 +77,5 @@ describe.skipIf(process.platform !== 'win32')('deleting a worktree a program hol
     expect(h.eventsOf('notify').some((n) => n.message === `Finished removing ${basename(wt)}`)).toBe(true);
     expect(tracked).toContainEqual(['worktree_delete_retried_ok', { attempts: '1' }]);
     expect(git(repo, 'worktree', 'list', '--porcelain').match(/^worktree /gm)).toHaveLength(1);
-  }, 90_000);
+  }, 120_000);
 });

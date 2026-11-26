@@ -9,6 +9,18 @@ rewriting others. Related: [agent-supervisor](agent-supervisor.md), [cli-integra
   `tools/*/test`, `test/`. Default timeout 20 s.
 - Agent tests never need a Claude login: they run against `tools/fake-claude`.
 - `test/no-credentials.test.ts` fails the build if a Claude credential location appears in code.
+- `test/setup/env.ts` (Vitest `setupFiles`) makes the machine irrelevant: `TMPDIR`/`TEMP`/`TMP` point
+  at the *real* temp path, and git runs with no system or global config (`GIT_CONFIG_NOSYSTEM`, an empty
+  `GIT_CONFIG_GLOBAL`). Without it the suite passed on a developer's Windows machine but failed on
+  GitHub's runners: macOS's `/var/folders` is a link to `/private/var` and Windows runners use an 8.3
+  short temp path (`RUNNER~1`), so paths git reports never matched the ones tests built; and the
+  Windows runners' `core.autocrlf=true` turned merged files into CRLF. Tests that need a git identity
+  set it on their repo or swap `GIT_CONFIG_GLOBAL` themselves.
+- To run under CI-like conditions on Windows: point `TEMP`/`TMP` at a junction to your temp folder, set
+  `GIT_CONFIG_GLOBAL` to an empty file and `GIT_CONFIG_SYSTEM` to a file with `core.autocrlf = true`.
+  The suite must pass like that (and, with `setupFiles` removed, it shows the failures above).
+- Tests that rely on Windows path rules (`PATHEXT`, UNC) are `it.runIf(process.platform === 'win32')`
+  or assert something that holds on every OS.
 
 ## Main-process integration (`test/integration/`)
 
