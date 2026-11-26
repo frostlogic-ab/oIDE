@@ -58,8 +58,12 @@ describe('archived agents (main services, fake-claude)', () => {
         await h.call('agents.answerPermission', { agentId: a!.id, answer: { requestId: s.pendingPermission.requestId, behavior: 'allow' } }).catch(() => undefined);
         return false;
       }
-      return s?.status === 'ready-for-review' && s.diff && s;
+      // The diff counts are refreshed in the background (debounced after each tool result), so the first
+      // `diff` seen can be a stale one taken after only the first file (committed.txt). The scenario's
+      // whole change is two files (committed.txt, committed; pending.txt, uncommitted): wait for that.
+      return s?.status === 'ready-for-review' && s.diff?.files === 2 && s;
     }, 'work submitted', 30_000);
+    expect(ready.diff).toEqual({ files: 2, additions: 2, deletions: 0 });
     const merged = await h.call('git.mergeLocal', { agentId: a!.id });
     expect(merged.ok).toBe(true);
     const head = git(repo, 'rev-parse', 'HEAD');
