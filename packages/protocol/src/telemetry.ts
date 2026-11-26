@@ -420,8 +420,8 @@ export const TELEMETRY_EVENTS = {
   pr_opened: def({
     from: 'main',
     question:
-      'How often does agent work leave as a pull request instead of a local merge, and how often did one already exist?',
-    props: z.object({ existing: z.boolean() }),
+      'How often does agent work leave as a pull request instead of a local merge, and how often did one already exist? Do new PRs follow the project conventions (agent draft or project template) or go up as the plain summary?',
+    props: z.object({ existing: z.boolean(), draft: z.enum(['agent', 'template', 'plain', 'given']).optional() }),
   }),
   pr_view_opened: def({
     from: 'main',

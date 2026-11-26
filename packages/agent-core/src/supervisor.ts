@@ -321,7 +321,7 @@ export class Supervisor {
         {
           onPermissionRequest: (req) => this.onPermissionRequest(rec, req),
           onPermissionResolved: (requestId, behavior, reason) => this.onPermissionResolved(rec, requestId, behavior, reason),
-          onReview: (review) => this.emitDraft(rec, { type: 'review-submitted', review: { agentId: rec.id, summary: review.summary, checks: review.checks, submittedAt: Date.now() } }),
+          onReview: (review) => this.emitDraft(rec, { type: 'review-submitted', review: { agentId: rec.id, summary: review.summary, checks: review.checks, ...(review.pr ? { pr: review.pr } : {}), submittedAt: Date.now() } }),
           onTitle: (title) => this.setOwnTitle(rec, title),
         },
         extra,

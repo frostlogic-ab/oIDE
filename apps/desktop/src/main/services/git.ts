@@ -11,6 +11,9 @@ import {
   gitPush,
   log as gitLog,
   autoStashNote,
+  branchSubjects,
+  composePr,
+  readPrConventions,
   mergeLocal as gitMergeLocal,
   predictMerge as gitPredictMerge,
   isInside,
@@ -494,7 +497,11 @@ export class GitService {
    * Push the branch and open a PR. Idempotent: when the branch already has an open or draft PR
    * (opened before, or outside oIDE), that one is returned (`existing: true`) instead of failing.
    */
-  async openPr(agentId: string, title: string, body: string): Promise<{ url: string; number?: number; state?: 'open' | 'draft' | 'merged' | 'closed'; existing?: boolean }> {
+  async openPr(
+    agentId: string,
+    title?: string,
+    body?: string,
+  ): Promise<{ url: string; number?: number; state?: 'open' | 'draft' | 'merged' | 'closed'; existing?: boolean; draft?: 'agent' | 'template' | 'plain' | 'given' }> {
     const a = this.agent(agentId);
     if (!a.branch || !a.worktreePath) throw new IpcError('This agent has no branch to open a pull request for.', 'conflict');
     if (!(await this.gh.available())) throw new IpcError('The GitHub CLI (gh) is not installed or not signed in.', 'unavailable');
@@ -510,9 +517,10 @@ export class GitService {
     await this.remote(() => gitPush(cwd, { branch, setUpstream: true }));
     if (known) return this.notePr(a, known, true);
     const base = a.baseRef && !/^[0-9a-f]{40}$/.test(a.baseRef) ? a.baseRef.replace(/^origin\//, '') : undefined;
+    const draft = title?.trim() ? { title: title.trim(), body: body ?? '', source: 'given' as const } : await this.draftPr(a, cwd, branch);
     let created: { url: string } | undefined;
     try {
-      created = await this.gh.prCreate(cwd, { title, body, head: branch, ...(base ? { base } : {}) });
+      created = await this.gh.prCreate(cwd, { title: draft.title, body: draft.body, head: branch, ...(base ? { base } : {}) });
     } catch (err) {
       // A PR appeared in between (or gh's lookup missed it): "a pull request for branch … already exists".
       const again = /already exists/i.test((err as Error).message) ? await existing() : undefined;
@@ -525,9 +533,30 @@ export class GitService {
     if (!pr) {
       this.prCache.delete(branch);
       this.changed(a.projectId);
-      return created;
+      return { ...created, draft: draft.source };
     }
-    return this.notePr(a, pr, false);
+    return { ...this.notePr(a, pr, false), draft: draft.source };
+  }
+
+  /**
+   * Title and body that follow the project's own conventions: the agent's draft from
+   * submit_for_review when it gave one, else the project's PR template filled with the review
+   * summary and checks, with a Conventional Commits title when the project uses them.
+   */
+  private async draftPr(a: AgentSummary, cwd: string, branch: string): Promise<{ title: string; body: string; source: 'agent' | 'template' | 'plain' }> {
+    const baseRef = a.baseRef ?? '';
+    const [conventions, commits] = await Promise.all([
+      readPrConventions(cwd, { baseRef }).catch(() => ({ conventional: false })),
+      baseRef ? branchSubjects(cwd, baseRef, branch) : Promise.resolve([]),
+    ]);
+    return composePr({
+      title: a.title,
+      summary: a.review?.summary ?? '',
+      checks: a.review?.checks ?? [],
+      ...(a.review?.pr ? { agentDraft: a.review.pr } : {}),
+      conventions,
+      commits,
+    });
   }
 
   private notePr(a: AgentSummary, pr: NonNullable<AgentSummary['pr']>, existing: boolean) {
