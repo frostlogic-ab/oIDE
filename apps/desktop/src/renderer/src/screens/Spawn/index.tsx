@@ -195,7 +195,7 @@ export default function SpawnScreen() {
   const offeredExtensions = extensions.filter((e) => e.id in form.extensions);
 
   const submit = async () => {
-    if (busy) return;
+    if (busy || atts.busy) return;
     const res = buildSpec(form, { allowBypass, customModels, techniqueOrder: techniques.map((t) => t.id) });
     if (!res.ok) {
       setErrors(res.errors);
@@ -241,6 +241,7 @@ export default function SpawnScreen() {
     <Dialog
       open
       onClose={cancel}
+      dismissOnScrim={false}
       title="Spawn an agent"
       position="top"
       width={720}
@@ -258,11 +259,11 @@ export default function SpawnScreen() {
           <button
             type="button"
             onClick={() => void submit()}
-            disabled={busy || noProjects}
+            disabled={busy || atts.busy || noProjects}
             aria-keyshortcuts={isMac() ? 'Meta+Enter' : 'Control+Enter'}
             className="h-[34px] px-4 rounded-md border-0 bg-accent text-on-accent font-semibold text-[13px] flex items-center gap-2 hover:brightness-110 disabled:opacity-50"
           >
-            {busy ? 'Spawning…' : spawnLabel}
+            {busy ? 'Spawning…' : atts.busy ? 'Attaching…' : spawnLabel}
             <Kbd className="text-on-accent! border-[rgba(11,13,16,0.35)]!">{isMac() ? '⌘ ↵' : 'Ctrl ↵'}</Kbd>
           </button>
         </div>
