@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FileDiff } from '@oide/protocol';
 import { setupMockApp } from '../SourceControl/testing';
+import { useAgents } from '../../stores/agents';
+import { useArchive } from '../../stores/archive';
 import { useRouter } from '../../stores/router';
 import { parseHunks, reverseApply, sidesFromHunks } from './diff';
 import ReviewScreen from './index';
@@ -81,6 +83,32 @@ describe('UnifiedDiff', () => {
     render(<UnifiedDiff file={FILE} comments={[]} composer={null} onOpenComposer={open} onCancelComposer={() => {}} onAddComment={() => {}} />);
     fireEvent.click(screen.getByRole('button', { name: 'Comment on line 3' }));
     expect(open).toHaveBeenCalledWith(expect.objectContaining({ path: 'src/x.ts', line: 3, removed: false }));
+  });
+});
+
+describe('Review screen for an agent that is not on the Wall', () => {
+  it('an archived (merged) agent says so and opens read-only in Focus, instead of "gone"', async () => {
+    await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook' } });
+    const live = useAgents.getState().byId['a-webhook']!;
+    useAgents.setState((s) => {
+      const { 'a-webhook': _drop, ...byId } = s.byId;
+      return { byId };
+    });
+    useArchive.setState({ byId: { 'a-webhook': { ...live, archived: { at: 1, reason: 'merged', worktreeRemoved: false } } } });
+    render(<ReviewScreen />);
+    expect(await screen.findByText(`${live.title} was merged and archived`)).toBeTruthy();
+    expect(screen.queryByText('This agent is gone')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Open in Focus' }));
+    expect(useRouter.getState().route).toEqual({ screen: 'focus', params: { agentId: 'a-webhook' } });
+    useArchive.setState({ byId: {} });
+  });
+
+  it('an unknown agent still says it is gone', async () => {
+    await setupMockApp({ screen: 'review', params: { agentId: 'a-nope' } });
+    useArchive.setState({ byId: {} });
+    render(<ReviewScreen />);
+    expect(await screen.findByText('This agent is gone')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open in Focus' })).toBeNull();
   });
 });
 

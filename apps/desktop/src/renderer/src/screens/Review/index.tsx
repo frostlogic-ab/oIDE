@@ -5,11 +5,13 @@
  * Keys: J / K next / previous file, ] / [ next / previous hunk. Wiki: screen-review.md.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ArchiveReason } from '@oide/protocol';
 import { Button, EmptyState, Spinner } from '@oide/ui';
 import { HeaderSlot } from '../../components/frame/HeaderSlot';
 import { keymap } from '../../lib/keymap';
 import { useKeymapScope } from '../../lib/useKeymap';
 import { useAgent } from '../../stores/agents';
+import { useArchive } from '../../stores/archive';
 import { projectName, useProjects } from '../../stores/projects';
 import { navigate, useRouter } from '../../stores/router';
 import { toast } from '../../stores/ui';
@@ -28,6 +30,60 @@ keymap.define('review.nextFile', ['J']);
 keymap.define('review.prevFile', ['K']);
 keymap.define('review.nextHunk', [']']);
 keymap.define('review.prevHunk', ['[']);
+
+const ARCHIVED_AS: Record<ArchiveReason, string> = {
+  merged: 'merged and archived',
+  discarded: 'discarded and archived',
+  completed: 'completed and archived',
+  'archived-by-user': 'archived',
+};
+
+function Gone() {
+  return <EmptyState icon="source-control" title="This agent is gone" description="It may have been removed. Pick another worktree from Source control." className="flex-1" />;
+}
+
+/**
+ * The agent is not on the Wall. A merge (or a merged PR) archives it, so look it up in the archive
+ * before claiming it is gone, and offer to open it read-only in Focus.
+ */
+function NotLive({ agentId }: { agentId: string }) {
+  const archived = useArchive((s) => s.byId[agentId]);
+  const [lookedUp, setLookedUp] = useState<string | null>(null);
+  useEffect(() => {
+    if (archived) return;
+    let cancelled = false;
+    void useArchive
+      .getState()
+      .fetchOne(agentId)
+      .finally(() => !cancelled && setLookedUp(agentId));
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, archived]);
+  if (archived?.archived) {
+    return (
+      <EmptyState
+        icon="archive"
+        title={`${archived.title} was ${ARCHIVED_AS[archived.archived.reason]}`}
+        description="There is nothing left to review here. Its transcript stays available, read-only."
+        className="flex-1"
+        action={
+          <Button icon="agents" onClick={() => navigate('focus', { agentId })}>
+            Open in Focus
+          </Button>
+        }
+      />
+    );
+  }
+  if (lookedUp !== agentId) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Spinner label="Looking for this agent" />
+      </div>
+    );
+  }
+  return <Gone />;
+}
 
 export default function ReviewScreen() {
   const route = useRouter((s) => s.route);
@@ -146,9 +202,7 @@ export default function ReviewScreen() {
     return (
       <>
         {breadcrumb}
-        <main className="flex-1 flex">
-          <EmptyState icon="source-control" title="This agent is gone" description="It may have been removed. Pick another worktree from Source control." className="flex-1" />
-        </main>
+        <main className="flex-1 flex">{agentId ? <NotLive agentId={agentId} /> : <Gone />}</main>
       </>
     );
   }

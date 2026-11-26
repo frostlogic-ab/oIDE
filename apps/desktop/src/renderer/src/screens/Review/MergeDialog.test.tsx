@@ -5,6 +5,7 @@ import type { MergePrediction } from '@oide/protocol';
 import { useAgents } from '../../stores/agents';
 import { fileList, freshnessText, useMergePredictions } from '../../stores/mergePrediction';
 import { setupMockApp } from '../SourceControl/testing';
+import { useRouter } from '../../stores/router';
 import ReviewScreen from './index';
 
 /**
@@ -39,6 +40,14 @@ async function openDialog(agentId: string) {
 }
 
 describe('merge dialog', () => {
+  it('a successful local merge leaves the review for Source control (the agent is archived by then)', async () => {
+    const { dialog, invoke } = await openDialog('a-webhook');
+    await waitFor(() => expect(dialog.textContent).toMatch(/merges cleanly/));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Merge' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('git.mergeLocal', { agentId: 'a-webhook' }));
+    await waitFor(() => expect(useRouter.getState().route.screen).toBe('source-control'));
+  });
+
   it('predicted clean: says so with the target commit; Merge is the action', async () => {
     const { dialog } = await openDialog('a-webhook');
     await waitFor(() => expect(dialog.textContent).toMatch(/merges cleanly into main @ c0ffee1/));

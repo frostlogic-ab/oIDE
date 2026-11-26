@@ -3,7 +3,7 @@ import { Button, Icon, agentStatusMeta } from '@oide/ui';
 import type { AgentSummary, CheckResult, ReviewComment, WorktreeInfo } from '@oide/protocol';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { targetName, useMergePrediction, useMergePredictions } from '../../stores/mergePrediction';
-import { navigate } from '../../stores/router';
+import { navigate, useRouter } from '../../stores/router';
 import { toast } from '../../stores/ui';
 import { hasPendingForPr, useGit } from '../SourceControl/gitStore';
 import { shortBranch } from '../SourceControl/model';
@@ -129,6 +129,10 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
         const stash = res.autoStash;
         toast(`Merged ${branch} into ${target}.${stash ? ` ${stash.note}` : ''}`, stash && !stash.restored ? 'warning' : 'success');
         void useGit.getState().load(agent.projectId);
+        // Main archives the merged agent, so there is nothing left to review here: go back to Source
+        // control (the toast stays). Not when the user already left this review while it merged.
+        const at = useRouter.getState().route;
+        if (at.screen === 'review' && at.params.agentId === agent.id) navigate('source-control');
       } else {
         setMerge({ step: 'conflicts', conflicts: res.conflicts, from: 'merge' });
         // The merge saw conflicts the prediction did not (or could not): ask main again.
