@@ -4,6 +4,7 @@ import type { AgentSummary, OverlapWarning, Project, WorktreeInfo } from '@oide/
 import { oide } from '../../lib/bridge';
 import { navigate } from '../../stores/router';
 import { CommitDialog } from './CommitDialog';
+import { RevertDialog } from './RevertDialog';
 import { reconcile, removeWorktree, revealFolder, runSync } from './actions';
 import type { ProjectGit } from './gitStore';
 import { MINUS, baseLabel, commitAuthor, displayPath, localChangesLabel, prView, statusView, syncView, timeAgo } from './model';
@@ -23,6 +24,7 @@ export interface ProjectCardProps {
 /** One project on Source control (canvas: a 12px-radius panel per repository). */
 export function ProjectCard({ project, git, agents, open, onToggle, logOpen, onToggleLog }: ProjectCardProps) {
   const [commitOpen, setCommitOpen] = useState(false);
+  const [revertOpen, setRevertOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const sync = git.sync ? syncView(git.sync) : undefined;
   const dirty = git.sync?.dirtyFiles ?? [];
@@ -99,6 +101,9 @@ export function ProjectCard({ project, git, agents, open, onToggle, logOpen, onT
               <span className="flex-1 min-w-[220px]">
                 <b className="font-semibold">Your changes on {branch}</b> <span className="text-ink-3 text-[12px]">· {localChangesLabel(dirty)}</span>
               </span>
+              <Button variant="secondary" size={28} onClick={() => setRevertOpen(true)} aria-haspopup="dialog" aria-label={`Revert changes on ${branch} in ${project.name}`}>
+                Revert…
+              </Button>
               <Button variant="secondary" size={28} onClick={() => setCommitOpen(true)} aria-haspopup="dialog">
                 Commit…
               </Button>
@@ -149,6 +154,14 @@ export function ProjectCard({ project, git, agents, open, onToggle, logOpen, onT
       <CommitDialog
         open={commitOpen}
         onClose={() => setCommitOpen(false)}
+        projectId={project.id}
+        projectName={project.name}
+        branch={branch}
+        files={dirty}
+      />
+      <RevertDialog
+        open={revertOpen}
+        onClose={() => setRevertOpen(false)}
         projectId={project.id}
         projectName={project.name}
         branch={branch}
