@@ -182,7 +182,8 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   reason. Test: `tools/licenses/test/fonts.test.ts`.
 - Docs site: VitePress 2 (alpha, matches the repo's vite 8) in `docs/site/`, `pnpm docs:dev` /
   `pnpm docs:build`, base `/oide/` for `oide-dev.github.io/oide`. Holds the user guide, the extension
-  author guide, the security model and the FAQ; it links here for internals.
+  author guide, the security model and the FAQ; it links here for internals. Home page and theme:
+  [docs-site](docs-site.md).
 ## Local commands
 
 ```

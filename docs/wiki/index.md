@@ -7,6 +7,7 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 
 - [raw/build-brief.md](raw/build-brief.md): the architecture and build brief (M0 to M7, stack, constraints).
 - [raw/design/](raw/design/): the Mission Control design screens (Main, Focus, Spawn, SourceControl, Review, Artifacts, Marketplace, Files, Settings).
+- [raw/design/website/](raw/design/website/): the oIDE Website design (home page top, middle, bottom and phone; `site.css`).
 - [raw/claude-cli-help-2.1.325.txt](raw/claude-cli-help-2.1.325.txt): `claude --help` of the CLI version oIDE was first built against.
 
 ## Overview
@@ -36,6 +37,7 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 - [pages/telemetry.md](pages/telemetry.md): opt-in Umami usage analytics and error reports from main: consent, event catalogue, never-sent list, scrubbing, adding an event, forks.
 - [pages/testing.md](pages/testing.md): Vitest, fake-claude fixtures, Playwright e2e.
 - [pages/packaging.md](pages/packaging.md): electron-builder, CI matrix, updates, signing.
+- [pages/docs-site.md](pages/docs-site.md): the VitePress docs site and its home page from the oIDE Website design: layout switch, scoped design CSS, light/dark without hydration mismatch, self-hosted fonts, download cards.
 
 ## Screens
 
