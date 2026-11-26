@@ -29,4 +29,4 @@ in Focus.
 On the right: agents editing the file now, its commit history (yours and agents'), and artifacts that
 mention it.
 
-Details: [screen-files](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/screen-files.md).
+Details: [screen-files](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/screen-files.md).

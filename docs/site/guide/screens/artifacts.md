@@ -127,4 +127,4 @@ content**, and opening it shows a panel with **Retrieve with an agent** (the sam
 above), **Choose files…** (replaces the empty import), or delete. **Open in claude.ai** appears only
 for artifacts that came from there.
 
-Details: [screen-artifacts](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/screen-artifacts.md).
+Details: [screen-artifacts](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/screen-artifacts.md).

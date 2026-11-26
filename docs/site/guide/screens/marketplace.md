@@ -46,5 +46,5 @@ Risk labels come from the server's tool hints (read-only hint means read only; a
 first); click a label to change it. Save the server to **My settings** (all your projects) or to the
 **project's `.mcp.json`** (shared through git, with secrets left as `${VAR}` placeholders).
 
-Details: [screen-marketplace](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/screen-marketplace.md)
-and [marketplace](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/marketplace.md).
+Details: [screen-marketplace](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/screen-marketplace.md)
+and [marketplace](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/marketplace.md).

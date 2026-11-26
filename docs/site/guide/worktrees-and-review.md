@@ -68,4 +68,4 @@ them from Source control.
 Commits made from inside oIDE carry an `Oide-Agent: <name>` trailer, so Source control and Files can
 say which agent made them.
 
-Internals: [git-worktrees](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/git-worktrees.md).
+Internals: [git-worktrees](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/git-worktrees.md).

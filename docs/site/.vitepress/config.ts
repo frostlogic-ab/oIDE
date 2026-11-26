@@ -1,22 +1,22 @@
-// VitePress config for the oIDE docs site (https://oide-dev.github.io/oide/).
+// VitePress config for the oIDE docs site (https://frostlogic-ab.github.io/oIDE/).
 // Build: pnpm docs:build   Dev: pnpm docs:dev   Deployed by .github/workflows/docs.yml.
 import { defineConfig } from 'vitepress';
 
-const repo = 'https://github.com/oide-dev/oide';
+const repo = 'https://github.com/frostlogic-ab/oIDE';
 
 export default defineConfig({
   title: 'oIDE',
   description: 'Mission Control for coding agents: run many Claude Code CLI agents in parallel, across many projects, in one window.',
   lang: 'en-US',
-  base: '/oide/',
+  base: '/oIDE/',
   cleanUrls: true,
   lastUpdated: true,
   appearance: 'dark',
   head: [
     // Brand assets: docs/brand (copied to docs/site/public by tools/brand/build-brand.mjs).
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/oide/favicon.svg' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/oIDE/favicon.svg' }],
     ['meta', { name: 'theme-color', content: '#0E1013' }],
-    ['meta', { property: 'og:image', content: 'https://oide-dev.github.io/oide/social-preview.png' }],
+    ['meta', { property: 'og:image', content: 'https://frostlogic-ab.github.io/oIDE/social-preview.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { property: 'og:title', content: 'oIDE' }],
     ['meta', { property: 'og:description', content: 'Run many Claude Code CLI agents in parallel, in one window. Open source, MIT.' }],

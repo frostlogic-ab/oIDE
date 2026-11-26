@@ -60,4 +60,4 @@ Browser preview). The footer lists the extension tools the agent has.
 **Stop subagent** takes effect at the subagent's next tool call that needs a permission: the CLI has
 no message to stop one subagent, so oIDE denies its next prompt with a stop message.
 
-Details: [screen-focus](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/screen-focus.md).
+Details: [screen-focus](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/screen-focus.md).

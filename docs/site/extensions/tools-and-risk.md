@@ -60,6 +60,6 @@ suggested label from them (`readOnlyHint` means read; `destructiveHint` or no hi
 
 ## Built-in example
 
-[Browser preview](https://github.com/oide-dev/oide/tree/main/extensions/browser-preview) ships a
+[Browser preview](https://github.com/frostlogic-ab/oIDE/tree/main/extensions/browser-preview) ships a
 dependency-free stdio server with one read-only tool, `preview_url`, that fetches a localhost URL and
 reports its status, content type and page title (other hosts are refused).

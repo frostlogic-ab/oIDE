@@ -62,8 +62,8 @@ once. Subagents add to your usage; Focus > Subagents shows their share of tokens
 ## Why is the installer unsigned? Is it safe?
 
 The project does not have code-signing accounts yet. Download only from the project's
-[GitHub Releases](https://github.com/oide-dev/oide/releases), which are built in CI from tagged
-commits. See [Getting started](/guide/getting-started#unsigned-builds) for the OS warnings and how to
+[GitHub Releases](https://github.com/frostlogic-ab/oIDE/releases), which CI builds from the release commit
+on `main`. See [Getting started](/guide/getting-started#unsigned-builds) for the OS warnings and how to
 open the app, and [Settings > Updates](/guide/screens/settings#updates) for how unsigned builds update.
 
 ## Does oIDE update itself?
@@ -102,4 +102,4 @@ kind of link. **Update** retrieves the link again later; nothing syncs on its ow
 ## How do I report a security problem?
 
 Privately, through GitHub's "Report a vulnerability" on the repository. See the
-[security policy](https://github.com/oide-dev/oide/blob/main/SECURITY.md).
+[security policy](https://github.com/frostlogic-ab/oIDE/blob/main/SECURITY.md).

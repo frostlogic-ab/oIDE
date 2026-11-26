@@ -5,7 +5,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useData, withBase } from 'vitepress';
 
-const repo = 'https://github.com/oide-dev/oide';
+const repo = 'https://github.com/frostlogic-ab/oIDE';
 const releases = `${repo}/releases/latest`;
 
 const { isDark } = useData();

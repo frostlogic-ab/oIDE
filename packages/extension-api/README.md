@@ -1,6 +1,6 @@
 # @oide/extension-api
 
-Types and helpers for writing [oIDE](https://github.com/oide-dev/oide) extensions.
+Types and helpers for writing [oIDE](https://github.com/frostlogic-ab/oIDE) extensions.
 
 An oIDE extension is an npm package with an `oide` manifest in its `package.json`. Its main job is
 to give agents new tools through MCP servers; it can also add commands (Ctrl K), panels, settings,

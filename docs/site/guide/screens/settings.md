@@ -118,4 +118,4 @@ What oIDE found at startup: the CLI and whether its version is in the tested ran
 Node, the OS keychain, the database, the MCP port and the logs. **Copy report** copies a redacted
 report that is safe to paste into a bug report; **Open logs folder** opens oIDE's log folder.
 
-Details: [screen-settings](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/screen-settings.md).
+Details: [screen-settings](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/screen-settings.md).

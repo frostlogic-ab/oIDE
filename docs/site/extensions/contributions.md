@@ -31,7 +31,7 @@ export function activate(ctx) {
 - Use an id prefix unique to your extension (`postgres.connect`), since all commands share one
   command bar.
 
-The built-in [Git extension](https://github.com/oide-dev/oide/tree/main/extensions/git) contributes
+The built-in [Git extension](https://github.com/frostlogic-ab/oIDE/tree/main/extensions/git) contributes
 `git.openPullRequest` and `git.viewPullRequest`, which run `gh` in an agent's worktree.
 
 ## Settings
@@ -118,5 +118,5 @@ await ctx.panels.postMessage('browserPreview.panel', { type: 'navigate', url });
 | `artifactTypes` | **Artifacts › Open**, for artifacts whose `artifact.json` has `type: "<your package name>:<type id>"`. Your `entry` runs in the same sandboxed iframe as panels, receives `{ type: 'oide:artifact', artifact }` on load (or after it posts `{ type: 'oide:ready' }`) and saves with `{ type: 'oide:artifact.save', content }`, which adds a new version of that artifact. Storage stays one of the built-in kinds (design, doc, whiteboard), and without your extension the artifact opens in its kind's normal viewer. |
 | `languages` | Parsed, and its command line is shown in the first-run consent dialog, but **not started** in v1. |
 
-The built-in [Accent themes](https://github.com/oide-dev/oide/tree/main/extensions/themes) extension
+The built-in [Accent themes](https://github.com/frostlogic-ab/oIDE/tree/main/extensions/themes) extension
 is manifest-only: it declares the four accent themes (Blue, Green, Violet, Amber).

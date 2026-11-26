@@ -1,7 +1,7 @@
 # Manifest reference
 
 The manifest is your package's `package.json`. oIDE validates it with the `ExtensionManifest`
-schema in [`packages/protocol/src/extensions.ts`](https://github.com/oide-dev/oide/blob/main/packages/protocol/src/extensions.ts)
+schema in [`packages/protocol/src/extensions.ts`](https://github.com/frostlogic-ab/oIDE/blob/main/packages/protocol/src/extensions.ts)
 plus a few extra rules, when it installs or loads the extension. A manifest that fails is refused
 with a message naming the field.
 

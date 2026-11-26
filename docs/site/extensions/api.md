@@ -5,7 +5,7 @@ Host code is an ES module named by `oide.main`. It exports `activate(ctx)` and, 
 call crosses a message channel to oIDE's main process, which checks it against your manifest and the
 projects your extension is enabled for.
 
-The types are in [`@oide/extension-api`](https://github.com/oide-dev/oide/tree/main/packages/extension-api)
+The types are in [`@oide/extension-api`](https://github.com/frostlogic-ab/oIDE/tree/main/packages/extension-api)
 (no runtime dependencies).
 
 ## Getting the types
@@ -16,7 +16,7 @@ maintainer: do not `npm install @oide/extension-api`, because whatever that name
 this project. The package will be published under a scope the project controls; the name is still
 an open question. Until then, either:
 
-- copy [`packages/extension-api/src/index.ts`](https://github.com/oide-dev/oide/blob/main/packages/extension-api/src/index.ts)
+- copy [`packages/extension-api/src/index.ts`](https://github.com/frostlogic-ab/oIDE/blob/main/packages/extension-api/src/index.ts)
   into your extension (it is types plus `API_VERSION` and `defineExtension`), or
 - work inside a clone of the oIDE repo and depend on it as a workspace package
   (`"@oide/extension-api": "workspace:*"`), as the built-in extensions do.

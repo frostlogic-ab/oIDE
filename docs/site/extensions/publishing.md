@@ -68,7 +68,7 @@ bundled with the app, which lists only the built-in extensions. You can already 
 ## What CI checks
 
 The index repository's CI runs
-[`tools/marketplace-index/validate.mjs`](https://github.com/oide-dev/oide/blob/main/tools/marketplace-index/README.md)
+[`tools/marketplace-index/validate.mjs`](https://github.com/frostlogic-ab/oIDE/blob/main/tools/marketplace-index/README.md)
 on the changed index. It fails when:
 
 - the entry does not match the `MarketplaceIndex` schema;
@@ -80,7 +80,7 @@ on the changed index. It fails when:
 Run it yourself before opening the PR:
 
 ```sh
-# from a clone of github.com/oide-dev/oide
+# from a clone of github.com/frostlogic-ab/oIDE
 node tools/marketplace-index/validate.mjs path/to/index.json --tarball @you/postgres-inspector@1.2.0=./you-postgres-inspector-1.2.0.tgz
 node tools/marketplace-index/validate.mjs path/to/index.json --schema-only
 ```

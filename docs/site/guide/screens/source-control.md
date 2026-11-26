@@ -22,4 +22,4 @@ Every project in scope as a card, plus a column of things that need you.
 
 The PR column is hidden when the GitHub CLI is missing or signed out.
 
-Details: [screen-source-control](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/screen-source-control.md).
+Details: [screen-source-control](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/screen-source-control.md).

@@ -41,5 +41,5 @@ above Open pull request, that hand the agent's branch to the extension.
 
 J / K next or previous file, `]` / `[` next or previous hunk. Rebindable.
 
-Details: [screen-review](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/screen-review.md)
+Details: [screen-review](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/screen-review.md)
 and [Worktrees and review](/guide/worktrees-and-review).

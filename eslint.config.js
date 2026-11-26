@@ -18,6 +18,8 @@ export default tseslint.config(
       '**/playwright-report/**',
       'docs/wiki/raw/**',
       'docs/site/.vitepress/cache/**',
+      // oIDE artifacts (designs with bundled React runtimes), not project source.
+      '.oide/artifacts/**',
       '**/*.dc.html',
     ],
   },

@@ -1,11 +1,18 @@
 # Changelog
 
-All notable changes to oIDE are recorded here. The format follows
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html). Pre-1.0 minor versions may break things.
+All notable changes to oIDE are recorded here. The project uses
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html); pre-1.0 minor versions may break things.
 The detailed build history lives in [docs/wiki/log.md](docs/wiki/log.md).
 
-## [Unreleased]
+New entries are written by [release-please](https://github.com/googleapis/release-please) from the
+Conventional Commit titles of merged pull requests, in the release pull request it keeps open on
+`main`. Do not add entries by hand; give your pull request a good title instead. The pipeline is
+described in [docs/wiki/pages/release-pipeline.md](docs/wiki/pages/release-pipeline.md).
+
+## 0.1.x (after 0.1.0, before automated releases)
+
+Hand-written notes for the work that landed between the internal 0.1.0 build and the first release
+cut by release-please. It ships in that first release.
 
 ### Added
 
@@ -76,7 +83,7 @@ First internal build. Not signed, not published.
 - Adversarial security, brief-conformance and design-conformance reviews before release
   ([review-security](docs/wiki/pages/review-security.md)). Fixed the extension and custom-tool
   findings (native confirmations, origin-bound credentials, per-agent proxy secrets, project-scoped
-  artifact reads); core findings were still open in this build (fixed since, see Unreleased).
+  artifact reads); core findings were still open in this build (fixed since, see 0.1.x).
 
 ### Known issues
 
@@ -85,5 +92,4 @@ First internal build. Not signed, not published.
   types) were not wired yet (wired since, except `languages`).
 - Builds are unsigned: Windows SmartScreen warns, and macOS needs a right-click › Open.
 
-[Unreleased]: https://github.com/oide-dev/oide/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/oide-dev/oide/releases/tag/v0.1.0
+[0.1.0]: https://github.com/frostlogic-ab/oIDE/releases/tag/v0.1.0

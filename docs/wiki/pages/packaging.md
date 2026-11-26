@@ -72,18 +72,16 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   (`v0.2.0-beta.1`) produces `beta*.yml`; `generateUpdatesFilesForAllChannels: true` makes stable tags
   publish `beta*.yml` too, so beta users also get stable releases. Changing the channel forgets an
   update that was found but not downloaded.
-- **Release feed (build time).** There is no default feed: the GitHub org `oide-dev` is not claimed
-  yet, so `electron-builder.yml` has `publish: null` and a default build writes no `app-update.yml`.
-  The release workflow reads two repository variables, `OIDE_PUBLISH_OWNER` and `OIDE_PUBLISH_REPO`:
-  when both are set it builds main with them (`define` in `electron.vite.config.ts` →
-  `buildPublishTarget()` in `updater.ts`) and passes `-c.publish.provider=github -c.publish.owner=…
-  -c.publish.repo=… -c.publish.releaseType=draft` to electron-builder; when either is missing it
-  builds with `--publish never` and a warning, uploads nothing, and the app's updater is off
-  ("This build has no release feed"). Settings › Updates then shows no releases link.
-- **What the owner sets after claiming the org:** in the repo's Settings › Variables, set
-  `OIDE_PUBLISH_OWNER` (e.g. `oide-dev`) and `OIDE_PUBLISH_REPO` (`oide`). Nothing else changes; the
-  names are validated (`publishTarget()` in `packages/protocol/src/distribution.ts`), and the
-  marketplace index default is separate ([marketplace](marketplace.md#distribution-defaults)).
+- **Release feed (build time).** `electron-builder.yml` keeps `publish: null`, so a local or
+  default build writes no `app-update.yml` and its updater is off ("This build has no release
+  feed"). The release workflow's "Release feed" step picks the feed: the repository variables
+  `OIDE_PUBLISH_OWNER` / `OIDE_PUBLISH_REPO` when set, otherwise the repository the workflow runs in
+  (`frostlogic-ab/oIDE` for official builds; a fork publishes to and updates from itself). It builds
+  main with them (`define` in `electron.vite.config.ts` → `buildPublishTarget()` in `updater.ts`)
+  and passes `-c.publish.provider=github -c.publish.owner=… -c.publish.repo=…
+  -c.publish.releaseType=draft` to electron-builder. The names are validated (`publishTarget()` in
+  `packages/protocol/src/distribution.ts`); the marketplace index default is separate
+  ([marketplace](marketplace.md#distribution-defaults)).
 - **Telemetry endpoint:** official builds compile in the Umami host and website id from
   `packages/protocol/src/distribution.ts`; `OIDE_UMAMI_HOST` / `OIDE_UMAMI_WEBSITE_ID` at build time
   override them, and an empty value compiles telemetry out ([telemetry](telemetry.md#forks-and-builds)).
@@ -100,8 +98,11 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
     "Open release page" instead of Download.
   - Linux AppImage: updates in place (no signature check beyond sha512); optional GPG `.asc` files on
     the release are for people verifying by hand.
-- **Publishing.** Release CI uploads to a **draft** GitHub Release; electron-updater cannot see drafts,
-  so nothing reaches users until a maintainer publishes the release. Beta tags are marked prerelease.
+- **Publishing.** Release CI uploads to a **draft** GitHub Release (created by release-please) and
+  publishes it only after every platform's installers, update files and `SHA256SUMS` are attached;
+  electron-updater cannot see drafts, so users never get a half-uploaded release. Prerelease versions
+  are published as pre-releases (beta channel), the others as *latest*. `OIDE_RELEASE_KEEP_DRAFT=true`
+  leaves them as drafts for a maintainer. Full flow: [release-pipeline](release-pipeline.md).
 - Tests: `updater.test.ts` (mocked electron-updater: consent, channels, disabled cases, unsigned
   macOS, errors, background timer), `UpdatesSection.test.tsx`, store default in `settings.test.ts`.
 
@@ -112,14 +113,20 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   `pnpm test` (Vitest), `pnpm wiki:lint` and `pnpm licenses:check` (Linux), `pnpm --filter @oide/desktop
   build`, Playwright for Electron (under `xvfb-run` on Linux, where the e2e launcher adds
   `--no-sandbox`). Playwright output is uploaded on failure.
-- `release.yml` (tags `v*`, or manual): a verify job fails unless the tag equals `v` + the
+- `release-please.yml` (push to main): release-please keeps the release PR current; merging it
+  creates a draft release + tag and calls `release.yml`. `pr-title.yml` checks that PR titles follow
+  Conventional Commits. See [release-pipeline](release-pipeline.md).
+- `release.yml` (`workflow_call` from release-please with a `tag`, or manual `workflow_dispatch` with
+  an optional tag): a verify job checks out the tag and fails unless it equals `v` + the
   `apps/desktop/package.json` version, then typecheck, lint, test, licences. One build job per OS runs
-  `electron-builder --publish always` to a draft release. Signing is gated per secret (a step exposes
+  `electron-builder --publish always` to the draft release (manual runs without a tag: `--publish
+  never`, installers as workflow artifacts only). Signing is gated per secret (a step exposes
   only whether each is set): Windows Azure Trusted Signing (`AZURE_*` secrets + signing vars →
   `-c.win.azureSignOptions.*`) or `WIN_CSC_LINK`; macOS `CSC_LINK` + `MAC_SIGNING_IDENTITY` →
   `-c.mac.identity`, notarization with Apple ID or App Store Connect API key secrets; otherwise
   `identity: null` / `CSC_IDENTITY_AUTO_DISCOVERY=false` and a warning. A last job uploads
-  `SHA256SUMS`, optional GPG signatures (`GPG_PRIVATE_KEY`) and marks prerelease tags as prerelease.
+  `SHA256SUMS`, optional GPG signatures (`GPG_PRIVATE_KEY`), then publishes the release (pre-release
+  for prerelease versions, *latest* otherwise).
   The header of the workflow lists every secret and variable.
 - `nightly-real-cli.yml`: opt-in (repo variable `OIDE_NIGHTLY_REAL_CLI=true`), self-hosted runner
   labelled `oide-real-cli`, runs `test/conformance/real-cli.test.ts` with `OIDE_REAL_CLI=1` on the
@@ -181,7 +188,7 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   any built font file that matches no record. `release.yml` runs it again after `Build app` for that
   reason. Test: `tools/licenses/test/fonts.test.ts`.
 - Docs site: VitePress 2 (alpha, matches the repo's vite 8) in `docs/site/`, `pnpm docs:dev` /
-  `pnpm docs:build`, base `/oide/` for `oide-dev.github.io/oide`. Holds the user guide, the extension
+  `pnpm docs:build`, base `/oIDE/` for `frostlogic-ab.github.io/oIDE`. Holds the user guide, the extension
   author guide, the security model and the FAQ; it links here for internals. Home page and theme:
   [docs-site](docs-site.md).
 ## Local commands

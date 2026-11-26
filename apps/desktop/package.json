@@ -6,7 +6,7 @@
   "license": "MIT",
   "description": "oIDE: Mission Control for many Claude Code CLI agents",
   "author": "oIDE contributors",
-  "homepage": "https://github.com/oide-dev/oide",
+  "homepage": "https://github.com/frostlogic-ab/oIDE",
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {

@@ -7,7 +7,7 @@ panels, themes, techniques, artifact types and deploy targets (language servers 
 are not started yet).
 
 oIDE's own Git, Browser preview and Accent themes features ship as extensions
-([`extensions/`](https://github.com/oide-dev/oide/tree/main/extensions) in the repo), so the API is
+([`extensions/`](https://github.com/frostlogic-ab/oIDE/tree/main/extensions) in the repo), so the API is
 used by oIDE itself.
 
 ## The parts of an extension
@@ -59,5 +59,5 @@ manifest changes.
 7. [Developing and testing](/extensions/developing): Add from folder, developer mode.
 8. [Packaging and publishing](/extensions/publishing): npm, the marketplace index and its checks.
 
-Internals: [extensions](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/extensions.md) and
-[marketplace](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/marketplace.md) in the wiki.
+Internals: [extensions](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/extensions.md) and
+[marketplace](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/marketplace.md) in the wiki.
