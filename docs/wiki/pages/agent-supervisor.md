@@ -91,8 +91,8 @@ Injected interfaces (`ports.ts`):
 | queued / starting / paused / stopped | Set by the supervisor (`status` events). |
 | running | A user message was sent (`status running`), or `init` while starting; still `running` after a `result` when `backgroundTasks > 0` (async subagents). |
 | needs-permission | A `permission-request` is pending; back to running on `permission-resolved` for that id. |
-| has-question | `result` and no `submit_for_review` since the last user message. |
-| ready-for-review | `review-submitted` since the last user message (kept through `/compact`). |
+| has-question | `result` and no `submit_for_review` since the last user message, unless the next row applies. |
+| ready-for-review | `review-submitted` since the last user message (kept through `/compact`); or a `result` after a review from an earlier turn whose final message asks nothing (`asksUser`: no `?` outside code and links, no "let me know"), [ADR 0016](../../adr/0016-follow-up-turns-return-to-ready-for-review.md). |
 | rate-limited | `rate-limit` event (rejected `rate_limit_event`, assistant `error:"rate_limit"`, or `api_error_status` 429). |
 | error | Non-zero exit, auth error (`error` code `auth`, API 401), `model_not_found`, or a launch failure. |
 

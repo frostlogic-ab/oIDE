@@ -918,3 +918,10 @@ Reported as `Invalid input for git.openPr: title: expected string, received unde
 process predated it. `electron-vite dev` hot-reloads the renderer but does not rebuild or restart main
 and preload, so after pulling, restart oIDE when `packages/protocol` or `src/main` change. A router
 test now pins `git.openPr` accepting just `{ agentId }` ([screen-review](pages/screen-review.md)).
+
+## [2026-11-26] decision | Status-only follow-ups return to Ready for review
+An agent that had submitted for review showed "Has a question" on the Wall after a follow-up turn that
+only reported CI status. The reducer now returns `ready-for-review` when a turn ends without
+`submit_for_review`, the agent submitted in an earlier turn, and its final message asks nothing
+(`asksUser`). [ADR 0016](../adr/0016-follow-up-turns-return-to-ready-for-review.md); updated
+[agent-supervisor](pages/agent-supervisor.md).

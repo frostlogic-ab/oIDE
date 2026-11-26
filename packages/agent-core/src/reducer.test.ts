@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentEvent, AgentEventDraft } from '@oide/protocol';
 import { fixtureEvents, stamp } from '../test/helpers.js';
-import { AgentReducer, createSummary, describeToolUse } from './reducer.js';
+import { AgentReducer, asksUser, createSummary, describeToolUse } from './reducer.js';
 
 const fresh = (model = 'haiku') => ({ ...createSummary({ id: 'agent-1', projectId: 'p1', title: 'T', mode: 'auto', model, status: 'starting', now: 0 }), worktreePath: 'C:\\work\\repo' });
 
@@ -124,13 +124,31 @@ describe('AgentReducer', () => {
     expect(r.summary.status).toBe('ready-for-review');
   });
 
-  it('a new user message resets ready-for-review; result without review = has-question', () => {
-    const { s } = run([
+  it('a new user message resets ready-for-review; a follow-up that asks something = has-question', () => {
+    const { s, statuses } = run([
       ev({ type: 'review-submitted', review: { agentId: 'agent-1', summary: 'x', checks: [], submittedAt: 1 } }),
       ev({ type: 'result', subtype: 'success', isError: false }),
       ev({ type: 'status', status: 'running' }),
-      ev({ type: 'result', subtype: 'success', isError: false }),
+      ev({ type: 'result', subtype: 'success', isError: false, text: 'Should I push the branch, or will you?' }),
     ]);
+    expect(statuses).toEqual(['ready-for-review', 'running', 'has-question']);
+    expect(s.status).toBe('has-question');
+  });
+
+  it('a follow-up after an earlier review that only reports status goes back to ready-for-review', () => {
+    const { s, statuses } = run([
+      ev({ type: 'review-submitted', review: { agentId: 'agent-1', summary: 'x', checks: [], submittedAt: 1 } }),
+      ev({ type: 'result', subtype: 'success', isError: false }),
+      ev({ type: 'status', status: 'running' }),
+      ev({ type: 'assistant-text', text: "PR #10's CI is green: typecheck, lint and E2E on Ubuntu." }),
+      ev({ type: 'result', subtype: 'success', isError: false, text: "PR #10's CI is green: typecheck, lint and E2E on Ubuntu." }),
+    ]);
+    expect(statuses).toEqual(['ready-for-review', 'running', 'ready-for-review']);
+    expect(s.review?.summary).toBe('x');
+  });
+
+  it('without an earlier review, a turn that ends without submitting is still has-question', () => {
+    const { s } = run([ev({ type: 'status', status: 'running' }), ev({ type: 'result', subtype: 'success', isError: false, text: 'All done.' })]);
     expect(s.status).toBe('has-question');
   });
 
@@ -169,5 +187,25 @@ describe('AgentReducer', () => {
   it('model error fixture ends in error', () => {
     const { s } = run([ev({ type: 'status', status: 'running' }), ...stamp([], 'agent-1'), ...fixtureEvents('real-model-error.jsonl')]);
     expect(s.status).toBe('error');
+  });
+});
+
+describe('asksUser', () => {
+  it('sees questions and plain requests for an answer', () => {
+    expect(asksUser('Should I push the branch to re-run CI, or will you?')).toBe(true);
+    expect(asksUser('Which option do you want?\n\n1. A\n2. B')).toBe(true);
+    expect(asksUser('Two ways to do it. Let me know which you prefer.')).toBe(true);
+    expect(asksUser('I need your decision on the schema before I go on.')).toBe(true);
+    expect(asksUser('Want me to open the PR too? (It is ready.)')).toBe(true);
+  });
+
+  it('ignores status reports, code, and query strings in links', () => {
+    expect(asksUser(undefined)).toBe(false);
+    expect(asksUser('   ')).toBe(false);
+    expect(asksUser("PR #10's CI is green: typecheck, lint, wiki and E2E on Ubuntu.\n\n- **Linux E2E:** passes now.")).toBe(false);
+    expect(asksUser('See https://github.com/o/r/actions/runs/1/job/2?pr=10 for the run.')).toBe(false);
+    expect(asksUser('Fixed the regex `/a?b/` and `x ?? y`.')).toBe(false);
+    expect(asksUser('Done:\n```ts\nconst v = a ? b : c;\n```')).toBe(false);
+    expect(asksUser('Details are in [the run](https://x.dev/run?id=3).')).toBe(false);
   });
 });
