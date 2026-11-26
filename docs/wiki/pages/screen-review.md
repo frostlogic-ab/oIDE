@@ -53,6 +53,12 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
   them equal (`lib/mock/mock.test.ts`).
 - Merge locally: confirm dialog → `git.mergeLocal`. The dialog predicts first (see
   [Merge conflicts](#merge-conflicts)); main is never left mid-merge.
+- Nothing to push (2026-11-26): when the diff is empty (committed, uncommitted and untracked), the
+  worktree is known with `ahead: 0` and there is no PR, Open pull request and Merge locally are
+  replaced by **Archive session** (`agents.archive`, then back to the Wall) with a note saying there
+  is nothing to push against the base. While the agent still works (not `canArchive`) the button is
+  disabled and the note says to archive once it stops. Archived sessions can be unarchived from
+  Wall › Archived.
 
 ## Merge conflicts
 

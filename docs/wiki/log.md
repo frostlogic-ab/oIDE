@@ -864,3 +864,8 @@ link to the new repository; the docs site base is `/oIDE/` (`frostlogic-ab.githu
 `CHANGELOG.md` is written by release-please from now on. No telemetry change (CI only). Pages:
 [release-pipeline.md](pages/release-pipeline.md) (new), [packaging.md](pages/packaging.md),
 [docs-site.md](pages/docs-site.md).
+
+## [2026-11-26] build | Review: Archive session when there is nothing to push
+A finished agent whose worktree has no changes or commits against its base (and no PR) no longer
+offers Open pull request / Merge locally in Review; it offers Archive session instead. See
+[screen-review](pages/screen-review.md#decisions).
