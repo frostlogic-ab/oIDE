@@ -22,7 +22,7 @@ flow, Add custom services, loopback proxy) are on [marketplace.md](marketplace.m
   source…" note at the bottom. Categories are buttons with `aria-current="page"`.
 - **List** (`main`): 36px search (scoped to the category; when it finds nothing there but matches
   elsewhere, the list shows those with a status line "No matches in <category>. Showing N matches
-  from other categories.", and "Nothing matches your search" only when no category matches), Sort select (Most installed = `downloads`, Recently updated =
+  from other categories." in an always-mounted `role="status"` line, and "Nothing matches your search" only when no category matches), Sort select (Most installed = `downloads`, Recently updated =
   `MarketplaceEntry.updatedAt`, Name), accent "+ Add custom"; `h1` = category; one row per item: 40px
   monogram tile (tint picked from `#9DBBFA #7FC8A9 #E6E8EB #F2C078 #C4A7E7` by a hash of the name),
   name · publisher, violet "Custom" pill for custom servers and folder/git extensions, description,

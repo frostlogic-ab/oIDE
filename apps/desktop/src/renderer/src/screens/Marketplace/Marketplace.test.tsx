@@ -58,6 +58,6 @@ describe('Marketplace search', () => {
     fireEvent.change(screen.getByLabelText('Search extensions'), { target: { value: 'git' } });
     const list = await screen.findByRole('list', { name: 'Agent tools extensions' });
     expect(within(list).getAllByRole('listitem').length).toBeGreaterThan(0);
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('status').textContent).toBe('');
   });
 });

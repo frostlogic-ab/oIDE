@@ -218,6 +218,12 @@ export default function MarketplaceScreen() {
           </Button>
         </div>
         <h1 className="m-0 text-[16px] font-semibold">{categoryLabel(cat)}</h1>
+        {/* Always mounted so screen readers announce the line when a search falls back to other categories. */}
+        <p role="status" className="m-0 text-[12.5px] text-ink-2 empty:hidden">
+          {elsewhere.length > 0
+            ? `No matches in ${categoryLabel(cat)}. Showing ${elsewhere.length} ${elsewhere.length === 1 ? 'match' : 'matches'} from other categories.`
+            : ''}
+        </p>
         {!data.loaded ? (
           <Spinner label="Loading extensions" />
         ) : data.error ? (
@@ -234,12 +240,6 @@ export default function MarketplaceScreen() {
             description={cat === 'custom' ? 'Add any MCP server or local extension with Add custom.' : undefined}
           />
         ) : (
-          <>
-          {elsewhere.length > 0 && (
-            <p role="status" className="m-0 text-[12.5px] text-ink-2">
-              No matches in {categoryLabel(cat)}. Showing {elsewhere.length} {elsewhere.length === 1 ? 'match' : 'matches'} from other categories.
-            </p>
-          )}
           <ul className="m-0 p-0 list-none flex flex-col gap-2" aria-label={elsewhere.length > 0 ? 'Matches in other categories' : `${categoryLabel(cat)} extensions`}>
             {shown.map((item) => {
               const sel = selected?.key === item.key;
@@ -271,7 +271,6 @@ export default function MarketplaceScreen() {
               );
             })}
           </ul>
-          </>
         )}
       </main>
 

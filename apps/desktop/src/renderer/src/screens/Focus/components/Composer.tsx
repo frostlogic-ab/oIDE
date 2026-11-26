@@ -7,7 +7,7 @@ import { invokeOr, ipcErrorMessage, oide } from '../../../lib/bridge';
 import { insertText } from '../../../lib/slash';
 import { toast } from '../../../stores/ui';
 import { composeMessage } from '../model/focus';
-import { clearDraft, getDraft, setDraft } from '../composerDrafts';
+import { getDraft, onDraftChange, setDraft } from '../composerDrafts';
 
 export interface ComposerProps {
   agentId: string;
@@ -75,6 +75,15 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
     },
   });
 
+  // A send started by an earlier mount of this composer finished: show what it left.
+  useEffect(
+    () =>
+      onDraftChange((id, next) => {
+        if (id === agentRef.current) setDraftState({ agentId: id, text: next });
+      }),
+    [],
+  );
+
   // The text comes back per agent (above); the picked artifact and attachments are not kept.
   useEffect(() => {
     setArtifact(null);
@@ -110,8 +119,8 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
       // sent part, so Enter does not send it again). If the user has switched agents meanwhile, the
       // visible composer belongs to someone else: only that agent's stored draft changes.
       const rest = afterSent(getDraft(agentId), text);
-      if (rest === '') clearDraft(agentId);
-      else setDraft(agentId, rest);
+      // Notify: a Composer mounted again for this agent while the send was in flight shows the rest too.
+      setDraft(agentId, rest, true);
       if (agentRef.current === agentId) {
         setDraftState({ agentId, text: rest });
         setArtifact(null);

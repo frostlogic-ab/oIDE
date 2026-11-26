@@ -95,8 +95,9 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
   the usual conflict banner (Keep mine / Use theirs). If an agent changed the artifact's entry
   file meanwhile, the draft (text of the old file) is dropped with a warning toast instead of being
   shown as the new entry's text and saved to the wrong file, both when the screen resumes it and when
-  the user reopens it from its card. After Keep as draft, a route that names the artifact (a chip, a
-  toast action, the card) opens it with the draft again. The screen subscribes to the draft ids
+  the user reopens it from its card. After Keep as draft, coming back to the screen on a route that
+  names the artifact (a chip, a toast action) reopens it with the draft; while the grid is already
+  showing, such a route only selects it, and opening the card (double-click or Enter) shows the draft. The screen subscribes to the draft ids
   only (`draftIdsKey`), not to the draft text, so typing does not re-render it. Unsaved edits to a
   non-entry file in the Files panel are not kept. Editors are lazy chunks:
 

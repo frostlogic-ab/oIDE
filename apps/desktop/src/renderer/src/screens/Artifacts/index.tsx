@@ -172,8 +172,10 @@ export default function ArtifactsScreen() {
   // Unmounting does not re-run the effect, so leaving the screen keeps the value.
   const openId = opened && shown ? shown.meta.id : undefined;
   useEffect(() => {
+    // Not before the list loaded: the resume above still needs the value from the last visit.
+    if (!loaded) return;
     useArtifactDrafts.getState().setLastOpen(openId ?? null);
-  }, [openId]);
+  }, [openId, loaded]);
   const closeViewer = () => {
     setOpened(false);
     useArtifactDrafts.getState().setLastOpen(null);

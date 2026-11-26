@@ -326,6 +326,30 @@ describe('Composer', () => {
       }
     });
 
+    it('a send that finishes after leaving and coming back clears the remounted composer too', async () => {
+      let release: () => void = () => {};
+      const impl = invoke.getMockImplementation()!;
+      invoke.mockImplementation(async (command: string, input?: unknown) => {
+        if (command === 'agents.send') await new Promise<void>((r) => (release = r));
+        return impl(command, input);
+      });
+      try {
+        const first = render(<Composer agentId="a-bridge" {...props} />);
+        fireEvent.change(box(), { target: { value: 'sent once' } });
+        fireEvent.keyDown(box(), { key: 'Enter' });
+        await waitFor(() => expect(calls('agents.send')).toHaveLength(1));
+        // Leave Focus and come back on the same agent while the send is still in flight.
+        first.unmount();
+        render(<Composer agentId="a-bridge" {...props} />);
+        expect(box().value).toBe('sent once');
+        await act(async () => release());
+        expect(box().value).toBe('');
+        expect(getDraft('a-bridge')).toBe('');
+      } finally {
+        invoke.mockImplementation(impl);
+      }
+    });
+
     it('afterSent: what stays once a message went out', () => {
       expect(afterSent('hi', 'hi')).toBe('');
       expect(afterSent('hi there', 'hi')).toBe('there');
