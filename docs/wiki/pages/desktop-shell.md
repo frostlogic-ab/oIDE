@@ -311,6 +311,10 @@ one index per checkout (`git ls-files --cached` plus untracked, not ignored file
 ones from `git status -uall`; a folder walk outside git), built on first use and marked dirty by the checkout watchers (`GitService.onCheckoutChange`);
 queries use the old list while it rebuilds. Timings: [screen-files](screen-files.md#performance).
 
+
+While a debounced file search for the current query is pending and nothing else matches, the list
+shows "Searching files…" rather than "No matches". The highlighted row is clamped to a real row, so an
+arrow key pressed before file results arrive cannot leave the selection at -1 and break Enter.
 ## Tests
 
 - Unit (Vitest): `ipc/router.test.ts` (routing, validation, error codes, sender check, emitter,

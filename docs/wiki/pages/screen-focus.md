@@ -146,6 +146,17 @@ echoes text messages (with attachments) into the transcript; `dialog.pickFiles` 
 paging, and streams a demo reply every 20 s; `a-invoice` and `a-webhook` cover question and review.
 A pretend shell answers `terminal.*`.
 
+## Header and composer details
+- **Pause and Resume.** Pause shows only while the agent is running, starting, waiting on a permission
+  or queued (queued is disabled). When a paused, stopped, error or rate-limited session cannot resume
+  (`resumeBlocked`, e.g. its worktree is gone), the header shows a focusable `aria-disabled` Resume whose
+  tooltip gives the reason, instead of an enabled Pause that does nothing.
+- **Permission prompt keys.** The Allow and Deny hints come from `useShortcutLabel('permission.allow' |
+  'permission.deny')`, so they follow a rebinding in Settings > Keys, the same as the Wall tile.
+- **Attach artifact popover.** It takes focus when it opens (the first item, or the popover itself while
+  loading, empty or failed), so Esc closes it instead of running `view.back`. Esc and picking return
+  focus to the trigger, and the trigger button toggles it closed.
+
 ## Tests
 
 `model/transcript.test.ts` (row mapping, Read merge, subagent cards and filtering, steps, diff,

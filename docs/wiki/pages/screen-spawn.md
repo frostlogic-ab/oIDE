@@ -57,6 +57,13 @@ section without `mcp-config`.
 - Model rows are one grid (rows are subgrids): only the orchestrator offers custom models, so its
   pill group is wider; a shared pill column keeps the effort selects (32px / 12px) aligned, as drawn.
 
+## Keeping what the user typed
+- The Spawn dialog does not close on a scrim click (`dismissOnScrim={false}`); Esc and Cancel still close it.
+- Esc inside the inline "Add context" panel closes only that panel and returns focus to its
+  "+ Artifact, file or URL" trigger.
+- While an attachment is still being read (`atts.busy`), submit is blocked and the button reads
+  "Attaching…", so a pasted screenshot is never dropped by a quick Ctrl+Enter.
+
 ## Tests
 
 `screens/Spawn/spawnModel.test.ts` (defaults, route pre-fill, routed spec with attempts and group,

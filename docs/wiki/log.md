@@ -969,3 +969,17 @@ GitHub's Ubuntu runners), so the frozen renderer outlived the poll and the teard
 macOS terminate the process directly. The test now kills the renderer with SIGKILL on
 `getOSProcessId()`, which dumps nothing and behaves the same on every OS
 ([reliability](pages/reliability.md#tests)).
+
+## [2026-11-26] review | Ten usability fixes across the renderer
+A usability pass over Wall, Focus, Spawn, the command bar, Files, Review, Source control, Settings,
+Artifacts and Marketplace found 19 verified issues. Ten were fixed, each in its own files:
+Focus artifact popover focus and Esc, Spawn keeping the typed goal and waiting for attachments, real
+shortcut hints on the Focus permission prompt, the command bar selection while file results load, the
+Focus header Pause/Resume, a retryable Review diff error, the Review send-feedback button, Retry in the
+Files tree, unsaved Files edits surviving a screen switch, and confirmations for destructive Settings
+actions. Pages: [screen-focus](pages/screen-focus.md), [screen-spawn](pages/screen-spawn.md),
+[desktop-shell](pages/desktop-shell.md#command-bar), [screen-review](pages/screen-review.md),
+[screen-files](pages/screen-files.md), [screen-settings](pages/screen-settings.md). Still open from the
+same pass: scrim clicks discard the New artifact and Add custom extension dialogs, CommitDialog can be
+closed mid-commit, Marketplace search is scoped to one category, its drop zone opens a picker, env rows
+can't be removed, and Review comment drafts are lost on a stray click.
