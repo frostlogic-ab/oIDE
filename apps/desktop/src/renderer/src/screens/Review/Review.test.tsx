@@ -106,9 +106,9 @@ describe('Review screen', () => {
     expect(await screen.findByRole('heading', { name: 'Your feedback · 2 comments' })).toBeTruthy();
     expect(screen.queryByLabelText('Comment for the agent')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send feedback to agent' }));
+    fireEvent.click(screen.getByRole('button', { name: /^Send \d+ comments? to agent$/ }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('review.sendFeedback', { agentId: 'a-webhook' }));
-    expect(await screen.findByRole('button', { name: 'Feedback sent · agent is revising' })).toBeTruthy();
+    expect(await screen.findByText('Feedback sent · agent is revising')).toBeTruthy();
   });
 
   it('a comment on a removed line is saved with side "old" and shown under that line', async () => {
@@ -148,6 +148,30 @@ describe('Review screen', () => {
     fireEvent.click(archive);
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('agents.archive', { agentId: 'a-webhook' }));
     await waitFor(() => expect(useRouter.getState().route.screen).toBe('wall'));
+  });
+
+  it('when git.diff fails, shows an error with Try again instead of "No changes yet", and retry reloads', async () => {
+    const { invoke, real } = await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook' } });
+    let failing = true;
+    invoke.mockImplementation((async (command: string, input: unknown) => {
+      if (command === 'git.diff' && failing) throw new Error('[git_failed] fatal: bad revision');
+      return real(command as never, input as never);
+    }) as never);
+    render(<ReviewScreen />);
+
+    const alert = await screen.findByRole('alert');
+    expect(within(alert).getByText("Couldn't load the changes")).toBeTruthy();
+    expect(within(alert).getByText('fatal: bad revision')).toBeTruthy();
+    expect(screen.queryByText('No changes yet')).toBeNull();
+
+    failing = false;
+    const diffCalls = () => invoke.mock.calls.filter(([c]) => c === 'git.diff').length;
+    const before = diffCalls();
+    fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByRole('heading', { name: '8 files changed' })).toBeTruthy();
+    expect(diffCalls()).toBe(before + 1);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText("Couldn't load the changes")).toBeNull();
   });
 
   /** a-webhook with an open PR #21 and the given push state. */

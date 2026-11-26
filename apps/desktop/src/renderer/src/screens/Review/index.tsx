@@ -5,7 +5,7 @@
  * Keys: J / K next / previous file, ] / [ next / previous hunk. Wiki: screen-review.md.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { EmptyState, Spinner } from '@oide/ui';
+import { Button, EmptyState, Spinner } from '@oide/ui';
 import { HeaderSlot } from '../../components/frame/HeaderSlot';
 import { keymap } from '../../lib/keymap';
 import { useKeymapScope } from '../../lib/useKeymap';
@@ -271,7 +271,23 @@ export default function ReviewScreen() {
             )}
           </>
         ) : (
-          !review.loading && <EmptyState icon="source-control" title="No changes yet" description="This worktree has no changes against its base." className="flex-1" />
+          !review.loading &&
+          (review.error ? (
+            <EmptyState
+              role="alert"
+              icon="alert-circle"
+              title="Couldn't load the changes"
+              description={review.error}
+              className="flex-1"
+              action={
+                <Button icon="refresh" onClick={() => void review.reload()}>
+                  Try again
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState icon="source-control" title="No changes yet" description="This worktree has no changes against its base." className="flex-1" />
+          ))
         )}
       </main>
 
