@@ -52,17 +52,23 @@ export function CommitDialog({
     }
   };
 
+  // While the commit is in flight the dialog stays: its result (or error) shows here.
+  const close = () => {
+    if (!busy) onClose();
+  };
+
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={close}
+      dismissOnScrim={!busy}
       width={480}
       title={`Commit to ${branch}`}
       description={`In ${projectName} · ${files.length} changed ${files.length === 1 ? 'file' : 'files'}`}
       initialFocus={messageRef}
       footer={
         <>
-          <Button variant="secondary" size={32} onClick={onClose}>
+          <Button variant="secondary" size={32} disabled={busy} onClick={close}>
             Cancel
           </Button>
           <Button variant="primary" size={32} disabled={busy || !message.trim() || !picked.size} onClick={() => void submit()}>
