@@ -980,5 +980,5 @@ on macOS; finalize never ran), so every client sees no release. Fixed in `tools/
 The Windows portable zip carried `app-update.yml` and would have installed a second copy; the updater
 now needs the NSIS uninstaller next to the exe. The GitHub publisher writes no `beta*.yml` (beta users
 read `latest*.yml` through electron-updater's fallback); docs and config corrected. New finalize gate
-`tools/release/verify-feed.mjs`; new telemetry event `update_checked`. Pages: packaging,
+`tools/release-feed/verify-feed.mjs`; new telemetry event `update_checked`. Pages: packaging,
 release-pipeline, telemetry.

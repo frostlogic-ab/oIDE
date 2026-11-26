@@ -46,7 +46,7 @@ auto-update: [packaging](packaging.md).
      installers (Windows NSIS + zip, macOS dmg + zip, Linux AppImage + deb + rpm, x64 and arm64) and
      the update files. Signing per platform only when its secrets exist ([packaging](packaging.md)).
    - **finalize** adds `SHA256SUMS` (and detached GPG signatures when `GPG_PRIVATE_KEY` is set),
-     checks the update feed with `tools/release/verify-feed.mjs` (every platform's `latest*.yml` is
+     checks the update feed with `tools/release-feed/verify-feed.mjs` (every platform's `latest*.yml` is
      attached, has the release's version, names only attached files of the right size, and offers
      the Windows x64/arm64 installers, both macOS zips and both AppImages), then **publishes** the
      release: marked *latest* for a plain version, *pre-release* for a version like `0.3.0-beta.1`.
@@ -68,7 +68,7 @@ optional dependencies the same way on every OS ([packaging](packaging.md), Licen
 ```
 gh release download vX.Y.Z --pattern 'latest*.yml' --dir feed --repo frostlogic-ab/oIDE
 gh release view vX.Y.Z --json assets --jq '[.assets[] | {name, size}]' --repo frostlogic-ab/oIDE > assets.json
-node tools/release/verify-feed.mjs --version X.Y.Z --feed feed --assets assets.json
+node tools/release-feed/verify-feed.mjs --version X.Y.Z --feed feed --assets assets.json
 ```
 
 This works on drafts too (with a token that can see them). Installed apps only see the release

@@ -10,7 +10,7 @@ name: Release
 #      typecheck, lint, test and licences.
 #   3. build: one job per OS; electron-builder uploads the installers and the update feed
 #      (latest*.yml; its GitHub publisher writes no beta*.yml) to the draft release of that tag.
-#   4. finalize: SHA256SUMS (and GPG signatures when the key exists), then tools/release/verify-feed.mjs
+#   4. finalize: SHA256SUMS (and GPG signatures when the key exists), then tools/release-feed/verify-feed.mjs
 #      checks that every platform's latest*.yml is there and names only attached files, then the
 #      release is published: marked latest for 0.2.0, pre-release for 0.2.0-beta.1 (the beta channel
 #      takes the newest release, prerelease or not). If any build or the feed check fails, the release
@@ -320,10 +320,10 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TAG: v${{ needs.verify.outputs.version }}
     steps:
-      # Only tools/release (the feed check), from the workflow's own commit: plain Node, no install.
+      # Only tools/release-feed (the feed check), from the workflow's own commit: plain Node, no install.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          sparse-checkout: tools/release
+          sparse-checkout: tools/release-feed
           path: src
 
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -379,7 +379,7 @@ jobs:
           feed="$RUNNER_TEMP/feed"
           gh release download "$TAG" --pattern 'latest*.yml' --dir "$feed" --clobber --repo "$GITHUB_REPOSITORY"
           gh release view "$TAG" --json assets --jq '[.assets[] | {name, size}]' --repo "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/assets.json"
-          node src/tools/release/verify-feed.mjs --version "${TAG#v}" --feed "$feed" --assets "$RUNNER_TEMP/assets.json"
+          node src/tools/release-feed/verify-feed.mjs --version "${TAG#v}" --feed "$feed" --assets "$RUNNER_TEMP/assets.json"
 
       # Only now, with every installer, update file and checksum attached, does the release become
       # visible: electron-updater cannot see drafts, so no user is offered a half-uploaded release.
