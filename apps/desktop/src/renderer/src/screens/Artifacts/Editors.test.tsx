@@ -23,6 +23,7 @@ import { useProjects } from '../../stores/projects';
 import { useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useUi } from '../../stores/ui';
+import { useArtifactDrafts } from './draftStore';
 import ArtifactsScreen from './index';
 
 vi.mock('./SourceEditor', () => ({
@@ -109,6 +110,7 @@ const SITE: FileSet = {
 let arts: Record<string, Art>;
 let listeners: Map<string, Set<(p: unknown) => void>>;
 let saveError: string | null;
+let listError: string | null;
 
 function seed() {
   const board = JSON.stringify({ type: 'excalidraw', version: 2, elements: [], appState: {} }, null, 2);
@@ -186,6 +188,7 @@ const invoke = vi.fn(async (command: string, input: unknown): Promise<unknown> =
   };
   switch (command) {
     case 'artifacts.list':
+      if (listError) throw new Error(listError);
       return Object.values(arts).map((a) => a.meta);
     case 'artifacts.uses':
       return {};
@@ -256,6 +259,7 @@ const calls = (command: string) =>
 beforeEach(() => {
   seed();
   saveError = null;
+  listError = null;
   listeners = new Map();
   const bridge: OideBridge = {
     invoke: invoke as unknown as OideBridge['invoke'],
@@ -296,6 +300,7 @@ beforeEach(() => {
     loaded: true,
   });
   useUi.setState({ toasts: [] });
+  useArtifactDrafts.getState().reset();
   const slot = document.createElement('div');
   document.body.appendChild(slot);
   useUi.getState().setHeaderSlot('actions', slot);
@@ -451,6 +456,224 @@ describe('Whiteboard editor', () => {
     agentWrites('a-board', next);
     await waitFor(() => expect(within(viewer).getByTestId('whiteboard-loaded').textContent).toBe(next));
     expect(within(viewer).getByRole('status').textContent).toMatch(/Updated by Retry policy agent/);
+  });
+});
+
+describe('Unsaved edits survive leaving the screen', () => {
+  const draftsOf = () => useArtifactDrafts.getState().drafts;
+
+  async function typeAndLeave(text: string) {
+    const viewer = await openArtifact(/Webhook retry design/);
+    fireEvent.change(await within(viewer).findByLabelText('Source of Webhook retry design'), { target: { value: text } });
+    expect(draftsOf()['a-doc']).toMatchObject({ baseVersion: 1, draft: text });
+    // Another screen replaces this one (left rail, Ctrl+K, a toast action).
+    cleanup();
+    expect(draftsOf()['a-doc']?.draft).toBe(text);
+  }
+
+  async function comeBack() {
+    render(<ArtifactsScreen />);
+    const viewer = await screen.findByRole('region', { name: /\(open\)/ });
+    return viewer;
+  }
+
+  it('reopens the artifact with the typed text and the Unsaved changes badge', async () => {
+    await typeAndLeave('# Retry\n\nhalf-written');
+    const viewer = await comeBack();
+    expect(((await within(viewer).findByLabelText('Source of Webhook retry design')) as HTMLTextAreaElement).value).toBe('# Retry\n\nhalf-written');
+    expect(within(viewer).getByText('Unsaved changes')).toBeTruthy();
+    expect(within(viewer).getByText(/Doc · oide · v1/)).toBeTruthy();
+    // A save from the resumed editor is based on the version the edit started from, and clears the draft.
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(within(viewer).getByText(/Doc · oide · v2/)).toBeTruthy());
+    expect(calls('artifacts.save')).toEqual([{ id: 'a-doc', content: '# Retry\n\nhalf-written', note: 'Edited by you', baseVersion: 1 }]);
+    await waitFor(() => expect(draftsOf()['a-doc']).toBeUndefined());
+    await waitFor(() => expect(within(viewer).queryByText('Unsaved changes')).toBeNull());
+  });
+
+  it('marks the artifact in the grid when the route points at another one (no auto-open)', async () => {
+    await typeAndLeave('draft text');
+    // Coming back to the grid with the route on another artifact: marker on the card, no auto-open.
+    useRouter.setState({ route: { screen: 'artifacts', params: { artifactId: 'a-board' } }, back: [], forward: [] });
+    render(<ArtifactsScreen />);
+    const card = await screen.findByRole('button', { name: /Webhook retry design/ });
+    expect(within(card).getByText('Unsaved')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: /\(open\)/ })).toBeNull();
+  });
+
+  const viaRail = () => useRouter.setState({ route: { screen: 'artifacts', params: {} }, back: [], forward: [] });
+  const viewerOpen = () => screen.queryByRole('region', { name: /\(open\)/ });
+  const gridCard = async (title: RegExp) => within(await screen.findByRole('tabpanel', { name: 'Artifacts' })).findByRole('button', { name: title });
+
+  it('reopens the open artifact when the rail (no artifact in the route) brings the screen back', async () => {
+    await typeAndLeave('half-written');
+    viaRail();
+    const viewer = await comeBack();
+    expect(((await within(viewer).findByLabelText('Source of Webhook retry design')) as HTMLTextAreaElement).value).toBe('half-written');
+    expect(useRouter.getState().route).toEqual({ screen: 'artifacts', params: { artifactId: 'a-doc' } });
+  });
+
+  it('Keep as draft goes back to the grid with the draft kept, and the grid stays browsable', async () => {
+    await typeAndLeave('draft text');
+    viaRail();
+    const viewer = await comeBack();
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Artifacts' }));
+    const confirm = await screen.findByRole('dialog', { name: 'Discard your changes?' });
+    expect(within(confirm).getByRole('button', { name: 'Keep editing' })).toBeTruthy();
+    expect(within(confirm).getByRole('button', { name: 'Discard' })).toBeTruthy();
+    fireEvent.click(within(confirm).getByRole('button', { name: 'Keep as draft' }));
+    await waitFor(() => expect(viewerOpen()).toBeNull());
+    expect(draftsOf()['a-doc']?.draft).toBe('draft text');
+    expect(within(await gridCard(/Webhook retry design/)).getByText('Unsaved')).toBeTruthy();
+    // Leaving and coming back by the rail lands on the grid, not in the editor again.
+    cleanup();
+    viaRail();
+    render(<ArtifactsScreen />);
+    const card = await gridCard(/Webhook retry design/);
+    expect(within(card).getByText('Unsaved')).toBeTruthy();
+    expect(viewerOpen()).toBeNull();
+    // The badge is the way back: the card opens the editor with the kept text.
+    fireEvent.click(card);
+    fireEvent.doubleClick(card);
+    const again = await screen.findByRole('region', { name: /\(open\)/ });
+    expect(((await within(again).findByLabelText('Source of Webhook retry design')) as HTMLTextAreaElement).value).toBe('draft text');
+  });
+
+  it('a Viewer without edits closes straight away, with no Keep as draft', async () => {
+    const viewer = await openArtifact(/Webhook retry design/);
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Artifacts' }));
+    await waitFor(() => expect(viewerOpen()).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Keep as draft' })).toBeNull();
+  });
+
+  it('keeps every draft when the first load of the list fails, and resumes once it works', async () => {
+    await typeAndLeave('draft text');
+    listError = 'disk is busy';
+    render(<ArtifactsScreen />);
+    await waitFor(() => expect(calls('artifacts.list').length).toBeGreaterThan(0));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(draftsOf()['a-doc']?.draft).toBe('draft text');
+    expect(viewerOpen()).toBeNull();
+    // A later successful load: the draft is still there and the route's artifact reopens with it.
+    listError = null;
+    emit('artifacts.changed', { id: 'a-doc', change: 'saved', version: 1, author: 'user' });
+    const viewer = await screen.findByRole('region', { name: /\(open\)/ });
+    expect(((await within(viewer).findByLabelText('Source of Webhook retry design')) as HTMLTextAreaElement).value).toBe('draft text');
+  });
+
+  it('still drops the draft of an artifact that no longer exists', async () => {
+    await typeAndLeave('draft text');
+    delete arts['a-doc'];
+    viaRail();
+    render(<ArtifactsScreen />);
+    await screen.findByRole('button', { name: /Session lifecycle/ });
+    await waitFor(() => expect(draftsOf()['a-doc']).toBeUndefined());
+  });
+
+  it('drops a draft whose artifact now opens on another page, with a notice, instead of writing it to the wrong file', async () => {
+    const viewer = await openArtifact(/Docs site/);
+    fireEvent.change(await within(viewer).findByLabelText('Source of Docs site'), { target: { value: '<h1>Home mine</h1>' } });
+    expect(draftsOf()['a-site']).toMatchObject({ entry: 'index.html', draft: '<h1>Home mine</h1>' });
+    cleanup();
+    // An agent made about.html the page while the screen was away.
+    const a = arts['a-site']!;
+    writeSet(a, { ...a.files![1]! }, 'about.html', 'agent:ag-fix');
+    render(<ArtifactsScreen />);
+    await screen.findByRole('button', { name: /Docs site/ });
+    await waitFor(() => expect(draftsOf()['a-site']).toBeUndefined());
+    expect(viewerOpen()).toBeNull();
+    expect(useUi.getState().toasts.map((t) => t.message)).toContain('Docs site now opens on another page, so your unsaved edits to the old one were discarded.');
+    expect(calls('artifacts.writeFiles')).toEqual([]);
+  });
+
+  it('does not remember an artifact whose Viewer was never shown when the route moves while one is open', async () => {
+    // a-doc has a kept draft (Unsaved badge); the user then opens another artifact.
+    await typeAndLeave('draft text');
+    useRouter.setState({ route: { screen: 'artifacts', params: { artifactId: 'a-board' } }, back: [], forward: [] });
+    render(<ArtifactsScreen />);
+    const board = await gridCard(/Session lifecycle/);
+    fireEvent.click(board);
+    fireEvent.doubleClick(board);
+    await screen.findByRole('region', { name: /\(open\)/ });
+    // A toast action or Ctrl+K moves the route to a-doc: the Viewer closes, its editor was never shown.
+    act(() => useRouter.getState().replace('artifacts', { artifactId: 'a-doc' }));
+    await waitFor(() => expect(viewerOpen()).toBeNull());
+    expect(useArtifactDrafts.getState().lastOpenId).toBeNull();
+    // Back by the rail later: the grid, not a-doc's editor.
+    cleanup();
+    viaRail();
+    render(<ArtifactsScreen />);
+    expect(within(await gridCard(/Webhook retry design/)).getByText('Unsaved')).toBeTruthy();
+    expect(viewerOpen()).toBeNull();
+  });
+
+  it('tells the user when a kept draft is dropped on reopening from the card because the page changed meanwhile', async () => {
+    const viewer = await openArtifact(/Docs site/);
+    fireEvent.change(await within(viewer).findByLabelText('Source of Docs site'), { target: { value: '<h1>Home mine</h1>' } });
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Artifacts' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Discard your changes?' })).getByRole('button', { name: 'Keep as draft' }));
+    await waitFor(() => expect(viewerOpen()).toBeNull());
+    // While the grid is shown, an agent makes about.html the page.
+    const a = arts['a-site']!;
+    const v = writeSet(a, { ...a.files![a.meta.version]! }, 'about.html', 'agent:ag-fix');
+    emit('artifacts.changed', { id: 'a-site', change: 'saved', version: v, author: 'agent:ag-fix' });
+    const card = await gridCard(/Docs site/);
+    fireEvent.click(card);
+    fireEvent.doubleClick(card);
+    await screen.findByRole('region', { name: /\(open\)/ });
+    await waitFor(() => expect(draftsOf()['a-site']).toBeUndefined());
+    expect(useUi.getState().toasts.map((t) => t.message)).toContain('Docs site now opens on another page, so your unsaved edits to the old one were discarded.');
+    expect(calls('artifacts.writeFiles')).toEqual([]);
+  });
+
+  it('Discard clears the stored draft', async () => {
+    await typeAndLeave('draft text');
+    const viewer = await comeBack();
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Artifacts' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Discard your changes?' })).getByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: /\(open\)/ })).toBeNull());
+    expect(draftsOf()['a-doc']).toBeUndefined();
+    cleanup();
+    render(<ArtifactsScreen />);
+    await screen.findByRole('button', { name: /Webhook retry design/ });
+    expect(screen.queryByRole('region', { name: /\(open\)/ })).toBeNull();
+  });
+
+  it('Use theirs clears the stored draft', async () => {
+    const viewer = await openArtifact(/Webhook retry design/);
+    fireEvent.change(await within(viewer).findByLabelText('Source of Webhook retry design'), { target: { value: 'my edit' } });
+    agentWrites('a-doc', 'agent edit');
+    fireEvent.click(await within(viewer).findByRole('button', { name: 'Use theirs' }));
+    await waitFor(() => expect(draftsOf()['a-doc']).toBeUndefined());
+  });
+
+  it('a draft whose artifact moved on while away comes back as the conflict banner, not lost', async () => {
+    await typeAndLeave('my edit');
+    agentWrites('a-doc', 'agent edit');
+    const viewer = await comeBack();
+    const banner = await within(viewer).findByRole('alert');
+    expect(banner.textContent).toMatch(/Retry policy agent saved v2 while you were editing/);
+    expect((within(viewer).getByLabelText('Source of Webhook retry design') as HTMLTextAreaElement).value).toBe('my edit');
+    expect(within(viewer).getByText('Unsaved changes')).toBeTruthy();
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Keep mine' }));
+    await waitFor(() => expect(calls('artifacts.save')[0]).toMatchObject({ content: 'my edit', baseVersion: 2 }));
+    await waitFor(() => expect(draftsOf()['a-doc']).toBeUndefined());
+  });
+
+  it('keeps a whiteboard with a changed scene and restores it as edited', async () => {
+    const viewer = await openArtifact(/Session lifecycle/);
+    fireEvent.click(await within(viewer).findByRole('button', { name: 'stub: loaded' }));
+    expect(draftsOf()['a-board']).toBeUndefined();
+    fireEvent.click(within(viewer).getByRole('button', { name: 'stub: draw' }));
+    await waitFor(() => expect(draftsOf()['a-board']).toBeDefined());
+    cleanup();
+    const back = await comeBack();
+    expect(within(back).getByText('Unsaved changes')).toBeTruthy();
+    // Loading the stored scene again is not a new baseline: still unsaved.
+    fireEvent.click(await within(back).findByRole('button', { name: 'stub: loaded' }));
+    expect(within(back).getByText('Unsaved changes')).toBeTruthy();
   });
 });
 

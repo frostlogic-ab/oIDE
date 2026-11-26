@@ -62,6 +62,11 @@ function fakeAgents() {
   return { port, agents, spawned, stopped, cleaned, setStatus, gone };
 }
 
+/**
+ * `cleanupAfterMs` is the service's fallback timer for an agent that never ends its turn. Tests that
+ * are not about that fallback get an hour, so a slow machine can never fire it mid-test; the test of
+ * the fallback passes a short value on purpose.
+ */
 function setup(opts: { cleanupAfterMs?: number } = {}) {
   const db = openStore(':memory:');
   const appData = temp('oide-ret-');
@@ -70,7 +75,7 @@ function setup(opts: { cleanupAfterMs?: number } = {}) {
   const fake = fakeAgents();
   const events: Array<{ name: string; props: unknown }> = [];
   const stagingRoot = join(appData, 'artifact-staging');
-  const svc = new ArtifactRetrievalService({ artifacts, agents: fake.port, stagingRoot, track: (name, props) => void events.push({ name, props }), cleanupAfterMs: opts.cleanupAfterMs ?? 50 });
+  const svc = new ArtifactRetrievalService({ artifacts, agents: fake.port, stagingRoot, track: (name, props) => void events.push({ name, props }), cleanupAfterMs: opts.cleanupAfterMs ?? 3_600_000 });
   return { db, artifacts, fake, svc, events, stagingRoot, projectId: p.id, appData };
 }
 

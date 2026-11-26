@@ -3,6 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FileDiff } from '@oide/protocol';
 import { setupMockApp } from '../SourceControl/testing';
+import { useAgents } from '../../stores/agents';
+import { useArchive } from '../../stores/archive';
 import { useRouter } from '../../stores/router';
 import { parseHunks, reverseApply, sidesFromHunks } from './diff';
 import ReviewScreen from './index';
@@ -84,6 +86,32 @@ describe('UnifiedDiff', () => {
   });
 });
 
+describe('Review screen for an agent that is not on the Wall', () => {
+  it('an archived (merged) agent says so and opens read-only in Focus, instead of "gone"', async () => {
+    await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook' } });
+    const live = useAgents.getState().byId['a-webhook']!;
+    useAgents.setState((s) => {
+      const { 'a-webhook': _drop, ...byId } = s.byId;
+      return { byId };
+    });
+    useArchive.setState({ byId: { 'a-webhook': { ...live, archived: { at: 1, reason: 'merged', worktreeRemoved: false } } } });
+    render(<ReviewScreen />);
+    expect(await screen.findByText(`${live.title} was merged and archived`)).toBeTruthy();
+    expect(screen.queryByText('This agent is gone')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Open in Focus' }));
+    expect(useRouter.getState().route).toEqual({ screen: 'focus', params: { agentId: 'a-webhook' } });
+    useArchive.setState({ byId: {} });
+  });
+
+  it('an unknown agent still says it is gone', async () => {
+    await setupMockApp({ screen: 'review', params: { agentId: 'a-nope' } });
+    useArchive.setState({ byId: {} });
+    render(<ReviewScreen />);
+    expect(await screen.findByText('This agent is gone')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open in Focus' })).toBeNull();
+  });
+});
+
 describe('Review screen', () => {
   it('adds a comment through review.addComment and sends feedback', async () => {
     const { invoke } = await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook' } });
@@ -121,6 +149,61 @@ describe('Review screen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add to feedback' }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('review.addComment', expect.objectContaining({ line, side: 'old', body: 'Keep this' })));
     expect(await screen.findByRole('note', { name: `Your comment on removed line ${line}` })).toBeTruthy();
+  });
+
+  describe('comment drafts', () => {
+    const textbox = () => screen.getByLabelText('Comment for the agent') as HTMLTextAreaElement;
+
+    /** Opens line 7, types a draft, then opens another line; returns the other line's button label. */
+    async function draftOnLine7ThenOpenAnother() {
+      const mock = await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook' } });
+      render(<ReviewScreen />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Comment on line 7' }));
+      fireEvent.change(textbox(), { target: { value: 'half written thought' } });
+      const other = (await screen.findAllByRole('button', { name: /^Comment on line \d+$/ }))[0]!;
+      fireEvent.click(other);
+      return { ...mock, other };
+    }
+
+    it('keeps the text when another line is clicked, marks the line, and restores it on return', async () => {
+      await draftOnLine7ThenOpenAnother();
+      // the other line's composer is empty and the first line is marked as having a draft
+      expect(textbox().value).toBe('');
+      expect(screen.getAllByLabelText('Comment for the agent')).toHaveLength(1);
+      fireEvent.click(screen.getByRole('button', { name: 'Comment on line 7 (draft)' }));
+      expect(textbox().value).toBe('half written thought');
+      expect(screen.getByText('Your comment on line 7 · goes to the agent')).toBeTruthy();
+    });
+
+    it('Cancel discards the draft', async () => {
+      await draftOnLine7ThenOpenAnother();
+      fireEvent.click(screen.getByRole('button', { name: 'Comment on line 7 (draft)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByLabelText('Comment for the agent')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Comment on line 7 (draft)' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Comment on line 7' }));
+      expect(textbox().value).toBe('');
+    });
+
+    it('Esc discards the draft', async () => {
+      await draftOnLine7ThenOpenAnother();
+      fireEvent.click(screen.getByRole('button', { name: 'Comment on line 7 (draft)' }));
+      fireEvent.keyDown(textbox(), { key: 'Escape' });
+      expect(screen.queryByRole('button', { name: 'Comment on line 7 (draft)' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Comment on line 7' }));
+      expect(textbox().value).toBe('');
+    });
+
+    it('a successful add clears the draft', async () => {
+      const { invoke } = await draftOnLine7ThenOpenAnother();
+      fireEvent.click(screen.getByRole('button', { name: 'Comment on line 7 (draft)' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Add to feedback' }));
+      await waitFor(() => expect(invoke).toHaveBeenCalledWith('review.addComment', expect.objectContaining({ line: 7, body: 'half written thought' })));
+      await waitFor(() => expect(screen.queryByLabelText('Comment for the agent')).toBeNull());
+      expect(screen.queryByRole('button', { name: 'Comment on line 7 (draft)' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Comment on line 7' }));
+      expect(textbox().value).toBe('');
+    });
   });
 
   it('toggles Viewed through review.setViewed', async () => {

@@ -28,6 +28,7 @@ import { ExtensionArtifactView } from '../../extensions/ExtensionArtifactView';
 import { artifactTypeOf } from '../../extensions/model';
 import { useExtensions } from '../../extensions/store';
 import { FilesPanel, useArtifactFile, type ArtifactFileState } from './FilesPanel';
+import { useArtifactDrafts } from './draftStore';
 import { FixImportPanel } from './FixImportPanel';
 import { DesignFrame, MarkdownView } from './Preview';
 import { RetrievalStatus, useRetrieval } from './Retrieval';
@@ -98,10 +99,17 @@ export function Viewer({
   // An extension artifact type opens in its own viewer (Preview); everything else in the editor.
   const [mode, setMode] = useState<ViewerMode>(initialMode ?? (meta.type ? 'preview' : 'edit'));
   /** The saved version the editor is based on. */
-  const [base, setBase] = useState({ version: meta.version, content: detail.content });
-  const [draft, setDraft] = useState(detail.content);
+  // Unsaved edits kept when the screen was left (draftStore.ts): resume them. When the artifact moved
+  // on meanwhile, the draft keeps its old base and the conflict banner below takes over.
+  const [resumed] = useState(() => {
+    const d = useArtifactDrafts.getState().drafts[detail.meta.id];
+    // A draft of another entry file (an agent moved the artifact's page) is not this file's text.
+    return d && d.entry === detail.meta.entry && d.baseVersion <= detail.meta.version && d.draft !== d.baseline ? d : undefined;
+  });
+  const [base, setBase] = useState(resumed ? { version: resumed.baseVersion, content: resumed.baseContent } : { version: meta.version, content: detail.content });
+  const [draft, setDraft] = useState(resumed ? resumed.draft : detail.content);
   /** What "unchanged" looks like: the base content, or (whiteboards) Excalidraw's serialisation of it. */
-  const [baseline, setBaseline] = useState<string | null>(kind === 'whiteboard' ? null : detail.content);
+  const [baseline, setBaseline] = useState<string | null>(resumed ? resumed.baseline : kind === 'whiteboard' ? null : detail.content);
   const [sceneKey, setSceneKey] = useState(0);
   const [notice, setNotice] = useState<Other | null>(null);
   const [conflict, setConflict] = useState<Other | null>(null);
@@ -115,7 +123,28 @@ export function Viewer({
   const own = useRef(new Set<number>());
   const dirty = baseline !== null && draft !== baseline;
   const live = useRef({ base, dirty, entry: meta.entry });
+  /** The entry file the editor's text belongs to (`live.entry` moves as soon as an agent changes it). */
+  const draftEntry = useRef(meta.entry);
   live.current = { ...live.current, base, dirty };
+  // A kept draft of an entry file the artifact no longer opens on (an agent changed its page since):
+  // it is not this file's text, so it is dropped (by the effect below) and the user is told.
+  const [staleDraft] = useState(() => {
+    const d = useArtifactDrafts.getState().drafts[detail.meta.id];
+    return Boolean(d && d.entry !== detail.meta.entry);
+  });
+  const staleToasted = useRef(false);
+  useEffect(() => {
+    if (!staleDraft || staleToasted.current) return;
+    staleToasted.current = true;
+    toast(`${meta.title} now opens on another page, so your unsaved edits to the old one were discarded.`, 'warning');
+  }, [staleDraft, meta.title]);
+  // Keep the unsaved entry edits outside this component so leaving the screen does not lose them.
+  // Not cleared on unmount: that is the point. Save, "Use theirs" and Discard make it not dirty or clear it.
+  useEffect(() => {
+    const drafts = useArtifactDrafts.getState();
+    if (dirty && baseline !== null) drafts.set(meta.id, { baseVersion: base.version, baseContent: base.content, baseline, entry: draftEntry.current, draft });
+    else drafts.clear(meta.id);
+  }, [dirty, baseline, draft, base, meta.id]);
   const retrieval = useRetrieval(meta, onMeta);
 
   // Several files: the Files panel, and one other file open at a time (null = the entry).
@@ -189,6 +218,7 @@ export function Viewer({
 
   /** Replace the editor content with another saved version (an agent's, or "Use theirs"). */
   const loadOther = (o: Other, announce: boolean) => {
+    draftEntry.current = detail.meta.entry;
     setBase({ version: o.version, content: o.content });
     setDraft(o.content);
     setBaseline(kind === 'whiteboard' ? null : o.content);
@@ -224,6 +254,7 @@ export function Viewer({
         ? await oide.invoke('artifacts.writeFiles', { id: meta.id, files: [{ path: meta.entry, encoding: 'utf8', data: content }], note, baseVersion })
         : await oide.invoke('artifacts.save', { id: meta.id, content, note, baseVersion });
       own.current.add(next.version);
+      draftEntry.current = meta.entry;
       setBase({ version: next.version, content });
       setBaseline(content);
       setConflict(null);
@@ -499,13 +530,36 @@ export function Viewer({
         open={confirmClose}
         onClose={() => setConfirmClose(false)}
         title="Discard your changes?"
-        description={`Your edits to ${meta.title} are not saved.`}
+        description={
+          dirty
+            ? `Your edits to ${meta.title} are not saved. Keep them as a draft to come back to from the grid.${file.dirty ? ` Edits to ${otherPath} are not kept.` : ''}`
+            : `Your edits to ${otherPath ?? meta.title} are not saved.`
+        }
         footer={
           <>
             <Button size={32} onClick={() => setConfirmClose(false)}>
               Keep editing
             </Button>
-            <Button size={32} variant="danger" onClick={onClose}>
+            {dirty && (
+              <Button
+                size={32}
+                onClick={() => {
+                  // The draft stays in the store (the grid card shows Unsaved); only the editor closes.
+                  setConfirmClose(false);
+                  onClose();
+                }}
+              >
+                Keep as draft
+              </Button>
+            )}
+            <Button
+              size={32}
+              variant="danger"
+              onClick={() => {
+                useArtifactDrafts.getState().clear(meta.id);
+                onClose();
+              }}
+            >
               Discard
             </Button>
           </>

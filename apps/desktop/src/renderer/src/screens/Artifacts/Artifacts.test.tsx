@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { AgentSummary, ArtifactMeta, ArtifactUse, Project, type OideBridge } from '@oide/protocol';
 import { installFallbackBridge } from '../../lib/bridge';
 import { useAgents } from '../../stores/agents';
@@ -8,6 +8,7 @@ import { useProjects } from '../../stores/projects';
 import { useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useUi } from '../../stores/ui';
+import { draftIdsKey, useArtifactDrafts } from './draftStore';
 import ArtifactsScreen from './index';
 
 const now = Date.now();
@@ -69,6 +70,7 @@ beforeEach(() => {
   useRouter.setState({ route: { screen: 'artifacts', params: {} }, back: [], forward: [] });
   useAgents.setState({ byId: {}, order: [], loaded: true });
   useUi.setState({ toasts: [] });
+  useArtifactDrafts.getState().reset();
   // The header's actions slot (the search field renders there).
   const slot = document.createElement('div');
   document.body.appendChild(slot);
@@ -675,5 +677,23 @@ describe('React designs', () => {
     // React source never goes into srcdoc.
     expect(document.querySelector('iframe[srcdoc]')).toBeNull();
     expect(document.querySelector('iframe')).toBeNull();
+  });
+});
+
+describe('draft store subscription', () => {
+  it('a screen watching the draft ids does not re-render on each keystroke', () => {
+    let renders = 0;
+    renderHook(() => {
+      renders++;
+      return useArtifactDrafts(draftIdsKey);
+    });
+    const d = { baseVersion: 1, baseContent: 'a', baseline: 'a', entry: 'x', draft: 'a1' };
+    act(() => useArtifactDrafts.getState().set('a-doc', d));
+    const afterFirst = renders;
+    act(() => useArtifactDrafts.getState().set('a-doc', { ...d, draft: 'a12' }));
+    act(() => useArtifactDrafts.getState().set('a-doc', { ...d, draft: 'a123' }));
+    expect(renders).toBe(afterFirst);
+    act(() => useArtifactDrafts.getState().set('a-board', d));
+    expect(renders).toBe(afterFirst + 1);
   });
 });

@@ -11,6 +11,7 @@ import { useScope } from '../../stores/scope';
 import { useSettings } from '../../stores/settings';
 import { TileBody } from '../Wall/components/TileBody';
 import FocusScreen from './index';
+import { resetDrafts } from './composerDrafts';
 
 /** An agent resumed after oIDE quit while its permission prompt was open; its CLI reported its own slash commands. */
 const agent = AgentSummary.parse({
@@ -37,6 +38,7 @@ const invoke = vi.fn(async (command: string): Promise<unknown> => {
 });
 
 beforeEach(() => {
+  resetDrafts();
   installFallbackBridge({ invoke: invoke as unknown as OideBridge['invoke'], on: () => () => {}, platform: 'win32' });
   useAgents.setState({ byId: { [agent.id]: agent }, order: [agent.id], events: { [agent.id]: events }, loaded: true });
   useProjects.setState({ list: projects, loaded: true });

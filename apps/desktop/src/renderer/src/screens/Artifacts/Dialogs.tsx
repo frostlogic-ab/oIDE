@@ -169,6 +169,20 @@ export function NewArtifactDialog({ open, onClose, projects, defaultProjectId, o
     if (!locationPicked) setLocation(defaultLocation(f, projectId));
   };
 
+  // A stray click on the scrim only closes a pristine form; once anything is typed, chosen or
+  // attached it would throw that away (Esc, the × and Cancel still close).
+  const pristine =
+    !url &&
+    !cameFrom &&
+    !title &&
+    !kind &&
+    blankKind === 'doc' &&
+    !chosen.folder &&
+    !chosen.files.length &&
+    !chosen.images.length &&
+    !locationPicked &&
+    projectId === (defaultProjectId ?? '');
+
   const names = useMemo(() => [...chosen.files.map((f) => f.name), ...chosen.images.map((i) => i.name)], [chosen]);
   const detected = names.length ? kindFromFiles(names) : undefined;
   const filesKind = kind || detected;
@@ -318,6 +332,7 @@ export function NewArtifactDialog({ open, onClose, projects, defaultProjectId, o
       description="A design, doc or whiteboard that you and your agents can read and edit."
       width={560}
       showClose
+      dismissOnScrim={pristine && !busy}
       initialFocus={firstField}
       footer={
         <>

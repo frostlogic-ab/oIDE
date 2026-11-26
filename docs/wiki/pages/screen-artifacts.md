@@ -49,7 +49,11 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
   `SegmentedControl`: roving tabindex, arrow keys, Home / End): **A link** | **Files** | **Blank**.
   The last choice is kept between uses; Project and "Where it lives" are reset from the scope each
   time. The primary button stays disabled until the choice can go, with the reason beside it as
-  its `aria-describedby`; focus starts on the first field of the choice; Esc closes.
+  its `aria-describedby`; focus starts on the first field of the choice; Esc, × and Cancel close.
+  A press on the scrim closes it only while the form is untouched (no link, title or kind typed or
+  chosen, no files picked or dropped, Project and "Where it lives" still the defaults; switching
+  "Start from" alone doesn't count) and never while a create is in flight, so a stray click does
+  not throw away what was entered.
   - *A link*: "Link" (mono) checked live with `classifyClaudeLink` (reason inline, `role="alert"`,
     `aria-invalid`; a half-typed link waits for blur), hint "An agent opens the link with your
     Claude Code CLI and copies its files here. You can follow it on the Wall; the artifact fills in
@@ -73,7 +77,29 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
 - **Open (Viewer.tsx)**: back button, title, "Kind · project · vN" (plus "· 9 files" for several
   files, "no files yet" at version 0), Unsaved changes badge, view tabs, Save, and a "More actions"
   menu (Rename, Delete). Tabs: docs and designs Edit / Preview / Compare; whiteboards Board /
-  Compare. Editors are lazy chunks:
+  Compare. Unsaved entry edits are kept in `draftStore.ts` (a module-level zustand store keyed by
+  artifact id: base version and content, baseline, the entry file, draft; in memory only), so leaving
+  the screen from the rail, Ctrl+K or a toast does not lose them. The store also remembers which
+  artifact's Viewer was open when the screen was left (`lastOpenId`, taken from the Viewer actually
+  rendered, so a route change while one is open never records an artifact the user didn't see; any
+  close forgets it). Back on Artifacts the Viewer
+  reopens once, on the route's artifact when it has a draft, or (the rail and Ctrl+K carry no
+  artifact) on that remembered one; there is no "most recent draft" fallback, so the grid stays
+  browsable. Back to the grid with unsaved edits asks **Keep editing / Keep as draft / Discard**:
+  Keep as draft closes the Viewer, leaves the draft in the store and forgets `lastOpenId` (so the
+  screen does not reopen it); grid cards with a draft show an **Unsaved** badge, which is the way
+  back (the card opens the Viewer with the draft). Save, Use theirs and Discard clear the draft, and
+  so does deleting the artifact or finding it gone from the list; that clean-up runs only after a
+  list load succeeded, so a failed `artifacts.list` never deletes drafts (and the resume waits for
+  the next good load). If an agent saved a newer version meanwhile, the restored draft goes through
+  the usual conflict banner (Keep mine / Use theirs). If an agent changed the artifact's entry
+  file meanwhile, the draft (text of the old file) is dropped with a warning toast instead of being
+  shown as the new entry's text and saved to the wrong file, both when the screen resumes it and when
+  the user reopens it from its card. After Keep as draft, coming back to the screen on a route that
+  names the artifact (a chip, a toast action) reopens it with the draft; while the grid is already
+  showing, such a route only selects it, and opening the card (double-click or Enter) shows the draft. The screen subscribes to the draft ids
+  only (`draftIdsKey`), not to the draft text, so typing does not re-render it. Unsaved edits to a
+  non-entry file in the Files panel are not kept. Editors are lazy chunks:
 
   | Kind | Edit | Preview |
   | --- | --- | --- |
@@ -197,6 +223,15 @@ event and its helper are gone.
 
 ## Tests
 
+`Editors.test.tsx` "Unsaved edits survive leaving the screen": draft and badge back after a remount,
+reopening from the rail (no artifact in the route), Keep as draft (grid kept, badge, no auto-reopen,
+the card reopens it), no Keep as draft without edits, a failed `artifacts.list` keeps the drafts
+and resumes on the next good load, drafts of deleted artifacts are pruned, a changed entry file
+drops the draft with a notice (on resume and on reopening from the card), a route change while a Viewer
+is open never sets `lastOpenId` to an unseen artifact, Save / Discard / Use theirs clear it, an agent write while away opens
+the conflict banner, whiteboard drafts. `Artifacts.test.tsx` "draft store subscription": no
+re-render per keystroke. `Dialogs.test.tsx`: New artifact closes on a scrim press only while untouched (a typed title, a changed
+project, a typed link or a dropped file keep it open; Esc, × and Cancel still close).
 `model.test.ts` (filters, use lines, reads/writes grouping, version labels, claude.ai host check and
 `importLinkError`, `kindFromFiles`, `entryCandidates`, `baseName`, `activeRetrieval` /
 `retrievalLine` / `canUpdateFromLink`, Monaco language per entry and per file, `fileTree`, image data

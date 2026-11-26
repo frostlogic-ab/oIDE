@@ -23,6 +23,9 @@ export interface Composer {
   removed: boolean;
 }
 
+/** Key of an unsent comment draft: one per file, side and line. */
+export const draftKey = (path: string, removed: boolean, line: number) => `${path}\u0000${removed ? 'old' : 'new'}:${line}`;
+
 export interface UnifiedDiffHandle {
   scrollToHunk(index: number): void;
   /** Scroll to a line: `new` numbers (default) or, for comments on removed lines, `old` numbers. */
@@ -35,6 +38,12 @@ export interface UnifiedDiffProps {
   composer: Composer | null;
   onOpenComposer(c: Composer): void;
   onCancelComposer(): void;
+  /** Unsent text for a composer location (see `draftKey`); seeds the composer when it reopens. */
+  getDraft?(key: string): string;
+  /** Called on every edit of the composer text so the parent can keep it across line and file switches. */
+  onDraftChange?(key: string, body: string): void;
+  /** Draft keys that currently hold text; those lines show a draft marker. */
+  draftKeys?: ReadonlySet<string>;
   onAddComment(body: string): Promise<void> | void;
   onDeleteComment?(id: string): void;
   /** Called with the hunk index nearest the top as the user scrolls. */
@@ -47,7 +56,7 @@ export interface UnifiedDiffProps {
  * comment threads inline. Long diffs are virtualized.
  */
 export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(function UnifiedDiff(
-  { file, comments, composer, onOpenComposer, onCancelComposer, onAddComment, onDeleteComment, onHunkInView },
+  { file, comments, composer, onOpenComposer, onCancelComposer, getDraft, onDraftChange, draftKeys, onAddComment, onDeleteComment, onHunkInView },
   ref,
 ) {
   const rows = useMemo(() => toRows(parseHunks(file.patch)), [file.patch]);
@@ -125,6 +134,7 @@ export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(funct
     const open = composer?.rowKey === row.key && composer.path === file.path;
     const thread = removed ? (line.oldLine !== undefined ? byLine.get(threadKey('old', line.oldLine)) : undefined) : line.newLine !== undefined ? byLine.get(threadKey('new', line.newLine)) : undefined;
     const clickable = n !== undefined && line.kind !== 'no-newline';
+    const hasDraft = clickable && !open && !!draftKeys?.has(draftKey(file.path, removed, n!));
     const openComposer = () => clickable && onOpenComposer({ path: file.path, rowKey: row.key, line: n!, removed });
     return (
       <>
@@ -142,9 +152,10 @@ export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(funct
             <button
               type="button"
               className="w-11 flex-[0_0_44px] text-right pr-2.5 text-ink-3 select-none bg-transparent border-0 p-0 font-mono text-[12px] leading-5 cursor-pointer focus-visible:outline focus-visible:outline-accent"
-              aria-label={removed ? `Comment on removed line ${n}` : `Comment on line ${n}`}
+              aria-label={`${removed ? `Comment on removed line ${n}` : `Comment on line ${n}`}${hasDraft ? ' (draft)' : ''}`}
               onClick={openComposer}
             >
+              {hasDraft && <span aria-hidden="true" className="inline-block w-1.5 h-1.5 mr-1 rounded-full bg-accent align-middle" />}
               {line.kind === 'del' ? '' : line.newLine}
             </button>
           ) : (
@@ -155,7 +166,16 @@ export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(funct
         {(!!thread?.length || (open && !!composer)) && (
           <div className="sticky left-0" style={{ width: visibleWidth ?? '100%' }}>
             {thread?.map((c) => <CommentCard key={c.id} c={c} onDelete={onDeleteComment} />)}
-            {open && composer && <CommentComposer key={`${index}:${composer.line}`} composer={composer} onCancel={onCancelComposer} onAdd={onAddComment} />}
+            {open && composer && (
+              <CommentComposer
+                key={`${index}:${composer.line}`}
+                composer={composer}
+                initialBody={getDraft?.(draftKey(composer.path, composer.removed, composer.line)) ?? ''}
+                onDraftChange={(body) => onDraftChange?.(draftKey(composer.path, composer.removed, composer.line), body)}
+                onCancel={onCancelComposer}
+                onAdd={onAddComment}
+              />
+            )}
           </div>
         )}
       </>
@@ -211,8 +231,20 @@ function Notice({ children }: { children: ReactNode }) {
 
 const BOX = 'my-1.5 mr-5 ml-[54px] p-3 border border-line-3 rounded-lg bg-card font-sans text-[13px] flex flex-col gap-2 whitespace-normal';
 
-function CommentComposer({ composer, onCancel, onAdd }: { composer: Composer; onCancel(): void; onAdd(body: string): Promise<void> | void }) {
-  const [body, setBody] = useState('');
+function CommentComposer({
+  composer,
+  initialBody,
+  onDraftChange,
+  onCancel,
+  onAdd,
+}: {
+  composer: Composer;
+  initialBody: string;
+  onDraftChange(body: string): void;
+  onCancel(): void;
+  onAdd(body: string): Promise<void> | void;
+}) {
+  const [body, setBody] = useState(initialBody);
   const [busy, setBusy] = useState(false);
   const ta = useRef<HTMLTextAreaElement>(null);
   const id = `comment-${composer.rowKey}`;
@@ -239,7 +271,10 @@ function CommentComposer({ composer, onCancel, onAdd }: { composer: Composer; on
         ref={ta}
         rows={2}
         value={body}
-        onChange={(e) => setBody(e.target.value)}
+        onChange={(e) => {
+          setBody(e.target.value);
+          onDraftChange(e.target.value);
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Escape') {
             e.preventDefault();

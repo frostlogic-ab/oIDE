@@ -57,6 +57,7 @@ const SAMPLE = ext('@oide-test/ui', 'UI sample', {
 });
 
 let fields: Record<string, ExtensionSettingField[]>;
+const listeners = new Map<string, Set<(payload: unknown) => void>>();
 const invoke = vi.fn(async (command: string, input?: unknown): Promise<unknown> => {
   const i = input as Record<string, unknown>;
   switch (command) {
@@ -127,10 +128,16 @@ function InspectorHost({ initial = 'plan' as InspectorTab }) {
 beforeEach(() => {
   installFallbackBridge({
     invoke: invoke as unknown as OideBridge['invoke'],
-    on: () => () => {},
+    on: ((channel: string, handler: (payload: unknown) => void) => {
+      const set = listeners.get(channel) ?? new Set();
+      set.add(handler);
+      listeners.set(channel, set);
+      return () => set.delete(handler);
+    }) as unknown as OideBridge['on'],
     platform: 'win32',
   });
   invoke.mockClear();
+  listeners.clear();
   fields = {
     '@oide/ext-browser-preview': [
       {
@@ -224,6 +231,39 @@ describe('extension UI', () => {
         id: '@oide-test/ui',
         key: 'uiSample.token',
         value: null,
+      }),
+    );
+  });
+
+  it('Settings › Extensions: a refresh that lands while the user is typing does not discard the edit', async () => {
+    render(<ExtensionSettingsSection />);
+    const url = await screen.findByRole('textbox', { name: 'browserPreview.defaultUrl' });
+    fireEvent.change(url, { target: { value: 'http://localhost:5173' } });
+
+    // Another window changes the saved value; the section reloads it while the edit is unsaved.
+    const loads = () => invoke.mock.calls.filter(([c]) => c === 'extensions.settings').length;
+    const before = loads();
+    fields['@oide/ext-browser-preview'] = fields['@oide/ext-browser-preview']!.map((f) => ({
+      ...f,
+      value: 'http://localhost:4000',
+      hasValue: true,
+    }));
+    act(() => {
+      for (const h of listeners.get('extensions.settingChanged') ?? [])
+        h({ id: '@oide/ext-browser-preview', key: 'browserPreview.defaultUrl' });
+    });
+    await waitFor(() => expect(loads()).toBeGreaterThan(before));
+    await act(async () => {}); // let the reloaded fields render
+
+    expect((screen.getByRole('textbox', { name: 'browserPreview.defaultUrl' }) as HTMLInputElement).value).toBe(
+      'http://localhost:5173',
+    );
+    fireEvent.blur(screen.getByRole('textbox', { name: 'browserPreview.defaultUrl' }));
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith('extensions.setSetting', {
+        id: '@oide/ext-browser-preview',
+        key: 'browserPreview.defaultUrl',
+        value: 'http://localhost:5173',
       }),
     );
   });

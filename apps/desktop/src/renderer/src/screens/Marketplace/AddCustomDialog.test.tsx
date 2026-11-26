@@ -132,3 +132,103 @@ describe('Add custom › From a URL', () => {
     expect(container.innerHTML).not.toContain('tok-SECRET-123');
   });
 });
+
+const scrimOf = () => screen.getByRole('dialog').parentElement as HTMLElement;
+
+describe('Add custom › scrim click', () => {
+  it('closes on a scrim press while the form is pristine', () => {
+    const onClose = vi.fn();
+    render(<AddCustomDialog projects={projects} onSaved={vi.fn()} onClose={onClose} />);
+    fireEvent.mouseDown(scrimOf());
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps what was typed: a scrim press does nothing once something is entered, Cancel and Esc still close', () => {
+    const onClose = vi.fn();
+    render(<AddCustomDialog projects={projects} onSaved={vi.fn()} onClose={onClose} />);
+    fireEvent.change(screen.getByLabelText('MCP server URL'), { target: { value: 'https://mcp.example.com/mcp' } });
+    fireEvent.mouseDown(scrimOf());
+    expect(onClose).not.toHaveBeenCalled();
+    expect((screen.getByLabelText('MCP server URL') as HTMLInputElement).value).toBe('https://mcp.example.com/mcp');
+
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a press that starts inside the dialog even when the form is pristine', () => {
+    const onClose = vi.fn();
+    render(<AddCustomDialog projects={projects} onSaved={vi.fn()} onClose={onClose} />);
+    fireEvent.mouseDown(screen.getByLabelText('MCP server URL'));
+    fireEvent.mouseUp(scrimOf());
+    fireEvent.click(scrimOf());
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe('Add custom › Local command environment variables', () => {
+  const openCmd = () => {
+    render(<AddCustomDialog projects={projects} onSaved={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(screen.getByRole('tab', { name: 'Local command or JSON' }));
+  };
+
+  it('removes a row and keeps the others', () => {
+    openCmd();
+    fireEvent.click(screen.getByRole('button', { name: '+ Add variable' }));
+    fireEvent.change(screen.getByLabelText('Variable 1 name'), { target: { value: 'ONE' } });
+    fireEvent.change(screen.getByLabelText('Variable 2 name'), { target: { value: 'TWO' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove variable ONE' }));
+
+    expect(screen.queryByLabelText('Variable 2 name')).toBeNull();
+    expect((screen.getByLabelText('Variable 1 name') as HTMLInputElement).value).toBe('TWO');
+    // Focus moves to the row that took the removed one's place, not to the page body.
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove variable TWO' }));
+  });
+
+  it('moves focus to the new last row when the last of several rows is removed', () => {
+    openCmd();
+    fireEvent.click(screen.getByRole('button', { name: '+ Add variable' }));
+    fireEvent.change(screen.getByLabelText('Variable 1 name'), { target: { value: 'ONE' } });
+    fireEvent.change(screen.getByLabelText('Variable 2 name'), { target: { value: 'TWO' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove variable TWO' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove variable ONE' }));
+  });
+
+  it('leaves one empty row when the last one is removed, labelled by position when it has no name', () => {
+    openCmd();
+    fireEvent.change(screen.getByLabelText('Variable 1 name'), { target: { value: 'KEY' } });
+    fireEvent.change(screen.getByLabelText('Variable 1 value'), { target: { value: 'secret' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Remove variable KEY' }));
+
+    expect((screen.getByLabelText('Variable 1 name') as HTMLInputElement).value).toBe('');
+    expect((screen.getByLabelText('Variable 1 value') as HTMLInputElement).value).toBe('');
+    expect(screen.getAllByRole('button', { name: /^Remove variable/ })).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Remove variable 1' })).toBeTruthy();
+  });
+});
+
+describe('Add custom › Extension from folder', () => {
+  it('does not claim to accept drops: dropping says so and does not open the folder picker', () => {
+    render(<AddCustomDialog projects={projects} onSaved={vi.fn()} onClose={vi.fn()} initialTab="ext" />);
+    expect(screen.queryByText(/Drop an extension folder/)).toBeNull();
+    const zone = screen.getByText('Choose an extension folder').parentElement as HTMLElement;
+    // The live region is there before anything is dropped, so the note is announced when it appears.
+    expect(screen.getByRole('status').textContent).toBe('');
+    const dataTransfer = { files: [], dropEffect: 'copy' };
+    fireEvent.dragOver(zone, { dataTransfer });
+    expect(dataTransfer.dropEffect).toBe('none');
+    expect(screen.getByRole('status').textContent).toMatch(/not supported/);
+    fireEvent.drop(zone, { dataTransfer: { files: [] } });
+    expect(screen.getByRole('status').textContent).toMatch(/not supported/);
+    expect(invoke).not.toHaveBeenCalledWith('extensions.addFromFolder', expect.anything());
+  });
+
+  it('opens the picker from the button', async () => {
+    invoke.mockImplementation(async (command: string) => (command === 'custom.scanImports' ? [] : null));
+    render(<AddCustomDialog projects={projects} onSaved={vi.fn()} onClose={vi.fn()} initialTab="ext" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a folder…' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('extensions.addFromFolder', { devMode: true }));
+  });
+});

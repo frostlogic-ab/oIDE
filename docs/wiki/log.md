@@ -1026,3 +1026,32 @@ release-pipeline, telemetry.
 The header lockup is now the mark beside "oIDE" with a "by [Frostlogic]" subtitle underneath. The Frostlogic
 wordmark is traced 1:1 from the company's vector logo into `FrostlogicLogo` (`@oide/ui`) and
 `docs/brand/frostlogic-wordmark.svg`. Updated [design-system](pages/design-system.md) and docs/brand/README.md.
+
+## [2026-11-26] review | Second usability pass: drafts, dialogs, Marketplace, Review after merge
+Fixed the six issues the first pass left open plus five new ones. Dialogs: Add custom extension and
+New artifact close on a scrim press only while untouched (and never from a drag that started inside);
+Commit… can't be closed while the commit runs. Marketplace: env rows have a remove button, the
+extension box no longer claims to accept drops it can't use, and a search with no match in the
+current category shows the matches from the others. Drafts: Review line comments (per file, side,
+line, with a draft marker), the Focus composer (per agent, `composerDrafts.ts`) and the Artifacts
+Viewer (`draftStore.ts`, reopened on return, Unsaved badge, conflicts through the usual banner) keep
+unsent text across screen and target switches. Review goes to Source control after a local merge and
+shows "was merged and archived" with Open in Focus for archived agents instead of "This agent is
+gone". Settings › Keyboard shortcuts: plain Tab leaves the recorder and focus returns to Change.
+Pages: [screen-marketplace](pages/screen-marketplace.md), [screen-artifacts](pages/screen-artifacts.md),
+[screen-source-control](pages/screen-source-control.md), [screen-review](pages/screen-review.md),
+[screen-focus](pages/screen-focus.md), [screen-settings](pages/screen-settings.md). Still open:
+agent toasts have no Open action, Remove worktree and the side-panel Push show no progress, the Wall
+sidebar does nothing for a live agent in the Archived view, Marketplace install/update show no
+progress text, git status errors have no Retry.
+
+## [2026-11-26] build | Windows CI: three timing-dependent tests made deterministic
+The Windows unit-test job failed three tests that pass elsewhere. `artifact-retrieval.test.ts`: the
+service's "archive anyway" fallback was armed after 50 ms in `setup()`, which a loaded runner exceeds
+mid-test; tests not about the fallback now use an hour. `test/integration/archive.test.ts`: the live
+diff refresh is debounced, so the ready-for-review snapshot could hold a one-file diff while the
+archive copied the final two-file one; the test now waits for the full diff. `extensions/ui.test.tsx`
+exposed a product bug: Settings › Extensions re-synced a field's draft from the saved value in an
+effect, so a late load or a `settingChanged` reload overwrote what the user had just typed and blur
+saved nothing. The draft now follows the saved value only while the field is unedited (regression
+test added). See [extensions](pages/extensions.md).

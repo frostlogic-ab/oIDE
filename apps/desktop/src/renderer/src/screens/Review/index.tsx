@@ -5,11 +5,13 @@
  * Keys: J / K next / previous file, ] / [ next / previous hunk. Wiki: screen-review.md.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ArchiveReason } from '@oide/protocol';
 import { Button, EmptyState, Spinner } from '@oide/ui';
 import { HeaderSlot } from '../../components/frame/HeaderSlot';
 import { keymap } from '../../lib/keymap';
 import { useKeymapScope } from '../../lib/useKeymap';
 import { useAgent } from '../../stores/agents';
+import { useArchive } from '../../stores/archive';
 import { projectName, useProjects } from '../../stores/projects';
 import { navigate, useRouter } from '../../stores/router';
 import { toast } from '../../stores/ui';
@@ -17,7 +19,7 @@ import { findWorktree, useGit, useGitData, useProjectGit } from '../SourceContro
 import { MINUS } from '../SourceControl/model';
 import { listName } from './diff';
 import { SummaryPanel } from './SummaryPanel';
-import { UnifiedDiff, type Composer, type UnifiedDiffHandle } from './UnifiedDiff';
+import { draftKey, UnifiedDiff, type Composer, type UnifiedDiffHandle } from './UnifiedDiff';
 import { useReview } from './useReview';
 import { ResizableAside } from '../../components/ResizableAside';
 import { PANELS } from '../../lib/panels';
@@ -28,6 +30,60 @@ keymap.define('review.nextFile', ['J']);
 keymap.define('review.prevFile', ['K']);
 keymap.define('review.nextHunk', [']']);
 keymap.define('review.prevHunk', ['[']);
+
+const ARCHIVED_AS: Record<ArchiveReason, string> = {
+  merged: 'merged and archived',
+  discarded: 'discarded and archived',
+  completed: 'completed and archived',
+  'archived-by-user': 'archived',
+};
+
+function Gone() {
+  return <EmptyState icon="source-control" title="This agent is gone" description="It may have been removed. Pick another worktree from Source control." className="flex-1" />;
+}
+
+/**
+ * The agent is not on the Wall. A merge (or a merged PR) archives it, so look it up in the archive
+ * before claiming it is gone, and offer to open it read-only in Focus.
+ */
+function NotLive({ agentId }: { agentId: string }) {
+  const archived = useArchive((s) => s.byId[agentId]);
+  const [lookedUp, setLookedUp] = useState<string | null>(null);
+  useEffect(() => {
+    if (archived) return;
+    let cancelled = false;
+    void useArchive
+      .getState()
+      .fetchOne(agentId)
+      .finally(() => !cancelled && setLookedUp(agentId));
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, archived]);
+  if (archived?.archived) {
+    return (
+      <EmptyState
+        icon="archive"
+        title={`${archived.title} was ${ARCHIVED_AS[archived.archived.reason]}`}
+        description="There is nothing left to review here. Its transcript stays available, read-only."
+        className="flex-1"
+        action={
+          <Button icon="agents" onClick={() => navigate('focus', { agentId })}>
+            Open in Focus
+          </Button>
+        }
+      />
+    );
+  }
+  if (lookedUp !== agentId) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Spinner label="Looking for this agent" />
+      </div>
+    );
+  }
+  return <Gone />;
+}
 
 export default function ReviewScreen() {
   const route = useRouter((s) => s.route);
@@ -46,6 +102,23 @@ export default function ReviewScreen() {
   const [view, setView] = useState<'unified' | 'split'>('unified');
   const [composer, setComposer] = useState<Composer | null>(null);
   const [hunk, setHunk] = useState(0);
+  // Unsent comment text per location (path + side + line). Kept in a ref so typing doesn't re-render
+  // the whole diff; `draftKeys` mirrors which locations hold text, for the line markers.
+  const drafts = useRef(new Map<string, string>());
+  const [draftKeys, setDraftKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const setDraft = useCallback((key: string, body: string) => {
+    if (body.trim()) drafts.current.set(key, body);
+    else drafts.current.delete(key);
+    const has = drafts.current.has(key);
+    setDraftKeys((prev) => {
+      if (prev.has(key) === has) return prev;
+      const next = new Set(prev);
+      if (has) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+  }, []);
+  const getDraft = useCallback((key: string) => drafts.current.get(key) ?? '', []);
   const diffRef = useRef<UnifiedDiffHandle>(null);
   const pendingLine = useRef<{ line: number; side: 'old' | 'new' } | undefined>(undefined);
 
@@ -56,6 +129,8 @@ export default function ReviewScreen() {
   useEffect(() => {
     setSelected(0);
     setComposer(null);
+    drafts.current.clear();
+    setDraftKeys(new Set());
   }, [agentId]);
 
   const selectFile = useCallback(
@@ -127,9 +202,7 @@ export default function ReviewScreen() {
     return (
       <>
         {breadcrumb}
-        <main className="flex-1 flex">
-          <EmptyState icon="source-control" title="This agent is gone" description="It may have been removed. Pick another worktree from Source control." className="flex-1" />
-        </main>
+        <main className="flex-1 flex">{agentId ? <NotLive agentId={agentId} /> : <Gone />}</main>
       </>
     );
   }
@@ -245,13 +318,23 @@ export default function ReviewScreen() {
                 comments={fileComments}
                 composer={composer}
                 onOpenComposer={setComposer}
-                onCancelComposer={() => setComposer(null)}
+                getDraft={getDraft}
+                onDraftChange={setDraft}
+                draftKeys={draftKeys}
+                onCancelComposer={() => {
+                  // Cancel / Esc is an explicit discard.
+                  if (composer) setDraft(draftKey(composer.path, composer.removed, composer.line), '');
+                  setComposer(null);
+                }}
                 onHunkInView={setHunk}
                 onAddComment={async (body) => {
                   if (!composer) return;
                   try {
                     await review.addComment(composer.path, composer.line, body, composer.removed ? 'old' : 'new');
-                    setComposer(null);
+                    const key = draftKey(composer.path, composer.removed, composer.line);
+                    setDraft(key, '');
+                    // The user may have opened another line while this was saving; leave that one open.
+                    setComposer((c) => (c && draftKey(c.path, c.removed, c.line) === key ? null : c));
                   } catch (err) {
                     toast(`Couldn't add the comment: ${err instanceof Error ? err.message : String(err)}`, 'error');
                   }

@@ -8,7 +8,7 @@
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CommandOutput, CustomServer, InstalledExtension, Project } from '@oide/protocol';
-import { Badge, Button, Icon, Spinner, cn } from '@oide/ui';
+import { Badge, Button, Icon, IconButton, Spinner, cn } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
 import { CheckButton, ModalShell, SaveFields, ToolRows, inputClass, type EditableTool, type SavedTo } from './parts';
@@ -68,6 +68,17 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
   const [cmdMode, setCmdMode] = useState<'form' | 'json'>('form');
   const [cmdLine, setCmdLine] = useState('');
   const [env, setEnv] = useState<Array<{ key: string; value: string }>>([{ key: '', value: '' }]);
+  // After a row is removed its button is gone: move focus to the row that took its place (or the
+  // last one), so keyboard focus never falls out of the dialog.
+  const envRef = useRef<HTMLFieldSetElement>(null);
+  const [envFocus, setEnvFocus] = useState<number | null>(null);
+  useEffect(() => {
+    if (envFocus === null) return;
+    const rows = envRef.current?.querySelectorAll<HTMLElement>('[data-env-remove]');
+    const target = rows?.[Math.min(envFocus, rows.length - 1)];
+    target?.focus();
+    setEnvFocus(null);
+  }, [envFocus]);
   const [json, setJson] = useState('');
   const [cmdProbe, setCmdProbe] = useState<Record<string, { tools: EditableTool[]; error?: string }> | null>(null);
 
@@ -80,6 +91,8 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
   const [editTools, setEditTools] = useState<EditableTool[]>(editing ? editing.tools.map((t) => ({ ...t })) : []);
 
   const finished = useRef(false);
+  // Set when a file or folder is dropped on the extension zone (see onDrop there).
+  const [dropNote, setDropNote] = useState(false);
   const urlId = useId();
   const gitId = useId();
   const cmdId = useId();
@@ -116,6 +129,15 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
     setEnv([]);
     onClose();
   };
+
+  // Anything typed or fetched? Then a click on the backdrop must not throw it away.
+  const dirty = editing
+    ? name !== editing.name || savedTo !== editing.savedTo || JSON.stringify(editTools) !== JSON.stringify(editing.tools) || selected.join() !== (editing.allProjects ? allIds : editing.projects).join()
+    : Boolean(
+        name || url.trim() || probe || token || cmdLine.trim() || json.trim() || gitUrl.trim() || ext || imported || picked.length || draftSaved ||
+          env.some((r) => r.key || r.value) || useToken || tokenHeader !== 'Authorization' || !devMode || cmdMode !== 'form' ||
+          selected.join() !== allIds.join() || savedTo !== 'my-settings',
+      );
 
   const placement = () => ({
     savedTo,
@@ -422,6 +444,7 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
       onClose={close}
       tabs={tabsEl}
       footer={footer}
+      dismissOnScrim={!dirty}
     >
       {editing ? (
         <div className="flex flex-col gap-3.5">
@@ -636,7 +659,7 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
                       />
                     </div>
                   </div>
-                  <fieldset className="m-0 p-0 border-0 flex flex-col gap-1.5">
+                  <fieldset ref={envRef} className="m-0 p-0 border-0 flex flex-col gap-1.5">
                     <legend className="text-[12px] text-ink-2 p-0 mb-1.5">Environment variables</legend>
                     {env.map((row, i) => (
                       <div key={i} className="flex gap-2">
@@ -655,6 +678,16 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
                           placeholder="stored in your keychain"
                           value={row.value}
                           onChange={(e) => setEnv(env.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
+                        />
+                        <IconButton
+                          icon="trash"
+                          size={32}
+                          aria-label={row.key.trim() ? `Remove variable ${row.key.trim()}` : `Remove variable ${i + 1}`}
+                          data-env-remove
+                          onClick={() => {
+                            setEnv(env.length > 1 ? env.filter((_, j) => j !== i) : [{ key: '', value: '' }]);
+                            setEnvFocus(i);
+                          }}
                         />
                       </div>
                     ))}
@@ -719,19 +752,33 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
 
           {tab === 'ext' && (
             <>
+              {/*
+                Dropping is not supported: a sandboxed renderer cannot read a dropped folder's path, and main
+                only accepts folders picked in its own dialog (extensions.addFromFolder), so we say so
+                instead of silently opening the picker.
+              */}
               <div
                 className="flex flex-col items-center gap-2 p-[22px] rounded-xl border-[1.5px] border-dashed border-line-hover text-center text-ink-2"
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => {
+                  // Refuse the drop (no "copy" cursor) and say why while something is dragged over.
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = 'none';
+                  setDropNote(true);
+                }}
                 onDrop={(e) => {
                   e.preventDefault();
-                  void loadFolder();
+                  setDropNote(true);
                 }}
               >
-                <span className="font-semibold">Drop an extension folder or package here</span>
-                <span className="text-[12px] text-ink-3">or</span>
-                <Button size={32} onClick={() => void loadFolder()} disabled={busy} data-autofocus>
+                <span className="font-semibold">Choose an extension folder</span>
+                <span className="text-[12px] text-ink-3">Pick the folder that holds the extension.</span>
+                <Button size={32} onClick={() => { setDropNote(false); void loadFolder(); }} disabled={busy} data-autofocus>
                   Choose a folder…
                 </Button>
+                {/* Always mounted so screen readers announce the text when it appears. */}
+                <span role="status" className="text-[12px] text-warn empty:hidden">
+                  {dropNote ? 'Dropping a folder here is not supported yet. Use Choose a folder instead.' : ''}
+                </span>
               </div>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor={gitId} className="text-[12px] text-ink-2">

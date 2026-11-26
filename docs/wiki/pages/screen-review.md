@@ -26,6 +26,11 @@ Design: [../raw/design/Review.dc.html](../raw/design/Review.dc.html). Route `rev
 - Click a line (or its number button, "Comment on line N") → inline box "Your comment on line N ·
   goes to the agent", Cancel / Add to feedback (Ctrl/Cmd+Enter, Esc) → `review.addComment
   { agentId, path, line, body }`. Removed lines comment with their old number ("removed line N").
+- A half-written comment is a draft kept per file, side and line (`index.tsx`): clicking another
+  line or switching file keeps it, and reopening that line restores the text. A line with an unsent
+  draft shows a small accent dot and its button reads "Comment on line N (draft)". Cancel / Esc
+  discard the draft, a successful add clears it; drafts reset when the agent changes and are not
+  kept after leaving Review.
 - Existing comments render inline under their line (sent / not sent yet, delete while unsent →
   `review.deleteComment`).
 - Over 400 rows the list is virtualized (`@tanstack/react-virtual`, measured rows).
@@ -74,7 +79,16 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
   `AgentSummary.diff` / `WorktreeInfo.diff`. Both come from the same git diff in main; the mock keeps
   them equal (`lib/mock/mock.test.ts`).
 - Merge locally: confirm dialog → `git.mergeLocal`. The dialog predicts first (see
-  [Merge conflicts](#merge-conflicts)); main is never left mid-merge.
+  [Merge conflicts](#merge-conflicts)); main is never left mid-merge. After a successful merge
+  (toast "Merged X into main") Review goes to Source control, but only while the route is still
+  this agent's Review and main has archived the agent (it does when the branch is fully merged).
+  A merge that left the agent live keeps Review open; if the archive event lands after the reply,
+  Review shows the agent as merged and archived (below).
+- An agent that is no longer live (merged, discarded or archived, including a PR the watcher
+  archived as merged) is looked up in the archive as Focus does (`useArchive` `byId`, then
+  `fetchOne`; a spinner while it loads). Review then says "<title> was merged and archived" (or
+  discarded / completed / archived, by reason) with **Open in Focus** (read-only). "This agent is
+  gone. It may have been removed." is only for an agent the archive doesn't know either.
 - Nothing to push (2026-11-26): when the diff is empty (committed, uncommitted and untracked), the
   worktree is known with `ahead: 0` and there is no PR, Open pull request and Merge locally are
   replaced by **Archive session** (`agents.archive`, then back to the Wall) with a note saying there
@@ -154,6 +168,9 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
 ## Tests
 
 `Review.test.tsx`: hunk numbering, reverse-apply, rendered numbers and colours, click-to-comment,
+comment drafts (kept across lines, cleared by Cancel / Esc / add), an archived agent's "was merged
+and archived" state with Open in Focus versus "gone" for an unknown one; `MergeDialog.test.tsx`: a
+successful merge goes to Source control once the agent is archived and stays when it is still live,
 `review.addComment` arguments (with `side`), removed-line threads, Send feedback, Viewed toggle.
 
 ## Comment side

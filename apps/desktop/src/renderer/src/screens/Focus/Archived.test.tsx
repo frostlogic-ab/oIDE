@@ -11,6 +11,7 @@ import { useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useSettings } from '../../stores/settings';
 import FocusScreen from './index';
+import { resetDrafts } from './composerDrafts';
 
 /** Focus opens an archived agent read-only: transcript from the database, Unarchive / Delete, no composer. */
 
@@ -56,6 +57,7 @@ const invoke = vi.fn(async (command: string): Promise<unknown> => {
 installFallbackBridge({ invoke: invoke as unknown as OideBridge['invoke'], on: () => () => {}, platform: 'win32' });
 
 beforeEach(() => {
+  resetDrafts();
   invoke.mockClear();
   useAgents.setState({ byId: {}, order: [], events: {}, loaded: true });
   useArchive.setState({ byId: {}, items: [], total: 0, count: 0 });

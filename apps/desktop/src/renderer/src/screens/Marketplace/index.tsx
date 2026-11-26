@@ -13,7 +13,7 @@ import { useRouter } from '../../stores/router';
 import { toast } from '../../stores/ui';
 import { AddCustomDialog, Capabilities, type AddCustomTab } from './AddCustomDialog';
 import { CheckButton, Monogram, RiskPill } from './parts';
-import { RISK_COLOR, RISK_LABEL, YOURS, buildItems, categoryLabel, customSource, enabledIn, filterItems, inCategory, isCustomLike, type CategoryId, type ListItem, type SortId } from './model';
+import { RISK_COLOR, RISK_LABEL, YOURS, buildItems, categoryLabel, customSource, enabledIn, filterItems, inCategory, matchesElsewhere, isCustomLike, type CategoryId, type ListItem, type SortId } from './model';
 import { ResizableAside } from '../../components/ResizableAside';
 import { PANELS } from '../../lib/panels';
 
@@ -79,6 +79,9 @@ export default function MarketplaceScreen() {
 
   const items = useMemo(() => buildItems(data.index, data.installed, data.custom, data.updates), [data]);
   const visible = useMemo(() => filterItems(items, cat, query, sort), [items, cat, query, sort]);
+  // A query that finds nothing in this category still shows its matches from the other categories.
+  const elsewhere = useMemo(() => (visible.length === 0 ? matchesElsewhere(items, cat, query, sort) : []), [items, cat, query, sort, visible]);
+  const shown = visible.length > 0 ? visible : elsewhere;
   const counts = useMemo(
     () => ({ installed: items.filter((i) => inCategory(i, 'installed')).length, custom: items.filter(isCustomLike).length, updates: data.updates.length }),
     [items, data.updates],
@@ -86,8 +89,8 @@ export default function MarketplaceScreen() {
 
   const selected = useMemo(() => {
     const byRoute = routeExt ? items.find((i) => i.key === routeExt || i.name === routeExt) : undefined;
-    return byRoute ?? visible[0] ?? null;
-  }, [items, visible, routeExt]);
+    return byRoute ?? shown[0] ?? null;
+  }, [items, shown, routeExt]);
 
   const select = (item: ListItem) => replace('marketplace', { extension: item.key });
 
@@ -215,6 +218,12 @@ export default function MarketplaceScreen() {
           </Button>
         </div>
         <h1 className="m-0 text-[16px] font-semibold">{categoryLabel(cat)}</h1>
+        {/* Always mounted so screen readers announce the line when a search falls back to other categories. */}
+        <p role="status" className="m-0 text-[12.5px] text-ink-2 empty:hidden">
+          {elsewhere.length > 0
+            ? `No matches in ${categoryLabel(cat)}. Showing ${elsewhere.length} ${elsewhere.length === 1 ? 'match' : 'matches'} from other categories.`
+            : ''}
+        </p>
         {!data.loaded ? (
           <Spinner label="Loading extensions" />
         ) : data.error ? (
@@ -224,15 +233,15 @@ export default function MarketplaceScreen() {
               Try again
             </Button>
           </div>
-        ) : visible.length === 0 ? (
+        ) : shown.length === 0 ? (
           <EmptyState
             icon="marketplace"
             title={query ? 'Nothing matches your search' : cat === 'updates' ? 'Everything is up to date' : 'Nothing here yet'}
             description={cat === 'custom' ? 'Add any MCP server or local extension with Add custom.' : undefined}
           />
         ) : (
-          <ul className="m-0 p-0 list-none flex flex-col gap-2" aria-label={`${categoryLabel(cat)} extensions`}>
-            {visible.map((item) => {
+          <ul className="m-0 p-0 list-none flex flex-col gap-2" aria-label={elsewhere.length > 0 ? 'Matches in other categories' : `${categoryLabel(cat)} extensions`}>
+            {shown.map((item) => {
               const sel = selected?.key === item.key;
               const st = STATE_TEXT[item.state];
               return (

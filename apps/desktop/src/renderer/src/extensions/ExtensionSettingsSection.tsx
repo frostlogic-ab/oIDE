@@ -153,8 +153,16 @@ function FieldControl({
   onSave(v: string | number | boolean | null): Promise<boolean>;
 }) {
   const current = field.value ?? field.default;
-  const [draft, setDraft] = useState(current === undefined ? '' : String(current));
-  useEffect(() => setDraft(current === undefined ? '' : String(current)), [current]);
+  const currentText = current === undefined ? '' : String(current);
+  const [draft, setDraft] = useState(currentText);
+  // Follow the saved value only when it changes, and only if the user has not edited the field: a
+  // mount-time or late-arriving sync effect would otherwise overwrite what they just typed (and
+  // blur would then see "no change" and never save it).
+  const [syncedText, setSyncedText] = useState(currentText);
+  if (syncedText !== currentText) {
+    setSyncedText(currentText);
+    if (draft === syncedText) setDraft(currentText);
+  }
 
   if (field.type === 'boolean' && !field.secret) {
     return (
