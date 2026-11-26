@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useState, type KeyboardEvent } from 'react';
+import { useEffect, useReducer, useRef, useState, type KeyboardEvent } from 'react';
 import { Button, Dialog, Kbd } from '@oide/ui';
 import { ACTION_LABELS, DEFAULT_BINDINGS, comboFromEvent, comboLabel, keymap, portableCombo, type Keymap } from '../../lib/keymap';
 import { H1, Rd, Row, Sec, describedBy, outlineBtn } from './ui';
@@ -28,8 +28,24 @@ export function KeysSection({ km = keymap }: { km?: Keymap }) {
   const anyCustom = customCount > 0;
   const [confirmReset, setConfirmReset] = useState(false);
 
+  // Each action's Change button, so focus can go back to it when recording ends (Save, Cancel, Esc).
+  const changeButtons = useRef(new Map<string, HTMLButtonElement>());
+  const returnFocusTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (recording) {
+      returnFocusTo.current = recording.action;
+      return;
+    }
+    const action = returnFocusTo.current;
+    returnFocusTo.current = null;
+    if (action) changeButtons.current.get(action)?.focus();
+  }, [recording]);
+
   const onRecordKey = (e: KeyboardEvent<HTMLElement>) => {
     if (!recording) return;
+    // A plain Tab is never recorded: it moves focus on to Save/Cancel so the keyboard is not trapped.
+    // Shift+Tab stays recordable because it is a real shortcut (Switch permission mode).
+    if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey) return;
     // Keep the key away from the app's own shortcuts while recording.
     e.preventDefault();
     e.stopPropagation();
@@ -81,8 +97,8 @@ export function KeysSection({ km = keymap }: { km?: Keymap }) {
                   >
                     {rec.combo ? comboLabel(rec.combo, mac) : 'Press keys…'}
                   </button>
-                  <span id={`${titleId}-rec`} className="sr-only">
-                    Press the new shortcut. Escape cancels.
+                  <span id={`${titleId}-rec`} className="basis-full text-right text-[11.5px] text-ink-3 order-last">
+                    Press the new keys · Tab to move on · Esc to cancel
                   </span>
                   <button
                     type="button"
@@ -108,7 +124,16 @@ export function KeysSection({ km = keymap }: { km?: Keymap }) {
                       {comboLabel(c, mac)}
                     </Kbd>
                   ))}
-                  <button type="button" className={outlineBtn} aria-label={`Change shortcut for ${title}`} onClick={() => setRecording({ action })}>
+                  <button
+                    type="button"
+                    ref={(el) => {
+                      if (el) changeButtons.current.set(action, el);
+                      else changeButtons.current.delete(action);
+                    }}
+                    className={outlineBtn}
+                    aria-label={`Change shortcut for ${title}`}
+                    onClick={() => setRecording({ action })}
+                  >
                     Change
                   </button>
                   {custom && (

@@ -81,6 +81,49 @@ describe('Settings › Keyboard shortcuts', () => {
     expect(invoke).not.toHaveBeenCalled();
   });
 
+  it('lets Tab through to Save instead of recording it, and shows the hint', async () => {
+    render(<KeysSection km={km} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Change shortcut for Next agent' }));
+    const rec = screen.getByRole('button', { name: 'New shortcut for Next agent' });
+    expect(screen.getByText('Press the new keys · Tab to move on · Esc to cancel')).toBeTruthy();
+    fireEvent.keyDown(rec, { key: 'l' });
+    // Not default-prevented, so the browser moves focus; the combo stays as it was.
+    expect(fireEvent.keyDown(rec, { key: 'Tab' })).toBe(true);
+    expect(rec.textContent).toBe('L');
+    const save = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    expect(save.disabled).toBe(false);
+    save.focus();
+    expect(document.activeElement).toBe(save);
+    await act(async () => fireEvent.click(save));
+    expect(patches()).toEqual([{ keybindings: { 'agent.next': ['L'] } }]);
+  });
+
+  it('keeps Shift+Tab recordable because it is the Switch permission mode shortcut', () => {
+    render(<KeysSection km={km} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Change shortcut for Next agent' }));
+    const rec = screen.getByRole('button', { name: 'New shortcut for Next agent' });
+    expect(fireEvent.keyDown(rec, { key: 'Tab', shiftKey: true })).toBe(false);
+    expect(rec.textContent).toBe('Shift Tab');
+  });
+
+  it('puts focus back on the Change button after Save, Cancel and Escape', async () => {
+    render(<KeysSection km={km} />);
+    const change = () => screen.getByRole('button', { name: 'Change shortcut for Next agent' });
+
+    fireEvent.click(change());
+    fireEvent.keyDown(screen.getByRole('button', { name: 'New shortcut for Next agent' }), { key: 'l' });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save' })));
+    expect(document.activeElement).toBe(change());
+
+    fireEvent.click(change());
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Cancel' })));
+    expect(document.activeElement).toBe(change());
+
+    fireEvent.click(change());
+    fireEvent.keyDown(screen.getByRole('button', { name: 'New shortcut for Next agent' }), { key: 'Escape' });
+    expect(document.activeElement).toBe(change());
+  });
+
   it('follows settings.changed and moves old browser-storage rebinds into Settings once', () => {
     act(() => useSettings.getState().apply({ ...current, keybindings: { 'agent.prev': ['I'] } }));
     expect(km.getBindings()['agent.prev']).toEqual(['I']);
