@@ -1021,3 +1021,21 @@ now needs the NSIS uninstaller next to the exe. The GitHub publisher writes no `
 read `latest*.yml` through electron-updater's fallback); docs and config corrected. New finalize gate
 `tools/release-feed/verify-feed.mjs`; new telemetry event `update_checked`. Pages: packaging,
 release-pipeline, telemetry.
+
+## [2026-11-26] review | Second usability pass: drafts, dialogs, Marketplace, Review after merge
+Fixed the six issues the first pass left open plus five new ones. Dialogs: Add custom extension and
+New artifact close on a scrim press only while untouched (and never from a drag that started inside);
+Commit… can't be closed while the commit runs. Marketplace: env rows have a remove button, the
+extension box no longer claims to accept drops it can't use, and a search with no match in the
+current category shows the matches from the others. Drafts: Review line comments (per file, side,
+line, with a draft marker), the Focus composer (per agent, `composerDrafts.ts`) and the Artifacts
+Viewer (`draftStore.ts`, reopened on return, Unsaved badge, conflicts through the usual banner) keep
+unsent text across screen and target switches. Review goes to Source control after a local merge and
+shows "was merged and archived" with Open in Focus for archived agents instead of "This agent is
+gone". Settings › Keyboard shortcuts: plain Tab leaves the recorder and focus returns to Change.
+Pages: [screen-marketplace](pages/screen-marketplace.md), [screen-artifacts](pages/screen-artifacts.md),
+[screen-source-control](pages/screen-source-control.md), [screen-review](pages/screen-review.md),
+[screen-focus](pages/screen-focus.md), [screen-settings](pages/screen-settings.md). Still open:
+agent toasts have no Open action, Remove worktree and the side-panel Push show no progress, the Wall
+sidebar does nothing for a live agent in the Archived view, Marketplace install/update show no
+progress text, git status errors have no Retry.
