@@ -440,3 +440,19 @@ describe('keep-in-sync contract', () => {
     }
   });
 });
+
+describe('pull request contract', () => {
+  const prompt = (patch: Partial<LaunchContext> = {}) => flagValue(buildLaunch(spec(), ctx(patch)).args, '--append-system-prompt');
+
+  it("tells a branch agent to follow the project's PR conventions and draft the PR in submit_for_review", () => {
+    const p = prompt({ baseRef: 'main' });
+    expect(p).toContain('first look in the project for how pull requests should look');
+    expect(p).toContain('.github/pull_request_template.md');
+    expect(p).toContain('Conventional Commits');
+    expect(p).toContain('In submit_for_review also pass `pr`');
+  });
+
+  it('adds nothing for an agent without a branch', () => {
+    expect(prompt({ branch: undefined })).not.toContain('pull request');
+  });
+});

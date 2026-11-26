@@ -262,11 +262,22 @@ export const CheckResult = z.object({
 });
 export type CheckResult = z.infer<typeof CheckResult>;
 
+/**
+ * The pull request an agent drafted for its branch, written to the project's own conventions (PR
+ * template, title rules). oIDE opens the PR with it when the user clicks Open pull request.
+ */
+export const PrDraft = z.object({
+  title: z.string().min(1).max(300),
+  body: z.string().max(60_000).default(''),
+});
+export type PrDraft = z.infer<typeof PrDraft>;
+
 /** What an agent sends through `oide.submit_for_review`. */
 export const ReviewSubmission = z.object({
   agentId: Id,
   summary: z.string(),
   checks: z.array(CheckResult).default([]),
+  pr: PrDraft.optional(),
   submittedAt: z.number(),
 });
 export type ReviewSubmission = z.infer<typeof ReviewSubmission>;

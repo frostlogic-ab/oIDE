@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { FileDiff } from '@oide/protocol';
 import { setupMockApp } from '../SourceControl/testing';
+import { useRouter } from '../../stores/router';
 import { parseHunks, reverseApply, sidesFromHunks } from './diff';
 import ReviewScreen from './index';
 import { UnifiedDiff } from './UnifiedDiff';
@@ -129,5 +130,31 @@ describe('Review screen', () => {
     await waitFor(() => expect(box).toHaveProperty('checked', true));
     fireEvent.click(box);
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('review.setViewed', { agentId: 'a-webhook', path: 'src/webhooks/retry.ts', viewed: false }));
+  });
+
+  it('with nothing to push, offers Archive session instead of a pull request or a merge', async () => {
+    const { invoke, real } = await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook' } });
+    invoke.mockImplementation((async (command: string, input: unknown) => {
+      if (command === 'git.diff') return [];
+      const out = await real(command as never, input as never);
+      if (command === 'git.worktrees') return (out as Array<{ agentId?: string }>).map((w) => (w.agentId === 'a-webhook' ? { ...w, ahead: 0, pr: undefined } : w));
+      return out;
+    }) as never);
+    render(<ReviewScreen />);
+    const archive = await screen.findByRole('button', { name: 'Archive session' });
+    expect(screen.queryByRole('button', { name: /pull request/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Merge worktree into/ })).toBeNull();
+    expect(screen.getByText(/Nothing to push: this worktree has no changes or commits against main/)).toBeTruthy();
+    fireEvent.click(archive);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('agents.archive', { agentId: 'a-webhook' }));
+    await waitFor(() => expect(useRouter.getState().route.screen).toBe('wall'));
+  });
+
+  it('keeps Open pull request when the branch has commits to push', async () => {
+    await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook' } });
+    render(<ReviewScreen />);
+    expect(await screen.findByRole('heading', { name: '8 files changed' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Archive session' })).toBeNull();
+    expect(screen.getByRole('button', { name: /Merge worktree into .* locally/ })).toBeTruthy();
   });
 });

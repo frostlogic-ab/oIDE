@@ -216,8 +216,11 @@ export class TelemetryObservers {
         return;
       }
       case 'git.openPr':
-        this.sink.track('pr_opened', { existing: !!(output as { existing?: boolean }).existing });
+      {
+        const o = output as { existing?: boolean; draft?: 'agent' | 'template' | 'plain' | 'given' };
+        this.sink.track('pr_opened', { existing: !!o.existing, ...(o.draft ? { draft: o.draft } : {}) });
         return;
+      }
       case 'agents.archive':
         // Reported from the `agents.archived` event (covers automatic archiving too).
         return;

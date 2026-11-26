@@ -214,6 +214,17 @@ describe('OideMcpServer', () => {
     await client.close();
   });
 
+  it('submit_for_review passes the drafted pull request on, and drops a malformed one instead of refusing', async () => {
+    const { reg, rec } = await setup();
+    const client = await connect(reg.url, reg.secret);
+    await client.callTool({ name: 'submit_for_review', arguments: { summary: 'Fixed login', pr: { title: 'fix(auth): keep the session on reload', body: '## Summary\n\nFixed login' } } });
+    expect(rec.reviews[0]).toEqual({ summary: 'Fixed login', checks: [], pr: { title: 'fix(auth): keep the session on reload', body: '## Summary\n\nFixed login' } });
+    const res = await client.callTool({ name: 'submit_for_review', arguments: { summary: 'Again', pr: { title: '' } } });
+    expect(res.isError).toBeFalsy();
+    expect(rec.reviews[1]).toEqual({ summary: 'Again', checks: [] });
+    await client.close();
+  });
+
   it('set_title hands the title to the agent handler and reports a refusal as an error', async () => {
     const { reg, rec } = await setup();
     const client = await connect(reg.url, reg.secret);

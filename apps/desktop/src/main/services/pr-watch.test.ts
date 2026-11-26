@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -21,6 +21,7 @@ class FakeGh {
   prs = new Map<string, PrInfo | 'error'>();
   calls: string[] = [];
   created: string[] = [];
+  drafts: Array<{ title: string; body: string }> = [];
   createError: string | undefined;
   async available() {
     return this.available_;
@@ -35,9 +36,10 @@ class FakeGh {
   async prView(cwd: string, branch: string) {
     return (await this.prLookup(cwd, branch)).pr;
   }
-  async prCreate(_cwd: string, o: { head?: string }) {
+  async prCreate(_cwd: string, o: { head?: string; title: string; body: string }) {
     if (this.createError) throw new Error(this.createError);
     this.created.push(o.head ?? '');
+    this.drafts.push({ title: o.title, body: o.body });
     const url = `https://github.com/o/r/pull/${20 + this.created.length}`;
     this.prs.set(o.head ?? '', { state: 'open', number: 20 + this.created.length, url });
     return { url };
@@ -218,7 +220,7 @@ describe('GitService.openPr is idempotent', () => {
     const repo = repoWithRemote();
     const gh = new FakeGh();
     const { svc, setPr } = service(agent('a', { worktreePath: repo, baseRef: 'main' }), gh);
-    expect(await svc.openPr('a', 'T', 'B')).toEqual({ url: 'https://github.com/o/r/pull/21', number: 21, state: 'open', existing: false });
+    expect(await svc.openPr('a', 'T', 'B')).toEqual({ url: 'https://github.com/o/r/pull/21', number: 21, state: 'open', existing: false, draft: 'given' });
     expect(setPr.at(-1)).toMatchObject({ number: 21 });
     // Second click: the PR exists now, so no second create.
     expect((await svc.openPr('a', 'T', 'B')).existing).toBe(true);
@@ -244,6 +246,30 @@ describe('GitService.openPr is idempotent', () => {
     gh2.prLookup = async () => ({});
     await expect(svc2.openPr('a', 'T', 'B')).rejects.toThrow(/HTTP 422/);
     await svc.dispose();
+    await svc2.dispose();
+  });
+
+  it("writes the PR from the agent's draft, else from the project's template and title rules", async () => {
+    const repo = repoWithRemote();
+    mkdirSync(join(repo, '.github'), { recursive: true });
+    writeFileSync(join(repo, '.github', 'pull_request_template.md'), '## Summary\n\n<!-- What and why. -->\n\n## How I tested it\n\n## Checklist\n\n- [ ] Docs updated\n');
+    writeFileSync(join(repo, 'release-please-config.json'), '{}');
+    const review = { agentId: 'a', summary: 'Tiles can be filtered by status.', checks: [{ name: 'pnpm test', status: 'passed' as const }], submittedAt: 1 };
+
+    const gh = new FakeGh();
+    const { svc } = service(agent('a', { title: 'Add tile filters', worktreePath: repo, review }), gh);
+    expect(await svc.openPr('a')).toMatchObject({ existing: false, draft: 'template' });
+    expect(gh.drafts[0]!.title).toBe('feat: add tile filters');
+    expect(gh.drafts[0]!.body).toContain('## Summary\n\n<!-- What and why. -->\n\nTiles can be filtered by status.');
+    expect(gh.drafts[0]!.body).toContain('## How I tested it\n\n- [x] pnpm test');
+    expect(gh.drafts[0]!.body).toContain('- [ ] Docs updated');
+    await svc.dispose();
+
+    const gh2 = new FakeGh();
+    const pr = { title: 'feat(wall): filter tiles by status', body: '## Summary\n\nDrafted by the agent.' };
+    const { svc: svc2 } = service(agent('a', { title: 'Add tile filters', worktreePath: repo, review: { ...review, pr } }), gh2);
+    expect(await svc2.openPr('a')).toMatchObject({ draft: 'agent' });
+    expect(gh2.drafts[0]).toEqual(pr);
     await svc2.dispose();
   });
 });

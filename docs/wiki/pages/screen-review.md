@@ -43,8 +43,15 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
 - Send feedback → `review.sendFeedback { agentId }` (main bundles unsent comments into one
   `review-feedback` message); label becomes "Feedback sent · agent is revising". Disabled while there
   are no unsent comments.
-- Open pull request → `git.openPr { agentId, title, body }` (body = summary + checks as a task list),
-  then opens the URL. With an existing PR it reads "View pull request #n". When `git.prAvailable`
+- Open pull request → `git.openPr { agentId }`, then opens the URL. Main writes the title and body
+  to the project's own conventions (`packages/git/src/pr-draft.ts`): the agent's draft from
+  `submit_for_review` (`pr`) when it gave one; otherwise the project's PR template
+  (`.github/pull_request_template.md`, root, `docs/`, or a `PULL_REQUEST_TEMPLATE/` folder) with the
+  summary under its Summary/Description heading and the checks as a task list under its testing
+  heading, or summary + checks without a template. When the project uses Conventional Commits
+  (commitlint, release-please or semantic-release config, a PR-title workflow, or 60% of recent
+  commits) the title gets a `type(scope):` from the branch's own commits or the title's words.
+  The Wall tile's Open PR takes the same path. With an existing PR it reads "View pull request #n". When `git.prAvailable`
   answers `available: false` it is disabled with the reason (default: install gh and `gh auth login`).
 - Comment cards and the inline composer are sized to the visible diff width and stick to its left
   edge, so long lines scroll sideways under them; the diff scroller uses full-width scrollbars.
@@ -53,6 +60,12 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
   them equal (`lib/mock/mock.test.ts`).
 - Merge locally: confirm dialog → `git.mergeLocal`. The dialog predicts first (see
   [Merge conflicts](#merge-conflicts)); main is never left mid-merge.
+- Nothing to push (2026-11-26): when the diff is empty (committed, uncommitted and untracked), the
+  worktree is known with `ahead: 0` and there is no PR, Open pull request and Merge locally are
+  replaced by **Archive session** (`agents.archive`, then back to the Wall) with a note saying there
+  is nothing to push against the base. While the agent still works (not `canArchive`) the button is
+  disabled and the note says to archive once it stops. Archived sessions can be unarchived from
+  Wall › Archived.
 
 ## Merge conflicts
 

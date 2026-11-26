@@ -118,7 +118,7 @@ a second build racing the first.
    before anything is published either way.)
 4. **Branch protection on `main`** (recommended): require the CI and PR title checks.
 5. **Pages:** Settings › Pages › Source "GitHub Actions" for the docs site
-   (`docs.yml`, `https://frostlogic-ab.github.io/oIDE/`, base `/oIDE/`, [docs-site](docs-site.md)).
+   (`docs.yml`, custom domain `https://getoide.com/`, base `/`, [docs-site](docs-site.md)).
 6. **Signing (optional):** the secrets and variables listed in the header of `release.yml`.
 
 Repository variables the release reads (all optional):

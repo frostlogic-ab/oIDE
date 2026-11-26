@@ -1,4 +1,4 @@
-// VitePress config for the oIDE docs site (https://frostlogic-ab.github.io/oIDE/).
+// VitePress config for the oIDE docs site (https://getoide.com/, GitHub Pages custom domain).
 // Build: pnpm docs:build   Dev: pnpm docs:dev   Deployed by .github/workflows/docs.yml.
 import { defineConfig } from 'vitepress';
 
@@ -8,15 +8,16 @@ export default defineConfig({
   title: 'oIDE',
   description: 'Mission Control for coding agents: run many Claude Code CLI agents in parallel, across many projects, in one window.',
   lang: 'en-US',
-  base: '/oIDE/',
+  base: '/',
   cleanUrls: true,
+  sitemap: { hostname: 'https://getoide.com' },
   lastUpdated: true,
   appearance: 'dark',
   head: [
     // Brand assets: docs/brand (copied to docs/site/public by tools/brand/build-brand.mjs).
-    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/oIDE/favicon.svg' }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
     ['meta', { name: 'theme-color', content: '#0E1013' }],
-    ['meta', { property: 'og:image', content: 'https://frostlogic-ab.github.io/oIDE/social-preview.png' }],
+    ['meta', { property: 'og:image', content: 'https://getoide.com/social-preview.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { property: 'og:title', content: 'oIDE' }],
     ['meta', { property: 'og:description', content: 'Run many Claude Code CLI agents in parallel, in one window. Open source, MIT.' }],

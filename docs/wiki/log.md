@@ -865,6 +865,28 @@ link to the new repository; the docs site base is `/oIDE/` (`frostlogic-ab.githu
 [release-pipeline.md](pages/release-pipeline.md) (new), [packaging.md](pages/packaging.md),
 [docs-site.md](pages/docs-site.md).
 
+## [2026-11-26] build | Review: Archive session when there is nothing to push
+A finished agent whose worktree has no changes or commits against its base (and no PR) no longer
+offers Open pull request / Merge locally in Review; it offers Archive session instead. See
+[screen-review](pages/screen-review.md#decisions).
+## [2026-11-26] build | Pull requests follow the project's own conventions
+Open pull request no longer sends the agent title and a summary as is. The oIDE contract (`prContract`
+in `args.ts`) tells branch agents to look up how the project wants PRs (PR template, CONTRIBUTING.md,
+CLAUDE.md/AGENTS.md, Conventional Commits via commitlint / release-please / semantic-release / a
+PR-title workflow, recent commit style) whenever they write one, and to pass a `pr { title, body }`
+draft in `submit_for_review`. `git.openPr { agentId }` uses that draft; without one, main
+(`packages/git/src/pr-draft.ts`) fills the project's PR template with the summary and checks and
+gives the title a Conventional Commits type when the project uses them. Telemetry: `pr_opened` gains
+`draft` (agent / template / plain / given). Pages: [screen-review.md](pages/screen-review.md),
+[mcp-server.md](pages/mcp-server.md), [agent-supervisor.md](pages/agent-supervisor.md),
+[telemetry.md](pages/telemetry.md).
+## [2026-11-26] decision | Docs site served from getoide.com
+The repository is now public at github.com/frostlogic-ab/oIDE and GitHub Pages (source: GitHub Actions)
+uses the custom domain `getoide.com`. The VitePress base moved from `/oIDE/` to `/`, the favicon and
+`og:image` URLs follow, a sitemap is generated for `https://getoide.com`, and `docs/site/public/CNAME`
+pins the domain in the deployed artifact. `docs.yml` deploys on every push to `main` that touches
+`docs/site/**` ([docs-site](pages/docs-site.md), [release-pipeline](pages/release-pipeline.md)).
+
 ## [2026-11-26] build | CI unit tests pass on GitHub's runners
 
 CI run 45783318672 failed `pnpm test` on all three OSes, though the suite passed on a developer's

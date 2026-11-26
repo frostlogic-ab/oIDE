@@ -281,6 +281,7 @@ export default function ReviewScreen() {
         comments={comments}
         prAvailable={git.prAvailable}
         prReason={git.prReason}
+        nothingToPush={!review.loading && !review.error && files.length === 0 && worktree !== undefined && worktree.ahead === 0 && !(agent.pr ?? worktree.pr)}
         onSendFeedback={review.sendFeedback}
         sensitiveFiles={files.flatMap((f) => (f.sensitive ? [{ path: f.path, reason: f.sensitive }] : []))}
         onJump={(path, line, side = 'new') => {

@@ -47,11 +47,14 @@ export function resumeAgent(agentId: string): Promise<boolean> {
   return run(() => oide.invoke('agents.resume', { agentId }), 'Could not resume');
 }
 
-/** Idempotent in main: a branch that already has a PR gets that PR back (`existing`), never an error. */
-export async function openPullRequest(agentId: string, title: string, body: string): Promise<boolean> {
+/**
+ * Idempotent in main: a branch that already has a PR gets that PR back (`existing`), never an error.
+ * Main writes the title and body (the agent's draft, else the project's PR template and title rules).
+ */
+export async function openPullRequest(agentId: string): Promise<boolean> {
   let url = '';
   const ok = await run(async () => {
-    const r = await oide.invoke('git.openPr', { agentId, title, body });
+    const r = await oide.invoke('git.openPr', { agentId });
     url = r.url;
     if (r.existing) toast(`This branch already has pull request${r.number ? ` #${r.number}` : ''}: opening it.`, 'info', { agentId });
   }, 'Could not open a pull request');

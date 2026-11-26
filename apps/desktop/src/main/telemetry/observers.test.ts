@@ -356,6 +356,12 @@ describe('archived agents and the PR lifecycle', () => {
     expect(JSON.stringify(events)).not.toMatch(/acme|github/);
   });
 
+  it('pr_opened says where a new PR title and body came from', () => {
+    const { o, events } = make();
+    o.command('git.openPr', { agentId: 'a1' }, { url: 'https://github.com/acme/private/pull/13', number: 13, state: 'open', existing: false, draft: 'template' });
+    expect(events).toEqual([{ name: 'pr_opened', props: { existing: false, draft: 'template' } }]);
+  });
+
   it('artifact_imported says how it came in, the kind and the format, never the link, title or content', () => {
     const { o, events } = make();
     const url = 'https://claude.ai/artifact/SecretId';

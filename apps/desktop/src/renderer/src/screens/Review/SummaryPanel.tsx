@@ -12,6 +12,8 @@ import { DeployActions } from '../../extensions/DeployActions';
 import { ResizableAside } from '../../components/ResizableAside';
 import { PANELS } from '../../lib/panels';
 import { MergeDialog, MergeStatus, SensitiveWarning } from './MergeDialog';
+import { archiveAgent } from '../../stores/archive';
+import { canArchive } from '../Wall/logic';
 
 const SECTION_LABEL = 'text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3';
 
@@ -25,16 +27,22 @@ export interface SummaryPanelProps {
   onJump(path: string, line?: number, side?: 'old' | 'new'): void;
   /** Changed files that configure agents, git or MCP (FileDiff.sensitive), shown before Merge. */
   sensitiveFiles?: Array<{ path: string; reason: string }>;
+  /**
+   * The worktree has no changes and no commits against its base, and no pull request: there is
+   * nothing to push or merge, so the panel offers Archive instead of Open pull request / Merge.
+   */
+  nothingToPush?: boolean;
 }
 
 /** Right column of Review: status, title, worktree → base, agent's summary and checks, feedback, decisions. */
-export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason, onSendFeedback, onJump, sensitiveFiles = [] }: SummaryPanelProps) {
+export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason, onSendFeedback, onJump, sensitiveFiles = [], nothingToPush = false }: SummaryPanelProps) {
   const meta = agentStatusMeta(agent.status);
   const branch = worktree?.branch ?? agent.branch ?? '';
   const base = (worktree?.baseRef ?? agent.baseRef ?? 'main').replace(/^origin\//, '');
   const pending = comments.filter((c) => !c.sent);
   const [sendState, setSendState] = useState<'idle' | 'busy' | 'sent'>('idle');
   const [prBusy, setPrBusy] = useState(false);
+  const [archiveBusy, setArchiveBusy] = useState(false);
   const [merge, setMerge] = useState<{ step: 'confirm' | 'busy' | 'conflicts' | 'asking'; conflicts: string[]; from?: 'prediction' | 'merge' } | null>(null);
   // The agent's own PR info (kept fresh by main's PR watcher) wins over Source control's cached lookup.
   const pr = agent.pr ?? worktree?.pr;
@@ -83,8 +91,8 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
     }
     setPrBusy(true);
     try {
-      const body = [agent.review?.summary ?? '', checksMarkdown(agent.review?.checks ?? [])].filter(Boolean).join('\n\n');
-      const { url } = await oide.invoke('git.openPr', { agentId: agent.id, title: agent.title, body });
+      // Main writes the title and body: the agent's draft, else the project's PR template and title rules.
+      const { url } = await oide.invoke('git.openPr', { agentId: agent.id });
       toast('Pull request opened', 'success', { action: { label: 'View', run: () => void oide.invoke('shell.openExternal', { url }).catch(() => {}) } });
       void oide.invoke('shell.openExternal', { url }).catch(() => {});
       void useGit.getState().load(agent.projectId);
@@ -93,6 +101,14 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
     } finally {
       setPrBusy(false);
     }
+  };
+
+  const archive = async () => {
+    setArchiveBusy(true);
+    const ok = await archiveAgent(agent.id, agent.title);
+    setArchiveBusy(false);
+    // Archived agents leave the Wall (and this screen); go back to it.
+    if (ok) navigate('wall');
   };
 
   const doMerge = async () => {
@@ -193,24 +209,30 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
         <Button variant="secondary" size={36} className="rounded-md" disabled={sendState === 'busy' || (sendState !== 'sent' && pending.length === 0)} onClick={() => void send()}>
           {sendLabel}
         </Button>
-        {prAvailable === false ? (
-          <>
-            <Button variant="primary" size={36} className="rounded-md" disabled aria-describedby="pr-unavailable">
-              Open pull request
-            </Button>
-            <span id="pr-unavailable" className="text-[11.5px] text-ink-3 leading-[1.45]">
-              {prReason ?? 'Pull requests need the GitHub CLI: install gh and run gh auth login, then come back.'}
-            </span>
-          </>
+        {nothingToPush ? (
+          <NothingToPush agent={agent} base={base} busy={archiveBusy} onArchive={() => void archive()} />
         ) : (
-          <Button variant="primary" size={36} className="rounded-md" disabled={prBusy} onClick={() => void openPr()}>
-            {prLabel}
-          </Button>
+          <>
+            {prAvailable === false ? (
+              <>
+                <Button variant="primary" size={36} className="rounded-md" disabled aria-describedby="pr-unavailable">
+                  Open pull request
+                </Button>
+                <span id="pr-unavailable" className="text-[11.5px] text-ink-3 leading-[1.45]">
+                  {prReason ?? 'Pull requests need the GitHub CLI: install gh and run gh auth login, then come back.'}
+                </span>
+              </>
+            ) : (
+              <Button variant="primary" size={36} className="rounded-md" disabled={prBusy} onClick={() => void openPr()}>
+                {prLabel}
+              </Button>
+            )}
+            <MergeStatus agent={agent} prediction={prediction} />
+            <Button variant="ghost" size={32} className="rounded-md text-[12.5px]!" onClick={openMerge}>
+              Merge worktree into {target} locally
+            </Button>
+          </>
         )}
-        <MergeStatus agent={agent} prediction={prediction} />
-        <Button variant="ghost" size={32} className="rounded-md text-[12.5px]!" onClick={openMerge}>
-          Merge worktree into {target} locally
-        </Button>
       </div>
 
       <MergeDialog
@@ -228,6 +250,23 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
         onHandOff={(files) => handConflicts(files)}
       />
     </ResizableAside>
+  );
+}
+
+/** Decisions when the branch has nothing to push: archive the session instead of opening an empty PR. */
+function NothingToPush({ agent, base, busy, onArchive }: { agent: AgentSummary; base: string; busy: boolean; onArchive(): void }) {
+  const archivable = canArchive(agent);
+  return (
+    <>
+      <Button variant="primary" size={36} className="rounded-md" disabled={busy || !archivable} aria-describedby="nothing-to-push" onClick={onArchive}>
+        {busy ? 'Archiving…' : 'Archive session'}
+      </Button>
+      <span id="nothing-to-push" className="text-[11.5px] text-ink-3 leading-[1.45]">
+        {archivable
+          ? `Nothing to push: this worktree has no changes or commits against ${base}. Archive the session to take it off the Wall; you can unarchive it from Wall › Archived.`
+          : `Nothing to push yet: this worktree has no changes or commits against ${base}. You can archive the session once the agent stops working.`}
+      </span>
+    </>
   );
 }
 
@@ -260,10 +299,4 @@ function CheckRow({ c }: { c: CheckResult }) {
       {text} (skipped)
     </li>
   );
-}
-
-function checksMarkdown(checks: CheckResult[]): string {
-  if (!checks.length) return '';
-  const mark = { passed: '[x]', failed: '[ ] FAILED', warning: '[ ] warning', skipped: '[ ] skipped' } as const;
-  return ['Checks the agent ran:', ...checks.map((c) => `- ${mark[c.status]} ${c.name}${c.detail ? `: ${c.detail}` : ''}`)].join('\n');
 }

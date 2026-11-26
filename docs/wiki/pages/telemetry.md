@@ -100,7 +100,7 @@ The source of truth is `TELEMETRY_EVENTS` in `packages/protocol/src/telemetry.ts
 | `agent_archived` | main | `reason` [merged, discarded, completed, archived-by-user] | Why do agents leave the Wall? |
 | `agent_unarchived` | main | none | Do people bring archived agents back? |
 | `agent_deleted` | main | none | Do people delete archived agents for good? |
-| `pr_opened` | main | `existing` | Do people open PRs instead of merging locally? |
+| `pr_opened` | main | `existing`, `draft` (`agent` / `template` / `plain` / `given`, new PRs only) | Do people open PRs instead of merging locally? Do new PRs follow the project's conventions (agent draft, project template) or go up as the plain summary? |
 | `pr_view_opened` | main | none (the URL is never sent) | Do people follow an agent's PR from oIDE? |
 | `pr_merged_detected` | main | none | How often does oIDE see an agent's PR merged? |
 | `worktree_delete_failed` | main | `holder` [docker, editor, terminal, node, unknown] | How often can a worktree folder not be deleted, and what kind of program holds it? Never the program's name or any path. |
