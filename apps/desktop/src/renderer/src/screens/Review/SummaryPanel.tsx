@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Icon, agentStatusMeta } from '@oide/ui';
 import type { AgentSummary, CheckResult, ReviewComment, WorktreeInfo } from '@oide/protocol';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
@@ -42,6 +42,12 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
   const base = (worktree?.baseRef ?? agent.baseRef ?? 'main').replace(/^origin\//, '');
   const pending = comments.filter((c) => !c.sent);
   const [sendState, setSendState] = useState<'idle' | 'busy' | 'sent'>('idle');
+  // New comments after a send are not delivered yet: leave the 'sent' state when the pending count grows.
+  const prevPending = useRef(pending.length);
+  useEffect(() => {
+    if (pending.length > prevPending.current) setSendState((s) => (s === 'sent' ? 'idle' : s));
+    prevPending.current = pending.length;
+  }, [pending.length]);
   const [prBusy, setPrBusy] = useState(false);
   const [archiveBusy, setArchiveBusy] = useState(false);
   const [merge, setMerge] = useState<{ step: 'confirm' | 'busy' | 'conflicts' | 'asking'; conflicts: string[]; from?: 'prediction' | 'merge' } | null>(null);
@@ -143,7 +149,10 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
     });
   };
 
-  const sendLabel = sendState === 'sent' ? 'Feedback sent · agent is revising' : sendState === 'busy' ? 'Sending…' : 'Send feedback to agent';
+  const sendLabel =
+    sendState === 'busy' ? 'Sending…' : pending.length > 0 ? `Send ${plural(pending.length, 'comment', 'comments')} to agent` : 'Send feedback to agent';
+  // Nothing pending after a send: the agent has it and is working on it.
+  const revising = sendState === 'sent' && pending.length === 0;
   const prLabel = pr?.url ? `View pull request${pr.number ? ` #${pr.number}` : ''}` : prBusy ? 'Opening…' : 'Open pull request';
 
   return (
@@ -209,9 +218,12 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
       <DeployActions agent={agent} />
       {sensitiveFiles.length > 0 && <SensitiveWarning files={sensitiveFiles} onJump={onJump} />}
       <div className="flex flex-col gap-2">
-        <Button variant="secondary" size={36} className="rounded-md" disabled={sendState === 'busy' || (sendState !== 'sent' && pending.length === 0)} onClick={() => void send()}>
+        <Button variant="secondary" size={36} className="rounded-md" disabled={sendState === 'busy' || pending.length === 0} onClick={() => void send()}>
           {sendLabel}
         </Button>
+        <span role="status" aria-live="polite" className="text-[11.5px] text-ink-3 leading-[1.45] empty:hidden">
+          {revising ? 'Feedback sent · agent is revising' : ''}
+        </span>
         {nothingToPush ? (
           <NothingToPush agent={agent} base={base} busy={archiveBusy} onArchive={() => void archive()} />
         ) : (
