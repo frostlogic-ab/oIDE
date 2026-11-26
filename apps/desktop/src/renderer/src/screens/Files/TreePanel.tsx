@@ -264,7 +264,9 @@ function ProjectTree({
         break;
       case 'Enter':
       case ' ':
-        activate(r);
+        // A folder that failed to load retries (the row's Retry button is for the mouse).
+        if (r.kind === 'dir' && r.error) void s.loadDir(root, r.path, true);
+        else activate(r);
         break;
       default:
         return;
@@ -349,7 +351,20 @@ function ProjectTree({
               <Spinner size={12} label={`Loading ${p.name}`} />
             </div>
           )}
-          {rows.length === 0 && s.errors[root]?.[''] && <div className="px-2 py-1 text-[12px] text-bad">{s.errors[root]['']}</div>}
+          {rows.length === 0 && s.errors[root]?.[''] && (
+            <div role="alert" className="flex items-center gap-2 px-2 py-1 text-[12px] text-bad">
+              <span className="flex-1 min-w-0 truncate" title={s.errors[root]['']}>
+                {s.errors[root]['']}
+              </span>
+              <button
+                type="button"
+                onClick={() => void s.loadDir(root, '', true)}
+                className="shrink-0 h-5 px-2 rounded-sm border border-line-3 bg-card text-ink-2 text-[11px] cursor-pointer hover:bg-raised hover:text-ink"
+              >
+                Retry
+              </button>
+            </div>
+          )}
           {shown.map((i) => {
             const r = rows[i]!;
             const markers = r.kind === 'file' ? info.markers.get(r.path) : undefined;
@@ -397,6 +412,22 @@ function ProjectTree({
                   <FileIcon name={r.label} />
                 )}
                 <span className={`flex-1 min-w-0 ml-1.5 truncate whitespace-pre ${r.error ? 'text-bad' : ''}`}>{r.label}</span>
+                {r.kind === 'dir' && r.error && <span className="sr-only">, failed to load. Press Enter to retry.</span>}
+                {r.kind === 'dir' && r.error && (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                    title={`Retry loading ${r.label} (Enter)`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void s.loadDir(root, r.path, true);
+                    }}
+                    className="shrink-0 ml-1 h-4 px-1.5 rounded-sm border border-line-3 bg-card text-ink-2 text-[10.5px] cursor-pointer hover:bg-raised hover:text-ink"
+                  >
+                    Retry
+                  </button>
+                )}
                 {markers?.slice(0, 3).map((m) => (
                   <span key={m.agentId} title={m.title} className="w-[7px] h-[7px] ml-1 rounded-full shrink-0" style={{ background: m.color }} role="img" aria-label={m.title} />
                 ))}

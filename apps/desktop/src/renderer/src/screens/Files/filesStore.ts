@@ -64,6 +64,11 @@ interface FilesState {
   errors: PerRoot<string>;
   tabs: FileTab[];
   active?: string;
+  /**
+   * Tab id → has unsaved edits. Lives here (not in the screen) so the dot, the Save button and the
+   * close warning survive leaving Files and coming back: the editor models outlive the screen too.
+   */
+  dirty: Record<string, boolean>;
   /** Projects whose agent-touched folders were auto-expanded once. */
   revealed: Record<string, boolean>;
   /** Recently opened files, most recent first (quick open ranks them first). */
@@ -80,6 +85,7 @@ interface FilesState {
   expandMany(root: string, dirs: string[]): void;
   openFile(projectId: string, root: string, path: string): void;
   closeTab(id: string): void;
+  setDirty(id: string, dirty: boolean): void;
   setActive(id: string): void;
   markRevealed(key: string): void;
   /** Open a file (and reveal it in the tree) from anywhere; switch to Files separately. */
@@ -115,6 +121,7 @@ export const useFiles = create<FilesState>()((set, get) => ({
   errors: {},
   tabs: [],
   active: undefined,
+  dirty: {},
   revealed: {},
   recent: loadRecent(),
   pending: undefined,
@@ -173,7 +180,13 @@ export const useFiles = create<FilesState>()((set, get) => ({
     const i = tabs.findIndex((t) => t.id === id);
     const next = tabs.filter((t) => t.id !== id);
     const active = get().active === id ? (next[Math.min(i, next.length - 1)]?.id ?? undefined) : get().active;
-    set({ tabs: next, active });
+    const { [id]: _closed, ...dirty } = get().dirty;
+    set({ tabs: next, active, dirty });
+  },
+  setDirty: (id, d) => {
+    if (Boolean(get().dirty[id]) === d) return;
+    const { [id]: _prev, ...rest } = get().dirty;
+    set({ dirty: d ? { ...rest, [id]: true } : rest });
   },
   setActive: (id) => set({ active: id }),
   markRevealed: (key) => set({ revealed: { ...get().revealed, [key]: true } }),

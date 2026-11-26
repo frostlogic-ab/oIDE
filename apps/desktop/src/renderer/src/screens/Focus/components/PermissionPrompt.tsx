@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { PermissionRequest } from '@oide/protocol';
 import { Button } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../../lib/bridge';
-import { useKeymapScope } from '../../../lib/useKeymap';
+import { useKeymapScope, useShortcutLabel } from '../../../lib/useKeymap';
 import { toast } from '../../../stores/ui';
 import { permissionCopy } from '../model/focus';
 
@@ -25,11 +25,14 @@ export interface PermissionPromptProps {
   onViewSubagent?: () => void;
 }
 
-/** Pinned above the composer: Allow once (Y), Always in <project>, Deny (D). */
+/** Pinned above the composer: Allow once, Always in <project>, Deny (hints show the current bindings). */
 export function PermissionPrompt({ agentId, request, projectName, subagentName, onViewSubagent }: PermissionPromptProps) {
   const [busy, setBusy] = useState(false);
   const answered = useRef<string | null>(null);
   const { verb, detail } = permissionCopy(request);
+  // Show the real binding (rebindable in Settings > Keys); no hint when the action is unbound.
+  const allowKey = useShortcutLabel('permission.allow');
+  const denyKey = useShortcutLabel('permission.deny');
 
   useEffect(() => {
     answered.current = null;
@@ -78,7 +81,7 @@ export function PermissionPrompt({ agentId, request, projectName, subagentName, 
         <span className="font-mono text-[12.5px] text-ink break-all">{detail}</span>
       </div>
       <div className="flex items-center gap-3 @max-[700px]:gap-2 shrink-0">
-      <Button variant="warn" size={32} kbd="Y" disabled={busy} onClick={() => answer('allow')}>
+      <Button variant="warn" size={32} kbd={allowKey || undefined} disabled={busy} onClick={() => answer('allow')}>
         Allow once
       </Button>
       <Button
@@ -94,7 +97,7 @@ export function PermissionPrompt({ agentId, request, projectName, subagentName, 
       >
         Always in {projectName}
       </Button>
-      <Button variant="warn-outline" size={32} kbd="D" disabled={busy} onClick={() => answer('deny')}>
+      <Button variant="warn-outline" size={32} kbd={denyKey || undefined} disabled={busy} onClick={() => answer('deny')}>
         Deny
       </Button>
       </div>

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Project, Technique } from '@oide/protocol';
-import { Icon, Toggle, cn } from '@oide/ui';
+import { Button, Dialog, Icon, Toggle, cn } from '@oide/ui';
 import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
 import { H1, Rd, Row, inp, inpSm } from './ui';
@@ -19,6 +19,7 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
   const [list, setList] = useState<Technique[] | null>(null);
   const [fromExtensions, setFromExtensions] = useState<Technique[]>([]);
   const [open, setOpen] = useState<string>('');
+  const [confirmDelete, setConfirmDelete] = useState<Technique | null>(null);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const pending = useRef(new Map<string, Technique>());
 
@@ -103,6 +104,7 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
   };
 
   const remove = async (t: Technique) => {
+    setConfirmDelete(null);
     try {
       await oide.invoke('settings.deleteTechnique', { id: t.id, projectId });
       setList((l) => l?.filter((x) => x.id !== t.id) ?? l);
@@ -237,7 +239,7 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
                       </button>
                     )}
                     {!t.builtIn && (
-                      <button type="button" onClick={() => void remove(t)} className="h-[30px] px-3 rounded-[7px] border border-[#5A2E33] bg-transparent text-bad text-[12.5px] hover:bg-bad-bg">
+                      <button type="button" onClick={() => setConfirmDelete(t)} className="h-[30px] px-3 rounded-[7px] border border-[#5A2E33] bg-transparent text-bad text-[12.5px] hover:bg-bad-bg">
                         Delete technique
                       </button>
                     )}
@@ -273,6 +275,27 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
         )}
       </div>
       <Rd className="mt-2.5">The agent's transcript shows which techniques were added, so nothing is hidden from you after spawning.</Rd>
+
+      <Dialog
+        open={Boolean(confirmDelete)}
+        onClose={() => setConfirmDelete(null)}
+        title={`Delete ${confirmDelete?.name ?? ''}?`}
+        description={
+          projectId
+            ? "Its text is removed from this project's .oide/techniques.json (git history keeps any committed copy)."
+            : "Its text is removed from your global techniques and can't be recovered."
+        }
+        footer={
+          <>
+            <Button size={32} onClick={() => setConfirmDelete(null)}>
+              Cancel
+            </Button>
+            <Button size={32} variant="danger" onClick={() => confirmDelete && void remove(confirmDelete)}>
+              Delete
+            </Button>
+          </>
+        }
+      />
     </>
   );
 }

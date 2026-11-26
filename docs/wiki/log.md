@@ -970,6 +970,19 @@ macOS terminate the process directly. The test now kills the renderer with SIGKI
 `getOSProcessId()`, which dumps nothing and behaves the same on every OS
 ([reliability](pages/reliability.md#tests)).
 
+## [2026-11-26] review | Ten usability fixes across the renderer
+A usability pass over Wall, Focus, Spawn, the command bar, Files, Review, Source control, Settings,
+Artifacts and Marketplace found 19 verified issues. Ten were fixed, each in its own files:
+Focus artifact popover focus and Esc, Spawn keeping the typed goal and waiting for attachments, real
+shortcut hints on the Focus permission prompt, the command bar selection while file results load, the
+Focus header Pause/Resume, a retryable Review diff error, the Review send-feedback button, Retry in the
+Files tree, unsaved Files edits surviving a screen switch, and confirmations for destructive Settings
+actions. Pages: [screen-focus](pages/screen-focus.md), [screen-spawn](pages/screen-spawn.md),
+[desktop-shell](pages/desktop-shell.md#command-bar), [screen-review](pages/screen-review.md),
+[screen-files](pages/screen-files.md), [screen-settings](pages/screen-settings.md). Still open from the
+same pass: scrim clicks discard the New artifact and Add custom extension dialogs, CommitDialog can be
+closed mid-commit, Marketplace search is scoped to one category, its drop zone opens a picker, env rows
+can't be removed, and Review comment drafts are lost on a stray click.
 ## [2026-11-26] build | Licence notices identical on every OS
 The release run's macOS build failed `pnpm licenses:check` ("THIRD_PARTY_NOTICES.md is stale"): chokidar's
 optional `fsevents` dependency is only installed on macOS, so the generator listed one extra package there.

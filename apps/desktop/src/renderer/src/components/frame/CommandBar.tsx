@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
 import { Icon, Kbd, StatusDot, agentStatusMeta, cn } from '@oide/ui';
-import type { AgentSummary } from '@oide/protocol';
+import { parseQuickOpenQuery, type AgentSummary } from '@oide/protocol';
 import { commands, fuzzyFilter } from '../../lib/commands';
 import { buildCommandBarRows, openQuickOpenResult, recentRows, useQuickOpenFiles, useQuickOpenRoots, type CommandBarRow } from '../../lib/quickOpen';
 import { trackCommand } from '../../lib/telemetry';
@@ -66,6 +66,10 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
   }, [version, byId, order, projects, mode, query, found, recent, roots]);
 
   useEffect(() => setActive(0), [query, mode]);
+  // Rows change as file results arrive: keep the highlight on a real row (never -1 or past the end).
+  const current = Math.max(0, Math.min(active, rows.length - 1));
+  // A file search applies to this query but its (debounced) answer has not arrived yet.
+  const searching = mode === 'commands' && !commandOnly && roots.length > 0 && parseQuickOpenQuery(query).query !== '' && found.query !== query;
 
   const runRow = async (row: Row | undefined) => {
     if (!row) return;
@@ -85,9 +89,9 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowDown') setActive((i) => Math.min(rows.length - 1, i + 1));
-    else if (e.key === 'ArrowUp') setActive((i) => Math.max(0, i - 1));
-    else if (e.key === 'Enter') void runRow(rows[active]);
+    if (e.key === 'ArrowDown') setActive(Math.max(0, Math.min(rows.length - 1, current + 1)));
+    else if (e.key === 'ArrowUp') setActive(Math.max(0, current - 1));
+    else if (e.key === 'Enter') void runRow(rows[current]);
     else if (e.key === 'Escape') close();
     else if (e.key === 'Backspace' && !query && mode === 'sessions') openBar('commands');
     else return;
@@ -96,8 +100,8 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
   };
 
   useEffect(() => {
-    document.getElementById(`${listId}-${active}`)?.scrollIntoView({ block: 'nearest' });
-  }, [active, listId]);
+    document.getElementById(`${listId}-${current}`)?.scrollIntoView({ block: 'nearest' });
+  }, [current, listId]);
 
   let lastGroup = '';
   return (
@@ -121,7 +125,7 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
             role="combobox"
             aria-expanded="true"
             aria-controls={listId}
-            aria-activedescendant={rows[active] ? `${listId}-${active}` : undefined}
+            aria-activedescendant={rows[current] ? `${listId}-${current}` : undefined}
             aria-autocomplete="list"
             aria-label={mode === 'sessions' ? 'Find a session' : 'Search files and commands'}
             value={query}
@@ -133,7 +137,7 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
           <Kbd>Esc</Kbd>
         </div>
         <div id={listId} role="listbox" aria-label="Results" className="max-h-[360px] overflow-y-auto py-1.5">
-          {rows.length === 0 && <div className="px-4 py-6 text-center text-ink-3 text-[12.5px]">No matches</div>}
+          {rows.length === 0 && <div className="px-4 py-6 text-center text-ink-3 text-[12.5px]">{searching ? 'Searching files…' : 'No matches'}</div>}
           {rows.map((row, i) => {
             const header = row.group !== lastGroup ? row.group : null;
             lastGroup = row.group;
@@ -143,10 +147,10 @@ function CommandBarPanel({ mode, query }: { mode: 'commands' | 'sessions'; query
                 <div
                   id={`${listId}-${i}`}
                   role="option"
-                  aria-selected={i === active}
+                  aria-selected={i === current}
                   onMouseMove={() => setActive(i)}
                   onClick={() => void runRow(row)}
-                  className={cn('mx-1.5 flex items-center gap-2.5 h-9 px-2.5 rounded-sm cursor-pointer text-[13px]', i === active ? 'bg-selected text-ink' : 'text-ink-2')}
+                  className={cn('mx-1.5 flex items-center gap-2.5 h-9 px-2.5 rounded-sm cursor-pointer text-[13px]', i === current ? 'bg-selected text-ink' : 'text-ink-2')}
                 >
                   {row.kind === 'command' ? (
                     <>

@@ -10,7 +10,7 @@ import {
   type ModelStrategy,
   type Settings,
 } from '@oide/protocol';
-import { SegmentedControl, Tabs, cn } from '@oide/ui';
+import { Button, Dialog, SegmentedControl, Tabs, cn } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
 import { CustomModelForm, PROVIDER_LABEL } from './CustomModelForm';
@@ -52,6 +52,17 @@ function slotsOf(s: ModelStrategy): Array<{ key: SlotKey; label: string; slot: M
     { key: 'standard', label: 'Standard subagent tasks', slot: s.standard },
     { key: 'complex', label: 'Complex subagent tasks', slot: s.complex },
   ];
+}
+
+/** What removing a custom model loses: its keychain key, and every preset slot that points at it. */
+function removeWarning(m: CustomModel, presets: FocusPreset[]): string {
+  const ref = `${CUSTOM_PREFIX}${m.id}`;
+  const using = presets.filter((p) => slotsOf(p.strategy).some(({ slot }) => slot.model === ref)).map((p) => p.name);
+  const parts: string[] = [];
+  if (m.hasKey) parts.push('Its API key is deleted from your keychain and cannot be recovered.');
+  if (using.length) parts.push(`${using.join(', ')} ${using.length === 1 ? 'uses' : 'use'} it and cannot spawn agents until you pick another model.`);
+  parts.push('Sessions started with it can no longer be resumed.');
+  return parts.join(' ');
 }
 
 /** Switch strategy kind, keeping the models already chosen where they map. */
@@ -245,7 +256,7 @@ export function ModelsSection({ settings, builtIns }: { settings: Settings; buil
         );
       })}
 
-      <YourModels customs={customs} />
+      <YourModels customs={customs} presets={presets} />
     </>
   );
 }
@@ -274,9 +285,10 @@ function envLines(m: CustomModel): Array<[string, string]> {
 
 type TestState = { state: 'testing' } | { state: 'done'; ok: boolean; detail: string };
 
-function YourModels({ customs }: { customs: CustomModel[] }) {
+function YourModels({ customs, presets }: { customs: CustomModel[]; presets: FocusPreset[] }) {
   const [form, setForm] = useState<{ open: false } | { open: true; editing?: CustomModel }>({ open: false });
   const [tests, setTests] = useState<Record<string, TestState>>({});
+  const [confirmRemove, setConfirmRemove] = useState<CustomModel | null>(null);
 
   const test = async (id: string) => {
     setTests((t) => ({ ...t, [id]: { state: 'testing' } }));
@@ -288,6 +300,7 @@ function YourModels({ customs }: { customs: CustomModel[] }) {
     }
   };
   const remove = async (m: CustomModel) => {
+    setConfirmRemove(null);
     try {
       await oide.invoke('settings.deleteCustomModel', { id: m.id });
       toast(`Removed ${m.name}. Its key was deleted from your keychain.`, 'info');
@@ -328,7 +341,7 @@ function YourModels({ customs }: { customs: CustomModel[] }) {
                 <button type="button" className="h-7 px-2.5 rounded-sm border-0 bg-transparent text-ink-3 text-[12px] hover:text-ink" onClick={() => setForm({ open: true, editing: m })} aria-label={`Edit ${m.name}`}>
                   Edit
                 </button>
-                <button type="button" className="h-7 px-2.5 rounded-sm border-0 bg-transparent text-ink-3 text-[12px] hover:text-ink" onClick={() => void remove(m)} aria-label={`Remove ${m.name}`}>
+                <button type="button" className="h-7 px-2.5 rounded-sm border-0 bg-transparent text-ink-3 text-[12px] hover:text-ink" onClick={() => setConfirmRemove(m)} aria-label={`Remove ${m.name}`}>
                   Remove
                 </button>
               </div>
@@ -346,6 +359,23 @@ function YourModels({ customs }: { customs: CustomModel[] }) {
 
       {form.open && <CustomModelForm key={form.editing?.id ?? 'new'} editing={form.editing} onClose={() => setForm({ open: false })} />}
       <Rd className="mt-2.5">Your models show up next to Haiku, Sonnet, Opus and Fable in presets and in Spawn agent.</Rd>
+
+      <Dialog
+        open={Boolean(confirmRemove)}
+        onClose={() => setConfirmRemove(null)}
+        title={`Remove ${confirmRemove?.name ?? ''}?`}
+        description={confirmRemove ? removeWarning(confirmRemove, presets) : undefined}
+        footer={
+          <>
+            <Button size={32} onClick={() => setConfirmRemove(null)}>
+              Cancel
+            </Button>
+            <Button size={32} variant="danger" onClick={() => confirmRemove && void remove(confirmRemove)}>
+              Remove
+            </Button>
+          </>
+        }
+      />
     </>
   );
 }

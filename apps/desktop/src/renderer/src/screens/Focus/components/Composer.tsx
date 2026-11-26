@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import type { ArtifactMeta } from '@oide/protocol';
 import { Chip, Icon } from '@oide/ui';
 import { AttachFileButton, AttachmentTray, useAttachments } from '../../../components/Attachments';
@@ -36,6 +36,7 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
   const [sending, setSending] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const inputId = useId();
   const pickerId = useId();
   const disabled = !!disabledReason;
@@ -68,6 +69,12 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
     el.style.height = 'auto';
     el.style.height = `${Math.min(160, el.scrollHeight)}px`;
   }, [text]);
+
+  /** Esc or a pick hands focus back to the trigger; an outside click leaves it where the user clicked. */
+  const closePicker = useCallback((restoreFocus: boolean) => {
+    setPickerOpen(false);
+    if (restoreFocus) triggerRef.current?.focus();
+  }, []);
 
   const send = async () => {
     if (sending || disabled || atts.busy) return;
@@ -113,12 +120,13 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
         <ArtifactPicker
           id={pickerId}
           projectId={projectId}
+          triggerRef={triggerRef}
           onPick={(a) => {
             setArtifact(a);
             setPickerOpen(false);
             ref.current?.focus();
           }}
-          onClose={() => setPickerOpen(false)}
+          onClose={closePicker}
         />
       )}
       <div
@@ -149,6 +157,7 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
           />
           <AttachFileButton state={atts} disabled={disabled} />
           <button
+            ref={triggerRef}
             type="button"
             aria-haspopup="dialog"
             aria-expanded={pickerOpen}
@@ -176,7 +185,20 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
   );
 }
 
-function ArtifactPicker({ id, projectId, onPick, onClose }: { id: string; projectId: string; onPick(a: ArtifactMeta): void; onClose(): void }) {
+function ArtifactPicker({
+  id,
+  projectId,
+  triggerRef,
+  onPick,
+  onClose,
+}: {
+  id: string;
+  projectId: string;
+  /** The button that opens the picker: clicking it is the trigger's own toggle, not an outside click. */
+  triggerRef: RefObject<HTMLElement | null>;
+  onPick(a: ArtifactMeta): void;
+  onClose(restoreFocus: boolean): void;
+}) {
   const [list, setList] = useState<ArtifactMeta[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const first = useRef<HTMLButtonElement>(null);
@@ -193,17 +215,22 @@ function ArtifactPicker({ id, projectId, onPick, onClose }: { id: string; projec
     };
   }, [projectId]);
 
+  // Focus always moves into the picker (first item when there is one, else the dialog itself) so Esc
+  // is handled here and does not fall through to the global view.back.
   useEffect(() => {
     if (list?.length) first.current?.focus();
-  }, [list]);
+    else wrap.current?.focus();
+  }, [list, error]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) onClose();
+      const t = e.target as Node;
+      if (wrap.current?.contains(t) || triggerRef.current?.contains(t)) return;
+      onClose(false);
     };
     document.addEventListener('mousedown', onDown);
     return () => document.removeEventListener('mousedown', onDown);
-  }, [onClose]);
+  }, [onClose, triggerRef]);
 
   return (
     <div
@@ -211,14 +238,15 @@ function ArtifactPicker({ id, projectId, onPick, onClose }: { id: string; projec
       id={id}
       role="dialog"
       aria-label="Attach an artifact"
+      tabIndex={-1}
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
           e.preventDefault();
           e.stopPropagation();
-          onClose();
+          onClose(true);
         }
       }}
-      className="absolute bottom-[calc(100%+6px)] right-10 z-30 w-[300px] max-h-[280px] overflow-auto py-1 rounded-[10px] border border-line-3 bg-card shadow-dialog"
+      className="absolute bottom-[calc(100%+6px)] right-10 z-30 w-[300px] max-h-[280px] overflow-auto py-1 rounded-[10px] border border-line-3 bg-card shadow-dialog focus:outline-none"
     >
       <div className="px-3 pt-1.5 pb-1 text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3">Artifacts</div>
       {error && <div className="px-3 py-2 text-[12px] text-bad">{error}</div>}

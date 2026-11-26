@@ -130,6 +130,15 @@ so it never holds the index lock an agent's git needs.
   "<trailer> agent"; the oldest reads "created").
 - Mentioned in: `files.mentionedIn { root, path }` (protocol addition) → artifact links.
 
+## Unsaved edits and load errors
+- Each tab's unsaved state lives in the `useFiles` store (`dirty`, `setDirty`), and `EditorPane` reports
+  it again from its models when it mounts and when it shows a tab. The tab dot, the Save button and the
+  close warning survive leaving Files and coming back. Closing a tab, including the last one, disposes
+  its model, so reopening the file reads it fresh from disk.
+- A folder that fails to load shows its error with a Retry button, on the root row and on each failing
+  sub-folder row (Enter on a failed folder row retries too). Retry forces `loadDir(root, dir, true)`
+  instead of leaving the tree broken until restart.
+
 ## Tests
 
 `Files.test.tsx`: trees per project, revealed compacted folders, markers, lazy expansion via

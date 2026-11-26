@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useState, type KeyboardEvent } from 'react';
-import { Kbd } from '@oide/ui';
+import { Button, Dialog, Kbd } from '@oide/ui';
 import { ACTION_LABELS, DEFAULT_BINDINGS, comboFromEvent, comboLabel, keymap, portableCombo, type Keymap } from '../../lib/keymap';
 import { H1, Rd, Row, Sec, describedBy, outlineBtn } from './ui';
 
@@ -24,7 +24,9 @@ export function KeysSection({ km = keymap }: { km?: Keymap }) {
   const bindings = km.getBindings();
   const actions = Object.keys({ ...DEFAULT_BINDINGS, ...bindings });
   const [recording, setRecording] = useState<{ action: string; combo?: string } | null>(null);
-  const anyCustom = actions.some((a) => km.isCustom(a));
+  const customCount = actions.filter((a) => km.isCustom(a)).length;
+  const anyCustom = customCount > 0;
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const onRecordKey = (e: KeyboardEvent<HTMLElement>) => {
     if (!recording) return;
@@ -122,11 +124,35 @@ export function KeysSection({ km = keymap }: { km?: Keymap }) {
       })}
       {anyCustom && (
         <div className="mt-4">
-          <button type="button" className={outlineBtn} onClick={() => km.resetBinding()}>
+          <button type="button" className={outlineBtn} onClick={() => setConfirmReset(true)}>
             Reset all shortcuts
           </button>
         </div>
       )}
+      <Dialog
+        open={confirmReset}
+        onClose={() => setConfirmReset(false)}
+        title="Reset all shortcuts?"
+        description={`${customCount} ${customCount === 1 ? 'shortcut goes' : 'shortcuts go'} back to oIDE's defaults.`}
+        footer={
+          <>
+            <Button size={32} onClick={() => setConfirmReset(false)}>
+              Cancel
+            </Button>
+            <Button
+              size={32}
+              variant="danger"
+              onClick={() => {
+                km.resetBinding();
+                setConfirmReset(false);
+              }}
+            >
+              Reset all
+            </Button>
+          </>
+        }
+      />
+
     </>
   );
 }

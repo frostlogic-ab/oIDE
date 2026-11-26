@@ -24,9 +24,15 @@ function chipKey(c: ContextChip): string {
  */
 export function ContextChips({ value, onChange, projectId, attachments }: { value: ContextChip[]; onChange: (next: ContextChip[]) => void; projectId: string; attachments?: AttachmentsState }) {
   const [adding, setAdding] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const add = (c: ContextChip) => {
     if (!value.some((v) => chipKey(v) === chipKey(c))) onChange([...value, c]);
     setAdding(false);
+  };
+  // Closing the panel from inside it would drop focus to <body>; send it back to the trigger.
+  const cancelAdding = () => {
+    setAdding(false);
+    triggerRef.current?.focus();
   };
   return (
     <div className="flex flex-col gap-2">
@@ -55,6 +61,7 @@ export function ContextChips({ value, onChange, projectId, attachments }: { valu
           );
         })}
         <button
+          ref={triggerRef}
           type="button"
           aria-expanded={adding}
           onClick={() => setAdding((a) => !a)}
@@ -69,7 +76,7 @@ export function ContextChips({ value, onChange, projectId, attachments }: { valu
           {attachments.error}
         </span>
       )}
-      {adding && <AddContext projectId={projectId} onAdd={add} onCancel={() => setAdding(false)} />}
+      {adding && <AddContext projectId={projectId} onAdd={add} onCancel={cancelAdding} />}
     </div>
   );
 }
@@ -130,6 +137,13 @@ function AddContext({ projectId, onAdd, onCancel }: { projectId: string; onAdd: 
       role="group"
       aria-label="Add context"
       onKeyDown={(e) => {
+        // The Dialog closes on Esc from its own React onKeyDown; stopping propagation here keeps it open.
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          onCancel();
+          return;
+        }
         if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && (e.target as HTMLElement).tagName !== 'BUTTON') {
           e.preventDefault();
           submit();

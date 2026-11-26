@@ -68,6 +68,14 @@ shows as an amber banner at the top of every section, and per project under Proj
 - Techniques open with the first technique expanded, as drawn.
 - Models: the slot rows share a grid so the effort selects (32px / 12px) line up, as in Spawn.
 
+## Confirmations
+Removing a custom model, deleting a technique and resetting all shortcuts each open a danger `Dialog`
+first, saying what is lost: the model's keychain key, the presets that point at it, and resuming the
+sessions that used it. The supervisor refuses to launch or resume an agent whose `customModel` no
+longer exists (it never falls back to the Claude plan with the custom model's name), so those presets
+fail with a clear error until another model is picked. For a technique it names where the text lives
+(global, or the project's `.oide/techniques.json`); for shortcuts, how many custom bindings go back.
+
 ## Gaps
 
 - Custom models are offered only in the lead slot (stored as `custom:<id>`; `agents.spawn` maps it to

@@ -117,7 +117,8 @@ export default function FilesScreen() {
   const active = files.tabs.find((t) => t.id === files.active);
   const activeProject = allProjects.find((p) => p.id === active?.projectId);
   const [status, setStatus] = useState<EditorStatus>();
-  const [dirty, setDirty] = useState<Record<string, boolean>>({});
+  // In the store, not local state: the screen unmounts when you leave Files, the editor models don't.
+  const dirty = files.dirty;
   const saveRef = useRef<(() => Promise<void>) | null>(null);
   const info = useFileInfo(active);
 
@@ -167,7 +168,6 @@ export default function FilesScreen() {
   const closeTab = (t: FileTab) => {
     if (dirty[t.id] && !window.confirm(`${t.path} has unsaved changes. Close it anyway?`)) return;
     files.closeTab(t.id);
-    setDirty((d) => ({ ...d, [t.id]: false }));
   };
 
   return (
@@ -273,7 +273,7 @@ export default function FilesScreen() {
                 active={active}
                 reveal={reveal}
                 onStatus={setStatus}
-                onDirty={(id, d) => setDirty((prev) => (prev[id] === d ? prev : { ...prev, [id]: d }))}
+                onDirty={files.setDirty}
                 onAsk={ask}
                 sendTo={sendTo}
                 saveRef={saveRef}
