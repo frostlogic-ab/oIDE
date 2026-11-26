@@ -423,6 +423,12 @@ export const TELEMETRY_EVENTS = {
       'How often does agent work leave as a pull request instead of a local merge, and how often did one already exist? Do new PRs follow the project conventions (agent draft or project template) or go up as the plain summary?',
     props: z.object({ existing: z.boolean(), draft: z.enum(['agent', 'template', 'plain', 'given']).optional() }),
   }),
+  pr_pushed: def({
+    from: 'main',
+    question:
+      'Do people send follow-up work to a pull request that is already open (Push to PR), how many commits at a time, and how often were there uncommitted files that oIDE committed first?',
+    props: z.object({ commits: CountBucket, committed: z.boolean() }),
+  }),
   pr_view_opened: def({
     from: 'main',
     question: 'Do people follow the pull request of an agent from oIDE (View PR)?',

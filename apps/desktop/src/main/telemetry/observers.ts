@@ -221,6 +221,11 @@ export class TelemetryObservers {
         this.sink.track('pr_opened', { existing: !!o.existing, ...(o.draft ? { draft: o.draft } : {}) });
         return;
       }
+      case 'git.pushToPr': {
+        const o = output as { pushed: number; committed: boolean };
+        this.sink.track('pr_pushed', { commits: countBucket(o.pushed), committed: !!o.committed });
+        return;
+      }
       case 'agents.archive':
         // Reported from the `agents.archived` event (covers automatic archiving too).
         return;

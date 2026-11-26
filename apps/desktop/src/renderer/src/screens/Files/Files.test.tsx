@@ -171,6 +171,25 @@ describe('Files search and replace', () => {
     await waitFor(() => expect(screen.getByRole('tab', { name: /Layout\.tsx/ }).getAttribute('aria-selected')).toBe('true'));
   });
 
+  it('Enter searches once: the debounce from the last edit does not run the same search again', async () => {
+    const { invoke } = await setupMockApp({ screen: 'files', params: {} });
+    useScope.setState({ scope: 'oide' });
+    render(<FilesScreen />);
+    await screen.findByRole('tree', { name: 'oide (main)' });
+    fireEvent.click(screen.getByRole('button', { name: 'Search in files' }));
+    const panel = screen.getByRole('complementary', { name: 'Search' });
+    const field = within(panel).getByRole('textbox', { name: 'Search text' });
+    const searches = () => invoke.mock.calls.filter(([channel]) => channel === 'files.searchContent').length;
+    fireEvent.change(field, { target: { value: 'Meter' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    expect(await within(panel).findByText('4 results in 1 file')).toBeTruthy();
+    expect(searches()).toBe(1);
+    // Well past the 250ms debounce: nothing else started.
+    await new Promise((r) => setTimeout(r, 400));
+    expect(searches()).toBe(1);
+    expect(useSearch.getState().files).toHaveLength(1);
+  });
+
   it('replaces one match after a preview and refuses a file that changed since the search', async () => {
     const { invoke } = await setupMockApp({ screen: 'files', params: {} });
     useScope.setState({ scope: 'oide' });

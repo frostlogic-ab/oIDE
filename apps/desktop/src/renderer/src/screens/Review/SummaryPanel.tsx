@@ -14,6 +14,7 @@ import { PANELS } from '../../lib/panels';
 import { MergeDialog, MergeStatus, SensitiveWarning } from './MergeDialog';
 import { archiveAgent } from '../../stores/archive';
 import { canArchive } from '../Wall/logic';
+import { pushToPullRequest } from '../Wall/actions';
 
 const SECTION_LABEL = 'text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3';
 
@@ -46,6 +47,8 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
   const [merge, setMerge] = useState<{ step: 'confirm' | 'busy' | 'conflicts' | 'asking'; conflicts: string[]; from?: 'prediction' | 'merge' } | null>(null);
   // The agent's own PR info (kept fresh by main's PR watcher) wins over Source control's cached lookup.
   const pr = agent.pr ?? worktree?.pr;
+  // An open (or draft) PR with a number: follow-up work can be pushed to it.
+  const openPrInfo = pr?.url && pr.number && (pr.state === 'open' || pr.state === 'draft') ? { url: pr.url, number: pr.number } : undefined;
   // Would Merge conflict? Predicted with git merge-tree (main caches it per pair of commits).
   const forecast = useMergePrediction(agent.id, agent.projectId, Boolean(branch));
   const prediction = forecast.prediction;
@@ -222,6 +225,8 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
                   {prReason ?? 'Pull requests need the GitHub CLI: install gh and run gh auth login, then come back.'}
                 </span>
               </>
+            ) : openPrInfo ? (
+              <PushToPr agent={agent} pr={openPrInfo} worktree={worktree} onView={() => void openPr()} />
             ) : (
               <Button variant="primary" size={36} className="rounded-md" disabled={prBusy} onClick={() => void openPr()}>
                 {prLabel}
@@ -250,6 +255,63 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
         onHandOff={(files) => handConflicts(files)}
       />
     </ResizableAside>
+  );
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+/** What the worktree has that the PR does not: "2 new commits and 1 uncommitted file". Empty when up to date (or unknown). */
+export function pendingForPr(worktree: Pick<WorktreeInfo, 'unpushed' | 'uncommitted'> | undefined): string {
+  if (!worktree) return '';
+  const parts: string[] = [];
+  if (worktree.unpushed) parts.push(plural(worktree.unpushed, 'new commit', 'new commits'));
+  if (worktree.uncommitted) parts.push(plural(worktree.uncommitted, 'uncommitted file', 'uncommitted files'));
+  return parts.join(' and ');
+}
+
+/**
+ * The branch has an open PR: follow-up work (new commits, files the agent left uncommitted) goes up
+ * to it with Push to PR; View pull request stays next to it.
+ */
+function PushToPr({ agent, pr, worktree, onView }: { agent: AgentSummary; pr: { url: string; number: number }; worktree?: WorktreeInfo; onView(): void }) {
+  const [busy, setBusy] = useState(false);
+  const pending = pendingForPr(worktree);
+  // Unknown (Source control not loaded yet, or the branch was pushed from elsewhere): offer the push anyway.
+  const upToDate = worktree !== undefined && worktree.unpushed !== undefined && !pending;
+  const working = agent.status === 'running' || agent.status === 'starting' || agent.status === 'needs-permission';
+  const blocked = working && (worktree?.uncommitted ?? 0) > 0;
+  const push = async () => {
+    setBusy(true);
+    await pushToPullRequest(agent.id);
+    setBusy(false);
+    void useGit.getState().load(agent.projectId);
+  };
+  const view = (
+    <Button variant={upToDate ? 'primary' : 'secondary'} size={upToDate ? 36 : 32} className="rounded-md" icon="external-link" onClick={onView}>
+      View pull request #{pr.number}
+    </Button>
+  );
+  if (upToDate)
+    return (
+      <>
+        {view}
+        <span className="text-[11.5px] text-ink-3 leading-[1.45]">Pull request #{pr.number} has everything in this worktree.</span>
+      </>
+    );
+  return (
+    <>
+      <Button variant="primary" size={36} className="rounded-md" icon="arrow-up" disabled={busy || blocked} aria-describedby="push-to-pr" onClick={() => void push()}>
+        {busy ? 'Pushing…' : `Push to pull request #${pr.number}`}
+      </Button>
+      <span id="push-to-pr" className="text-[11.5px] text-ink-3 leading-[1.45]">
+        {blocked
+          ? `${agent.title} is still working. Push once it stops or submits for review.`
+          : pending
+            ? `Not on pull request #${pr.number} yet: ${pending}.${worktree?.uncommitted ? ' oIDE commits the files for the agent first.' : ''}`
+            : `Sends this worktree's new commits to pull request #${pr.number}.`}
+      </span>
+      {view}
+    </>
   );
 }
 

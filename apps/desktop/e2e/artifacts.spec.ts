@@ -1,6 +1,6 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { launchApp, type LaunchedApp } from './app';
 
 /**
@@ -23,14 +23,27 @@ test.afterAll(async () => {
 
 const shots = join(import.meta.dirname, '../test-results');
 
-test('edit a doc artifact in Monaco and save it as version 2', async () => {
-  const { page } = ctx;
+/**
+ * Monaco's own keys: "end of document" is Cmd+Down on macOS (Ctrl+End elsewhere), and the save
+ * command is bound to CtrlCmd+S (Cmd+S on macOS). Ctrl+End / Ctrl+S do nothing in Monaco on a Mac.
+ */
+const MAC = process.platform === 'darwin';
+const DOC_END = MAC ? 'Meta+ArrowDown' : 'Control+End';
+const SAVE = 'ControlOrMeta+s';
+
+/** The Artifacts library, from the left rail (each test gets there itself, so a retry can run alone). */
+async function openArtifacts(page: Page): Promise<void> {
   await page
     .getByRole('navigation', { name: 'Primary' })
     .getByRole('link', { name: 'Artifacts' })
     .or(page.getByRole('navigation', { name: 'Primary' }).getByRole('button', { name: 'Artifacts' }))
     .first()
     .click();
+}
+
+test('edit a doc artifact in Monaco and save it as version 2', async () => {
+  const { page } = ctx;
+  await openArtifacts(page);
   await page.getByRole('button', { name: '+ New artifact' }).click();
   const dialog = page.getByRole('dialog', { name: 'New artifact' });
   // One creation flow: start from a link (the default), files, or blank.
@@ -49,7 +62,7 @@ test('edit a doc artifact in Monaco and save it as version 2', async () => {
   const editor = viewer.locator('.monaco-editor .view-lines');
   await expect(editor).toBeVisible();
   await editor.click();
-  await page.keyboard.press('Control+End');
+  await page.keyboard.press(DOC_END);
   await page.keyboard.type('# Retry policy\n\nBack off with **jitter**.\n');
   await expect(viewer.getByText('Unsaved changes')).toBeVisible();
   // Live preview beside the editor.
@@ -57,7 +70,7 @@ test('edit a doc artifact in Monaco and save it as version 2', async () => {
     viewer.getByRole('region', { name: 'Preview of E2E retry notes' }).locator('strong'),
   ).toHaveText('jitter');
 
-  await page.keyboard.press('Control+s');
+  await page.keyboard.press(SAVE);
   await expect(viewer.getByText('Doc · Personal · v2')).toBeVisible();
   await expect(viewer.getByText('Unsaved changes')).toHaveCount(0);
   mkdirSync(shots, { recursive: true });
@@ -95,9 +108,10 @@ test('a whiteboard opens in Excalidraw with bundled fonts and no CSP violations'
   const failed: string[] = [];
   page.on('requestfailed', (r) => failed.push(`${r.url()} ${r.failure()?.errorText ?? ''}`));
 
+  await openArtifacts(page);
   await page.getByRole('button', { name: '+ New artifact' }).click();
   const dialog = page.getByRole('dialog', { name: 'New artifact' });
-  // The dialog keeps the last "Start from" choice (Blank, from the test above); pick it anyway.
+  // The dialog may keep the last "Start from" choice (Blank, from the test above); pick it anyway.
   await dialog.getByRole('radio', { name: 'Blank' }).click();
   await dialog.getByLabel('Title', { exact: true }).fill('E2E board');
   await dialog

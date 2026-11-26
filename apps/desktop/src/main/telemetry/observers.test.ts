@@ -362,6 +362,17 @@ describe('archived agents and the PR lifecycle', () => {
     expect(events).toEqual([{ name: 'pr_opened', props: { existing: false, draft: 'template' } }]);
   });
 
+  it('pr_pushed buckets the commits sent to an open PR and says whether oIDE committed files first, never the URL', () => {
+    const { o, events } = make();
+    o.command('git.pushToPr', { agentId: 'a1' }, { url: 'https://github.com/acme/private/pull/13', number: 13, state: 'open', committed: true, pushed: 3 });
+    o.command('git.pushToPr', { agentId: 'a1' }, { url: 'https://github.com/acme/private/pull/13', number: 13, state: 'open', committed: false, pushed: 0 });
+    expect(events).toEqual([
+      { name: 'pr_pushed', props: { commits: '2-5', committed: true } },
+      { name: 'pr_pushed', props: { commits: '0', committed: false } },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/acme|github/);
+  });
+
   it('artifact_imported says how it came in, the kind and the format, never the link, title or content', () => {
     const { o, events } = make();
     const url = 'https://claude.ai/artifact/SecretId';
