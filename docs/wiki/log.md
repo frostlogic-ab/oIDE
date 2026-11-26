@@ -876,3 +876,9 @@ gives the title a Conventional Commits type when the project uses them. Telemetr
 `draft` (agent / template / plain / given). Pages: [screen-review.md](pages/screen-review.md),
 [mcp-server.md](pages/mcp-server.md), [agent-supervisor.md](pages/agent-supervisor.md),
 [telemetry.md](pages/telemetry.md).
+## [2026-11-26] decision | Docs site served from getoide.com
+The repository is now public at github.com/frostlogic-ab/oIDE and GitHub Pages (source: GitHub Actions)
+uses the custom domain `getoide.com`. The VitePress base moved from `/oIDE/` to `/`, the favicon and
+`og:image` URLs follow, a sitemap is generated for `https://getoide.com`, and `docs/site/public/CNAME`
+pins the domain in the deployed artifact. `docs.yml` deploys on every push to `main` that touches
+`docs/site/**` ([docs-site](pages/docs-site.md), [release-pipeline](pages/release-pipeline.md)).

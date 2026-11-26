@@ -1,6 +1,6 @@
 # Docs site and home page
 
-The public site at `frostlogic-ab.github.io/oIDE/`: a marketing home page plus the user guide, the
+The public site at `getoide.com` (GitHub Pages custom domain, `docs/site/public/CNAME`): a marketing home page plus the user guide, the
 extension author guide, the security model and the FAQ. VitePress 2 in `docs/site/`, built and
 deployed by `.github/workflows/docs.yml` ([packaging](packaging.md)). Commands: `pnpm docs:dev`,
 `pnpm docs:build`, `pnpm docs:preview`.
