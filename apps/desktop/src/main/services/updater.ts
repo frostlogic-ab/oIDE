@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { publishTarget, type PublishTarget, type Settings, type UpdateChannel, type UpdateStatus } from '@oide/protocol';
 
@@ -12,15 +12,21 @@ import { publishTarget, type PublishTarget, type Settings, type UpdateChannel, t
  *   (`updates.install` with `consent: true`), which quits oIDE and runs the installer.
  * - Off unless the build was given a release feed (`OIDE_PUBLISH_OWNER` / `OIDE_PUBLISH_REPO` at build
  *   time, see `buildPublishTarget`): the GitHub org is not claimed yet, so no default feed exists.
- * - Off in development builds, in builds without `app-update.yml` (portable zip), for Linux
- *   deb/rpm installs (the package manager updates those) and when `OIDE_DISABLE_UPDATES=1`.
+ * - Off in development builds, in builds without `app-update.yml`, for the Windows portable zip
+ *   (it carries `app-update.yml` too, because electron-builder packs the zip and the NSIS installer
+ *   from one folder, but running the installer would add a second, installed copy instead of updating
+ *   the portable one), for Linux deb/rpm installs (the package manager updates those) and when
+ *   `OIDE_DISABLE_UPDATES=1`.
  * - Unsigned macOS builds can check but cannot install (Squirrel.Mac only installs signed apps), so
  *   `canInstall` is false and the UI links to the release page instead.
  *
- * Channels: `stable` reads `latest*.yml` from normal releases; `beta` reads `beta*.yml` and allows
- * prereleases. Stable releases also publish `beta*.yml` (`generateUpdatesFilesForAllChannels`), so
- * beta users get them too. Downgrades are never offered: going back from beta to stable waits for the
- * next stable version above the installed beta.
+ * Channels: `stable` asks GitHub for the release marked latest (prereleases and drafts never are)
+ * and reads its `latest*.yml`. `beta` allows prereleases: electron-updater takes the newest release
+ * in the repository's releases feed, stable or prerelease, tries `beta*.yml` and falls back to
+ * `latest*.yml`. electron-builder's GitHub publisher only writes `latest*.yml` (it ignores
+ * `generateUpdatesFilesForAllChannels`), so that fallback is what beta users read. Downgrades are
+ * never offered: going back from beta to stable waits for the next stable version above the
+ * installed beta.
  */
 
 /** Injected by electron-vite (`define` in electron.vite.config.ts) from the build's env; absent in tests. */
@@ -80,10 +86,17 @@ export interface UpdaterOptions {
   env?: NodeJS.ProcessEnv;
   /** True when the packaged app carries `app-update.yml`; default checks `process.resourcesPath`. */
   hasUpdateConfig?: () => boolean;
+  /**
+   * Windows: true when oIDE runs from an NSIS install (its uninstaller sits next to the exe), false
+   * for the portable zip. Default looks for `Uninstall *.exe` next to `process.execPath`.
+   */
+  isWindowsInstall?: () => boolean;
   /** macOS: true when the running app is Developer ID signed; default asks `codesign`. */
   isMacSigned?: () => Promise<boolean>;
   /** Run background checks (startup + every 6 h) when Settings allow. Default true. */
   background?: boolean;
+  /** Called once per finished check (telemetry `update_checked`; main decides whether to send). */
+  onChecked?: (e: { outcome: UpdateCheckOutcome; channel: UpdateChannel }) => void;
   /** The release feed; default `buildPublishTarget()`. null: this build has none, updates are off. */
   publish?: PublishTarget | null;
   now?: () => number;
@@ -100,6 +113,15 @@ export async function loadElectronUpdater(): Promise<AppUpdaterLike> {
 function defaultHasUpdateConfig(): boolean {
   const res = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
   return Boolean(res && existsSync(join(res, 'app-update.yml')));
+}
+
+/** The NSIS installer puts `Uninstall <productName>.exe` in the install folder; the portable zip has none. */
+function defaultIsWindowsInstall(): boolean {
+  try {
+    return readdirSync(dirname(process.execPath)).some((f) => /^Uninstall .+.exe$/i.test(f));
+  } catch {
+    return false;
+  }
 }
 
 /** `codesign -dv` on the .app bundle; Developer ID signatures name their authority. */
@@ -133,11 +155,37 @@ export function plainNotes(notes: UpdateInfoLike['releaseNotes']): string | unde
   return text ? text.slice(0, 4000) : undefined;
 }
 
+/**
+ * What a failed check means for the Settings row. electron-updater's GitHub provider reports "no
+ * release is published yet" as an error; for the user that is simply "no newer version".
+ */
+export function checkFailure(err: unknown): { state: 'not-available'; reason: 'no_release' } | { state: 'error'; reason: 'feed_missing' | 'error'; error: string } {
+  const code = (err as { code?: unknown } | null)?.code;
+  const message = err instanceof Error ? err.message : '';
+  // No release found by /releases/latest, or a releases feed with no entries at all (no tags yet:
+  // electron-updater then throws its XML "missing element" error with the same message).
+  if (code === 'ERR_UPDATER_NO_PUBLISHED_VERSIONS' || (code === 'ERR_XML_MISSED_ELEMENT' && /No published versions/.test(message))) {
+    return { state: 'not-available', reason: 'no_release' };
+  }
+  if (code === 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND') {
+    // The releases feed lists a tag as soon as it exists, before its files are public: a draft
+    // still being built, a draft whose build failed, or a release published without its latest*.yml.
+    return { state: 'error', reason: 'feed_missing', error: 'The newest release on GitHub has no update file for this platform (it may not be published yet). Try again later, or download it from the releases page.' };
+  }
+  return { state: 'error', reason: 'error', error: errorText(err) };
+}
+
+/** How a finished check ended, for the `update_checked` telemetry event (no free text). */
+export type UpdateCheckOutcome = 'available' | 'not_available' | ReturnType<typeof checkFailure>['reason'];
+
 function errorText(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
   // electron-updater errors can carry whole HTTP responses; keep the first line.
   return (msg.split('\n')[0] ?? msg).slice(0, 300) || 'Update failed';
 }
+
+/** A change to the status; `undefined` removes a field. */
+type StatusPatch = Partial<{ [K in keyof UpdateStatus]: UpdateStatus[K] | undefined }>;
 
 export class UpdaterService {
   private status: UpdateStatus;
@@ -180,6 +228,7 @@ export class UpdaterService {
     if (!this.target) return 'This build has no release feed (it was built without OIDE_PUBLISH_OWNER and OIDE_PUBLISH_REPO), so it never checks for updates. Download new versions by hand.';
     if (opts.platform === 'linux' && !env.APPIMAGE) return 'Installed from a .deb or .rpm package: update oIDE through your package manager.';
     if (!(opts.hasUpdateConfig ?? defaultHasUpdateConfig)()) return 'This build has no update configuration (for example a portable zip). Download new versions from the releases page.';
+    if (opts.platform === 'win32' && !(opts.isWindowsInstall ?? defaultIsWindowsInstall)()) return 'This is the portable zip, which does not update itself. Download new versions from the releases page, or use the installer to get automatic updates.';
     return undefined;
   }
 
@@ -218,15 +267,23 @@ export class UpdaterService {
       const u = await this.ensure();
       if (!u) return this.getStatus();
       this.set({ state: 'checking', error: undefined });
+      let outcome: UpdateCheckOutcome;
       try {
         await u.checkForUpdates();
         // The 'update-available' / 'update-not-available' / 'error' listeners set the state; a null
         // result (updater inactive) leaves 'checking', so settle it here.
         if (this.status.state === 'checking') this.set({ state: 'not-available' });
+        outcome = this.status.state === 'available' ? 'available' : this.status.state === 'error' ? 'error' : 'not_available';
       } catch (err) {
-        this.set({ state: 'error', error: errorText(err) });
+        outcome = checkFailure(err).reason;
+        this.set(this.failedCheck(err));
       } finally {
         this.markChecked();
+      }
+      try {
+        this.opts.onChecked?.({ outcome, channel: this.status.channel });
+      } catch (err) {
+        this.opts.log.warn('update check observer failed', err);
       }
       return this.getStatus();
     })().finally(() => {
@@ -296,7 +353,19 @@ export class UpdaterService {
       this.set({ state: 'downloading', progress });
     });
     u.on('update-downloaded', (info: UpdateInfoLike) => this.set({ state: 'downloaded', progress: 1, available: this.infoOf(info) }));
-    u.on('error', (err: unknown) => this.set({ state: 'error', error: errorText(err), progress: undefined }));
+    u.on('error', (err: unknown) => {
+      // The same error also rejects checkForUpdates(); a check maps it there too.
+      if (this.status.state === 'checking') this.set(this.failedCheck(err));
+      else this.set({ state: 'error', error: errorText(err), progress: undefined });
+    });
+  }
+
+  private failedCheck(err: unknown): StatusPatch {
+    const f = checkFailure(err);
+    if (f.state === 'not-available') this.opts.log.debug('no published release yet', errorText(err));
+    return f.state === 'not-available'
+      ? { state: 'not-available', available: undefined, error: undefined, releaseUrl: this.releasesUrl }
+      : { state: 'error', error: f.error, progress: undefined };
   }
 
   private applyChannel(u: AppUpdaterLike, channel: UpdateChannel): void {
@@ -326,7 +395,7 @@ export class UpdaterService {
     };
   }
 
-  private set(patch: Partial<{ [K in keyof UpdateStatus]: UpdateStatus[K] | undefined }>): void {
+  private set(patch: StatusPatch): void {
     const next = { ...this.status, ...patch } as Record<string, unknown>;
     for (const k of Object.keys(next)) if (next[k] === undefined) delete next[k];
     this.status = next as UpdateStatus;

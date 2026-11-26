@@ -1008,3 +1008,16 @@ untracked files deleted, only paths git reports as changed). New telemetry event
 Review and the Wall review tile hide Push to pull request when the worktree has no new commits and no
 uncommitted files the PR lacks (or the push state is not known yet); `hasPendingForPr` in the git store.
 See [Review](pages/screen-review.md), [Wall](pages/screen-wall.md).
+
+## [2026-11-26] review | Auto-update verified against the v0.2.0 release
+
+Checked the first GitHub release (frostlogic-ab/oIDE v0.2.0) end to end: assets, the packaged
+Windows zip (`app-update.yml`, compiled feed `publishTarget("frostlogic-ab", "oIDE")`, electron-updater
+shipped) and electron-updater's own GitHub provider run against the live repo. Findings and fixes:
+v0.2.0 is still a **draft** (the macOS build failed `licenses:check` because `fsevents` installs only
+on macOS; finalize never ran), so every client sees no release (fixed on main in `notices.mjs`).
+The Windows portable zip carried `app-update.yml` and would have installed a second copy; the updater
+now needs the NSIS uninstaller next to the exe. The GitHub publisher writes no `beta*.yml` (beta users
+read `latest*.yml` through electron-updater's fallback); docs and config corrected. New finalize gate
+`tools/release-feed/verify-feed.mjs`; new telemetry event `update_checked`. Pages: packaging,
+release-pipeline, telemetry.

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ArchiveReason, Effort, PermissionMode, WorkIn } from './agent.js';
 import { ArtifactKind } from './artifacts.js';
+import { UpdateChannel } from './updates.js';
 
 /**
  * Opt-in usage analytics and error reports (docs/wiki/pages/telemetry.md, ADR 0011).
@@ -312,6 +313,15 @@ export const TELEMETRY_EVENTS = {
     from: 'main',
     question: 'Do people move to new versions, and from which ones?',
     props: z.object({ from_version: AppVersion, to_version: AppVersion }),
+  }),
+  update_checked: def({
+    from: 'main',
+    question:
+      'Does auto-update work in the field: do checks find releases, and when they fail, is it a missing release, a missing update file or something else?',
+    props: z.object({
+      outcome: z.enum(['available', 'not_available', 'no_release', 'feed_missing', 'error']),
+      channel: UpdateChannel,
+    }),
   }),
   telemetry_opt_in: def({
     from: 'main',

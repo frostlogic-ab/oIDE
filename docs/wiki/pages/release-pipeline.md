@@ -20,8 +20,9 @@ auto-update: [packaging](packaging.md).
                               └─► calls release.yml with tag vX.Y.Z
                                    verify    tag == app version; typecheck, lint, test, licences
                                    build     Windows, macOS, Linux in parallel; electron-builder
-                                             uploads installers + latest*.yml / beta*.yml to the draft
-                                   finalize  SHA256SUMS (+ GPG .asc), then publish the release
+                                             uploads installers + latest*.yml to the draft
+                                   finalize  SHA256SUMS (+ GPG .asc), check the update feed,
+                                             then publish the release
 ```
 
 1. **Merge pull requests.** Every PR is squash-merged into `main`; its title becomes the commit
@@ -47,13 +48,36 @@ auto-update: [packaging](packaging.md).
    - **finalize** uploads a version-free copy of every installer (`oIDE-<os>-<x64|arm64>.<ext>`,
      e.g. `oIDE-mac-arm64.dmg`, `oIDE-linux-x64.deb`) so the site's download buttons can link to
      `/releases/latest/download/<name>`, adds `SHA256SUMS` over both names (and detached GPG
-     signatures when `GPG_PRIVATE_KEY` is set), then
-     **publishes** the release: marked *latest* for a plain version, *pre-release* for a version like
-     `0.3.0-beta.1`.
+     signatures when `GPG_PRIVATE_KEY` is set), checks the update feed with
+     `tools/release-feed/verify-feed.mjs` (every platform's `latest*.yml` is attached, has the
+     release's version, names only attached files of the right size, and offers the Windows x64/arm64
+     installers, both macOS zips and both AppImages), then **publishes** the release: marked *latest*
+     for a plain version, *pre-release* for a version like `0.3.0-beta.1`.
 
 Until finalize, the release is a draft: electron-updater and the site's download buttons
 (`/releases/latest/download/…`) cannot see it, so no user ever gets a release with missing files. If any
-platform fails, the release stays a draft; fix the cause and use **Re-run failed jobs** on the run.
+platform fails, the release stays a draft. When the failure was outside the code (a runner hiccup,
+an expired secret), fix that and use **Re-run failed jobs**. When it was in the code at the tag,
+re-running cannot help (every job checks out the tag): merge the fix and ship the next release.
+The stuck draft and its tag can then be deleted by a maintainer. Until then the tag is in the
+releases feed, so beta-channel checks report "no update file for this platform" (stable checks are
+unaffected).
+
+v0.2.0 was the first case: its macOS build failed `pnpm licenses:check` because chokidar's optional
+`fsevents` (macOS only) made `THIRD_PARTY_NOTICES.md` differ on macOS, so finalize never ran and the
+release stayed a draft without macOS files. `tools/licenses/notices.mjs` now lists platform-only
+optional dependencies by name from `pnpm-lock.yaml`, the same on every OS ([packaging](packaging.md), Licences).
+
+### Checking a release's update feed by hand
+
+```
+gh release download vX.Y.Z --pattern 'latest*.yml' --dir feed --repo frostlogic-ab/oIDE
+gh release view vX.Y.Z --json assets --jq '[.assets[] | {name, size}]' --repo frostlogic-ab/oIDE > assets.json
+node tools/release-feed/verify-feed.mjs --version X.Y.Z --feed feed --assets assets.json
+```
+
+This works on drafts too (with a token that can see them). Installed apps only see the release
+once it is published and, for stable, marked latest.
 
 ## Versions
 
@@ -66,7 +90,7 @@ platform fails, the release stays a draft; fix the cause and use **Re-run failed
 
 - Force a version with a `Release-As: 1.0.0` line in the body of a commit on `main` (for example in
   the squash-merge message). Use it for 1.0 and for betas: `Release-As: 0.3.0-beta.1` gives a
-  pre-release on the beta update channel (`beta*.yml`, [packaging](packaging.md#auto-update-m7)).
+  pre-release on the beta update channel ([packaging](packaging.md#auto-update-m7)).
   The next normal release after a beta needs `Release-As` too (e.g. `0.3.0`), otherwise the default
   strategy bumps past it.
 - Changelog sections (`release-please-config.json` → `changelog-sections`): Added (`feat`), Fixed

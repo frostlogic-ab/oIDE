@@ -70,10 +70,10 @@ electronFuses:
 # and the same values are compiled into main (electron.vite.config.ts). See docs/wiki/pages/packaging.md.
 publish: null
 
-# Update channels (apps/desktop/src/main/services/updater.ts). A version with a prerelease tag
-# (0.2.0-beta.1) publishes beta*.yml; a plain version publishes latest*.yml and, with this flag, the
-# beta*.yml files too, so beta users also receive stable releases.
-generateUpdatesFilesForAllChannels: true
+# Update channels (apps/desktop/src/main/services/updater.ts): the GitHub publisher writes only
+# latest*.yml, for stable and prerelease versions alike (it ignores generateUpdatesFilesForAllChannels).
+# Stable users read the release marked latest; beta users read the newest release, prerelease or not,
+# through electron-updater's fallback from beta*.yml to latest*.yml.
 
 win:
   target:
