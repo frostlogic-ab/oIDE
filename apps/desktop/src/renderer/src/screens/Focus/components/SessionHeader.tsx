@@ -47,7 +47,9 @@ export interface LeadHeaderProps {
 }
 
 const RESUMABLE = new Set(['paused', 'stopped', 'error', 'rate-limited']);
-const STOPPABLE = new Set(['running', 'starting', 'needs-permission', 'queued']);
+/** Statuses where supervisor.pause() means something (a queued agent is shown disabled). Done, review and question states have nothing to pause. */
+const PAUSABLE = new Set(['running', 'starting', 'needs-permission', 'queued']);
+const STOPPABLE =new Set(['running', 'starting', 'needs-permission', 'queued']);
 
 /**
  * The permission mode in the meta line: a menu of every mode, so any mode can be picked at any
@@ -80,7 +82,8 @@ function ModeMenu({ current, modes, shortcut, onSetMode }: { current: Permission
 
 export function LeadHeader({ agent, project, now, warnAt, dangerAt, modeShortcut, modes, onSetMode, onCompact, onRawTerminal, onPause, onResume, onStop, onArchive, onUnarchive, onDelete }: LeadHeaderProps) {
   const worktree = agent.branch ? agent.branch.split('/').pop() : undefined;
-  const resumable = RESUMABLE.has(agent.status) && !agent.resumeBlocked;
+  const resumeBlocked = RESUMABLE.has(agent.status) ? agent.resumeBlocked : undefined;
+  const resumable = RESUMABLE.has(agent.status) && !resumeBlocked;
   if (agent.archived) return <ArchivedHeader agent={agent} project={project} worktree={worktree} onUnarchive={onUnarchive} onDelete={onDelete} />;
   return (
     <div className={ROW}>
@@ -126,11 +129,19 @@ export function LeadHeader({ agent, project, now, warnAt, dangerAt, modeShortcut
         <Button size={28} className={ACTION} icon="play" onClick={onResume} title="Resume">
           <span className={NARROW_LABEL}>Resume</span>
         </Button>
-      ) : (
+      ) : resumeBlocked ? (
+        // aria-disabled (not disabled) keeps the button focusable, so the reason is reachable by keyboard
+        // and read out by screen readers through the tooltip's aria-describedby.
+        <Tooltip content={resumeBlocked} placement="bottom-end">
+          <Button size={28} className={`${ACTION} opacity-50 cursor-not-allowed`} icon="play" aria-disabled="true" onClick={(e) => e.preventDefault()}>
+            <span className={NARROW_LABEL}>Resume</span>
+          </Button>
+        </Tooltip>
+      ) : PAUSABLE.has(agent.status) ? (
         <Button size={28} className={ACTION} icon="pause" onClick={onPause} disabled={agent.status === 'queued'} title="Pause">
           <span className={NARROW_LABEL}>Pause</span>
         </Button>
-      )}
+      ) : null}
       {agent.pr && <PrLink pr={agent.pr} className="shrink-0 @max-[700px]:hidden" />}
       {onArchive && canArchive(agent) && (
         <Button size={28} className={ACTION} icon="archive" onClick={onArchive} title="Archive">
