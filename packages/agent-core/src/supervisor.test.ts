@@ -2,7 +2,7 @@ import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { OideMcpServer } from '@oide/mcp-server';
-import type { AgentEvent, AgentSpecInput, AgentSummary, Settings } from '@oide/protocol';
+import type { AgentEvent, AgentSpecInput, AgentSummary, CustomModel, Settings } from '@oide/protocol';
 import { fakeCli, tempDir, testSettings, waitFor } from '../test/helpers.js';
 import type { AttachmentProvider, EventSink, SettingsProvider, WorktreeProvider } from './ports.js';
 import { Supervisor } from './supervisor.js';
@@ -23,7 +23,7 @@ afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();
 });
 
-async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup?: WorktreeProvider['runSetup']; attachments?: AttachmentProvider; ask?: string[] }): Promise<Harness> {
+async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup?: WorktreeProvider['runSetup']; attachments?: AttachmentProvider; ask?: string[]; customModels?: CustomModel[] }): Promise<Harness> {
   const settings = testSettings({ extraFlags: opts.extraFlags, maxRunning: opts.maxRunning ?? 3 });
   const mcp = new OideMcpServer({ appDataDir: tempDir('oide-app-') });
   await mcp.start();
@@ -51,6 +51,7 @@ async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup
     cli: () => fakeCli,
     project: () => ({ path: '/repo', trusted: true, rules: { allow: [], deny: [], ...(opts.ask ? { ask: opts.ask } : {}) } }),
     addAllowRule: (p, r) => void rules.push([p, r]),
+    ...(opts.customModels ? { customModel: (id: string) => opts.customModels!.find((m) => m.id === id) } : {}),
   };
   const sup = new Supervisor({ worktrees, sink, settings: provider, broker: mcp, ...(opts.attachments ? { attachments: opts.attachments } : {}) });
   cleanups.push(async () => {
@@ -102,6 +103,13 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     expect(h.events.some((e) => e.type === 'permission-resolved' && e.behavior === 'deny')).toBe(true);
     expect(h.raw.some((r) => r.includes('"subtype":"init"'))).toBe(true);
     expect(h.saved.get(a!.id)?.status).toBe('has-question');
+  });
+
+  it('refuses to launch an agent whose custom model was removed, instead of falling back to the Claude plan', async () => {
+    const h = await harness({ extraFlags: '', customModels: [] });
+    const [a] = await h.sup.spawn(spec({ customModel: { id: 'gone' }, strategy: { kind: 'single', lead: { model: 'gone' } } }));
+    await status(h, a!.id, 'error');
+    expect(h.events.some((e) => e.agentId === a!.id && e.type === 'error' && /custom model was removed/.test(e.message))).toBe(true);
   });
 
   it('"Always" covers the rest of the session: the next matching request runs without a prompt', async () => {

@@ -58,6 +58,8 @@ Injected interfaces (`ports.ts`):
 - `EventSink { append(event, raw?); appendRaw?(agentId, line); saveSummary?(summary, spec); removeAgent?(id) }` (packages/store).
 - `SettingsProvider { get(); cli(); techniques?(projectId); project?(projectId) → {path, trusted, rules}; extensionTools?(spec); extraMcpServers?(spec); customModel?(id); addAllowRule?(projectId, rule); resolveArtifact? }`.
 - `SecretProvider { customModelKey(id) }` (keychain; never Claude credentials).
+- A launch or resume whose `spec.customModel` no longer resolves through `customModel?(id)` fails with a
+  `LaunchError` (agent goes to `error`); it never runs against the Claude plan with the custom model's name.
 - `PermissionBroker { registerAgent(agentId, handlers, extraServers?, {projectId}?) → {mcpConfigPath}; unregisterAgent(id); answer(requestId, answer) → boolean }`. `OideMcpServer` from packages/mcp-server satisfies it as-is.
 
 ## Lifecycle and queue

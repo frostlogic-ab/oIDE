@@ -331,6 +331,10 @@ export class Supervisor {
       const agentEnv = reg.env ?? secretEnv;
       const project = await this.deps.settings.project?.(rec.spec.projectId);
       const customModel = rec.spec.customModel ? await this.deps.settings.customModel?.(rec.spec.customModel.id) : undefined;
+      // A removed custom model must not fall through to the user's Claude plan with its model name.
+      if (rec.spec.customModel && this.deps.settings.customModel && !customModel) {
+        throw new LaunchError('Its custom model was removed in Settings > Models. Spawn a new agent with another model.');
+      }
       const customModelSecret = customModel?.hasKey ? await this.deps.secrets?.customModelKey(customModel.id) : undefined;
       let firstAttachments: MessageAttachment[] | undefined;
       if (!(resume || rec.started) && rec.firstAttachments?.length) {

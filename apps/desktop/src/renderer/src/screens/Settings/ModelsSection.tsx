@@ -61,7 +61,8 @@ function removeWarning(m: CustomModel, presets: FocusPreset[]): string {
   const parts: string[] = [];
   if (m.hasKey) parts.push('Its API key is deleted from your keychain and cannot be recovered.');
   if (using.length) parts.push(`${using.join(', ')} ${using.length === 1 ? 'uses' : 'use'} it and cannot spawn agents until you pick another model.`);
-  return parts.join(' ') || 'This cannot be undone.';
+  parts.push('Sessions started with it can no longer be resumed.');
+  return parts.join(' ');
 }
 
 /** Switch strategy kind, keeping the models already chosen where they map. */

@@ -282,7 +282,7 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
         title={`Delete ${confirmDelete?.name ?? ''}?`}
         description={
           projectId
-            ? "Its text is removed from this project's .oide/techniques.json and can't be recovered."
+            ? "Its text is removed from this project's .oide/techniques.json (git history keeps any committed copy)."
             : "Its text is removed from your global techniques and can't be recovered."
         }
         footer={
