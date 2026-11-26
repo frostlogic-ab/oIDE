@@ -15,7 +15,7 @@ agent is doing.
 
 ## Install
 
-oIDE is pre-1.0. Installers for Windows, macOS and Linux are built by CI for every release and
+oIDE is in preview. Installers for Windows, macOS and Linux are built by CI for every release and
 published on [GitHub Releases](https://github.com/frostlogic-ab/oIDE/releases) (the newest is always at
 [releases/latest](https://github.com/frostlogic-ab/oIDE/releases/latest)). Until the first release is
 published, [build from source](#build-from-source).

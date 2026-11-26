@@ -646,8 +646,10 @@ describe('A first retrieval landing while open', () => {
     a.versions = [{ version: 1, ts: now, author: 'agent:ag-fix', note: 'Retrieved from claude.ai' }];
     a.meta = { ...a.meta, version: 1, retrieval: { ...a.meta.retrieval!, status: 'ready', retrievedAt: now } };
     emit('artifacts.changed', { id: 'a-pending', change: 'saved', version: 1, author: 'agent:ag-fix' });
-    const editor = (await within(viewer).findByLabelText('Source of Pricing calculator')) as HTMLTextAreaElement;
-    expect(editor.value).toBe('# Pricing\n\nTiers');
+    // The editor mounts in the commit where `meta.version` leaves 0, one render before the Viewer's
+    // effect copies the retrieved content into its draft, so wait for the content, not the element.
+    await within(viewer).findByLabelText('Source of Pricing calculator');
+    await waitFor(() => expect((within(viewer).getByLabelText('Source of Pricing calculator') as HTMLTextAreaElement).value).toBe('# Pricing\n\nTiers'));
     expect(within(viewer).queryByRole('heading', { name: 'Retrieving from claude.ai' })).toBeNull();
     expect(within(viewer).getByText(/Doc · oide · v1/)).toBeTruthy();
   });

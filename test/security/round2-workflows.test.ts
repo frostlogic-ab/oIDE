@@ -12,11 +12,21 @@ import { describe, expect, it } from 'vitest';
  * Secure behaviour: every `uses:` is pinned to a full commit SHA (Dependabot's github-actions
  * ecosystem keeps the pins and their `# vN` comments current), release jobs use no dependency
  * cache, nothing uses `pull_request_target`, and no `run:` step expands `github.event.*` or
- * `github.head_ref` (PR titles, branch names) into the shell.
+ * `github.head_ref` (PR titles, branch names) into the shell; only the integer PR number may appear.
  */
 const dir = join(import.meta.dirname, '..', '..', '.github', 'workflows');
 const files = readdirSync(dir).filter((f) => /\.ya?ml$/.test(f));
 const read = (f: string) => readFileSync(join(dir, f), 'utf8');
+
+/**
+ * True when a `${{ }}` expression reads `github.head_ref` or a `github.event.*` field. Integer
+ * fields (the PR number) cannot carry shell syntax, so they are allowed; anything with
+ * attacker-chosen text (titles, bodies, branch names, labels) is not.
+ */
+function expandsUntrustedEventField(text: string): boolean {
+  const masked = text.replace(/github\.event\.pull_request\.number\b/g, 'SAFE_INT');
+  return /\$\{\{[^}]*github\.(event\.|head_ref)/.test(masked);
+}
 
 describe('SEC-34 GitHub workflows', () => {
   it('pins every action to a commit SHA', () => {
@@ -39,7 +49,16 @@ describe('SEC-34 GitHub workflows', () => {
     for (const f of files) {
       const t = read(f);
       expect(t, f).not.toMatch(/pull_request_target|workflow_run/);
-      expect(t, f).not.toMatch(/\$\{\{\s*github\.(event\.|head_ref)/);
+      expect(expandsUntrustedEventField(t), f).toBe(false);
     }
+  });
+
+  it('allows integer event fields but flags text fields, even in a larger expression', () => {
+    expect(expandsUntrustedEventField('group: ci-${{ github.event.pull_request.number || github.sha }}')).toBe(false);
+    expect(expandsUntrustedEventField('run: echo ${{ github.event.pull_request.title }}')).toBe(true);
+    expect(expandsUntrustedEventField('run: echo ${{ github.head_ref }}')).toBe(true);
+    expect(
+      expandsUntrustedEventField('x: ${{ github.event.pull_request.number || github.event.pull_request.title }}'),
+    ).toBe(true);
   });
 });

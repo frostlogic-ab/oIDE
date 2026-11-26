@@ -32,6 +32,10 @@ export const WorktreeInfo = z.object({
   diff: DiffStat.optional(),
   changedFiles: z.array(z.string()).default([]),
   pr: z.object({ state: z.string(), number: z.number().optional(), url: z.string().optional() }).optional(),
+  /** Commits on the branch that its upstream (the pushed branch, e.g. the PR head) does not have yet; absent when the branch was never pushed. */
+  unpushed: z.number().int().nonnegative().optional(),
+  /** Files with uncommitted changes in the worktree (tracked and untracked, not ignored). */
+  uncommitted: z.number().int().nonnegative().optional(),
   orphaned: z.boolean().default(false),
 });
 export type WorktreeInfo = z.infer<typeof WorktreeInfo>;

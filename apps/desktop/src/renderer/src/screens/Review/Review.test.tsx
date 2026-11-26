@@ -150,6 +150,37 @@ describe('Review screen', () => {
     await waitFor(() => expect(useRouter.getState().route.screen).toBe('wall'));
   });
 
+  /** a-webhook with an open PR #21 and the given push state. */
+  async function withOpenPr(push: { unpushed?: number; uncommitted?: number }) {
+    const app = await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook' } });
+    const pr = { state: 'open', number: 21, url: 'https://github.com/you/billing-api/pull/21' };
+    app.invoke.mockImplementation((async (command: string, input: unknown) => {
+      if (command === 'git.pushToPr') return { url: pr.url, number: 21, state: 'open', committed: true, pushed: 3 };
+      const out = await app.real(command as never, input as never);
+      if (command === 'git.worktrees') return (out as Array<{ agentId?: string }>).map((w) => (w.agentId === 'a-webhook' ? { ...w, pr, ...push } : w));
+      return out;
+    }) as never);
+    render(<ReviewScreen />);
+    return app;
+  }
+
+  it('after the PR is open, offers Push to pull request for new commits and uncommitted files', async () => {
+    const { invoke } = await withOpenPr({ unpushed: 2, uncommitted: 1 });
+    const push = await screen.findByRole('button', { name: 'Push to pull request #21' });
+    expect(screen.getByText('Not on pull request #21 yet: 2 new commits and 1 uncommitted file. oIDE commits the files for the agent first.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'View pull request #21' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open pull request' })).toBeNull();
+    fireEvent.click(push);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('git.pushToPr', { agentId: 'a-webhook' }));
+  });
+
+  it('a PR that has everything shows only View pull request', async () => {
+    await withOpenPr({ unpushed: 0, uncommitted: 0 });
+    expect(await screen.findByText('Pull request #21 has everything in this worktree.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'View pull request #21' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Push to pull request/ })).toBeNull();
+  });
+
   it('keeps Open pull request when the branch has commits to push', async () => {
     await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook' } });
     render(<ReviewScreen />);

@@ -2,13 +2,41 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { WorktreeManager, defaultBranch, isLockError, parseWorktreeList, removeTree, slugify } from '../src/worktrees.js';
+import { WorktreeManager, defaultBranch, isLockError, parseWorktreeList, pushState, removeTree, slugify } from '../src/worktrees.js';
 import { detectOverlaps, intersectChangedFiles } from '../src/overlaps.js';
 import { isInside, samePath } from '../src/paths.js';
 import { parsePrView, GhCli } from '../src/gh.js';
 import { cleanup, commitAll, makeRepo, sh, tempDir, write } from './helpers.js';
 
 afterAll(cleanup);
+
+describe('pushState (Push to PR)', () => {
+  it('counts commits the PR branch lacks and uncommitted files, ignoring an upstream that is the base', async () => {
+    const remote = join(tempDir(), 'remote.git');
+    sh(dirname(remote), 'init', '-q', '--bare', remote);
+    const repo = makeRepo();
+    sh(repo, 'remote', 'add', 'origin', remote);
+    sh(repo, 'push', '-q', 'origin', 'main');
+    sh(repo, 'fetch', '-q', 'origin');
+    // Like a worktree made from origin/main: the branch tracks origin/main, not its own remote branch.
+    sh(repo, 'checkout', '-q', '-b', 'oide/feature', '--track', 'origin/main');
+    write(repo, 'a.txt', 'a\n');
+    commitAll(repo, 'a');
+    expect(await pushState(repo, 'oide/feature')).toEqual({ uncommitted: 0 });
+    // Opened the PR: the branch is pushed and now tracks origin/oide/feature.
+    sh(repo, 'push', '-q', '--set-upstream', 'origin', 'oide/feature');
+    expect(await pushState(repo, 'oide/feature')).toEqual({ unpushed: 0, uncommitted: 0 });
+    // Follow-up work: one new commit, then a new file and an edit not committed yet.
+    write(repo, 'b.txt', 'b\n');
+    commitAll(repo, 'b');
+    write(repo, 'c.txt', 'c\n');
+    write(repo, 'a.txt', 'changed\n');
+    expect(await pushState(repo, 'oide/feature')).toEqual({ unpushed: 1, uncommitted: 2 });
+    // Tracking the base again: origin/<branch> is still found.
+    sh(repo, 'branch', '--set-upstream-to', 'origin/main');
+    expect(await pushState(repo, 'oide/feature')).toEqual({ unpushed: 1, uncommitted: 2 });
+  });
+});
 
 describe('worktree helpers', () => {
   it('slugifies', () => {
@@ -104,6 +132,9 @@ describe('WorktreeManager', () => {
     expect(await wm.aheadBehind(one.path, 'HEAD', 'main')).toEqual({ ahead: 1, behind: 1 });
     const info = await wm.info({ projectId: 'p1', path: one.path, branch: one.branch, baseRef: 'main', agentId: 'agent-1' });
     expect(info).toMatchObject({ agentId: 'agent-1', ahead: 1, behind: 1, changedFiles: ['scratch.txt', 'shared.txt'], diff: { files: 2, additions: 2, deletions: 1 } });
+    // Never pushed: nothing to compare against; scratch.txt is the one uncommitted file.
+    expect(info.unpushed).toBeUndefined();
+    expect(info.uncommitted).toBe(1);
 
     // Overlaps: worktree sib edits the same file differently → real conflict.
     write(sib.path, 'shared.txt', '1\nSIB\n3\n');

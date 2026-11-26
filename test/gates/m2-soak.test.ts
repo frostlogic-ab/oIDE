@@ -243,11 +243,14 @@ describe('M2 gate: six agents, three projects, a compressed working day', () => 
       >;
       const deadline = Date.now() + SOAK_MS;
       const resultsOf = (id: string) => results.get(id) ?? 0;
-      const idleAfter = (id: string, n: number, status?: AgentStatus) => (a: AgentSummary) =>
+      // A turn that ends without submit_for_review is has-question, or ready-for-review again once the
+      // agent has submitted before and its reply asks nothing (ADR 0016).
+      const TURN_END: ReadonlySet<AgentStatus> = new Set(['has-question', 'ready-for-review']);
+      const idleAfter = (id: string, n: number, status?: AgentStatus | 'turn-end') => (a: AgentSummary) =>
         resultsOf(id) >= n &&
         !ACTIVE.has(a.status) &&
         a.status !== 'queued' &&
-        (!status || a.status === status);
+        (!status || (status === 'turn-end' ? TURN_END.has(a.status) : a.status === status));
       const send = (id: string, text: string) =>
         h.call('agents.send', { agentId: id, message: { kind: 'text', text } });
 
@@ -258,19 +261,19 @@ describe('M2 gate: six agents, three projects, a compressed working day', () => 
         switch (action) {
           case 'tools':
             await send(id, '[fake-scenario:tools] Write the output file and run the tests');
-            await driveTo(h, id, idleAfter(id, n + 1, 'has-question'), { timeoutMs: 60_000 });
+            await driveTo(h, id, idleAfter(id, n + 1, 'turn-end'), { timeoutMs: 60_000 });
             break;
           case 'permission':
           case 'permission-deny':
             await send(id, '[fake-scenario:permission] Run the tests');
-            await driveTo(h, id, idleAfter(id, n + 1, 'has-question'), {
+            await driveTo(h, id, idleAfter(id, n + 1, 'turn-end'), {
               timeoutMs: 60_000,
               answer: action === 'permission' ? 'allow' : 'deny',
             });
             break;
           case 'subagents':
             await send(id, '[fake-scenario:subagents] Split the work');
-            await driveTo(h, id, idleAfter(id, n + 2, 'has-question'), { timeoutMs: 60_000 });
+            await driveTo(h, id, idleAfter(id, n + 2, 'turn-end'), { timeoutMs: 60_000 });
             break;
           case 'compact':
             await h.call('agents.compact', { agentId: id });
@@ -286,7 +289,7 @@ describe('M2 gate: six agents, three projects, a compressed working day', () => 
               body: 'Looks fine',
             });
             await h.call('review.sendFeedback', { agentId: id });
-            await driveTo(h, id, idleAfter(id, n + 2, 'has-question'), { timeoutMs: 60_000 });
+            await driveTo(h, id, idleAfter(id, n + 2, 'turn-end'), { timeoutMs: 60_000 });
             break;
           }
           case 'rate-limit':
@@ -296,11 +299,11 @@ describe('M2 gate: six agents, three projects, a compressed working day', () => 
             await h.call('agents.stop', { agentId: id });
             await driveTo(h, id, 'stopped');
             await h.call('agents.resume', { agentId: id });
-            await driveTo(h, id, 'has-question', { timeoutMs: 60_000 });
+            await driveTo(h, id, (a) => TURN_END.has(a.status), { timeoutMs: 60_000 });
             break;
           case 'reply':
             await send(id, '[fake-scenario:basic] Thanks, carry on');
-            await driveTo(h, id, idleAfter(id, n + 1, 'has-question'), { timeoutMs: 60_000 });
+            await driveTo(h, id, idleAfter(id, n + 1, 'turn-end'), { timeoutMs: 60_000 });
             break;
         }
         counts[action]++;
@@ -308,7 +311,7 @@ describe('M2 gate: six agents, three projects, a compressed working day', () => 
 
       await Promise.all(
         ids.map(async (id, k) => {
-          await driveTo(h, id, idleAfter(id, 1, 'has-question'), { timeoutMs: 60_000 });
+          await driveTo(h, id, idleAfter(id, 1, 'turn-end'), { timeoutMs: 60_000 });
           for (let i = k; Date.now() < deadline; i++) await act(id, ACTIONS[i % ACTIONS.length]!);
         }),
       );

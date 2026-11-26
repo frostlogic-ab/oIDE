@@ -18,7 +18,7 @@ after Stop, after a crash, after restarting oIDE) uses `--resume`, so the conver
 | Starting / Running | Working |
 | Needs permission | Waiting for you to answer a permission prompt |
 | Has a question | The turn ended without submitting for review: it is waiting for your reply |
-| Ready for review | The agent called `submit_for_review` with a summary and the checks it ran |
+| Ready for review | The agent called `submit_for_review` with a summary and the checks it ran. A later reply that only reports status (no question) keeps it here |
 | Paused / Stopped | You paused or stopped it; Resume continues the session |
 | Paused by plan limit | The CLI reported a rate limit; oIDE shows the reset time and does not retry |
 | Error | The process exited with an error; Resume restarts it with `--resume` |

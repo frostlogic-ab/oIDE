@@ -210,6 +210,23 @@ export const Commands = {
       draft: z.enum(['agent', 'template', 'plain', 'given']).optional(),
     }),
   ),
+  /**
+   * Push follow-up work to the branch's open pull request: uncommitted worktree files are committed
+   * first, on the agent's behalf (Oide-Agent trailer), then the branch is pushed. Fails with `conflict`
+   * when the branch has no open or draft PR (use `git.openPr`). `pushed: 0` and `committed: false` = it was already up to date.
+   */
+  'git.pushToPr': cmd(
+    z.object({ agentId: Id }),
+    z.object({
+      url: z.string(),
+      number: z.number().int(),
+      state: z.enum(['open', 'draft']),
+      /** Uncommitted files were committed before the push. */
+      committed: z.boolean(),
+      /** Commits the push sent to the PR (including the one made for uncommitted files). */
+      pushed: z.number().int().nonnegative(),
+    }),
+  ),
   'git.reconcile': cmd(z.object({ projectId: Id, agentIds: z.tuple([Id, Id]) }), z.array(AgentSummary)),
   'git.pruneOrphans': cmd(z.object({ projectId: Id }), z.object({ removed: z.array(z.string()) })),
   /** Whether PRs can be opened for this project (gh installed and signed in). Source control hides PR state and Review disables Open pull request when false. */
