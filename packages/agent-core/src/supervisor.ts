@@ -207,6 +207,10 @@ export class Supervisor {
       if (!settings.claude.allowBypass) throw new LaunchError('Bypass mode is off in Settings');
       if (spec.workIn === 'project-folder') throw new LaunchError('Bypass agents must run in a worktree');
     }
+    // Refuse up front (no worktree or setup run) when the chosen custom model is gone.
+    if (spec.customModel && this.deps.settings.customModel && !(await this.deps.settings.customModel(spec.customModel.id))) {
+      throw new LaunchError('That custom model was removed in Settings > Models. Pick another model.');
+    }
     for (let i = 0; i < n; i++) {
       const id = this.newId();
       const s: AgentSpec = { ...spec, ...(attemptGroup ? { attemptGroup } : {}), attempts: 1, title: n > 1 ? `${spec.title} #${i + 1}` : spec.title };

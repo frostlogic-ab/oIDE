@@ -106,8 +106,16 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
   });
 
   it('refuses to launch an agent whose custom model was removed, instead of falling back to the Claude plan', async () => {
-    const h = await harness({ extraFlags: '', customModels: [] });
-    const [a] = await h.sup.spawn(spec({ customModel: { id: 'gone' }, strategy: { kind: 'single', lead: { model: 'gone' } } }));
+    const models: CustomModel[] = [{ id: 'cm', name: 'Local', provider: 'compatible-api', baseUrl: 'http://127.0.0.1:8080', model: 'qwen', hasKey: false, extraEnv: {} }];
+    const h = await harness({ extraFlags: '', customModels: models });
+    await expect(h.sup.spawn(spec({ customModel: { id: 'gone' }, strategy: { kind: 'single', lead: { model: 'gone' } } }))).rejects.toThrow(/custom model was removed/);
+    // A model that still exists launches; once it is removed, resuming that session fails with a clear error.
+    const [a] = await h.sup.spawn(spec({ customModel: { id: 'cm' }, strategy: { kind: 'single', lead: { model: 'qwen' } } }));
+    await status(h, a!.id, 'has-question');
+    await h.sup.stop(a!.id);
+    await status(h, a!.id, 'stopped');
+    models.length = 0;
+    await h.sup.resume(a!.id).catch(() => {});
     await status(h, a!.id, 'error');
     expect(h.events.some((e) => e.agentId === a!.id && e.type === 'error' && /custom model was removed/.test(e.message))).toBe(true);
   });

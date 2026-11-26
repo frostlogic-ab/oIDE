@@ -412,6 +412,7 @@ function ProjectTree({
                   <FileIcon name={r.label} />
                 )}
                 <span className={`flex-1 min-w-0 ml-1.5 truncate whitespace-pre ${r.error ? 'text-bad' : ''}`}>{r.label}</span>
+                {r.kind === 'dir' && r.error && <span className="sr-only">, failed to load. Press Enter to retry.</span>}
                 {r.kind === 'dir' && r.error && (
                   <button
                     type="button"
