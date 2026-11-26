@@ -27,6 +27,7 @@ mark, or Anthropic's or Claude's branding: the product name and logo never inclu
 | `logo-mark-{16,32,128,512}.png` | Raster previews of the mark. |
 | [`social-preview.png`](social-preview.png) | 1280×640 GitHub social preview (Settings › General › Social preview) and the docs site's `og:image`. |
 | [`logo-sheet.png`](logo-sheet.png) | The final set at 16-128 px on dark and light. |
+| [`frostlogic-wordmark.svg`](frostlogic-wordmark.svg) | Frostlogic's wordmark (the company behind oIDE), for the header's "by Frostlogic" subtitle. Not part of the oIDE logo. |
 | [`concepts.png`](concepts.png), [`concepts/`](concepts/) | The four explored concepts (history; not for use). |
 
 App icons live with the app: `apps/desktop/build/icon.svg` (tile + mark, 48 px and up) and `icon-small.svg`
@@ -35,7 +36,8 @@ and `icons/<n>x<n>.png`. In the renderer, use the React component, not a file:
 
 ```tsx
 import { Logo } from '@oide/ui';
-<Logo variant="wordmark" size={22} />   // header: mark + "oIDE" in the UI font (Inter 700)
+<Logo variant="wordmark" size={22} />   // mark + "oIDE" in the UI font (Inter 700)
+<FrostlogicLogo height={10} />          // header subtitle "by Frostlogic" (word in currentColor)
 <Logo size={24} />                      // mark only, decorative
 <Logo size={32} title="oIDE" />         // mark only, announced as "oIDE"
 <Logo tone="mono" />                    // one colour (currentColor)
@@ -47,7 +49,7 @@ Regenerate everything after a geometry or colour change: `node tools/brand/build
 
 App icon (Windows `.ico`, macOS `.icns`, Linux PNG set), the runtime window/taskbar icon in dev and
 unpackaged runs too (`apps/desktop/src/main/app-icon.ts`, plus `app.setAppUserModelId('dev.oide.app')` on
-Windows and the oIDE icon on Electron's notification shortcut, see [packaging](../wiki/pages/packaging.md)), the header logo (`Header.tsx`), the screen error panel (`ErrorBoundary.tsx`), the renderer
+Windows and the oIDE icon on Electron's notification shortcut, see [packaging](../wiki/pages/packaging.md)), the header logo (`Header.tsx`, mark + "oIDE" with a "by Frostlogic" subtitle), the screen error panel (`ErrorBoundary.tsx`), the renderer
 favicon (inlined in `apps/desktop/src/renderer/index.html`), the docs site (nav logo, hero image, favicon,
 `og:image`), the README header and the GitHub social preview. Built-in extensions have no icon field in
 their manifest today, so they carry no logo.
@@ -105,6 +107,9 @@ The logo files and the scripts that make them are part of this repository and ar
 trademark use. Whether "oIDE" and this mark should be registered, and what a trademark policy for forks
 should say (for example: forks keep the code, drop the name and logo), is open:
 [open question 18](../wiki/pages/open-questions.md).
+
+The Frostlogic wordmark (`frostlogic-wordmark.svg`, `FrostlogicLogo`) is Frostlogic's own company logo, shown
+to credit the maker. It is not an oIDE mark; a fork that is not made by Frostlogic should drop the subtitle.
 
 ## How it was chosen
 

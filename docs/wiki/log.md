@@ -1022,6 +1022,11 @@ read `latest*.yml` through electron-updater's fallback); docs and config correct
 `tools/release-feed/verify-feed.mjs`; new telemetry event `update_checked`. Pages: packaging,
 release-pipeline, telemetry.
 
+## [2026-11-26] build | "by Frostlogic" subtitle in the header
+The header lockup is now the mark beside "oIDE" with a "by [Frostlogic]" subtitle underneath. The Frostlogic
+wordmark is traced 1:1 from the company's vector logo into `FrostlogicLogo` (`@oide/ui`) and
+`docs/brand/frostlogic-wordmark.svg`. Updated [design-system](pages/design-system.md) and docs/brand/README.md.
+
 ## [2026-11-26] review | Second usability pass: drafts, dialogs, Marketplace, Review after merge
 Fixed the six issues the first pass left open plus five new ones. Dialogs: Add custom extension and
 New artifact close on a scrim press only while untouched (and never from a drag that started inside);
@@ -1039,3 +1044,14 @@ Pages: [screen-marketplace](pages/screen-marketplace.md), [screen-artifacts](pag
 agent toasts have no Open action, Remove worktree and the side-panel Push show no progress, the Wall
 sidebar does nothing for a live agent in the Archived view, Marketplace install/update show no
 progress text, git status errors have no Retry.
+
+## [2026-11-26] build | Windows CI: three timing-dependent tests made deterministic
+The Windows unit-test job failed three tests that pass elsewhere. `artifact-retrieval.test.ts`: the
+service's "archive anyway" fallback was armed after 50 ms in `setup()`, which a loaded runner exceeds
+mid-test; tests not about the fallback now use an hour. `test/integration/archive.test.ts`: the live
+diff refresh is debounced, so the ready-for-review snapshot could hold a one-file diff while the
+archive copied the final two-file one; the test now waits for the full diff. `extensions/ui.test.tsx`
+exposed a product bug: Settings › Extensions re-synced a field's draft from the saved value in an
+effect, so a late load or a `settingChanged` reload overwrote what the user had just typed and blur
+saved nothing. The draft now follows the saved value only while the field is unedited (regression
+test added). See [extensions](pages/extensions.md).
