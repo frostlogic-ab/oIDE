@@ -12,6 +12,7 @@ import { useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useSettings } from '../../stores/settings';
 import { Composer } from './components/Composer';
+import { clearDraft, getDraft } from './composerDrafts';
 import { PermissionPrompt } from './components/PermissionPrompt';
 import FocusScreen from './index';
 
@@ -209,6 +210,106 @@ describe('Composer', () => {
     fireEvent.change(input, { target: { value: 'Follow this' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(calls('agents.send')).toEqual([{ agentId: 'a-bridge', message: { kind: 'artifact', artifactId: 'art-main-v2', note: 'Follow this' } }]));
+  });
+
+  describe('drafts', () => {
+    const props = { projectId: 'oide', placeholder: 'Steer', commands: ['compact'], onCompact: () => {} } as const;
+    const box = () => screen.getByRole('combobox', { name: 'Message this agent' }) as HTMLTextAreaElement;
+    afterEach(() => {
+      clearDraft('a-bridge');
+      clearDraft('a-other');
+    });
+
+    it('keeps the text per agent when switching agents and back', () => {
+      const { rerender } = render(<Composer agentId="a-bridge" {...props} />);
+      fireEvent.change(box(), { target: { value: 'half a thought' } });
+      rerender(<Composer agentId="a-other" {...props} />);
+      expect(box().value).toBe('');
+      fireEvent.change(box(), { target: { value: 'other draft' } });
+      rerender(<Composer agentId="a-bridge" {...props} />);
+      expect(box().value).toBe('half a thought');
+      rerender(<Composer agentId="a-other" {...props} />);
+      expect(box().value).toBe('other draft');
+    });
+
+    it('keeps the text when the composer unmounts and mounts again', () => {
+      const first = render(<Composer agentId="a-bridge" {...props} />);
+      fireEvent.change(box(), { target: { value: 'still here' } });
+      first.unmount();
+      render(<Composer agentId="a-bridge" {...props} />);
+      expect(box().value).toBe('still here');
+    });
+
+    it('does not keep an emptied box', () => {
+      const first = render(<Composer agentId="a-bridge" {...props} />);
+      fireEvent.change(box(), { target: { value: 'oops' } });
+      fireEvent.change(box(), { target: { value: '' } });
+      first.unmount();
+      expect(getDraft('a-bridge')).toBe('');
+    });
+
+    it('forgets the draft once it was sent', async () => {
+      const first = render(<Composer agentId="a-bridge" {...props} />);
+      fireEvent.change(box(), { target: { value: 'send me' } });
+      fireEvent.keyDown(box(), { key: 'Enter' });
+      await waitFor(() => expect(calls('agents.send')).toHaveLength(1));
+      await waitFor(() => expect(box().value).toBe(''));
+      first.unmount();
+      render(<Composer agentId="a-bridge" {...props} />);
+      expect(box().value).toBe('');
+    });
+
+    it('keeps the text when sending fails', async () => {
+      const impl = invoke.getMockImplementation()!;
+      invoke.mockImplementation(async (command: string, input?: unknown) => {
+        if (command === 'agents.send') throw new Error('offline');
+        return impl(command, input);
+      });
+      try {
+        const first = render(<Composer agentId="a-bridge" {...props} />);
+        fireEvent.change(box(), { target: { value: 'do not lose me' } });
+        fireEvent.keyDown(box(), { key: 'Enter' });
+        await waitFor(() => expect(calls('agents.send')).toHaveLength(1));
+        await waitFor(() => expect((screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement).disabled).toBe(false));
+        expect(box().value).toBe('do not lose me');
+        first.unmount();
+        render(<Composer agentId="a-bridge" {...props} />);
+        expect(box().value).toBe('do not lose me');
+      } finally {
+        invoke.mockImplementation(impl);
+      }
+    });
+
+    it('a send that finishes after switching agents leaves the new agent text alone', async () => {
+      let release: () => void = () => {};
+      const impl = invoke.getMockImplementation()!;
+      invoke.mockImplementation(async (command: string, input?: unknown) => {
+        if (command === 'agents.send') await new Promise<void>((r) => (release = r));
+        return impl(command, input);
+      });
+      try {
+        const { rerender } = render(<Composer agentId="a-bridge" {...props} />);
+        fireEvent.change(box(), { target: { value: 'first' } });
+        fireEvent.keyDown(box(), { key: 'Enter' });
+        await waitFor(() => expect(calls('agents.send')).toHaveLength(1));
+        rerender(<Composer agentId="a-other" {...props} />);
+        fireEvent.change(box(), { target: { value: 'typing elsewhere' } });
+        await act(async () => release());
+        expect(box().value).toBe('typing elsewhere');
+        expect(getDraft('a-bridge')).toBe('');
+        expect(getDraft('a-other')).toBe('typing elsewhere');
+      } finally {
+        invoke.mockImplementation(impl);
+      }
+    });
+
+    it('drops the draft when the agent is removed', () => {
+      const first = render(<Composer agentId="a-bridge" {...props} />);
+      fireEvent.change(box(), { target: { value: 'gone soon' } });
+      first.unmount();
+      act(() => useAgents.getState().remove('a-bridge'));
+      expect(getDraft('a-bridge')).toBe('');
+    });
   });
 
   it('is disabled while the agent is queued', () => {

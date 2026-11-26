@@ -7,6 +7,7 @@ import { invokeOr, ipcErrorMessage, oide } from '../../../lib/bridge';
 import { insertText } from '../../../lib/slash';
 import { toast } from '../../../stores/ui';
 import { composeMessage } from '../model/focus';
+import { clearDraft, getDraft, setDraft } from '../composerDrafts';
 
 export interface ComposerProps {
   agentId: string;
@@ -31,7 +32,17 @@ export interface ComposerProps {
  * `artifacts.list` and sends an artifact UserMessage.
  */
 export function Composer({ agentId, projectId, placeholder, commands, subagentName, disabledReason, onCompact, onCycleMode }: ComposerProps) {
-  const [text, setText] = useState('');
+  // The text belongs to one agent. Switching agents swaps in that agent's saved draft during render
+  // (no flash of the previous agent's text); every edit is mirrored into the draft store.
+  const [draft, setDraftState] = useState(() => ({ agentId, text: getDraft(agentId) }));
+  const text = draft.agentId === agentId ? draft.text : getDraft(agentId);
+  if (draft.agentId !== agentId) setDraftState({ agentId, text });
+  const agentRef = useRef(agentId);
+  agentRef.current = agentId;
+  const setText = (next: string) => {
+    setDraft(agentId, next);
+    setDraftState({ agentId, text: next });
+  };
   const [artifact, setArtifact] = useState<ArtifactMeta | null>(null);
   const [sending, setSending] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -57,8 +68,8 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
     },
   });
 
+  // The text comes back per agent (above); the picked artifact and attachments are not kept.
   useEffect(() => {
-    setText('');
     setArtifact(null);
     clearAttachments();
   }, [agentId, clearAttachments]);
@@ -88,9 +99,14 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
     setSending(true);
     try {
       await oide.invoke('agents.send', { agentId, message: intent.message });
-      setText('');
-      setArtifact(null);
-      atts.clear();
+      // Only the draft that was sent goes; text typed while it was in flight stays. If the user has
+      // switched agents meanwhile, the visible composer belongs to someone else: leave it alone.
+      if (getDraft(agentId) === text) clearDraft(agentId);
+      if (agentRef.current === agentId) {
+        if (getDraft(agentId) === '') setDraftState({ agentId, text: '' });
+        setArtifact(null);
+        atts.clear();
+      }
     } catch (err) {
       toast(ipcErrorMessage(err), 'error');
     } finally {
