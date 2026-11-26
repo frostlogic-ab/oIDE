@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { statSync } from 'node:fs';
+import { realpathSync, statSync } from 'node:fs';
 import { arch, platform, release } from 'node:os';
 import { findExecutable } from '@oide/git';
 import { TESTED_CLI_RANGE, type CliInfo, type DiagnosticCheck, type Diagnostics } from '@oide/protocol';
@@ -57,6 +57,8 @@ export interface DiagnosticsDeps {
   homeRedactor?: Redactor;
   runVersion?: RunVersion;
   now?: () => number;
+  /** Long-name real path (default `fs.realpathSync.native`, which expands Windows 8.3 names). */
+  realpath?: (p: string) => string;
 }
 
 function fileSize(p: string): number {
@@ -72,6 +74,26 @@ export function formatBytes(n: number): string {
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
   if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+/**
+ * The App data row: where app data lives, as `~/…` when it is inside the home folder. A folder
+ * outside home (a custom user-data dir, a temp folder) is shown as `<userData>`: its raw path can
+ * name a person, a machine or a project, and the report carries no raw paths. Windows 8.3 short
+ * names (`C:\Users\JANEDO~1\…`, common under `%TEMP%`) are expanded first so they still match home.
+ */
+export function appDataLocation(userDataDir: string, home: Redactor, realpath: (p: string) => string = realpathSync.native): { value: string; detail?: string } {
+  let long = userDataDir;
+  try {
+    long = realpath(userDataDir);
+  } catch {
+    // Missing or unreadable: use the path as given.
+  }
+  for (const p of [long, userDataDir]) {
+    const shown = home.string(p);
+    if (shown.startsWith('~')) return { value: shown };
+  }
+  return { value: '<userData>', detail: 'Outside the home folder; the path is left out of the report.' };
 }
 
 export async function collectDiagnostics(d: DiagnosticsDeps): Promise<Diagnostics> {
@@ -137,8 +159,10 @@ export async function collectDiagnostics(d: DiagnosticsDeps): Promise<Diagnostic
 
   add({ id: 'logs', label: 'Logs', status: d.fileLoggingOk() ? 'ok' : 'warn', value: d.logsDir, ...(d.fileLoggingOk() ? {} : { detail: 'Writing log files failed (disk full?); retrying.' }) });
   add({ id: 'crash', label: 'Crash reports', status: 'info', value: d.crashReportsEnabled() ? 'On (saved on this computer only, never uploaded)' : 'Off' });
-  // Home-only redaction here, so the row shows where app data lives (`~/…`), not `<userData>`.
-  checks.push({ id: 'userData', label: 'App data', status: 'info', value: (d.homeRedactor ?? new Redactor()).string(d.userDataDir) });
+  // Home-only redaction here, so the row shows where app data lives (`~/…`), not `<userData>`;
+  // outside home it is `<userData>`, never the raw path. `r` still strips registered secrets.
+  const appData = appDataLocation(d.userDataDir, d.homeRedactor ?? new Redactor(), d.realpath);
+  checks.push({ id: 'userData', label: 'App data', status: 'info', value: r(appData.value), ...(appData.detail ? { detail: appData.detail } : {}) });
 
   const generatedAt = new Date((d.now ?? Date.now)()).toISOString();
   return { generatedAt, checks, report: formatReport(generatedAt, checks) };

@@ -925,3 +925,35 @@ only reported CI status. The reducer now returns `ready-for-review` when a turn 
 `submit_for_review`, the agent submitted in an earlier turn, and its final message asks nothing
 (`asksUser`). [ADR 0016](../adr/0016-follow-up-turns-return-to-ready-for-review.md); updated
 [agent-supervisor](pages/agent-supervisor.md).
+## [2026-11-26] review | E2E on main: diagnostics leaked userData, renderer-crash race, macOS keys
+Three e2e failures on main. (1) Real bug, all OSes: the Diagnostics App data row only redacted the
+home folder, so a userData outside home (`/tmp/…` on Linux, `/var/folders/…` on macOS) or an 8.3
+short path on Windows (`C:\Users\RUNNER~1\…`) went into the copyable report raw. The row now shows
+`~/…` inside home (after expanding 8.3 names) and `<userData>` otherwise; unit tests cover both
+([reliability](pages/reliability.md#startup-diagnostics)). (2) Test race, Linux: the "window
+reloaded" check could pass before the kill landed, and the next `executeJavaScript` went to the dying
+frame and never settled; the test now waits for `render-process-gone` then `did-finish-load` and caps
+each call. (3) Test bug, macOS: Monaco binds save to Cmd+S and end-of-document to Cmd+Down there, so
+Ctrl+S / Ctrl+End did nothing; the whiteboard test also relied on the doc test having opened the
+Artifacts screen, so it failed on its own retry. It now opens the screen itself.
+
+## [2026-11-26] build | Windows holder scan no longer autoloads PowerShell modules
+`folder-holders.test.ts` (integration) and `test/integration/worktree-delete.test.ts` timed out on
+every Windows CI run even with the 25 s budget. Cause: the scan script called `Add-Type`, a cmdlet, so
+Windows PowerShell autoloaded `Microsoft.PowerShell.Utility`. To do that it analysed every module on
+the default PSModulePath, and `Program Files\WindowsPowerShell\Modules` comes before System32 (on the
+runner: AWSPowershell, Microsoft.Graph, SqlServer, ...). The cache was cold and the process was killed
+at the timeout, so the cache never warmed. Locally, one large module on the path raised `Add-Type` from
+about 0.2 s to 1.4 s, while the CodeDom compile stayed at about 0.14 s. The script now compiles its C#
+helper through `CSharpCodeProvider`, sets `$PSModuleAutoLoadingPreference = 'None'`, and gets only
+`System32\WindowsPowerShell\v1.0\Modules` on PSModulePath. See [reliability](pages/reliability.md).
+
+## [2026-11-26] review | Linux e2e: kill the renderer instead of asking it to crash
+The renderer-crash e2e still failed on ubuntu after the race fix: main never saw
+`render-process-gone` within 20 s, and `executeJavaScript` to the old frame hung. On Linux,
+`webContents.forcefullyCrashRenderer()` does not terminate the process. It sends the renderer an
+IPC to crash itself, and a crash signal makes the kernel write a core dump first (piped to apport on
+GitHub's Ubuntu runners), so the frozen renderer outlived the poll and the teardown. Windows and
+macOS terminate the process directly. The test now kills the renderer with SIGKILL on
+`getOSProcessId()`, which dumps nothing and behaves the same on every OS
+([reliability](pages/reliability.md#tests)).

@@ -14,10 +14,12 @@ import type { HOLDER_CATEGORIES } from '@oide/protocol';
  *   the user's own processes and keeps those whose final path is the folder or inside it. A
  *   process's current directory is such a handle, so daemons started from the folder (Docker
  *   Desktop, WSL) are found too; Restart Manager only sees files, not folders. The folder reaches
- *   the script through an environment variable, never as script text.
+ *   the script through an environment variable, never as script text. The script runs no cmdlet
+ *   (the C# helper is compiled through CodeDom, not `Add-Type`), autoloading is off and
+ *   PSModulePath holds only Windows' own modules, so no installed module is analysed or loaded.
  * - macOS and Linux: `lsof -a -u <uid> +d <dir>` (the folder itself and its direct entries: open
  *   files and current directories), best effort.
- * - Everything has a 10 s timeout. Only the user's own processes are reported, by executable name
+ * - Everything has a timeout (HOLDER_TIMEOUT_MS). Only the user's own processes are reported, by executable name
  *   and pid; never their paths or command lines. Any failure yields `{ holders: [] }` plus `error`,
  *   and callers fall back to the generic message.
  */
@@ -60,8 +62,10 @@ export interface FindHoldersOptions {
 
 /**
  * Budget for one scan. On Windows the script's own handle scan stops after 8 s and prints what it
- * found; the rest is PowerShell start-up and the `Add-Type` compile, which took well over 2 s on
- * GitHub's Windows runners, so a 10 s budget killed the script before it printed anything.
+ * found; the rest is PowerShell start-up and compiling the helper (about 1 s). The script calls no
+ * cmdlet and turns module autoloading off: `Add-Type` used to make PowerShell analyse every module
+ * on PSModulePath before its own; with a cold cache and big modules (GitHub's Windows runners ship
+ * AWSPowershell, Microsoft.Graph, SqlServer) that outlasted even 25 s, every time.
  */
 export const HOLDER_TIMEOUT_MS = 25_000;
 
@@ -173,6 +177,7 @@ export function parseLsofOutput(text: string): RawHolder[] {
  */
 const WINDOWS_SCRIPT = String.raw`
 $ErrorActionPreference = 'Stop'
+$PSModuleAutoLoadingPreference = 'None'
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $src = @'
 using System; using System.Collections.Generic; using System.Runtime.InteropServices; using System.Text; using System.Threading; using System.IO;
@@ -265,11 +270,17 @@ public static class OideHolders {
   }
 }
 '@
-Add-Type -TypeDefinition $src
 $dir = $env:OIDE_HOLDER_DIR
 if (-not $dir) { exit 2 }
+$cp = [System.CodeDom.Compiler.CompilerParameters]::new()
+$cp.GenerateInMemory = $true
+[void]$cp.ReferencedAssemblies.Add('System.dll')
+[void]$cp.ReferencedAssemblies.Add('System.Core.dll')
+$built = [Microsoft.CSharp.CSharpCodeProvider]::new().CompileAssemblyFromSource($cp, $src)
+if ($built.Errors.HasErrors) { exit 3 }
+$holders = $built.CompiledAssembly.GetType('OideHolders')
 $sid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-foreach ($line in [OideHolders]::Find($dir, $sid, $PID)) { [Console]::Out.WriteLine($line) }
+foreach ($line in $holders::Find($dir, $sid, $PID)) { [Console]::Out.WriteLine($line) }
 `;
 
 /** `%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe`, never a bare name (SEC-01). */
@@ -286,6 +297,8 @@ function windowsEnv(env: NodeJS.ProcessEnv, dir: string): NodeJS.ProcessEnv {
   for (const k of keep) if (env[k] !== undefined) out[k] = env[k];
   out.SystemRoot ??= root;
   out.PATH = `${join(root, 'System32')};${root};${join(root, 'System32', 'WindowsPowerShell', 'v1.0')}`;
+  // Only Windows' own modules: no user or machine-wide module can load into the scan, or make it slow.
+  out.PSModulePath = join(root, 'System32', 'WindowsPowerShell', 'v1.0', 'Modules');
   out.OIDE_HOLDER_DIR = dir;
   return out;
 }

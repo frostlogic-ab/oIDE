@@ -62,13 +62,18 @@ export function SearchPanel({
   }, [s.focusNonce]);
 
   // Search as you type (debounced) and whenever the options or the scope change.
+  const pending = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     if (regexError) return;
     const t = setTimeout(() => void useSearch.getState().run(rootsKey ? rootsKey.split('\n') : []), 250);
+    pending.current = t;
     return () => clearTimeout(t);
   }, [s.query, s.isRegex, s.matchCase, s.wholeWord, s.include, s.exclude, rootsKey, regexError]);
 
+  // Enter (and the re-run after a replace) searches now. The debounce timer from the last edit is
+  // dropped, or it would fire later, run the same search again and wipe the results mid-way.
   const runNow = () => {
+    clearTimeout(pending.current);
     if (!regexError) void s.run(roots);
   };
   const onFieldKey = (e: KeyboardEvent<HTMLInputElement>) => {
