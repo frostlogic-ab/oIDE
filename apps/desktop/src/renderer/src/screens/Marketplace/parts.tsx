@@ -170,8 +170,11 @@ const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]),select:n
  * Modal shell for the Add custom dialog (720px, 56px from the top, as designed): role=dialog,
  * aria-modal, labelled by its title, focus moves in and is trapped, Esc closes, focus returns
  * to the opener, and a modal keymap scope blocks the screen's shortcuts underneath.
+ * `dismissOnScrim={false}` stops a click on the backdrop from closing it (use it once the form holds
+ * input); Esc, Close and Cancel still do. Only a press that starts on the backdrop itself counts, so
+ * a drag that begins inside the dialog and ends outside never closes it.
  */
-export function ModalShell({ title, description, onClose, children, footer, tabs, width = 720 }: {
+export function ModalShell({ title, description, onClose, children, footer, tabs, width = 720, dismissOnScrim = true }: {
   title: ReactNode;
   description?: ReactNode;
   onClose: () => void;
@@ -179,6 +182,7 @@ export function ModalShell({ title, description, onClose, children, footer, tabs
   footer: ReactNode;
   tabs?: ReactNode;
   width?: number;
+  dismissOnScrim?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -222,7 +226,7 @@ export function ModalShell({ title, description, onClose, children, footer, tabs
     <div
       className="fixed inset-0 z-50 bg-scrim flex items-start justify-center pt-14 px-4 pb-4 box-border overflow-auto"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (dismissOnScrim && e.target === e.currentTarget) onClose();
       }}
     >
       <div

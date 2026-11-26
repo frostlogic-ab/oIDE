@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterItems, monogram, parsePastedJson, qualifiedToolName, riskFromHints, sanitizeServerName, splitCommandLine, type ListItem } from './model';
+import { filterItems, matchesElsewhere, monogram, parsePastedJson, qualifiedToolName, riskFromHints, sanitizeServerName, splitCommandLine, type ListItem } from './model';
 
 describe('marketplace model', () => {
   it('derives risk from MCP annotations', () => {
@@ -49,5 +49,32 @@ describe('marketplace model', () => {
     expect(filterItems(items, 'agent-tools', '', 'installs').map((i) => i.key)).toEqual(['A', 'B']);
     expect(filterItems(items, 'agent-tools', '', 'updated').map((i) => i.key)).toEqual(['B', 'A']);
     expect(filterItems(items, 'agent-tools', 'b', 'name').map((i) => i.key)).toEqual(['B']);
+  });
+
+  it('searches every category with "all" and reports matches a scoped search hides', () => {
+    const item = (displayName: string, categories: string[], extra: Partial<ListItem> = {}): ListItem => ({
+      key: displayName,
+      kind: 'entry',
+      name: displayName.toLowerCase(),
+      displayName,
+      publisher: 'p',
+      description: '',
+      categories,
+      downloads: 1,
+      tools: [],
+      capabilities: null,
+      reviewed: true,
+      state: 'install',
+      ...extra,
+    });
+    const items = [item('Alpha', ['agent-tools']), item('Alpine theme', ['themes']), item('Beta', ['themes'], { state: 'installed' })];
+    expect(filterItems(items, 'all', 'alp', 'name').map((i) => i.key)).toEqual(['Alpha', 'Alpine theme']);
+    expect(filterItems(items, 'all', '', 'name')).toHaveLength(3);
+    // Scoped search stays scoped; matchesElsewhere returns only what it hides.
+    expect(filterItems(items, 'agent-tools', 'alp', 'name').map((i) => i.key)).toEqual(['Alpha']);
+    expect(matchesElsewhere(items, 'agent-tools', 'alp', 'name').map((i) => i.key)).toEqual(['Alpine theme']);
+    expect(matchesElsewhere(items, 'themes', 'alpha', 'name').map((i) => i.key)).toEqual(['Alpha']);
+    expect(matchesElsewhere(items, 'agent-tools', '  ', 'name')).toEqual([]);
+    expect(matchesElsewhere(items, 'agent-tools', 'zzz', 'name')).toEqual([]);
   });
 });

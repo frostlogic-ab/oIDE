@@ -8,7 +8,7 @@
  */
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CommandOutput, CustomServer, InstalledExtension, Project } from '@oide/protocol';
-import { Badge, Button, Icon, Spinner, cn } from '@oide/ui';
+import { Badge, Button, Icon, IconButton, Spinner, cn } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
 import { CheckButton, ModalShell, SaveFields, ToolRows, inputClass, type EditableTool, type SavedTo } from './parts';
@@ -80,6 +80,8 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
   const [editTools, setEditTools] = useState<EditableTool[]>(editing ? editing.tools.map((t) => ({ ...t })) : []);
 
   const finished = useRef(false);
+  // Set when a file or folder is dropped on the extension zone (see onDrop there).
+  const [dropNote, setDropNote] = useState(false);
   const urlId = useId();
   const gitId = useId();
   const cmdId = useId();
@@ -116,6 +118,14 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
     setEnv([]);
     onClose();
   };
+
+  // Anything typed or fetched? Then a click on the backdrop must not throw it away.
+  const dirty = editing
+    ? name !== editing.name || savedTo !== editing.savedTo || JSON.stringify(editTools) !== JSON.stringify(editing.tools) || selected.join() !== (editing.allProjects ? allIds : editing.projects).join()
+    : Boolean(
+        name || url.trim() || probe || token || cmdLine.trim() || json.trim() || gitUrl.trim() || ext || imported || picked.length || draftSaved ||
+          env.some((r) => r.key || r.value) || selected.join() !== allIds.join() || savedTo !== 'my-settings',
+      );
 
   const placement = () => ({
     savedTo,
@@ -422,6 +432,7 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
       onClose={close}
       tabs={tabsEl}
       footer={footer}
+      dismissOnScrim={!dirty}
     >
       {editing ? (
         <div className="flex flex-col gap-3.5">
@@ -656,6 +667,12 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
                           value={row.value}
                           onChange={(e) => setEnv(env.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
                         />
+                        <IconButton
+                          icon="trash"
+                          size={32}
+                          aria-label={row.key.trim() ? `Remove variable ${row.key.trim()}` : `Remove variable ${i + 1}`}
+                          onClick={() => setEnv(env.length > 1 ? env.filter((_, j) => j !== i) : [{ key: '', value: '' }])}
+                        />
                       </div>
                     ))}
                     <button type="button" className="self-start border-0 bg-transparent p-0 text-link text-[12px]" onClick={() => setEnv([...env, { key: '', value: '' }])}>
@@ -719,19 +736,29 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
 
           {tab === 'ext' && (
             <>
+              {/*
+                Dropping is not supported: a sandboxed renderer cannot read a dropped folder's path, and main
+                only accepts folders picked in its own dialog (extensions.addFromFolder), so we say so
+                instead of silently opening the picker.
+              */}
               <div
                 className="flex flex-col items-center gap-2 p-[22px] rounded-xl border-[1.5px] border-dashed border-line-hover text-center text-ink-2"
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
                   e.preventDefault();
-                  void loadFolder();
+                  setDropNote(true);
                 }}
               >
-                <span className="font-semibold">Drop an extension folder or package here</span>
-                <span className="text-[12px] text-ink-3">or</span>
-                <Button size={32} onClick={() => void loadFolder()} disabled={busy} data-autofocus>
+                <span className="font-semibold">Choose an extension folder</span>
+                <span className="text-[12px] text-ink-3">Pick the folder that holds the extension.</span>
+                <Button size={32} onClick={() => { setDropNote(false); void loadFolder(); }} disabled={busy} data-autofocus>
                   Choose a folder…
                 </Button>
+                {dropNote && (
+                  <span role="status" className="text-[12px] text-warn">
+                    Dropping a folder here is not supported yet. Use Choose a folder instead.
+                  </span>
+                )}
               </div>
               <div className="flex flex-col gap-1.5">
                 <label htmlFor={gitId} className="text-[12px] text-ink-2">

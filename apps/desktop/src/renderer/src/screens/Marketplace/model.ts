@@ -210,18 +210,25 @@ export function inCategory(item: ListItem, cat: CategoryId): boolean {
 
 export type SortId = 'installs' | 'updated' | 'name';
 
-export function filterItems(items: ListItem[], cat: CategoryId, query: string, sort: SortId): ListItem[] {
+export function matchesQuery(item: ListItem, query: string): boolean {
   const q = query.trim().toLowerCase();
-  const out = items.filter(
-    (i) =>
-      inCategory(i, cat) &&
-      (!q || [i.displayName, i.name, i.publisher, i.description, ...i.tools.map((t) => t.name)].some((s) => s.toLowerCase().includes(q))),
-  );
+  return !q || [item.displayName, item.name, item.publisher, item.description, ...item.tools.map((t) => t.name)].some((s) => s.toLowerCase().includes(q));
+}
+
+/** `cat` of `'all'` matches every item (search across categories). */
+export function filterItems(items: ListItem[], cat: CategoryId | 'all', query: string, sort: SortId): ListItem[] {
+  const out = items.filter((i) => (cat === 'all' || inCategory(i, cat)) && matchesQuery(i, query));
   const byName = (a: ListItem, b: ListItem) => a.displayName.localeCompare(b.displayName);
   if (sort === 'name') return out.sort(byName);
   if (sort === 'updated') return out.sort((a, b) => (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '') || byName(a, b));
   // Most installed; custom and local ones (0 downloads) keep a stable order at the end.
   return out.sort((a, b) => b.downloads - a.downloads);
+}
+
+/** Matches for `query` that are NOT in `cat`: what a category-scoped search hides. Empty without a query. */
+export function matchesElsewhere(items: ListItem[], cat: CategoryId, query: string, sort: SortId): ListItem[] {
+  if (!query.trim()) return [];
+  return filterItems(items, 'all', query, sort).filter((i) => !inCategory(i, cat));
 }
 
 /** Effective per-project state of an installed extension. */
