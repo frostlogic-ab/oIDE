@@ -23,6 +23,7 @@ import { useProjects } from '../../stores/projects';
 import { useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useUi } from '../../stores/ui';
+import { useArtifactDrafts } from './draftStore';
 import ArtifactsScreen from './index';
 
 vi.mock('./SourceEditor', () => ({
@@ -296,6 +297,7 @@ beforeEach(() => {
     loaded: true,
   });
   useUi.setState({ toasts: [] });
+  useArtifactDrafts.getState().reset();
   const slot = document.createElement('div');
   document.body.appendChild(slot);
   useUi.getState().setHeaderSlot('actions', slot);
@@ -451,6 +453,97 @@ describe('Whiteboard editor', () => {
     agentWrites('a-board', next);
     await waitFor(() => expect(within(viewer).getByTestId('whiteboard-loaded').textContent).toBe(next));
     expect(within(viewer).getByRole('status').textContent).toMatch(/Updated by Retry policy agent/);
+  });
+});
+
+describe('Unsaved edits survive leaving the screen', () => {
+  const draftsOf = () => useArtifactDrafts.getState().drafts;
+
+  async function typeAndLeave(text: string) {
+    const viewer = await openArtifact(/Webhook retry design/);
+    fireEvent.change(await within(viewer).findByLabelText('Source of Webhook retry design'), { target: { value: text } });
+    expect(draftsOf()['a-doc']).toMatchObject({ baseVersion: 1, draft: text });
+    // Another screen replaces this one (left rail, Ctrl+K, a toast action).
+    cleanup();
+    expect(draftsOf()['a-doc']?.draft).toBe(text);
+  }
+
+  async function comeBack() {
+    render(<ArtifactsScreen />);
+    const viewer = await screen.findByRole('region', { name: /\(open\)/ });
+    return viewer;
+  }
+
+  it('reopens the artifact with the typed text and the Unsaved changes badge', async () => {
+    await typeAndLeave('# Retry\n\nhalf-written');
+    const viewer = await comeBack();
+    expect(((await within(viewer).findByLabelText('Source of Webhook retry design')) as HTMLTextAreaElement).value).toBe('# Retry\n\nhalf-written');
+    expect(within(viewer).getByText('Unsaved changes')).toBeTruthy();
+    expect(within(viewer).getByText(/Doc · oide · v1/)).toBeTruthy();
+    // A save from the resumed editor is based on the version the edit started from, and clears the draft.
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(within(viewer).getByText(/Doc · oide · v2/)).toBeTruthy());
+    expect(calls('artifacts.save')).toEqual([{ id: 'a-doc', content: '# Retry\n\nhalf-written', note: 'Edited by you', baseVersion: 1 }]);
+    expect(draftsOf()['a-doc']).toBeUndefined();
+    expect(within(viewer).queryByText('Unsaved changes')).toBeNull();
+  });
+
+  it('marks the artifact in the grid when the route points at another one (no auto-open)', async () => {
+    await typeAndLeave('draft text');
+    // Coming back to the grid with the route on another artifact: marker on the card, no auto-open.
+    useRouter.setState({ route: { screen: 'artifacts', params: { artifactId: 'a-board' } }, back: [], forward: [] });
+    render(<ArtifactsScreen />);
+    const card = await screen.findByRole('button', { name: /Webhook retry design/ });
+    expect(within(card).getByText('Unsaved')).toBeTruthy();
+    expect(screen.queryByRole('region', { name: /\(open\)/ })).toBeNull();
+  });
+
+  it('Discard clears the stored draft', async () => {
+    await typeAndLeave('draft text');
+    const viewer = await comeBack();
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Artifacts' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Discard your changes?' })).getByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: /\(open\)/ })).toBeNull());
+    expect(draftsOf()['a-doc']).toBeUndefined();
+    cleanup();
+    render(<ArtifactsScreen />);
+    await screen.findByRole('button', { name: /Webhook retry design/ });
+    expect(screen.queryByRole('region', { name: /\(open\)/ })).toBeNull();
+  });
+
+  it('Use theirs clears the stored draft', async () => {
+    const viewer = await openArtifact(/Webhook retry design/);
+    fireEvent.change(await within(viewer).findByLabelText('Source of Webhook retry design'), { target: { value: 'my edit' } });
+    agentWrites('a-doc', 'agent edit');
+    fireEvent.click(await within(viewer).findByRole('button', { name: 'Use theirs' }));
+    await waitFor(() => expect(draftsOf()['a-doc']).toBeUndefined());
+  });
+
+  it('a draft whose artifact moved on while away comes back as the conflict banner, not lost', async () => {
+    await typeAndLeave('my edit');
+    agentWrites('a-doc', 'agent edit');
+    const viewer = await comeBack();
+    const banner = await within(viewer).findByRole('alert');
+    expect(banner.textContent).toMatch(/Retry policy agent saved v2 while you were editing/);
+    expect((within(viewer).getByLabelText('Source of Webhook retry design') as HTMLTextAreaElement).value).toBe('my edit');
+    expect(within(viewer).getByText('Unsaved changes')).toBeTruthy();
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Keep mine' }));
+    await waitFor(() => expect(calls('artifacts.save')[0]).toMatchObject({ content: 'my edit', baseVersion: 2 }));
+    await waitFor(() => expect(draftsOf()['a-doc']).toBeUndefined());
+  });
+
+  it('keeps a whiteboard with a changed scene and restores it as edited', async () => {
+    const viewer = await openArtifact(/Session lifecycle/);
+    fireEvent.click(await within(viewer).findByRole('button', { name: 'stub: loaded' }));
+    expect(draftsOf()['a-board']).toBeUndefined();
+    fireEvent.click(within(viewer).getByRole('button', { name: 'stub: draw' }));
+    await waitFor(() => expect(draftsOf()['a-board']).toBeDefined());
+    cleanup();
+    const back = await comeBack();
+    expect(within(back).getByText('Unsaved changes')).toBeTruthy();
+    // Loading the stored scene again is not a new baseline: still unsaved.
+    fireEvent.click(await within(back).findByRole('button', { name: 'stub: loaded' }));
+    expect(within(back).getByText('Unsaved changes')).toBeTruthy();
   });
 });
 

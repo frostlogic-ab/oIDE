@@ -8,6 +8,7 @@ import { useProjects } from '../../stores/projects';
 import { useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useUi } from '../../stores/ui';
+import { useArtifactDrafts } from './draftStore';
 import ArtifactsScreen from './index';
 
 const now = Date.now();
@@ -69,6 +70,7 @@ beforeEach(() => {
   useRouter.setState({ route: { screen: 'artifacts', params: {} }, back: [], forward: [] });
   useAgents.setState({ byId: {}, order: [], loaded: true });
   useUi.setState({ toasts: [] });
+  useArtifactDrafts.getState().reset();
   // The header's actions slot (the search field renders there).
   const slot = document.createElement('div');
   document.body.appendChild(slot);

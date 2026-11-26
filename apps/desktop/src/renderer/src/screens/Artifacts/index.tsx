@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import type { ArtifactMeta, ArtifactUse, ArtifactVersion, CommandOutput } from '@oide/protocol';
-import { Button, EmptyState, Icon, IconButton, LinkButton, Spinner, agentStatusMeta, cn } from '@oide/ui';
+import { Badge, Button, EmptyState, Icon, IconButton, LinkButton, Spinner, agentStatusMeta, cn } from '@oide/ui';
 import { HeaderSlot } from '../../components/frame/HeaderSlot';
 import { invokeOr, ipcErrorMessage, isNotImplemented, oide } from '../../lib/bridge';
 import { useAgents } from '../../stores/agents';
@@ -19,6 +19,7 @@ import { navigate, useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { toast } from '../../stores/ui';
 import { DeleteDialog, NewArtifactDialog, RenameDialog } from './Dialogs';
+import { latestDraftId, useArtifactDrafts } from './draftStore';
 import { useFileDrop, type DroppedFiles } from './drop';
 import { BrokenImportBadge, FixImportPanel } from './FixImportPanel';
 import { ArtifactPreview, KindThumb } from './Preview';
@@ -122,7 +123,31 @@ export default function ArtifactsScreen() {
     setDetail((d) => (d && d.meta.id === m.id ? { ...d, meta: m } : d));
   };
 
-  useEffect(() => setOpened(false), [selectedId]);
+  // Back from another screen with unsaved edits (draftStore.ts): land on the artifact they belong to, in
+  // the editor. Only the route's artifact, or the most recent draft when the route names none.
+  const resume = useRef<string | undefined>(undefined);
+  const resumed = useRef(false);
+  const drafts = useArtifactDrafts((s) => s.drafts);
+  useEffect(() => {
+    if (!list) return;
+    useArtifactDrafts.getState().prune(new Set(list.map((a) => a.id)));
+    if (resumed.current) return;
+    resumed.current = true;
+    const kept = useArtifactDrafts.getState().drafts;
+    const id = routeId ? (kept[routeId] ? routeId : undefined) : latestDraftId(kept);
+    if (!id) return;
+    resume.current = id;
+    if (id !== routeId) useRouter.getState().replace('artifacts', { artifactId: id });
+    setOpened({});
+  }, [list, routeId]);
+  useEffect(() => {
+    // The resume above changes the selection once; that is not the user picking another artifact.
+    if (resume.current) {
+      if (resume.current === selectedId) resume.current = undefined;
+      return;
+    }
+    setOpened(false);
+  }, [selectedId]);
 
   const shown = detail?.meta.id === selectedId ? detail : null;
   const actionDialogs = shown && (
@@ -145,6 +170,7 @@ export default function ArtifactsScreen() {
           setDialog(null);
           setOpened(false);
           setDetail(null);
+          useArtifactDrafts.getState().clear(shown.meta.id);
           toast(`Deleted ${shown.meta.title}`, 'success');
           const next = visible.find((a) => a.id !== shown.meta.id);
           useRouter.getState().replace('artifacts', next ? { artifactId: next.id } : {});
@@ -263,7 +289,10 @@ export default function ArtifactsScreen() {
                     <KindThumb kind={a.kind} />
                   </div>
                   <div className="flex flex-col gap-[3px] px-3 py-2.5 w-full box-border">
-                    <span className="font-semibold truncate">{a.title}</span>
+                    <span className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-semibold truncate">{a.title}</span>
+                      {drafts[a.id] && <Badge tone="warn">Unsaved</Badge>}
+                    </span>
                     <span className="text-[12px] text-ink-3">
                       {KIND_LABEL[a.kind]} · {projectName(a.projectId)}
                     </span>

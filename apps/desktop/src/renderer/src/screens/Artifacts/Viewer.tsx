@@ -28,6 +28,7 @@ import { ExtensionArtifactView } from '../../extensions/ExtensionArtifactView';
 import { artifactTypeOf } from '../../extensions/model';
 import { useExtensions } from '../../extensions/store';
 import { FilesPanel, useArtifactFile, type ArtifactFileState } from './FilesPanel';
+import { useArtifactDrafts } from './draftStore';
 import { FixImportPanel } from './FixImportPanel';
 import { DesignFrame, MarkdownView } from './Preview';
 import { RetrievalStatus, useRetrieval } from './Retrieval';
@@ -98,10 +99,16 @@ export function Viewer({
   // An extension artifact type opens in its own viewer (Preview); everything else in the editor.
   const [mode, setMode] = useState<ViewerMode>(initialMode ?? (meta.type ? 'preview' : 'edit'));
   /** The saved version the editor is based on. */
-  const [base, setBase] = useState({ version: meta.version, content: detail.content });
-  const [draft, setDraft] = useState(detail.content);
+  // Unsaved edits kept when the screen was left (draftStore.ts): resume them. When the artifact moved
+  // on meanwhile, the draft keeps its old base and the conflict banner below takes over.
+  const [resumed] = useState(() => {
+    const d = useArtifactDrafts.getState().drafts[detail.meta.id];
+    return d && d.baseVersion <= detail.meta.version && d.draft !== d.baseline ? d : undefined;
+  });
+  const [base, setBase] = useState(resumed ? { version: resumed.baseVersion, content: resumed.baseContent } : { version: meta.version, content: detail.content });
+  const [draft, setDraft] = useState(resumed ? resumed.draft : detail.content);
   /** What "unchanged" looks like: the base content, or (whiteboards) Excalidraw's serialisation of it. */
-  const [baseline, setBaseline] = useState<string | null>(kind === 'whiteboard' ? null : detail.content);
+  const [baseline, setBaseline] = useState<string | null>(resumed ? resumed.baseline : kind === 'whiteboard' ? null : detail.content);
   const [sceneKey, setSceneKey] = useState(0);
   const [notice, setNotice] = useState<Other | null>(null);
   const [conflict, setConflict] = useState<Other | null>(null);
@@ -116,6 +123,13 @@ export function Viewer({
   const dirty = baseline !== null && draft !== baseline;
   const live = useRef({ base, dirty, entry: meta.entry });
   live.current = { ...live.current, base, dirty };
+  // Keep the unsaved entry edits outside this component so leaving the screen does not lose them.
+  // Not cleared on unmount: that is the point. Save, "Use theirs" and Discard make it not dirty or clear it.
+  useEffect(() => {
+    const drafts = useArtifactDrafts.getState();
+    if (dirty && baseline !== null) drafts.set(meta.id, { baseVersion: base.version, baseContent: base.content, baseline, draft });
+    else drafts.clear(meta.id);
+  }, [dirty, baseline, draft, base, meta.id]);
   const retrieval = useRetrieval(meta, onMeta);
 
   // Several files: the Files panel, and one other file open at a time (null = the entry).
@@ -505,7 +519,14 @@ export function Viewer({
             <Button size={32} onClick={() => setConfirmClose(false)}>
               Keep editing
             </Button>
-            <Button size={32} variant="danger" onClick={onClose}>
+            <Button
+              size={32}
+              variant="danger"
+              onClick={() => {
+                useArtifactDrafts.getState().clear(meta.id);
+                onClose();
+              }}
+            >
               Discard
             </Button>
           </>
