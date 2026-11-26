@@ -51,6 +51,20 @@ describe('command bar quick open', () => {
     expect(useFiles.getState().pending).toMatchObject({ path: 'src/shell/StatusBar.tsx', line: 6 });
   });
 
+  it('shows "Searching files…" and keeps a row highlighted when ArrowDown is pressed before results arrive', async () => {
+    await setupMockApp({ screen: 'wall', params: {} });
+    useUi.getState().openCommandBar('commands');
+    render(<CommandBar />);
+    fireEvent.change(input(), { target: { value: 'retry' } });
+    expect(within(bar()).getByText('Searching files…')).toBeTruthy();
+    fireEvent.keyDown(input(), { key: 'ArrowDown' });
+    const option = await within(bar()).findByRole('option', { name: /retry\.ts/ });
+    expect(within(bar()).queryByText('Searching files…')).toBeNull();
+    expect(within(bar()).getAllByRole('option').some((o) => o.getAttribute('aria-selected') === 'true')).toBe(true);
+    expect(input().getAttribute('aria-activedescendant')).toBeTruthy();
+    expect(option).toBeTruthy();
+  });
+
   it('with ">" lists commands only', async () => {
     await setupMockApp({ screen: 'wall', params: {} });
     useUi.getState().openCommandBar('commands');
