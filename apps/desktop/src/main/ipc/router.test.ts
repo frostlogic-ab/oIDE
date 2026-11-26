@@ -42,6 +42,15 @@ describe('IpcRouter', () => {
     expect(handler).toHaveBeenCalledWith({ cwd: '/tmp', cols: 100, rows: 30 }, meta);
   });
 
+  it('git.openPr accepts just the agent id (main writes the title and body)', async () => {
+    // Review > Open pull request and the Wall tile send only { agentId }; a required `title` here broke them.
+    const r = new IpcRouter();
+    const handler = vi.fn(() => ({ url: 'https://github.com/o/r/pull/1', number: 1 }));
+    r.register('git.openPr', handler);
+    expect(await r.dispatch({ command: 'git.openPr', input: { agentId: 'a1' } }, meta)).toMatchObject({ ok: true });
+    expect(handler).toHaveBeenCalledWith({ agentId: 'a1' }, meta);
+  });
+
   it('accepts void input as undefined or null', async () => {
     const r = new IpcRouter();
     r.register('app.info', () => ({ version: '1.0.0', platform: 'linux', userData: '/u' }));
