@@ -75,8 +75,25 @@ test('killing the renderer never kills agents; the window reloads and rehydrates
   })) as Array<{ id: string }>;
   await expect(page.getByRole('group', { name: 'Permission: Run npm test' })).toBeVisible({ timeout: 30_000 });
 
-  // Kill the renderer process.
-  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.webContents.forcefullyCrashRenderer());
+  // Kill the renderer process. Main records the crash and the page load that follows it, so the
+  // wait below is for the reload itself: right after the kill, `isCrashed()` can still read false
+  // and the old URL is still set, which would let a plain state check pass before anything reloaded.
+  // SIGKILL, not `forcefullyCrashRenderer()`: on Linux that asks the renderer to crash itself, and a
+  // crash signal makes the kernel write a core dump first (apport on GitHub's Ubuntu runners), which
+  // held the dying renderer, and `render-process-gone`, past every timeout. A kill dumps nothing.
+  await app.evaluate(({ BrowserWindow }) => {
+    const wc = BrowserWindow.getAllWindows()[0]!.webContents;
+    const g = globalThis as { __e2eReload?: { gone: boolean; loaded: boolean } };
+    const state = { gone: false, loaded: false };
+    g.__e2eReload = state;
+    wc.once('render-process-gone', () => {
+      state.gone = true;
+      wc.once('did-finish-load', () => {
+        state.loaded = true;
+      });
+    });
+    process.kill(wc.getOSProcessId(), 'SIGKILL');
+  });
 
   // Main reloads the page on its own; the stores rehydrate from agents.list.
   await expect
@@ -84,14 +101,25 @@ test('killing the renderer never kills agents; the window reloads and rehydrates
       () =>
         app.evaluate(({ BrowserWindow }) => {
           const wc = BrowserWindow.getAllWindows()[0]!.webContents;
-          return !wc.isCrashed() && !wc.isLoading() && wc.getURL().includes('index.html');
+          const s = (globalThis as { __e2eReload?: { gone: boolean; loaded: boolean } }).__e2eReload;
+          return { gone: s?.gone, loaded: s?.loaded, live: !wc.isCrashed() && !wc.isLoading() && wc.getURL().includes('index.html') };
         }),
       { timeout: 20_000 },
     )
-    .toBe(true);
+    .toEqual({ gone: true, loaded: true, live: true });
   // Playwright keeps the Page marked as crashed (locators refuse to run), so the reloaded DOM is
-  // read and driven through the window's webContents from main.
-  const inPage = <T,>(js: string) => app.evaluate(({ BrowserWindow }, code) => BrowserWindow.getAllWindows()[0]!.webContents.executeJavaScript(code) as Promise<T>, js);
+  // read and driven through the window's webContents from main. Each call is capped at 3 s: a call
+  // that lands on a frame being swapped can stay pending forever, which would stall a poll on its
+  // first try instead of letting it try again.
+  const inPage = <T,>(js: string) =>
+    app.evaluate(
+      ({ BrowserWindow }, code) =>
+        Promise.race([
+          BrowserWindow.getAllWindows()[0]!.webContents.executeJavaScript(code) as Promise<T>,
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('executeJavaScript timed out')), 3000)),
+        ]),
+      js,
+    );
   const PROMPT = `document.querySelector('[role="group"][aria-label="Permission: Run npm test"]')`;
   // While the page is still swapping frames, executeJavaScript can throw; keep polling.
   await expect.poll(() => inPage<boolean>(`Boolean(${PROMPT})`).catch(() => false), { timeout: 20_000 }).toBe(true);

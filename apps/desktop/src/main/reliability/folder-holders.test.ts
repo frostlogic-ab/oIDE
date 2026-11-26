@@ -71,6 +71,11 @@ describe('folder holders: names and messages', () => {
     const script = Buffer.from(calls[0]!.args[calls[0]!.args.length - 1]!, 'base64').toString('utf16le');
     expect(script).not.toContain('evil');
     expect(script).toContain('$env:OIDE_HOLDER_DIR');
+    // No cmdlet, no module autoloading, only Windows' own modules: an installed module (AWS,
+    // Graph, SqlServer on CI runners) must never be analysed or loaded on the way to the scan.
+    expect(script).not.toMatch(/Add-Type|New-Object/i);
+    expect(script).toContain("$PSModuleAutoLoadingPreference = 'None'");
+    expect(calls[0]!.env.PSModulePath).toBe(join('C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'Modules'));
   });
 
   it('falls back to no holders when the scan fails or times out', async () => {
