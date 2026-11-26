@@ -5,7 +5,7 @@ import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { targetName, useMergePrediction, useMergePredictions } from '../../stores/mergePrediction';
 import { navigate } from '../../stores/router';
 import { toast } from '../../stores/ui';
-import { useGit } from '../SourceControl/gitStore';
+import { hasPendingForPr, useGit } from '../SourceControl/gitStore';
 import { shortBranch } from '../SourceControl/model';
 import { baseName } from './diff';
 import { DeployActions } from '../../extensions/DeployActions';
@@ -271,31 +271,33 @@ export function pendingForPr(worktree: Pick<WorktreeInfo, 'unpushed' | 'uncommit
 
 /**
  * The branch has an open PR: follow-up work (new commits, files the agent left uncommitted) goes up
- * to it with Push to PR; View pull request stays next to it.
+ * to it with Push to PR; View pull request stays next to it. With nothing to send (or the push state
+ * not known yet), only View pull request shows.
  */
 function PushToPr({ agent, pr, worktree, onView }: { agent: AgentSummary; pr: { url: string; number: number }; worktree?: WorktreeInfo; onView(): void }) {
   const [busy, setBusy] = useState(false);
   const pending = pendingForPr(worktree);
-  // Unknown (Source control not loaded yet, or the branch was pushed from elsewhere): offer the push anyway.
-  const upToDate = worktree !== undefined && worktree.unpushed !== undefined && !pending;
   const working = agent.status === 'running' || agent.status === 'starting' || agent.status === 'needs-permission';
   const blocked = working && (worktree?.uncommitted ?? 0) > 0;
   const push = async () => {
     setBusy(true);
     await pushToPullRequest(agent.id);
+    await useGit.getState().load(agent.projectId);
     setBusy(false);
-    void useGit.getState().load(agent.projectId);
   };
+  const offerPush = busy || hasPendingForPr(worktree);
   const view = (
-    <Button variant={upToDate ? 'primary' : 'secondary'} size={upToDate ? 36 : 32} className="rounded-md" icon="external-link" onClick={onView}>
+    <Button variant={offerPush ? 'secondary' : 'primary'} size={offerPush ? 32 : 36} className="rounded-md" icon="external-link" onClick={onView}>
       View pull request #{pr.number}
     </Button>
   );
-  if (upToDate)
+  if (!offerPush)
     return (
       <>
         {view}
-        <span className="text-[11.5px] text-ink-3 leading-[1.45]">Pull request #{pr.number} has everything in this worktree.</span>
+        {worktree?.unpushed !== undefined && (
+          <span className="text-[11.5px] text-ink-3 leading-[1.45]">Pull request #{pr.number} has everything in this worktree.</span>
+        )}
       </>
     );
   return (
@@ -308,7 +310,7 @@ function PushToPr({ agent, pr, worktree, onView }: { agent: AgentSummary; pr: { 
           ? `${agent.title} is still working. Push once it stops or submits for review.`
           : pending
             ? `Not on pull request #${pr.number} yet: ${pending}.${worktree?.uncommitted ? ' oIDE commits the files for the agent first.' : ''}`
-            : `Sends this worktree's new commits to pull request #${pr.number}.`}
+            : `Sending to pull request #${pr.number}…`}
       </span>
       {view}
     </>

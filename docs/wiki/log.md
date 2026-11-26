@@ -969,3 +969,8 @@ GitHub's Ubuntu runners), so the frozen renderer outlived the poll and the teard
 macOS terminate the process directly. The test now kills the renderer with SIGKILL on
 `getOSProcessId()`, which dumps nothing and behaves the same on every OS
 ([reliability](pages/reliability.md#tests)).
+
+## [2026-11-26] build | Push to PR only when there is something to push
+Review and the Wall review tile hide Push to pull request when the worktree has no new commits and no
+uncommitted files the PR lacks (or the push state is not known yet); `hasPendingForPr` in the git store.
+See [Review](pages/screen-review.md), [Wall](pages/screen-wall.md).
