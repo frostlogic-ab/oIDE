@@ -37,6 +37,7 @@ of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in
 - [pages/telemetry.md](pages/telemetry.md): opt-in Umami usage analytics and error reports from main: consent, event catalogue, never-sent list, scrubbing, adding an event, forks.
 - [pages/testing.md](pages/testing.md): Vitest, fake-claude fixtures, Playwright e2e.
 - [pages/packaging.md](pages/packaging.md): electron-builder, CI matrix, updates, signing.
+- [pages/release-pipeline.md](pages/release-pipeline.md): release-please release PRs, Conventional Commit PR titles, draft release, per-OS installer builds and automatic publishing to GitHub Releases; one-time repo setup.
 - [pages/docs-site.md](pages/docs-site.md): the VitePress docs site and its home page from the oIDE Website design: layout switch, scoped design CSS, light/dark without hydration mismatch, self-hosted fonts, download cards.
 
 ## Screens

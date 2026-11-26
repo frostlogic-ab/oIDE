@@ -50,4 +50,4 @@ red with "/compact suggested" at the compact level (both in Settings > Agents). 
 | Enter | Open the focused tile in Focus |
 | Esc | Clear the selection |
 
-Details: [screen-wall](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/screen-wall.md) in the wiki.
+Details: [screen-wall](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/screen-wall.md) in the wiki.

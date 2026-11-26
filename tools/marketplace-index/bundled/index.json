@@ -35,7 +35,7 @@
           }
         }
       ],
-      "repository": "https://github.com/oide-dev/oide"
+      "repository": "https://github.com/frostlogic-ab/oIDE"
     },
     {
       "name": "@oide/ext-git",
@@ -63,7 +63,7 @@
           }
         }
       ],
-      "repository": "https://github.com/oide-dev/oide"
+      "repository": "https://github.com/frostlogic-ab/oIDE"
     },
     {
       "name": "@oide/ext-themes",
@@ -89,7 +89,7 @@
           }
         }
       ],
-      "repository": "https://github.com/oide-dev/oide"
+      "repository": "https://github.com/frostlogic-ab/oIDE"
     }
   ]
 }

@@ -6,7 +6,7 @@
   "license": "MIT",
   "type": "module",
   "files": ["dist"],
-  "repository": { "type": "git", "url": "https://github.com/oide-dev/oide.git", "directory": "extensions/git" },
+  "repository": { "type": "git", "url": "https://github.com/frostlogic-ab/oIDE.git", "directory": "extensions/git" },
   "scripts": { "typecheck": "tsc --noEmit -p ." },
   "devDependencies": {
     "@oide/extension-api": "workspace:*",

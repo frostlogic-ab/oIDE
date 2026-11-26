@@ -178,6 +178,10 @@ main to Umami; see [telemetry](telemetry.md). `ui.telemetry` is still never read
    later `oide-dev/oide-marketplace`). Enable private vulnerability reporting (SECURITY.md and the issue
    template rely on it), GitHub Pages (Actions source) for `docs.yml`, Dependabot and CodeQL, and branch
    protection on `main`. Decide about the `oide.dev` domain.
+   **Update 2026-11-26:** the app repository is [frostlogic-ab/oIDE](https://github.com/frostlogic-ab/oIDE);
+   the site, docs and package metadata link there, and the release feed defaults to it (no variables
+   needed). Its one-time settings are in [release-pipeline](release-pipeline.md#one-time-repository-setup).
+   `oide-dev/oide-marketplace` is still unclaimed, so the marketplace default stays off.
 3. **Commit identity.** All 43 commits carry a personal Gmail address. Before the first push, either
    keep it, or rewrite author and committer to the GitHub noreply address
    (`git filter-repo --mailmap`, or a fresh squashed initial commit). After pushing, this cannot be undone.

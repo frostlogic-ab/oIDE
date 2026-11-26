@@ -1,8 +1,8 @@
 # Contributing
 
 Thanks for helping. oIDE is an Electron + TypeScript + React monorepo. The full rules are in
-[CONTRIBUTING.md](https://github.com/oide-dev/oide/blob/main/CONTRIBUTING.md) and
-[CLAUDE.md](https://github.com/oide-dev/oide/blob/main/CLAUDE.md); this page is the short version.
+[CONTRIBUTING.md](https://github.com/frostlogic-ab/oIDE/blob/main/CONTRIBUTING.md) and
+[CLAUDE.md](https://github.com/frostlogic-ab/oIDE/blob/main/CLAUDE.md); this page is the short version.
 
 ## Hard rules
 
@@ -19,7 +19,7 @@ Every change must keep these. They protect users' Claude accounts:
 ## Set up
 
 ```sh
-git clone https://github.com/oide-dev/oide.git
+git clone https://github.com/frostlogic-ab/oIDE.git
 cd oide
 pnpm install
 pnpm dev          # the app with hot reload
@@ -76,16 +76,30 @@ docs/site/               This site
 
 `docs/wiki/` is the project's knowledge base: one page per package, screen or concept. When you change
 code, update the page that describes it, add new pages to `docs/wiki/index.md`, and append an entry
-to `docs/wiki/log.md`. Start at the [wiki index](https://github.com/oide-dev/oide/blob/main/docs/wiki/index.md).
+to `docs/wiki/log.md`. Start at the [wiki index](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/index.md).
 
 ## Pull requests
 
 1. Fork and branch from `main`.
 2. Run `pnpm typecheck && pnpm lint && pnpm test` before you push.
 3. Describe the user-visible change and how you tested it.
+4. Give the pull request a [Conventional Commits](https://www.conventionalcommits.org/) title:
+   `feat: …` for a feature, `fix: …` for a bug fix, `feat!: …` for a breaking change, `docs: …`,
+   `chore: …`, `ci: …` and the like for changes that do not need a release. Pull requests are
+   squash-merged and the title becomes the commit message.
+
+### How releases happen
+
+Nobody tags releases by hand. After each merge to `main`,
+[release-please](https://github.com/googleapis/release-please) keeps one release pull request open
+(`chore: release X.Y.Z`) with the next version and the changelog built from the pull request
+titles. A maintainer merges it when it is time to ship; CI then builds the Windows, macOS and Linux
+installers and publishes them on [GitHub Releases](https://github.com/frostlogic-ab/oIDE/releases).
+Details: [release-pipeline](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/release-pipeline.md)
+in the wiki.
 
 By contributing you agree that your contribution is licensed under the
-[MIT licence](https://github.com/oide-dev/oide/blob/main/LICENSE). Be kind; the project follows the
+[MIT licence](https://github.com/frostlogic-ab/oIDE/blob/main/LICENSE). Be kind; the project follows the
 Contributor Covenant code of conduct.
 
 ## Extensions

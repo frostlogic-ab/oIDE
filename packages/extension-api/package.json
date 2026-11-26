@@ -24,7 +24,7 @@
       }
     }
   },
-  "repository": { "type": "git", "url": "https://github.com/oide-dev/oide.git", "directory": "packages/extension-api" },
+  "repository": { "type": "git", "url": "https://github.com/frostlogic-ab/oIDE.git", "directory": "packages/extension-api" },
   "keywords": ["oide", "extension", "mcp", "claude-code"],
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

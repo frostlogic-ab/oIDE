@@ -1,6 +1,6 @@
 # Docs site and home page
 
-The public site at `oide-dev.github.io/oide/`: a marketing home page plus the user guide, the
+The public site at `frostlogic-ab.github.io/oIDE/`: a marketing home page plus the user guide, the
 extension author guide, the security model and the FAQ. VitePress 2 in `docs/site/`, built and
 deployed by `.github/workflows/docs.yml` ([packaging](packaging.md)). Commands: `pnpm docs:dev`,
 `pnpm docs:build`, `pnpm docs:preview`.
@@ -30,6 +30,9 @@ Source design: the "oIDE Website" artifact, copied to [raw/design/website/](../r
 - **Fonts are self-hosted** (`@fontsource-variable/archivo` with the width axis,
   `@fontsource-variable/jetbrains-mono`; Inter ships with VitePress). The site loads nothing from
   third-party hosts, in line with the [telemetry](telemetry.md) stance; the site has no analytics.
+- **Links**: `repo` in `Landing.vue` and `.vitepress/config.ts` is `https://github.com/frostlogic-ab/oIDE`;
+  every repository, issue, discussion and download link is built from it. Base path `/oIDE/`.
+  Releases there are published by the [release pipeline](release-pipeline.md).
 - **Downloads** go to GitHub Releases `latest`: file names carry the version
   (`oIDE-<version>-<os>-<arch>.<ext>`), so the page cannot link files directly. The visitor's system
   is detected after mount (none on phones and tablets) to label the buttons and mark its card.

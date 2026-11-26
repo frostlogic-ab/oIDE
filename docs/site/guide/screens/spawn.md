@@ -39,4 +39,4 @@ Presets are editable in Settings > Models. Changing any slot by hand switches th
 - Controls the installed CLI does not support (detected from `claude --help`) are hidden: unknown
   modes, effort, routed subagents, system-prompt techniques, extension tools.
 
-Details: [screen-spawn](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/screen-spawn.md).
+Details: [screen-spawn](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/screen-spawn.md).

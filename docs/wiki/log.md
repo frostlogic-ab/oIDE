@@ -846,3 +846,17 @@ Archivo headings. Fonts are self-hosted (fontsource). The design's brew and wing
 exist, so the download cards show SHA256SUMS checks instead; downloads link to GitHub Releases. No
 telemetry change (the site has no analytics). Pages: [docs-site.md](pages/docs-site.md) (new),
 [packaging.md](pages/packaging.md).
+
+## [2026-11-26] build | Release pipeline with release-please; links to frostlogic-ab/oIDE
+The project lives at [frostlogic-ab/oIDE](https://github.com/frostlogic-ab/oIDE). Releases are now
+automated: PRs are squash-merged with Conventional Commit titles (`pr-title.yml`), release-please
+(`release-please.yml`, `release-please-config.json`, `.release-please-manifest.json` at 0.1.0) keeps a
+`chore: release X.Y.Z` PR open, and merging it creates a draft release + tag and calls `release.yml`
+(now `workflow_call` / `workflow_dispatch`, no tag trigger), which builds Windows, macOS and Linux
+installers, uploads them to the draft and publishes it after `SHA256SUMS`. The release feed defaults
+to the repository running the workflow (`OIDE_PUBLISH_*` variables still override it);
+`OIDE_RELEASE_KEEP_DRAFT=true` keeps drafts. Website, docs, package metadata and issue templates
+link to the new repository; the docs site base is `/oIDE/` (`frostlogic-ab.github.io/oIDE`).
+`CHANGELOG.md` is written by release-please from now on. No telemetry change (CI only). Pages:
+[release-pipeline.md](pages/release-pipeline.md) (new), [packaging.md](pages/packaging.md),
+[docs-site.md](pages/docs-site.md).

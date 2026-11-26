@@ -58,4 +58,4 @@ printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocol
 Host code is a module with `activate(ctx)`; unit-test it with a fake `ctx` that records calls. The
 built-in extensions test their manifests in `src/manifest.test.ts` with `loadManifest` from
 `@oide/extension-host`; see
-[extensions/browser-preview](https://github.com/oide-dev/oide/tree/main/extensions/browser-preview).
+[extensions/browser-preview](https://github.com/frostlogic-ab/oIDE/tree/main/extensions/browser-preview).

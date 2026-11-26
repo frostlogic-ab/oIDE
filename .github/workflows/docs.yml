@@ -1,7 +1,7 @@
 name: Docs
 
 # Builds the VitePress site in docs/site/ and deploys it to GitHub Pages
-# (https://oide-dev.github.io/oide/). Enable Pages with source "GitHub Actions" in the repo settings.
+# (https://frostlogic-ab.github.io/oIDE/). Enable Pages with source "GitHub Actions" in the repo settings.
 
 on:
   push:

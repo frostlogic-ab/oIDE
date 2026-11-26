@@ -3,7 +3,7 @@
 oIDE runs agents that execute shell commands on your machine. The main risks are a malicious
 repository or extension reaching your machine, and an agent going further than you allowed. This
 page describes what oIDE does today. To report a vulnerability, see the
-[security policy](https://github.com/oide-dev/oide/blob/main/SECURITY.md).
+[security policy](https://github.com/frostlogic-ab/oIDE/blob/main/SECURITY.md).
 
 ## Your Claude account
 
@@ -102,6 +102,6 @@ removed; you can copy one into a bug report yourself.
 The lockfile is committed, dependencies are watched by Dependabot, and release builds are made only
 in CI from tagged commits.
 
-Internals: [security](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/security.md),
-[review-security](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/review-security.md),
-[constraints](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/constraints.md).
+Internals: [security](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/security.md),
+[review-security](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/review-security.md),
+[constraints](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/constraints.md).

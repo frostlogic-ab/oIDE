@@ -1,0 +1,44 @@
+name: PR title
+
+# release-please builds the version bump and CHANGELOG.md from the commits on main. Pull requests are
+# squash-merged, so the PR title becomes that commit: it must follow Conventional Commits
+# (docs/wiki/pages/release-pipeline.md#writing-pull-request-titles).
+#
+#   feat: ...   new feature, minor bump       fix: ...   bug fix, patch bump
+#   feat!: ...  breaking change               docs/chore/ci/test/refactor/build/style: no release
+#
+# The title is read through the API and matched in a shell variable; it is never expanded into the
+# script, so a hostile title cannot run code.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: read
+
+concurrency:
+  group: pr-title-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  conventional:
+    name: Conventional Commit title
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check the title
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          number="${GITHUB_REF#refs/pull/}"
+          number="${number%/merge}"
+          title=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number" --jq .title)
+          re='^(feat|fix|perf|security|revert|deps|docs|refactor|test|build|ci|chore|style)(\([A-Za-z0-9._/-]+\))?!?: [^ ].*'
+          if [[ "$title" =~ $re ]]; then
+            echo "The title follows Conventional Commits."
+          else
+            echo "::error::The PR title must follow Conventional Commits, for example 'feat(wall): add tile filters' or 'fix: keep worktree changes on merge'. See docs/wiki/pages/release-pipeline.md."
+            exit 1
+          fi

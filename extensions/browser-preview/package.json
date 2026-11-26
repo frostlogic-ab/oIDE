@@ -6,7 +6,7 @@
   "license": "MIT",
   "type": "module",
   "files": ["dist"],
-  "repository": { "type": "git", "url": "https://github.com/oide-dev/oide.git", "directory": "extensions/browser-preview" },
+  "repository": { "type": "git", "url": "https://github.com/frostlogic-ab/oIDE.git", "directory": "extensions/browser-preview" },
   "scripts": { "typecheck": "tsc --noEmit -p ." },
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",

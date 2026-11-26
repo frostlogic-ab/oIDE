@@ -97,7 +97,7 @@ subagents used. Usage percentages appear only when the CLI reports them.
 
 Commit these to share an agent setup with your team.
 
-Internals: [agent-supervisor](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/agent-supervisor.md),
-[cli-integration](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/cli-integration.md),
-[subagents](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/subagents.md),
-[mcp-server](https://github.com/oide-dev/oide/blob/main/docs/wiki/pages/mcp-server.md).
+Internals: [agent-supervisor](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/agent-supervisor.md),
+[cli-integration](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/cli-integration.md),
+[subagents](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/subagents.md),
+[mcp-server](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/pages/mcp-server.md).

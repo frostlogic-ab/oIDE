@@ -15,9 +15,10 @@ agent is doing.
 
 ## Install
 
-oIDE is pre-1.0. Installers are built by CI from version tags and published on
-[GitHub Releases](https://github.com/oide-dev/oide/releases). Until the first release is published,
-[build from source](#build-from-source).
+oIDE is pre-1.0. Installers for Windows, macOS and Linux are built by CI for every release and
+published on [GitHub Releases](https://github.com/frostlogic-ab/oIDE/releases) (the newest is always at
+[releases/latest](https://github.com/frostlogic-ab/oIDE/releases/latest)). Until the first release is
+published, [build from source](#build-from-source).
 
 | OS | Download | Install |
 | --- | --- | --- |
@@ -64,7 +65,7 @@ How updates reach each kind of build is described under
 ### Build from source
 
 ```sh
-git clone https://github.com/oide-dev/oide.git
+git clone https://github.com/frostlogic-ab/oIDE.git
 cd oide
 pnpm install
 pnpm dev                              # run the app with hot reload
