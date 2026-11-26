@@ -16,6 +16,7 @@ import {
   readPrConventions,
   mergeLocal as gitMergeLocal,
   predictMerge as gitPredictMerge,
+  pushState,
   isInside,
   samePath,
   syncState,
@@ -323,14 +324,7 @@ export class GitService {
     if (!a.branch || !a.worktreePath || samePath(a.worktreePath, p.path)) throw new IpcError('This agent works in the project folder; there is no branch to merge.', 'conflict');
     // Review shows committed AND uncommitted changes, so Merge merges both: pending worktree
     // changes are committed first, on the agent's behalf (Oide-Agent trailer).
-    if (existsSync(a.worktreePath) && (await this.hasLocalChanges(a.worktreePath))) {
-      const subject = (a.review?.summary ?? '').split(/\r?\n/)[0]!.trim().slice(0, 72) || `${a.title}: uncommitted work`;
-      try {
-        await gitCommit(a.worktreePath, { message: subject, agent: a.title });
-      } catch (err) {
-        throw new IpcError(`Could not commit the worktree's uncommitted changes before merging: ${(err as Error).message}`, 'git_failed');
-      }
-    }
+    if (existsSync(a.worktreePath)) await this.commitPending(a, a.worktreePath, 'uncommitted work', 'merging');
     const r = await gitMergeLocal(p.path, a.branch, { message: `Merge ${a.branch} (${a.title})` });
     if (r.error && !r.conflicts.length) throw new IpcError(r.error, r.blockedBy ? 'conflict' : 'git_failed');
     // Remembered for "Ask <agent> to resolve" when the prediction could not see these conflicts.
@@ -460,6 +454,21 @@ export class GitService {
     return { status: after.status, files: files.length, unarchived, resumed: unarchived || after.status === 'queued' || after.status === 'starting' };
   }
 
+  /**
+   * Commit the worktree's uncommitted files on the agent's behalf (Oide-Agent trailer), subject from
+   * the agent's latest review summary. Returns whether there was anything to commit.
+   */
+  private async commitPending(a: AgentSummary, worktree: string, fallback: string, before: string): Promise<boolean> {
+    if (!(await this.hasLocalChanges(worktree))) return false;
+    const subject = (a.review?.summary ?? '').split(/\r?\n/)[0]!.trim().slice(0, 72) || `${a.title}: ${fallback}`;
+    try {
+      await gitCommit(worktree, { message: subject, agent: a.title });
+    } catch (err) {
+      throw new IpcError(`Could not commit the worktree's uncommitted changes before ${before}: ${(err as Error).message}`, 'git_failed');
+    }
+    return true;
+  }
+
   private async hasLocalChanges(worktree: string): Promise<boolean> {
     const out = await new Git({ cwd: worktree }).out(['status', '--porcelain', '-z', '--untracked-files=all'], { env: { GIT_OPTIONAL_LOCKS: '0' } });
     return out.length > 0;
@@ -536,6 +545,45 @@ export class GitService {
       return { ...created, draft: draft.source };
     }
     return { ...this.notePr(a, pr, false), draft: draft.source };
+  }
+
+  /**
+   * "Push to PR": follow-up work after the pull request was opened goes up to that same PR. Uncommitted
+   * files are committed first (Oide-Agent trailer), then the branch is pushed. Never opens a PR; a branch
+   * without an open or draft one is refused (`conflict`) so the caller offers Open pull request instead.
+   */
+  async pushToPr(agentId: string): Promise<{ url: string; number: number; state: 'open' | 'draft'; committed: boolean; pushed: number }> {
+    const a = this.agent(agentId);
+    const p = this.project(a.projectId);
+    if (!a.branch || !a.worktreePath || samePath(a.worktreePath, p.path)) throw new IpcError('This agent has no branch of its own to push to a pull request.', 'conflict');
+    if (!existsSync(a.worktreePath)) throw new IpcError("This agent's worktree was deleted, so there is nothing to push.", 'conflict');
+    const cwd = a.worktreePath;
+    const branch = a.branch;
+    // The PR main already knows (watcher, Open pull request); else ask gh, e.g. for a PR opened outside oIDE.
+    let pr = a.pr && (a.pr.state === 'open' || a.pr.state === 'draft') ? a.pr : undefined;
+    if (!pr && (await this.gh.available().catch(() => false))) {
+      const found = toAgentPr((await this.gh.prLookup(cwd, branch).catch(() => ({ pr: undefined }))).pr, Date.now());
+      if (found && (found.state === 'open' || found.state === 'draft')) pr = found;
+    }
+    if (!pr) throw new IpcError('This branch has no open pull request to push to. Open a pull request first.', 'conflict');
+    // Committing under a working agent could race its own git commands (index.lock) and catch half-written files.
+    if (LIVE.has(a.status) && (await this.hasLocalChanges(cwd))) {
+      throw new IpcError(`${a.title} is still working. Push to the pull request once it stops or submits for review.`, 'conflict');
+    }
+    const committed = await this.commitPending(a, cwd, 'follow-up changes', 'pushing');
+    const before: { unpushed?: number } = await pushState(cwd, branch).catch(() => ({}));
+    await this.remote(() => gitPush(cwd, { branch, setUpstream: true }));
+    // Never pushed before (the PR head was pushed from elsewhere): count what the branch adds to its base.
+    const pushed = before.unpushed ?? (await this.commitsOnBranch(cwd, a.baseRef));
+    this.notePr(a, pr, true);
+    return { url: pr.url, number: pr.number, state: pr.state === 'draft' ? 'draft' : 'open', committed, pushed };
+  }
+
+  /** Commits on HEAD since the base. */
+  private async commitsOnBranch(cwd: string, baseRef?: string): Promise<number> {
+    if (!baseRef) return 0;
+    const out = await new Git({ cwd }).out(['rev-list', '--count', `${baseRef}..HEAD`, '--']).catch(() => '0');
+    return Number(out.trim()) || 0;
   }
 
   /**

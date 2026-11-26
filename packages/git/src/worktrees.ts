@@ -3,6 +3,7 @@ import { mkdir, readdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { WorktreeInfo } from '@oide/protocol';
 import { diffStat, changedFiles } from './diff.js';
+import { status } from './status.js';
 import { Git, GitError, isSafeRef, runShellCommand, toGit, type Repo, type StreamResult } from './git.js';
 import { fromGitPath, isInside, pathKey, samePath, worktreeRoot } from './paths.js';
 
@@ -336,13 +337,33 @@ export class WorktreeManager {
     if (!existsSync(opts.path)) {
       return WorktreeInfo.parse({ ...opts, orphaned: true });
     }
-    const [ab, diff, files] = await Promise.all([
+    const [ab, diff, files, push] = await Promise.all([
       aheadBehind(git, 'HEAD', opts.baseRef).catch(() => ({ ahead: 0, behind: 0 })),
       diffStat(git, opts.baseRef).catch(() => undefined),
       changedFiles(git, opts.baseRef).catch(() => [] as string[]),
+      pushState(git, opts.branch).catch(() => ({ uncommitted: 0 })),
     ]);
-    return WorktreeInfo.parse({ ...opts, ahead: ab.ahead, behind: ab.behind, diff, changedFiles: files });
+    return WorktreeInfo.parse({ ...opts, ahead: ab.ahead, behind: ab.behind, diff, changedFiles: files, ...push });
   }
+}
+
+/**
+ * What "Push to PR" would send: commits on HEAD that the branch's own remote branch (the PR head)
+ * lacks, and files with uncommitted changes. The remote branch is the upstream when it carries the
+ * branch's name, else `origin/<branch>`: a worktree made from `origin/main` may track `origin/main`,
+ * which is not where its PR lives. `unpushed` is absent when the branch was never pushed.
+ */
+export async function pushState(repo: Repo, branch: string): Promise<{ unpushed?: number; uncommitted: number }> {
+  const git = toGit(repo);
+  const st = await status(git);
+  const uncommitted = st.entries.filter((e) => e.kind !== 'ignored').length;
+  const name = branch.replace(/^refs\/heads\//, '');
+  if (st.upstream && st.upstream.endsWith(`/${name}`)) return { unpushed: st.ahead, uncommitted };
+  if (!isSafeRef(name)) return { uncommitted };
+  const remote = `refs/remotes/origin/${name}`;
+  if (!(await git.test(['rev-parse', '--verify', '--quiet', remote]))) return { uncommitted };
+  const out = await git.out(['rev-list', '--count', `${remote}..HEAD`, '--']);
+  return { unpushed: Number(out.trim()) || 0, uncommitted };
 }
 
 /** `git rev-list --left-right --count <base>...<branch>`: commits only on branch (ahead) and only on base (behind). */

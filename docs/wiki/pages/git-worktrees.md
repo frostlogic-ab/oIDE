@@ -39,7 +39,8 @@ security (trust and bypass rules; `security.md` once written), [architecture.md]
 | `orphans(projectPath, projectId, knownPaths)` | Worktrees under our two roots that no known agent owns, plus leftover folders git no longer lists (`registered: false`) |
 | `runSetup(path, command, opts)` | Streams the setup command's output |
 | `aheadBehind(cwd, branch, base)` | `rev-list --left-right --count base...branch` |
-| `info({ projectId, path, branch, baseRef, agentId? })` | A protocol `WorktreeInfo` (ahead/behind, `DiffStat`, changed files; `orphaned` when the folder is gone) |
+| `info({ projectId, path, branch, baseRef, agentId? })` | A protocol `WorktreeInfo` (ahead/behind, `DiffStat`, changed files, `unpushed`/`uncommitted` from `pushState`; `orphaned` when the folder is gone) |
+| `pushState(cwd, branch)` | What Push to PR would send: `unpushed` = commits on HEAD that the branch's own remote branch lacks (upstream when it carries the branch name, else `origin/<branch>`; absent if never pushed), `uncommitted` = `git status` entries |
 
 Path comparisons go through `pathKey()` / `samePath()` / `isInside()` (`paths.ts`), which case-fold
 on Windows and macOS. git prints `C:/x` on Windows; entries are normalised to native paths.
