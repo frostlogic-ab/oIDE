@@ -140,12 +140,22 @@ describe('DevModeWatcher', () => {
       expect(() => w.watch({ ...record, devMode: false })).toThrow();
       w.watch(record);
       await new Promise((r) => setTimeout(r, 50));
-      writeFileSync(path.join(t.dir, 'dist', 'host.js'), 'export function activate() {}');
+      // macOS (FSEvents) can deliver the fixture's creation events late, in an earlier batch than the
+      // write below, and may miss a write made before the stream is live. So wait for a batch that
+      // names host.js, rewriting it now and then, rather than taking the first batch.
+      const sawHost = () => reloads.flat().some((f) => f.includes('host.js'));
       const start = Date.now();
-      while (!reloads.length && Date.now() - start < 3000) await new Promise((r) => setTimeout(r, 25));
+      let lastWrite = 0;
+      while (!sawHost() && Date.now() - start < 5000) {
+        if (Date.now() - lastWrite > 500) {
+          writeFileSync(path.join(t.dir, 'dist', 'host.js'), `export function activate() {} // ${Date.now()}`);
+          lastWrite = Date.now();
+        }
+        await new Promise((r) => setTimeout(r, 25));
+      }
       w.dispose();
       expect(reloads.length).toBeGreaterThan(0);
-      expect(reloads.flat().some((f) => f.includes('host.js'))).toBe(true);
+      expect(sawHost()).toBe(true);
     } finally {
       t.cleanup();
     }
