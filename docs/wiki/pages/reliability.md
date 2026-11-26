@@ -113,7 +113,9 @@ anything; there is no crash server. When on:
   still holds it (`EBUSY`) or Windows denies a file (`EPERM`/`EACCES`/`ENOTEMPTY` after the retries),
   `services/agents.ts` removes the agent anyway, records the path in `<userData>/pending-cleanup.json`
   (`CleanupQueue`), and runs the holder scan (`reliability/folder-holders.ts`, only on failure,
-  10 s timeout, same-user processes, executable names only): "Docker Desktop
+  25 s timeout, same-user processes, executable names only; on Windows a PowerShell script that
+  runs no cmdlet, with module autoloading off and only Windows' own modules on `PSModulePath`, so
+  installed modules never slow it down, typically 1-2 s): "Docker Desktop
   (com.docker.backend.exe) still has this folder open. Quit it, and oIDE will finish removing the
   folder." Without holders the notice stays generic. `CleanupScheduler` retries every 5 minutes
   (per-folder backoff 5 min × 2ⁿ, at most 2 h) and at every start (then `git worktree prune`); a
@@ -147,7 +149,12 @@ Settings › Diagnostics (`app.diagnostics` → `Diagnostics { generatedAt, chec
 
 Tools are resolved to absolute paths from PATH (never the cwd) and only run with `--version`
 (5 s timeout). All values are redacted (home → `~`, userData → `<userData>`), so **Copy report** is
-safe to paste into an issue.
+safe to paste into an issue. The App data row is the one place that shows where userData lives: as
+`~/…` when it is inside the home folder, and as `<userData>` ("Outside the home folder") otherwise,
+so a custom or temp folder (`/tmp/…`, `/var/folders/…`) never appears as a raw path
+(`appDataLocation` in `reliability/diagnostics.ts`). Windows 8.3 short names (`C:\Users\RUNNER~1\…`,
+common under `%TEMP%`) are expanded with `realpathSync.native` first so they still match home. The
+general log redactor does not expand 8.3 names: a short-name home path in a log line is not caught.
 
 ## Tests
 
@@ -160,4 +167,9 @@ safe to paste into an issue.
   killed with `forcefullyCrashRenderer()`, the window reloads by itself, the prompt is back, answering
   it finishes the run (same live process), and `main.log` / `agents/<id>.log` record it without the
   home path. Also Diagnostics over IPC and in Settings, and `app.reportError` reaching `renderer.log`.
-  userData and the repo have spaces and non-ASCII names.
+  userData and the repo have spaces and non-ASCII names. The e2e userData is a temp folder, which is
+  outside home on Linux and macOS and an 8.3 short path on Windows runners, so the "no raw userData
+  in the report" check covers both App data cases. The crash test waits for main to see
+  `render-process-gone` and the next `did-finish-load` (a plain "not crashed, not loading" check can
+  pass before the kill lands), and caps each `executeJavaScript` call at 3 s, since a call sent to the
+  dying frame never settles.
