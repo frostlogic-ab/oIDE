@@ -1,5 +1,6 @@
 /* oIDE website (landing page) styles, from the "oIDE Website" design artifact (site.css).
-   Scoped to Landing.vue. Tokens live on .site (dark, the app's palette); .site.light swaps them. */
+   Scoped to Landing.vue. Tokens live on .site (dark, the app's palette); the light set is in
+   custom.css (global), keyed on VitePress's <html class="dark">, so the server render matches. */
 .site{
   --bg:#0A0C0F; --panel:#0F1216; --raise:#161A20; --line:#20252D; --line-strong:#343B46;
   --fg:#E8EAED; --fg-2:#B1B8C2; --fg-3:#838C99;
@@ -12,14 +13,6 @@
   --stage:#0E1013;
   background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:16px;line-height:1.6;
   -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;color-scheme:dark;
-}
-.site.light{
-  --bg:#F3F4F7; --panel:#FBFBFD; --raise:#E8EBF0; --line:#DADFE7; --line-strong:#B9C1CD;
-  --fg:#0F1319; --fg-2:#38414E; --fg-3:#5A6372;
-  --accent:#2C5BD3; --accent-ink:#FFFFFF; --accent-soft:rgba(44,91,211,.09);
-  --go:#167349; --hold:#8F5800; --review:#2C5BD3;
-  --shadow:0 40px 80px -40px rgba(20,28,45,.45);
-  color-scheme:light;
 }
 
 .site *{box-sizing:border-box}
@@ -274,3 +267,6 @@
 .cmd button:hover{color:var(--fg)}
 .site .faq-more{margin-top:18px;font-size:14.5px;color:var(--fg-2)}
 .site .faq-more a{color:var(--accent)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media (max-width:600px){.nav .os-name{display:none}}
+@media (max-width:420px){.site .theme-toggle{display:none}}
