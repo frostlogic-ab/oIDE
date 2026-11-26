@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import { Git, GitError } from '../src/git.js';
@@ -6,7 +6,7 @@ import { parseStatusV2, status, syncState } from '../src/status.js';
 import { changedFiles, diffStat, fileDiffs, parseNumstatZ } from '../src/diff.js';
 import { fileHistory, log } from '../src/log.js';
 import { mergeLocal, predictConflicts } from '../src/merge.js';
-import { commit } from '../src/commit.js';
+import { commit, discard } from '../src/commit.js';
 import { fetch, pull, push } from '../src/remote.js';
 import { cleanup, commitAll, makeRepo, sh, tempDir, write } from './helpers.js';
 
@@ -137,6 +137,35 @@ describe('log and commit', () => {
     expect(commits[1]!.ts).toBeGreaterThan(1_600_000_000_000);
     const hist = await fileHistory(repo, 'picked.txt');
     expect(hist.map((x) => x.message)).toEqual(['Add picked']);
+  });
+
+  it('reverts picked changes: edits, deletions, staged and untracked files and renames', async () => {
+    const repo = makeRepo({ 'edit.txt': 'e\n', 'gone.txt': 'g\n', 'keep.txt': 'k\n', 'old.txt': 'o\n', 'a b.txt': 'x\n' });
+    write(repo, 'edit.txt', 'changed\n');
+    write(repo, 'keep.txt', 'mine\n');
+    write(repo, 'a b.txt', 'spaced\n');
+    rmSync(join(repo, 'gone.txt'));
+    write(repo, 'new/staged.txt', 's\n');
+    write(repo, 'new/untracked[1].txt', 'u\n');
+    sh(repo, 'add', 'new/staged.txt');
+    sh(repo, 'mv', 'old.txt', 'renamed.txt');
+
+    const reverted = await discard(repo, {
+      files: ['edit.txt', 'gone.txt', 'new/staged.txt', 'new/untracked[1].txt', 'renamed.txt', 'a b.txt', 'not-a-change.txt', '../outside.txt'],
+    });
+    expect(reverted.sort()).toEqual(['a b.txt', 'edit.txt', 'gone.txt', 'new/staged.txt', 'new/untracked[1].txt', 'renamed.txt']);
+    expect((await status(repo)).entries.map((e) => e.path)).toEqual(['keep.txt']);
+    expect(readFileSync(join(repo, 'edit.txt'), 'utf8')).toBe('e\n');
+    expect(existsSync(join(repo, 'gone.txt'))).toBe(true);
+    expect(existsSync(join(repo, 'old.txt'))).toBe(true);
+    expect(existsSync(join(repo, 'renamed.txt'))).toBe(false);
+    expect(existsSync(join(repo, 'new/staged.txt'))).toBe(false);
+    expect(existsSync(join(repo, 'new/untracked[1].txt'))).toBe(false);
+
+    expect(await discard(repo)).toEqual(['keep.txt']);
+    expect((await status(repo)).entries).toEqual([]);
+    await expect(discard(repo)).rejects.toThrow(/no uncommitted changes/);
+    await expect(discard(repo, { files: [] })).rejects.toThrow(/No files selected/);
   });
 
   it('returns no commits for an unborn branch', async () => {

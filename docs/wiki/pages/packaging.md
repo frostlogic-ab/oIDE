@@ -193,6 +193,10 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   `LICENSE` and `THIRD_PARTY_NOTICES.md` are copied to `resources/` (`extraResources`). As of
   2026-11-25: 368 shipped packages, all MIT-compatible (dompurify is dual MPL-2.0 OR Apache-2.0, used
   under Apache-2.0). Build-only MPL tools (@resvg/resvg-js, lightningcss) do not ship.
+  The file must come out byte-identical on every OS, since the check runs in each release build.
+  Per-platform prebuilds (`<parent>-<platform>`) and other optional dependencies that `pnpm-lock.yaml`
+  restricts by `os`/`cpu`/`libc` (e.g. `fsevents` under chokidar, macOS only) are listed by name from
+  the lockfile, never from what this machine installed; their licence is checked where installed.
 - Fonts (`tools/licenses/fonts.mjs`, section "Bundled fonts" of the notices): 12 families. Excalidraw's
   folders (Assistant, Cascadia Code, Excalifont, Lilita One, Nunito, Virgil, Xiaolai SC: OFL-1.1; Comic
   Shanns: MIT; Liberation Sans 1.05: GPL-2.0 with the font exception, shipped unmodified as a separate

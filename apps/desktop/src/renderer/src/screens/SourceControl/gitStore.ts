@@ -98,3 +98,12 @@ export function findWorktree(byProject: Record<string, ProjectGit>, agentId: str
   }
   return undefined;
 }
+
+/**
+ * Whether Push to PR has anything to send: commits the PR head lacks, or uncommitted files. Unknown
+ * (worktree not loaded yet, or the branch's remote branch is not known locally) counts as nothing, so
+ * Review and the Wall never offer a push that would send nothing.
+ */
+export function hasPendingForPr(worktree: Pick<WorktreeInfo, 'unpushed' | 'uncommitted'> | undefined): boolean {
+  return (worktree?.unpushed ?? 0) > 0 || (worktree?.uncommitted ?? 0) > 0;
+}

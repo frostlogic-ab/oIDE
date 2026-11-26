@@ -33,9 +33,14 @@ Source design: the "oIDE Website" artifact, copied to [raw/design/website/](../r
 - **Links**: `repo` in `Landing.vue` and `.vitepress/config.ts` is `https://github.com/frostlogic-ab/oIDE`;
   every repository, issue, discussion and download link is built from it. Base path `/oIDE/`.
   Releases there are published by the [release pipeline](release-pipeline.md).
-- **Downloads** go to GitHub Releases `latest`: file names carry the version
-  (`oIDE-<version>-<os>-<arch>.<ext>`), so the page cannot link files directly. The visitor's system
-  is detected after mount (none on phones and tablets) to label the buttons and mark its card.
+- **Downloads** link straight to the newest installer file:
+  `releases/latest/download/oIDE-<os>-<x64|arm64>.<ext>`. Release file names carry the version, so
+  the [release pipeline](release-pipeline.md) also uploads a version-free copy of each installer for
+  these links. The visitor's system is detected after mount (none on phones and tablets); the main
+  Download buttons fetch that system's installer (Apple silicon .dmg, x64 .exe, x64 AppImage, or
+  the arm64/x64 build when Chromium's `userAgentData` reports the architecture) and fall back to the
+  `#download` cards when the system is unknown. Each card's button and links (arch, `.zip`, `.deb`,
+  `.rpm`) are direct file links too; only "All downloads on GitHub Releases" opens the release page.
 - **No package managers.** The design shows `brew install --cask oide` and `winget install oide`;
   neither exists, so each card shows the command to check the download against the release's
   `SHA256SUMS` instead. Add the package-manager commands back once a cask or winget manifest ships.

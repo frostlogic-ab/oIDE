@@ -983,3 +983,28 @@ actions. Pages: [screen-focus](pages/screen-focus.md), [screen-spawn](pages/scre
 same pass: scrim clicks discard the New artifact and Add custom extension dialogs, CommitDialog can be
 closed mid-commit, Marketplace search is scoped to one category, its drop zone opens a picker, env rows
 can't be removed, and Review comment drafts are lost on a stray click.
+## [2026-11-26] build | Licence notices identical on every OS
+The release run's macOS build failed `pnpm licenses:check` ("THIRD_PARTY_NOTICES.md is stale"): chokidar's
+optional `fsevents` dependency is only installed on macOS, so the generator listed one extra package there.
+`tools/licenses/notices.mjs` now reads `os`/`cpu`/`libc` restrictions from `pnpm-lock.yaml` and lists such
+optional dependencies by name (licence checked where installed). See [packaging](pages/packaging.md).
+
+## [2026-11-26] build | DevModeWatcher test stable on macOS
+PR #14's macOS unit tests failed `DevModeWatcher … reloads on change`: the test took the first reload
+batch, but FSEvents can deliver the fixture's creation events late, in a batch before the `host.js`
+write. The test now waits (up to 5 s) for a batch naming `host.js`, rewriting it every 500 ms in case a
+write lands before the stream is live. The watcher itself is unchanged.
+## [2026-11-26] build | Direct download links on the site
+Release finalize now uploads a version-free copy of every installer (`oIDE-<os>-<x64|arm64>.<ext>`),
+so the site's download buttons and the getting-started table link to
+`releases/latest/download/<file>` for the visitor's OS instead of the release page. Updated
+[docs-site](pages/docs-site.md) and [release-pipeline](pages/release-pipeline.md).
+## [2026-11-26] build | Revert uncommitted main-checkout changes from Source control
+"Your changes on main" now offers **Revert…** next to Commit…: a confirmation dialog with per-file
+checkboxes calls the new `git.discard` IPC command (`@oide/git` `discard()`: tracked files back to HEAD,
+untracked files deleted, only paths git reports as changed). New telemetry event `changes_reverted`
+(file count bucket, whether all files were picked; never paths). Pages: screen-source-control, telemetry.
+## [2026-11-26] build | Push to PR only when there is something to push
+Review and the Wall review tile hide Push to pull request when the worktree has no new commits and no
+uncommitted files the PR lacks (or the push state is not known yet); `hasPendingForPr` in the git store.
+See [Review](pages/screen-review.md), [Wall](pages/screen-wall.md).

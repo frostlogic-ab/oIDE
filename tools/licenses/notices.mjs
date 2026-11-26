@@ -169,7 +169,41 @@ const repoOf = (pkg) => {
   return r.replace(/^git\+/, '').replace(/\.git$/, '').replace(/^git:\/\//, 'https://').replace(/^github:/, 'https://github.com/');
 };
 
+/**
+ * Packages the lockfile restricts to some OS / CPU / libc (`os: [darwin]`, …), by name. The lockfile
+ * is the same on every OS, so this tells which optional dependencies are only installed on some
+ * platforms (e.g. `fsevents`, macOS only) without depending on what this machine installed.
+ */
+export function platformRestricted(lockText) {
+  const restricted = new Map();
+  const start = lockText.search(/^packages:\s*$/m);
+  if (start < 0) return restricted;
+  const end = lockText.slice(start).search(/^snapshots:\s*$/m);
+  const section = lockText.slice(start, end < 0 ? undefined : start + end);
+  let current = null;
+  for (const line of section.split(/\r?\n/)) {
+    const head = /^ {2}'?((?:@[^@/'\s]+\/)?[^@'\s]+)@[^:]*'?:\s*$/.exec(line);
+    if (head) {
+      current = head[1];
+      continue;
+    }
+    const field = /^ {4}(os|cpu|libc):\s*\[([^\]]*)\]/.exec(line);
+    if (current && field) {
+      const entry = restricted.get(current) ?? {};
+      entry[field[1]] = field[2].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean);
+      restricted.set(current, entry);
+    }
+  }
+  return restricted;
+}
+
+const OS_LABEL = { darwin: 'macOS', linux: 'Linux', win32: 'Windows', freebsd: 'FreeBSD', android: 'Android' };
+const platformLabel = (r) => (r.os?.length ? r.os.map((o) => OS_LABEL[o] ?? o).join(', ') : [...(r.cpu ?? []), ...(r.libc ?? [])].join(', '));
+
 /* ------------------------------------------------------------------ collect */
+
+const LOCKFILE = join(ROOT, 'pnpm-lock.yaml');
+const restricted = existsSync(LOCKFILE) ? platformRestricted(readFileSync(LOCKFILE, 'utf8')) : new Map();
 
 const workspace = workspacePackages();
 /** key name@version → record */
@@ -216,6 +250,17 @@ function record(dir, via, { follow = true } = {}) {
       }
       continue;
     }
+    // Other platform-only optional dependencies (`fsevents` under chokidar, …): same reason, list by
+    // name from the lockfile, check the licence wherever it is installed.
+    if (optional && restricted.has(dep)) {
+      const key = `${dep}<-${pkg.name}`;
+      if (!platformOnly.has(key)) platformOnly.set(key, { name: dep, parent: pkg.name, ...restricted.get(dep) });
+      if (depDir) {
+        const p = readJson(join(depDir, 'package.json'));
+        platformChecked.push({ name: p.name, version: p.version, license: licenseOf(p) ?? 'UNKNOWN', via: new Set([via]) });
+      }
+      continue;
+    }
     if (depDir) record(depDir, via);
     else if (!optional) missing.push(`${dep} (needed by ${pkg.name})`);
   }
@@ -225,6 +270,8 @@ const missing = [];
 const platformFamilies = new Map();
 /** installed prebuilds, licence-checked but not listed */
 const platformChecked = [];
+/** `dep<-parent` → other optional dependencies the lockfile restricts to some platforms */
+const platformOnly = new Map();
 
 // 1. Runtime node_modules of the packaged app.
 const desktopPkg = readJson(join(DESKTOP, 'package.json'));
@@ -302,6 +349,14 @@ if (platformFamilies.size) {
   md += 'published from the same repository under the same licence as their parent and are not listed one by one:\n\n';
   for (const f of [...platformFamilies.values()].sort((a, b) => a.parent.localeCompare(b.parent))) {
     md += `- \`${f.parent}-<platform>\` (${f.license}): ${[...f.variants].sort().map((v) => `\`${v.slice(f.parent.length + 1)}\``).join(', ')}\n`;
+  }
+  md += '\n';
+}
+if (platformOnly.size) {
+  md += 'A few optional dependencies are only installed on some platforms. They are not listed one by one\n';
+  md += 'either; `pnpm licenses:check` checks their licence in the release build for that platform:\n\n';
+  for (const r of [...platformOnly.values()].sort((a, b) => a.name.localeCompare(b.name) || a.parent.localeCompare(b.parent))) {
+    md += `- \`${r.name}\` (${platformLabel(r)}): optional dependency of \`${r.parent}\`\n`;
   }
   md += '\n';
 }

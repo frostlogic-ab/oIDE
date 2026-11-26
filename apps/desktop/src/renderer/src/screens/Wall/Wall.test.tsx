@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OideBridge } from '@oide/protocol';
 import { installFallbackBridge } from '../../lib/bridge';
@@ -13,6 +13,7 @@ import { useScope } from '../../stores/scope';
 import { useSettings } from '../../stores/settings';
 import WallScreen from './index';
 import { useWall } from './wallState';
+import { useGit } from '../SourceControl/gitStore';
 
 const invoke = vi.fn(async (command: string, _input?: unknown): Promise<unknown> => {
   if (command === 'agents.answerPermission' || command === 'agents.send' || command === 'agents.compact') return { ok: true };
@@ -204,5 +205,36 @@ describe('Wall keys', () => {
     act(() => tile('a-bridge').focus());
     fireEvent.keyDown(tile('a-bridge'), { key: 'Enter' });
     expect(useRouter.getState().route).toEqual({ screen: 'focus', params: { agentId: 'a-bridge' } });
+  });
+});
+
+describe('Wall review tile: Push to an open PR', () => {
+  const pr = { state: 'open' as const, number: 21, url: 'https://github.com/you/billing-api/pull/21' };
+  const base = invoke.getMockImplementation()!;
+  afterEach(() => {
+    invoke.mockImplementation(base);
+  });
+  function withPushState(push: { unpushed?: number; uncommitted?: number }) {
+    useGit.setState({ byProject: {} });
+    const a = useAgents.getState().byId['a-webhook']!;
+    useAgents.setState({ byId: { ...useAgents.getState().byId, 'a-webhook': { ...a, pr: { ...pr, updatedAt: 0 } as never } } });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === 'git.worktrees') return [{ agentId: 'a-webhook', projectId: 'billing-api', path: '/w', branch: 'billing-api/webhook-retry', baseRef: 'main', ahead: 2, behind: 0, changedFiles: [], orphaned: false, ...push }];
+      throw new Error(`[not_implemented] ${command}`);
+    });
+  }
+
+  it('shows Push when the worktree has commits the PR lacks', async () => {
+    withPushState({ unpushed: 1, uncommitted: 0 });
+    render(<WallScreen />);
+    expect(await within(tile('a-webhook')).findByRole('button', { name: 'Push new changes to pull request #21' })).toBeTruthy();
+  });
+
+  it('hides Push when the PR already has everything', async () => {
+    withPushState({ unpushed: 0, uncommitted: 0 });
+    render(<WallScreen />);
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('git.worktrees', { projectId: 'billing-api' }));
+    await act(async () => {});
+    expect(within(tile('a-webhook')).queryByRole('button', { name: /Push new changes/ })).toBeNull();
   });
 });
