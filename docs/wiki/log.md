@@ -919,6 +919,14 @@ process predated it. `electron-vite dev` hot-reloads the renderer but does not r
 and preload, so after pulling, restart oIDE when `packages/protocol` or `src/main` change. A router
 test now pins `git.openPr` accepting just `{ agentId }` ([screen-review](pages/screen-review.md)).
 
+## [2026-11-26] build | Push follow-up work to an open pull request
+After a PR is open, an agent often gets more work and makes new commits or leaves new files. Review
+now shows **Push to pull request #n** when the worktree has commits the PR branch lacks
+(`WorktreeInfo.unpushed`) or uncommitted files (`WorktreeInfo.uncommitted`), and the Wall tile in
+review gets a Push button next to View PR. `git.pushToPr` commits leftover files for the agent
+(`Oide-Agent` trailer), pushes the branch, and never opens a PR; it waits while the agent is working.
+New telemetry event `pr_pushed` (commit count bucket, whether files were committed first)
+([screen-review](pages/screen-review.md), [git-worktrees](pages/git-worktrees.md), [telemetry](pages/telemetry.md)).
 ## [2026-11-26] decision | Status-only follow-ups return to Ready for review
 An agent that had submitted for review showed "Has a question" on the Wall after a follow-up turn that
 only reported CI status. The reducer now returns `ready-for-review` when a turn ends without

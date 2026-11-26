@@ -89,6 +89,9 @@ export const worktrees: Record<string, WorktreeInfo[]> = {
       diff: { files: 4, additions: 120, deletions: 96 },
       changedFiles: ['content/docs/start/install.mdx', 'content/docs/start/quickstart.mdx', 'content/docs/start/index.mdx', 'astro.config.mjs'],
       pr: { state: 'draft', number: 18, url: 'https://github.com/you/docs-site/pull/18' },
+      // Follow-up work after the draft PR: Review offers Push to pull request #18.
+      unpushed: 1,
+      uncommitted: 2,
     }),
   ],
 };
@@ -619,7 +622,18 @@ export function createScmHandlers({ agents, emit, fallbackDiffs = {}, artifacts 
       }
       return { url, number, state: 'open' as const };
     },
-    'git.reconcile': ({ projectId, agentIds }) => {
+    'git.pushToPr': ({ agentId }) => {
+      const w = need(worktreeOf(agentId), `No worktree for ${agentId}`);
+      const pr = w.pr?.url && w.pr.number && (w.pr.state === 'open' || w.pr.state === 'draft') ? w.pr : undefined;
+      if (!pr) throw new Error('This branch has no open pull request to push to. Open a pull request first.');
+      const pushed = (w.unpushed ?? 0) + (w.uncommitted ? 1 : 0);
+      const committed = Boolean(w.uncommitted);
+      w.unpushed = 0;
+      w.uncommitted = 0;
+      changed(w.projectId);
+      return { url: pr.url!, number: pr.number!, state: pr.state === 'draft' ? ('draft' as const) : ('open' as const), committed, pushed };
+    },
+    'git.reconcile':({ projectId, agentIds }) => {
       const [a, b] = agentIds.map((id) => agents.get(id)?.title ?? id);
       const id = `a-reconcile-${nextId++}`;
       const summary = AgentSummary.parse({
