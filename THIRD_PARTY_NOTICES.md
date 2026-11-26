@@ -17,6 +17,11 @@ published from the same repository under the same licence as their parent and ar
 - `@lydell/node-pty-<platform>` (MIT): `darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`, `win32-arm64`, `win32-x64`
 - `@parcel/watcher-<platform>` (MIT): `android-arm64`, `darwin-arm64`, `darwin-x64`, `freebsd-x64`, `linux-arm-glibc`, `linux-arm-musl`, `linux-arm64-glibc`, `linux-arm64-musl`, `linux-x64-glibc`, `linux-x64-musl`, `win32-arm64`, `win32-x64`
 
+A few optional dependencies are only installed on some platforms. They are not listed one by one
+either; `pnpm licenses:check` checks their licence in the release build for that platform:
+
+- `fsevents` (macOS): optional dependency of `chokidar`
+
 | Package | Version | Licence | Shipped as |
 | --- | --- | --- | --- |
 | [@antfu/install-pkg](https://github.com/antfu-collective/install-pkg) | 2.1.0 | MIT | bundled |

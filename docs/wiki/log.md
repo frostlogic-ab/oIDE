@@ -918,3 +918,9 @@ Reported as `Invalid input for git.openPr: title: expected string, received unde
 process predated it. `electron-vite dev` hot-reloads the renderer but does not rebuild or restart main
 and preload, so after pulling, restart oIDE when `packages/protocol` or `src/main` change. A router
 test now pins `git.openPr` accepting just `{ agentId }` ([screen-review](pages/screen-review.md)).
+
+## [2026-11-26] build | Licence notices identical on every OS
+The release run's macOS build failed `pnpm licenses:check` ("THIRD_PARTY_NOTICES.md is stale"): chokidar's
+optional `fsevents` dependency is only installed on macOS, so the generator listed one extra package there.
+`tools/licenses/notices.mjs` now reads `os`/`cpu`/`libc` restrictions from `pnpm-lock.yaml` and lists such
+optional dependencies by name (licence checked where installed). See [packaging](pages/packaging.md).
