@@ -77,7 +77,14 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
 - **Open (Viewer.tsx)**: back button, title, "Kind · project · vN" (plus "· 9 files" for several
   files, "no files yet" at version 0), Unsaved changes badge, view tabs, Save, and a "More actions"
   menu (Rename, Delete). Tabs: docs and designs Edit / Preview / Compare; whiteboards Board /
-  Compare. Editors are lazy chunks:
+  Compare. Unsaved entry edits are kept in `draftStore.ts` (a module-level zustand store keyed by
+  artifact id: base version and content, baseline, draft; in memory only), so leaving the screen
+  from the rail, Ctrl+K or a toast does not lose them. Back on Artifacts the Viewer reopens on the
+  route's artifact when it has a draft, else on the most recently edited draft; grid cards show an
+  **Unsaved** badge. Save, Use theirs and Discard clear the draft, and so does deleting the
+  artifact or finding it gone from the list. If an agent saved a newer version meanwhile, the
+  restored draft goes through the usual conflict banner (Keep mine / Use theirs). Unsaved edits to a
+  non-entry file in the Files panel are not kept. Editors are lazy chunks:
 
   | Kind | Edit | Preview |
   | --- | --- | --- |
@@ -201,7 +208,9 @@ event and its helper are gone.
 
 ## Tests
 
-`Dialogs.test.tsx`: New artifact closes on a scrim press only while untouched (a typed title, a changed
+`Editors.test.tsx` "Unsaved edits survive leaving the screen": draft and badge back after a remount,
+Save / Discard / Use theirs clear it, the grid badge, an agent write while away opens the conflict
+banner, whiteboard drafts. `Dialogs.test.tsx`: New artifact closes on a scrim press only while untouched (a typed title, a changed
 project, a typed link or a dropped file keep it open; Esc, × and Cancel still close).
 `model.test.ts` (filters, use lines, reads/writes grouping, version labels, claude.ai host check and
 `importLinkError`, `kindFromFiles`, `entryCandidates`, `baseName`, `activeRetrieval` /
