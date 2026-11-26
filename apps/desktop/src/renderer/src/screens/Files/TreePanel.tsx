@@ -3,14 +3,20 @@ import { Icon, IconButton, Menu, SectionLabel, Spinner, type MenuItem } from '@o
 import type { Project, WorktreeInfo } from '@oide/protocol';
 import { shortBranch } from '../SourceControl/model';
 import { ancestorDirs, useFiles, visibleRows, type TreeRow } from './filesStore';
+import { FileIcon } from './fileIcons';
 import { ResizableAside } from '../../components/ResizableAside';
 import { PANELS } from '../../lib/panels';
 
-/** Row pitch: 22px row + 1px gap (canvas `.tr`, `gap: 1px`). */
-export const ROW_H = 23;
-const HEADER_H = 32;
-const SECTION_GAP = 8;
+/** Row pitch: 22px, flush rows as in the VS Code explorer. */
+export const ROW_H = 22;
+const HEADER_H = 26;
+const SECTION_GAP = 4;
 const OVERSCAN = 12;
+/** Left padding of a depth-0 row, and the extra indent per level. */
+const PAD = 8;
+const INDENT = 10;
+/** Width of the twistie / file-icon column. */
+const GLYPH = 16;
 
 export interface Marker {
   agentId: string;
@@ -93,7 +99,7 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
         />
         <IconButton icon="collapse-all" aria-label="Collapse all folders" title="Collapse all folders" disabled={!openRoots.length} onClick={all((r) => s.collapseAll(r))} />
       </div>
-      <div ref={scroller} className="flex-1 min-h-0 overflow-auto">
+      <div ref={scroller} className="flex-1 min-h-0 overflow-auto -mx-2">
         {trees.map((t, i) => {
           const p = t.project;
           const root = s.checkout[p.id] ?? p.path;
@@ -122,7 +128,7 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
             />
           );
         })}
-        {trees.length === 0 && <p className="m-0 px-2 py-1 text-[12px] text-ink-3">No projects in this scope.</p>}
+        {trees.length === 0 && <p className="m-0 px-4 py-1 text-[12px] text-ink-3">No projects in this scope.</p>}
       </div>
       <div className="mt-2 flex flex-col gap-1.5 p-2.5 rounded-lg border border-line-2 text-[11.5px] text-ink-3 shrink-0">
         <span className="flex items-center gap-1.5">
@@ -176,6 +182,11 @@ function ProjectTree({
   const focusIndex = Math.max(0, rows.findIndex((r) => r.key === (focusKey ?? selectedKey)));
   const treeId = `files-tree-${p.id}`;
   const agentCount = info.worktrees.filter((w) => w.agentId).length;
+  // VS Code highlights the indent guide of the folder holding the focused row (or of the focused
+  // folder itself when it is open).
+  const focusRow = focusKey || selectedKey ? rows[focusIndex] : undefined;
+  const guideRow = focusRow?.kind === 'dir' && focusRow.expanded ? focusRow : rows.find((x) => x.key === focusRow?.parent);
+  const guide = guideRow ? { key: guideRow.contentPath, depth: guideRow.depth } : undefined;
 
   const first = Math.max(0, Math.floor(windowStart / ROW_H) - OVERSCAN);
   const last = Math.min(rows.length, Math.ceil(windowEnd / ROW_H) + OVERSCAN);
@@ -282,19 +293,17 @@ function ProjectTree({
   ];
 
   return (
-    <section aria-label={`${p.name} files`} className="flex flex-col mb-2">
-      <div className="flex items-center gap-1.5 py-1 pr-1 pl-0.5" style={{ height: HEADER_H, boxSizing: 'border-box' }}>
+    <section aria-label={`${p.name} files`} className="flex flex-col mb-1">
+      <div className="flex items-center gap-1 pr-2 pl-1" style={{ height: HEADER_H, boxSizing: 'border-box' }}>
         <button
           type="button"
           aria-expanded={open}
           aria-controls={treeId}
           disabled={scoped}
           onClick={() => s.setProjectOpen(p.id, !open)}
-          className="flex-1 min-w-0 flex items-center gap-1.5 border-0 bg-transparent text-ink text-[12px] font-semibold px-1 py-0.5 text-left whitespace-nowrap cursor-pointer disabled:cursor-default"
+          className="flex-1 min-w-0 h-full flex items-center gap-0.5 border-0 bg-transparent text-ink text-[11px] font-bold uppercase tracking-[0.04em] px-0.5 text-left whitespace-nowrap cursor-pointer disabled:cursor-default"
         >
-          <span aria-hidden="true" className="text-ink-3 text-[10px] w-2.5">
-            {open ? '▾' : '▸'}
-          </span>
+          <Icon name="chevron-right" size={14} className={`shrink-0 text-ink-3 transition-transform duration-100 ${open ? 'rotate-90' : ''}`} />
           <span className="truncate">{p.name}</span>
           {agentCount > 0 && (
             <span className="font-normal text-ink-3 text-[11px]" title={`${agentCount} agent ${agentCount === 1 ? 'worktree' : 'worktrees'}`}>
@@ -307,7 +316,7 @@ function ProjectTree({
           aria-label={`Branch or worktree shown for ${p.name}`}
           value={root}
           onChange={(e) => s.setCheckout(p.id, e.target.value)}
-          className="font-mono h-6 w-24 flex-[0_0_96px] px-1 rounded-sm border border-line-3 bg-card text-ink-2 text-[10.5px]"
+          className="font-mono h-5 w-24 flex-[0_0_96px] px-1 rounded-sm border border-line-3 bg-card text-ink-2 text-[10.5px]"
         >
           {options.map((o) => (
             <option key={o.root} value={o.root}>
@@ -320,7 +329,7 @@ function ProjectTree({
             label={`Folder actions for ${p.name}`}
             align="end"
             className="-ml-1 -mr-1"
-            triggerClassName="w-5 h-6 px-0 flex items-center justify-center rounded-sm border-0 bg-transparent text-ink-3 cursor-pointer hover:bg-raised hover:text-ink"
+            triggerClassName="w-5 h-5 px-0 flex items-center justify-center rounded-sm border-0 bg-transparent text-ink-3 cursor-pointer hover:bg-raised hover:text-ink"
             trigger={<Icon name="more" size={14} />}
             items={folderActions}
           />
@@ -332,7 +341,7 @@ function ProjectTree({
           ref={treeRef}
           role="tree"
           aria-label={`${p.name} (${options.find((o) => o.root === root)?.label ?? 'main'})`}
-          className="relative"
+          className="group/tree relative"
           style={{ height: Math.max(rows.length * ROW_H, s.loading[root]?.[''] || s.errors[root]?.[''] ? ROW_H : 0) }}
         >
           {rows.length === 0 && s.loading[root]?.[''] && (
@@ -345,7 +354,6 @@ function ProjectTree({
             const r = rows[i]!;
             const markers = r.kind === 'file' ? info.markers.get(r.path) : undefined;
             const selected = r.key === selectedKey;
-            const label = r.kind === 'dir' ? `${r.expanded ? '▾' : '▸'} ${r.label}` : r.label;
             return (
               <div
                 key={r.key}
@@ -362,15 +370,35 @@ function ProjectTree({
                 }}
                 onKeyDown={(e) => onKey(e, r, i)}
                 onFocus={() => setFocusKey(r.key)}
-                className={`absolute left-0 right-0 flex items-center gap-1.5 pr-2 rounded-[5px] text-[12px] cursor-pointer outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--color-accent)] ${
-                  selected ? 'bg-selected text-ink' : 'text-ink-2 hover:bg-raised'
+                className={`group/row absolute left-0 right-0 flex items-center pr-2 text-[13px] cursor-pointer outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--color-accent)] ${
+                  selected ? 'bg-selected text-ink' : 'text-ink-2 hover:bg-raised hover:text-ink'
                 }`}
-                style={{ top: i * ROW_H, height: ROW_H - 1, paddingLeft: 8 + r.depth * 15 }}
-                title={r.error}
+                style={{ top: i * ROW_H, height: ROW_H, paddingLeft: PAD + r.depth * INDENT }}
+                title={r.error ?? r.path}
               >
-                <span className={`flex-1 min-w-0 truncate whitespace-pre ${r.error ? 'text-bad' : ''}`}>{label}</span>
+                {/* Indent guides: one line per ancestor level, the focused folder's brighter. */}
+                {Array.from({ length: r.depth }, (_, d) => (
+                  <span
+                    key={d}
+                    aria-hidden="true"
+                    className={`absolute top-0 bottom-0 w-px ${guide && d === guide.depth && r.key.startsWith(`${guide.key}/`) ? 'bg-ink-4' : 'bg-line-2 group-hover/tree:bg-line-3'}`}
+                    style={{ left: PAD + d * INDENT + GLYPH / 2 - 1 }}
+                  />
+                ))}
+                {r.kind === 'dir' ? (
+                  <span aria-hidden="true" className="w-4 h-4 shrink-0 flex items-center justify-center text-ink-3">
+                    {r.loading ? (
+                      <Spinner size={10} />
+                    ) : (
+                      <Icon name="chevron-right" size={14} className={`transition-transform duration-100 ${r.expanded ? 'rotate-90' : ''}`} />
+                    )}
+                  </span>
+                ) : (
+                  <FileIcon name={r.label} />
+                )}
+                <span className={`flex-1 min-w-0 ml-1.5 truncate whitespace-pre ${r.error ? 'text-bad' : ''}`}>{r.label}</span>
                 {markers?.slice(0, 3).map((m) => (
-                  <span key={m.agentId} title={m.title} className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: m.color }} role="img" aria-label={m.title} />
+                  <span key={m.agentId} title={m.title} className="w-[7px] h-[7px] ml-1 rounded-full shrink-0" style={{ background: m.color }} role="img" aria-label={m.title} />
                 ))}
               </div>
             );

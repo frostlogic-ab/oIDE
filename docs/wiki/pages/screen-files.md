@@ -36,7 +36,14 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   path)` (expands the ancestors and sets `revealTarget`; the tree scrolls to the row and makes it the
   tab stop once it is rendered). Reveal active file also opens the project and switches it to the
   tab's checkout.
-- Rows are a fixed 23px pitch and windowed (only visible rows plus overscan are in the DOM).
+- Look follows the VS Code explorer: flush full-width 22px rows (13px text, no gap, square corners),
+  10px indent per level, a rotating chevron for folders, a 16px file-type icon for files
+  (`fileIcons.tsx`: Seti-like coloured glyph per exact name, `tsconfig*`/`eslint.config*`-style
+  name, or extension; SVG or a short mono badge, never emoji; decorative, `aria-hidden`), and 1px
+  indent guides per ancestor level; the guide of the folder holding the focused row (or of the
+  focused open folder) is brighter. Project headers are uppercase 11px bold section headers with the
+  same chevron. Row tooltip is the relative path.
+- Rows are a fixed 22px pitch and windowed (only visible rows plus overscan are in the DOM).
 
 ## Editor (`EditorPane.tsx`, `monaco/setup.ts`)
 

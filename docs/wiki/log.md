@@ -846,3 +846,7 @@ Archivo headings. Fonts are self-hosted (fontsource). The design's brew and wing
 exist, so the download cards show SHA256SUMS checks instead; downloads link to GitHub Releases. No
 telemetry change (the site has no analytics). Pages: [docs-site.md](pages/docs-site.md) (new),
 [packaging.md](pages/packaging.md).
+
+## [2026-11-26] build | Files tree restyled like the VS Code explorer
+Flush 22px rows, chevrons, Seti-like file-type icons (`screens/Files/fileIcons.tsx`), indent guides with
+the focused folder's guide highlighted, uppercase project section headers. See [screen-files](pages/screen-files.md).
