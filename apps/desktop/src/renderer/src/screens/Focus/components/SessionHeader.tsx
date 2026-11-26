@@ -49,7 +49,7 @@ export interface LeadHeaderProps {
 const RESUMABLE = new Set(['paused', 'stopped', 'error', 'rate-limited']);
 /** Statuses where supervisor.pause() means something (a queued agent is shown disabled). Done, review and question states have nothing to pause. */
 const PAUSABLE = new Set(['running', 'starting', 'needs-permission', 'queued']);
-const STOPPABLE =new Set(['running', 'starting', 'needs-permission', 'queued']);
+const STOPPABLE = new Set(['running', 'starting', 'needs-permission', 'queued']);
 
 /**
  * The permission mode in the meta line: a menu of every mode, so any mode can be picked at any

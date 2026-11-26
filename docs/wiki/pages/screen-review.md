@@ -139,7 +139,7 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
 
 ## Load errors and sending feedback
 - When `git.diff` fails, the main pane shows "Couldn't load the changes" with the message and a
-  "Try again" button (`review.reload()`). "No changes yet" appears only when the diff loaded and is empty.
+  "Try again" button (`review.reload()`) that stays mounted, reading "Trying again…", while it retries. "No changes yet" appears only when the diff loaded and is empty.
 - The send button in the summary reads "Send N comments to agent" and is enabled only while comments
   are pending. After a send with nothing pending it is disabled and a polite live region says
   "Feedback sent · agent is revising"; a new comment brings the button back.

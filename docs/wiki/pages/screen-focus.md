@@ -154,8 +154,8 @@ A pretend shell answers `terminal.*`.
 - **Permission prompt keys.** The Allow and Deny hints come from `useShortcutLabel('permission.allow' |
   'permission.deny')`, so they follow a rebinding in Settings > Keys, the same as the Wall tile.
 - **Attach artifact popover.** It takes focus when it opens (the first item, or the popover itself while
-  loading, empty or failed), so Esc closes it instead of running `view.back`. Esc and picking return
-  focus to the trigger, and the trigger button toggles it closed.
+  loading, empty or failed), so Esc closes it instead of running `view.back`. Esc returns focus to the
+  trigger, picking an artifact returns it to the message box, and the trigger button toggles it closed.
 
 ## Tests
 

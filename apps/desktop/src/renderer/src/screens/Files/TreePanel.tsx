@@ -264,7 +264,9 @@ function ProjectTree({
         break;
       case 'Enter':
       case ' ':
-        activate(r);
+        // A folder that failed to load retries (the row's Retry button is for the mouse).
+        if (r.kind === 'dir' && r.error) void s.loadDir(root, r.path, true);
+        else activate(r);
         break;
       default:
         return;
@@ -414,7 +416,8 @@ function ProjectTree({
                   <button
                     type="button"
                     tabIndex={-1}
-                    aria-label={`Retry loading ${r.label}`}
+                    aria-hidden="true"
+                    title={`Retry loading ${r.label} (Enter)`}
                     onClick={(e) => {
                       e.stopPropagation();
                       void s.loadDir(root, r.path, true);

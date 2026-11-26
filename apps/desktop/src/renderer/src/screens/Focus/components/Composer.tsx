@@ -123,7 +123,8 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
           triggerRef={triggerRef}
           onPick={(a) => {
             setArtifact(a);
-            closePicker(true);
+            setPickerOpen(false);
+            ref.current?.focus();
           }}
           onClose={closePicker}
         />

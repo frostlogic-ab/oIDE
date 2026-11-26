@@ -136,7 +136,8 @@ so it never holds the index lock an agent's git needs.
   close warning survive leaving Files and coming back. Closing a tab, including the last one, disposes
   its model, so reopening the file reads it fresh from disk.
 - A folder that fails to load shows its error with a Retry button, on the root row and on each failing
-  sub-folder row. Retry forces `loadDir(root, dir, true)` instead of leaving the tree broken until restart.
+  sub-folder row (Enter on a failed folder row retries too). Retry forces `loadDir(root, dir, true)`
+  instead of leaving the tree broken until restart.
 
 ## Tests
 

@@ -271,7 +271,7 @@ export default function ReviewScreen() {
             )}
           </>
         ) : (
-          !review.loading &&
+          // The error state stays mounted while retrying, so focus stays on "Try again".
           (review.error ? (
             <EmptyState
               role="alert"
@@ -280,13 +280,13 @@ export default function ReviewScreen() {
               description={review.error}
               className="flex-1"
               action={
-                <Button icon="refresh" onClick={() => void review.reload()}>
-                  Try again
+                <Button icon="refresh" aria-busy={review.loading} onClick={() => !review.loading && void review.reload()}>
+                  {review.loading ? 'Trying again…' : 'Try again'}
                 </Button>
               }
             />
           ) : (
-            <EmptyState icon="source-control" title="No changes yet" description="This worktree has no changes against its base." className="flex-1" />
+            !review.loading && <EmptyState icon="source-control" title="No changes yet" description="This worktree has no changes against its base." className="flex-1" />
           ))
         )}
       </main>
