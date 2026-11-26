@@ -895,3 +895,10 @@ all three OSes, e2e on Linux for PRs and on all three OSes for main, skips the h
 docs-only PRs, builds the docs site when `docs/site/**` changes, never cancels runs on main, and ends
 in one `CI ok` check for branch protection. CodeQL skips docs-only PRs and no longer cancels runs on
 main ([packaging](pages/packaging.md#ci-and-release-workflows)).
+
+## [2026-11-26] review | "Open pull request" failed with "title: expected string"
+Reported as `Invalid input for git.openPr: title: expected string, received undefined`. The schema on
+`main` was already right (`title`/`body` optional since the PR-conventions change); the running main
+process predated it. `electron-vite dev` hot-reloads the renderer but does not rebuild or restart main
+and preload, so after pulling, restart oIDE when `packages/protocol` or `src/main` change. A router
+test now pins `git.openPr` accepting just `{ agentId }` ([screen-review](pages/screen-review.md)).
