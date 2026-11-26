@@ -975,3 +975,9 @@ The release run's macOS build failed `pnpm licenses:check` ("THIRD_PARTY_NOTICES
 optional `fsevents` dependency is only installed on macOS, so the generator listed one extra package there.
 `tools/licenses/notices.mjs` now reads `os`/`cpu`/`libc` restrictions from `pnpm-lock.yaml` and lists such
 optional dependencies by name (licence checked where installed). See [packaging](pages/packaging.md).
+
+## [2026-11-26] build | DevModeWatcher test stable on macOS
+PR #14's macOS unit tests failed `DevModeWatcher … reloads on change`: the test took the first reload
+batch, but FSEvents can deliver the fixture's creation events late, in a batch before the `host.js`
+write. The test now waits (up to 5 s) for a batch naming `host.js`, rewriting it every 500 ms in case a
+write lands before the stream is live. The watcher itself is unchanged.
