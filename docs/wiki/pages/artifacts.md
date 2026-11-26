@@ -7,7 +7,7 @@ artifact is retrieved by an agent running the user's own `claude` CLI, never by 
 [ADR 0004](../../adr/0004-artifact-versions-as-numbered-snapshots.md) (numbered snapshots),
 [ADR 0013](../../adr/0013-react-designs-with-a-bundled-offline-runtime.md) (React designs),
 [ADR 0014](../../adr/0014-multi-file-artifacts-retrieved-by-agents.md) (multi-file artifacts, retrieval
-by agents). Related: [storage.md](storage.md), [protocol.md](protocol.md), [mcp-server.md](mcp-server.md),
+by agents), [ADR 0015](../../adr/0015-artifact-previews-allow-eval.md) (previews allow eval). Related: [storage.md](storage.md), [protocol.md](protocol.md), [mcp-server.md](mcp-server.md),
 [screen-artifacts.md](screen-artifacts.md), [telemetry.md](telemetry.md).
 
 ## Store (`packages/store/src/artifacts.ts`, `artifact-files.ts`)
@@ -237,8 +237,10 @@ Tailwind's browser build and resolves imports only from those.
 404; `.versions` (any segment), `artifact.json`, `.staging`, `__oide` and `~<digit>` segments are refused
 case-insensitively, before and after resolving; backslashes and NUL are refused before the file system is
 touched (SEC-32); real paths come from `realpathSync.native` (the OS expands 8.3 short names, the JS
-implementation keeps them) and must stay inside the real folder. The artifact CSP is unchanged: no
-network at all (`ARTIFACT_CSP`).
+implementation keeps them) and must stay inside the real folder. The artifact CSP allows no network at
+all (`ARTIFACT_CSP`); it allows `'unsafe-inline'` and `'unsafe-eval'` scripts so claude.ai design exports
+(`*.dc.html` pages whose `_runtime/support.js` compiles the component with `new Function`) render
+([ADR 0015](../../adr/0015-artifact-previews-allow-eval.md)).
 
 ## MCP tools and agents
 

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 import type { ArtifactMeta } from '@oide/protocol';
 import type { ArtifactStore } from '@oide/store';
+import { ARTIFACT_CSP } from './core.js';
 import { previewUrlOf, reactPreviewPage, resolveArtifactRequest, REACT_RUNTIME_PATH } from './artifact-preview.js';
 
 const root = mkdtempSync(join(tmpdir(), 'oide-preview-'));
@@ -128,5 +129,23 @@ describe('multi-file previews (ADR 0014)', () => {
   it('a .tsx entry gets the generated React page at index.html', async () => {
     const hit = await resolveArtifactRequest(multi, 'oide-artifact://t1/index.html', runtime);
     expect(hit && 'body' in hit && hit.body).toContain('id="oide-src"');
+  });
+});
+
+describe('ARTIFACT_CSP (ADR 0015)', () => {
+  const directives = new Map(
+    ARTIFACT_CSP.split(';').map((d) => {
+      const [name, ...values] = d.trim().split(/\s+/);
+      return [name, values] as const;
+    }),
+  );
+  it("lets a design's own runtime evaluate code (claude.ai .dc.html exports use new Function)", () => {
+    expect(directives.get('script-src')).toEqual(expect.arrayContaining(["'unsafe-inline'", "'unsafe-eval'", "'self'"]));
+    expect(directives.get('script-src')).not.toContain('oide-artifact:');
+  });
+  it('still blocks every network path', () => {
+    for (const d of ['default-src', 'connect-src', 'frame-src', 'worker-src', 'form-action', 'base-uri']) {
+      expect(directives.get(d)).toEqual(["'none'"]);
+    }
   });
 });
