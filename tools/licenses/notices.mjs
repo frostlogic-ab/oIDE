@@ -24,6 +24,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkBuiltFonts, collectFonts, readLicenseText, renderFonts, UPSTREAM_PACKAGE_TEXTS } from './fonts.mjs';
+import { classifyOptional, lockfilePackages } from './platform.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DESKTOP = join(ROOT, 'apps', 'desktop');
@@ -216,10 +217,48 @@ function record(dir, via, { follow = true } = {}) {
       }
       continue;
     }
+    if (optional) {
+      // An optional dependency that installs only on some OSes would make the file differ per OS.
+      const p = depDir ? readJson(join(depDir, 'package.json')) : null;
+      const installed = p && {
+        version: p.version,
+        license: licenseOf(p),
+        text: licenseFiles(depDir).map((f) => readFileSync(join(depDir, f), 'utf8').replace(/\r\n/g, '\n').trimEnd())[0] ?? null,
+        restricted: Boolean(p.os || p.cpu || p.libc),
+      };
+      const c = classifyOptional(dep, installed, lockfile, readLicenseText);
+      if (c.kind === 'record') {
+        platformDrift.push(...c.problems);
+        recordPlatformOnly(dep, c.record, via);
+        continue;
+      }
+      if (c.kind === 'unlisted') {
+        platformUnlisted.add(`${dep} (optional dependency of ${pkg.name})`);
+        continue;
+      }
+    }
     if (depDir) record(depDir, via);
     else if (!optional) missing.push(`${dep} (needed by ${pkg.name})`);
   }
 }
+
+/** A PLATFORM_ONLY package, rendered from its record so the output is the same on every OS. */
+function recordPlatformOnly(name, rec, via) {
+  const key = `${name}@${rec.version}`;
+  const existing = shipped.get(key);
+  if (existing) {
+    existing.via.add(via);
+    return;
+  }
+  const texts = [{ file: 'LICENSE', text: readLicenseText(rec.file) }];
+  shipped.set(key, { name, version: rec.version, license: rec.license, detected: false, repo: rec.repo, texts, via: new Set([via]), platforms: rec.platforms, dir: null });
+}
+
+const lockfile = lockfilePackages(existsSync(join(ROOT, 'pnpm-lock.yaml')) ? readFileSync(join(ROOT, 'pnpm-lock.yaml'), 'utf8') : '');
+/** Drift between PLATFORM_ONLY records and the installed package or the lockfile. */
+const platformDrift = [];
+/** Platform-only optional dependencies with no PLATFORM_ONLY record. */
+const platformUnlisted = new Set();
 const missing = [];
 /** parent name → declared per-platform prebuild packages */
 const platformFamilies = new Map();
@@ -285,7 +324,7 @@ const built = checkBuiltFonts(join(DESKTOP, 'out', 'renderer'));
 
 const list = [...shipped.values()].sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version, undefined, { numeric: true }));
 const VIA = { runtime: 'runtime module', bundled: 'bundled', injected: 'build helper', electron: 'Electron runtime' };
-const viaLabel = (r) => [...r.via].sort().map((v) => VIA[v]).join(', ');
+const viaLabel = (r) => [...r.via].sort().map((v) => VIA[v]).join(', ') + (r.platforms ? ` (${r.platforms})` : '');
 const esc = (s) => String(s).replace(/\|/g, '\\|');
 
 let md = '';
@@ -346,6 +385,12 @@ if (CHECK) {
     console.error('Packages that could not be resolved from node_modules:');
     for (const m of missing) console.error(`  ${m}`);
   }
+  if (platformDrift.length || platformUnlisted.size) {
+    failed = true;
+    console.error('Optional dependencies that install only on some platforms (tools/licenses/platform.mjs):');
+    for (const p of platformDrift) console.error(`  ${p}`);
+    for (const u of [...platformUnlisted].sort()) console.error(`  ${u}: installs only on some OSes or CPUs; add it to PLATFORM_ONLY so the notices are the same on every OS.`);
+  }
   if (fonts.problems.length || built.problems.length) {
     failed = true;
     console.error('Shipped fonts and assets without a recorded, MIT-compatible licence:');
@@ -365,4 +410,6 @@ if (CHECK) {
   for (const p of [...fonts.problems, ...built.problems]) console.warn(`  font: ${p}`);
   for (const r of problems) console.warn(`  not MIT-compatible or unknown: ${r.name}@${r.version}: ${r.license}`);
   for (const m of missing) console.warn(`  unresolved: ${m}`);
+  for (const p of platformDrift) console.warn(`  platform-only: ${p}`);
+  for (const u of [...platformUnlisted].sort()) console.warn(`  platform-only, not in PLATFORM_ONLY: ${u}`);
 }
