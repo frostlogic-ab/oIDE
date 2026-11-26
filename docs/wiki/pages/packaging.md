@@ -79,9 +79,11 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
     (it ignores `generateUpdatesFilesForAllChannels`, which oIDE therefore no longer sets), so the
     fallback is what beta users read, for betas and stable releases alike.
   - `releases.atom` lists a tag as soon as it exists, before its draft is published. Beta users who
-    check in that window get "no update file for this platform yet" (`ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`)
-    until finalize publishes the release. "No published versions on GitHub" is shown as no newer
-    version, not as an error.
+    check in that window get "no update file for this platform" (`ERR_UPDATER_CHANNEL_FILE_NOT_FOUND`)
+    until finalize publishes the release, and a draft whose build failed (v0.2.0) keeps blocking beta
+    checks that way until a newer release is published or the stuck tag is deleted. Stable is not
+    affected. "No published versions on GitHub" (no release marked latest, or a repository with no
+    tags at all) is shown as no newer version, not as an error.
   - Windows picks the per-arch installer (`oIDE-X-win-x64.exe` / `-arm64.exe`, matched on
     `process.arch`) from `latest.yml`, not the combined `oIDE-X-win.exe`.
 - **Release feed (build time).** `electron-builder.yml` keeps `publish: null`, so a local or
@@ -225,7 +227,8 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   installs only on some OSes (`os` / `cpu` / `libc`) and is not a `<parent>-<platform>` prebuild, such as
   chokidar's `fsevents` (macOS), is listed on every OS from its `PLATFORM_ONLY` record and vendored
   licence text, so the notices are byte-identical whichever OS generates them. The check compares the
-  record with the installed package (where present) and with `pnpm-lock.yaml` (everywhere), and fails
+  record with the installed package (where present) and with the version `pnpm-lock.yaml` resolves for
+  that parent (`snapshots:`, everywhere), and fails
   on any platform-only optional dependency without a record, so the Linux CI job catches what only
   macOS or Windows would install. Test: `tools/licenses/test/platform.test.ts`.
 - Docs site: VitePress 2 (alpha, matches the repo's vite 8) in `docs/site/`, `pnpm docs:dev` /

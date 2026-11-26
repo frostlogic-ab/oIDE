@@ -44,6 +44,44 @@ export function lockfilePackages(text) {
 }
 
 /**
+ * The versions pnpm resolved for each package's dependencies, from pnpm-lock.yaml's `snapshots:`
+ * section: `'chokidar@3.6.0'` → `{ fsevents: '2.3.3', … }` (peer suffixes such as `(react@19.0.0)`
+ * are dropped from keys and versions).
+ * @param {string} text pnpm-lock.yaml contents (lockfile v9)
+ * @returns {Map<string, Map<string, string>>}
+ */
+export function lockfileSnapshots(text) {
+  const map = new Map();
+  let inSnapshots = false;
+  let deps = null;
+  let inDeps = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (/^\S/.test(line)) {
+      inSnapshots = line === 'snapshots:';
+      deps = null;
+      continue;
+    }
+    if (!inSnapshots) continue;
+    const key = /^ {2}'?((?:@[^@/'\s]+\/)?[^@/'\s]+)@([^('\s:]+)[^:]*'?:/.exec(line);
+    if (key) {
+      const id = `${key[1]}@${key[2]}`;
+      deps = map.get(id) ?? new Map();
+      map.set(id, deps);
+      inDeps = false;
+      continue;
+    }
+    const section = /^ {4}(\w+):/.exec(line);
+    if (section) {
+      inDeps = section[1] === 'dependencies' || section[1] === 'optionalDependencies';
+      continue;
+    }
+    const dep = /^ {6}'?((?:@[^@/'\s]+\/)?[^@/'\s:]+)'?:\s*'?([^('\s]+)/.exec(line);
+    if (dep && deps && inDeps) deps.set(dep[1], dep[2]);
+  }
+  return map;
+}
+
+/**
  * How notices.mjs should treat an optional dependency that is not a `<parent>-<platform>` prebuild.
  * - `record`: listed in PLATFORM_ONLY; render it from the record. `problems` lists drift between
  *   the record and the installed package or the lockfile.
@@ -55,14 +93,19 @@ export function lockfilePackages(text) {
  *   the package as installed here (`text`: its normalised licence file), or null when not installed
  * @param {Map<string, Array<{ version: string, restricted: boolean }>>} lock from lockfilePackages
  * @param {(file: string) => string} readText reads a licence text from tools/licenses/texts
+ * @param {string | undefined} resolved the version pnpm-lock.yaml resolved for this dependency of
+ *   this parent (lockfileSnapshots); when unknown, any locked version of the package is accepted
  */
-export function classifyOptional(name, installed, lock, readText) {
+export function classifyOptional(name, installed, lock, readText, resolved) {
   const rec = PLATFORM_ONLY[name];
-  const locked = lock.get(name) ?? [];
+  const all = lock.get(name) ?? [];
+  const locked = resolved ? all.filter((l) => l.version === resolved) : all;
   if (rec) {
     const problems = [];
-    if (locked.length && !locked.some((l) => l.version === rec.version)) {
-      problems.push(`${name}: PLATFORM_ONLY records ${rec.version} but pnpm-lock.yaml has ${locked.map((l) => l.version).join(', ')}. Update the record and tools/licenses/texts/${rec.file}.`);
+    if (resolved && resolved !== rec.version) {
+      problems.push(`${name}: PLATFORM_ONLY records ${rec.version} but pnpm-lock.yaml resolves ${resolved}. Update the record and tools/licenses/texts/${rec.file}.`);
+    } else if (!resolved && all.length && !all.some((l) => l.version === rec.version)) {
+      problems.push(`${name}: PLATFORM_ONLY records ${rec.version} but pnpm-lock.yaml has ${all.map((l) => l.version).join(', ')}. Update the record and tools/licenses/texts/${rec.file}.`);
     }
     if (installed) {
       if (installed.version !== rec.version) problems.push(`${name}: installed ${installed.version}, PLATFORM_ONLY records ${rec.version}.`);

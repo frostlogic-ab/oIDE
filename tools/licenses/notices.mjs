@@ -24,7 +24,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkBuiltFonts, collectFonts, readLicenseText, renderFonts, UPSTREAM_PACKAGE_TEXTS } from './fonts.mjs';
-import { classifyOptional, lockfilePackages } from './platform.mjs';
+import { classifyOptional, lockfilePackages, lockfileSnapshots } from './platform.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DESKTOP = join(ROOT, 'apps', 'desktop');
@@ -226,7 +226,7 @@ function record(dir, via, { follow = true } = {}) {
         text: licenseFiles(depDir).map((f) => readFileSync(join(depDir, f), 'utf8').replace(/\r\n/g, '\n').trimEnd())[0] ?? null,
         restricted: Boolean(p.os || p.cpu || p.libc),
       };
-      const c = classifyOptional(dep, installed, lockfile, readLicenseText);
+      const c = classifyOptional(dep, installed, lockfile, readLicenseText, lockSnapshots.get(`${pkg.name}@${pkg.version}`)?.get(dep));
       if (c.kind === 'record') {
         platformDrift.push(...c.problems);
         recordPlatformOnly(dep, c.record, via);
@@ -254,7 +254,9 @@ function recordPlatformOnly(name, rec, via) {
   shipped.set(key, { name, version: rec.version, license: rec.license, detected: false, repo: rec.repo, texts, via: new Set([via]), platforms: rec.platforms, dir: null });
 }
 
-const lockfile = lockfilePackages(existsSync(join(ROOT, 'pnpm-lock.yaml')) ? readFileSync(join(ROOT, 'pnpm-lock.yaml'), 'utf8') : '');
+const lockText = existsSync(join(ROOT, 'pnpm-lock.yaml')) ? readFileSync(join(ROOT, 'pnpm-lock.yaml'), 'utf8') : '';
+const lockfile = lockfilePackages(lockText);
+const lockSnapshots = lockfileSnapshots(lockText);
 /** Drift between PLATFORM_ONLY records and the installed package or the lockfile. */
 const platformDrift = [];
 /** Platform-only optional dependencies with no PLATFORM_ONLY record. */

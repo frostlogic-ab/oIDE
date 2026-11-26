@@ -56,7 +56,9 @@ Until finalize, the release is a draft: electron-updater and the site's download
 platform fails, the release stays a draft. When the failure was outside the code (a runner hiccup,
 an expired secret), fix that and use **Re-run failed jobs**. When it was in the code at the tag,
 re-running cannot help (every job checks out the tag): merge the fix and ship the next release.
-The stuck draft and its tag can then be deleted by a maintainer.
+The stuck draft and its tag can then be deleted by a maintainer. Until then the tag is in the
+releases feed, so beta-channel checks report "no update file for this platform" (stable checks are
+unaffected).
 
 v0.2.0 was the first case: its macOS build failed `pnpm licenses:check` because chokidar's optional
 `fsevents` (macOS only) made `THIRD_PARTY_NOTICES.md` differ on macOS, so finalize never ran and the

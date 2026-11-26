@@ -157,6 +157,17 @@ it('is off unless the build was given a release feed (no default org), and never
     expect(emitted.map((e) => e.state)).not.toContain('error');
   });
 
+  it('a repository with no tags at all (empty releases feed) is also "no newer version"', async () => {
+    const { svc } = make();
+    // builder-util-runtime's XmlElement.element() error, as GitHubProvider raises it for an empty feed.
+    const err = Object.assign(new Error('No published versions on GitHub'), { code: 'ERR_XML_MISSED_ELEMENT' });
+    updater.checkForUpdates.mockRejectedValueOnce(err);
+    expect((await svc.check()).state).toBe('not-available');
+    // Any other missing XML element is still an error.
+    updater.checkForUpdates.mockRejectedValueOnce(Object.assign(new Error('No element "link"'), { code: 'ERR_XML_MISSED_ELEMENT' }));
+    expect((await svc.check()).state).toBe('error');
+  });
+
   it('reports each finished check to onChecked with a bounded outcome and the channel only', async () => {
     const seen: unknown[] = [];
     const { svc } = make({ onChecked: (e) => seen.push(e) });
@@ -185,7 +196,7 @@ it('is off unless the build was given a release feed (no default org), and never
       updater.emit('error', err);
       throw err;
     });
-    expect(await svc.check()).toMatchObject({ state: 'error', error: expect.stringMatching(/no update file for this platform yet/) });
+    expect(await svc.check()).toMatchObject({ state: 'error', error: expect.stringMatching(/no update file for this platform/) });
     expect((await svc.check()).state).toBe('not-available');
   });
 

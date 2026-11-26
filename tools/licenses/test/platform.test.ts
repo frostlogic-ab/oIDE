@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { readLicenseText } from '../fonts.mjs';
-import { classifyOptional, lockfilePackages, PLATFORM_ONLY } from '../platform.mjs';
+import { classifyOptional, lockfilePackages, lockfileSnapshots, PLATFORM_ONLY } from '../platform.mjs';
 
 const LOCK = `lockfileVersion: '9.0'
 
@@ -33,6 +33,16 @@ packages:
 
 snapshots:
 
+  chokidar@3.6.0:
+    dependencies:
+      anymatch: 3.1.3
+    optionalDependencies:
+      fsevents: 2.3.3
+
+  '@scope/uses-react@1.0.0(react@19.0.0)':
+    dependencies:
+      '@scope/dep': 2.0.0(react@19.0.0)
+
   later@1.0.0:
     os: [linux]
 `;
@@ -59,6 +69,20 @@ describe('lockfilePackages', () => {
   });
 });
 
+describe('lockfileSnapshots', () => {
+  it('maps each package to the versions resolved for its dependencies', () => {
+    const snaps = lockfileSnapshots(LOCK);
+    expect(snaps.get('chokidar@3.6.0')).toEqual(new Map([['anymatch', '3.1.3'], ['fsevents', '2.3.3']]));
+    expect(snaps.get('@scope/uses-react@1.0.0')).toEqual(new Map([['@scope/dep', '2.0.0']]));
+    expect(snaps.get('later@1.0.0')).toEqual(new Map());
+  });
+
+  it("reads chokidar's fsevents from the real lockfile", () => {
+    const real = lockfileSnapshots(readFileSync(new URL('../../../pnpm-lock.yaml', import.meta.url), 'utf8'));
+    expect(real.get('chokidar@3.6.0')?.get('fsevents')).toBe(PLATFORM_ONLY.fsevents.version);
+  });
+});
+
 describe('classifyOptional', () => {
   const lock = lockfilePackages(LOCK);
   const fseventsText = readLicenseText(PLATFORM_ONLY.fsevents.file);
@@ -73,6 +97,10 @@ describe('classifyOptional', () => {
   it('reports drift from the installed package and from the lockfile', () => {
     const bumped = lockfilePackages(LOCK.replace('fsevents@2.3.3', 'fsevents@2.3.4'));
     expect(classifyOptional('fsevents', null, bumped, readLicenseText).problems).toEqual([expect.stringContaining('pnpm-lock.yaml has 2.3.4')]);
+    // The parent resolves another version even though some other package still locks 2.3.3.
+    const both = lockfilePackages(LOCK.replace('  fsevents@2.3.3:', '  fsevents@2.3.4:\n    os: [darwin]\n\n  fsevents@2.3.3:'));
+    expect(classifyOptional('fsevents', null, both, readLicenseText, '2.3.4').problems).toEqual([expect.stringContaining('resolves 2.3.4')]);
+    expect(classifyOptional('fsevents', null, both, readLicenseText, '2.3.3').problems).toEqual([]);
     const drifted = classifyOptional('fsevents', { version: '2.3.4', license: 'ISC', text: 'other', restricted: true }, lock, readLicenseText);
     expect(drifted.problems).toHaveLength(3);
   });

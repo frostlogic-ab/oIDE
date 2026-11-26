@@ -161,11 +161,16 @@ export function plainNotes(notes: UpdateInfoLike['releaseNotes']): string | unde
  */
 export function checkFailure(err: unknown): { state: 'not-available'; reason: 'no_release' } | { state: 'error'; reason: 'feed_missing' | 'error'; error: string } {
   const code = (err as { code?: unknown } | null)?.code;
-  if (code === 'ERR_UPDATER_NO_PUBLISHED_VERSIONS') return { state: 'not-available', reason: 'no_release' };
+  const message = err instanceof Error ? err.message : '';
+  // No release found by /releases/latest, or a releases feed with no entries at all (no tags yet:
+  // electron-updater then throws its XML "missing element" error with the same message).
+  if (code === 'ERR_UPDATER_NO_PUBLISHED_VERSIONS' || (code === 'ERR_XML_MISSED_ELEMENT' && /No published versions/.test(message))) {
+    return { state: 'not-available', reason: 'no_release' };
+  }
   if (code === 'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND') {
-    // A release's tag is in the feed before its files are public (a draft still being built and
-    // published, or a release published without its latest*.yml).
-    return { state: 'error', reason: 'feed_missing', error: 'The newest release on GitHub has no update file for this platform yet. It may still be publishing; try again later.' };
+    // The releases feed lists a tag as soon as it exists, before its files are public: a draft
+    // still being built, a draft whose build failed, or a release published without its latest*.yml.
+    return { state: 'error', reason: 'feed_missing', error: 'The newest release on GitHub has no update file for this platform (it may not be published yet). Try again later, or download it from the releases page.' };
   }
   return { state: 'error', reason: 'error', error: errorText(err) };
 }
