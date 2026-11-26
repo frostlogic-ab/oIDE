@@ -173,7 +173,7 @@ const img = (name: string) => withBase(`/shots/${name}`);
       <!-- HERO: the moat, then proof -->
       <section class="hero">
         <div class="wrap">
-          <span class="label go"><i></i>Open source · agent-first IDE · v0.1 preview</span>
+          <span class="label go"><i></i>Open source · agent-first IDE · preview</span>
           <h1><span>Six agents.</span> <span>Three projects.</span> <span class="punch">One window.</span></h1>
           <div class="hero-row">
             <p class="lede">
@@ -466,7 +466,7 @@ const img = (name: string) => withBase(`/shots/${name}`);
       <section class="sec" id="download">
         <div class="wrap">
           <div class="sec-head">
-            <span class="label go"><i></i>Download · v0.1 preview</span>
+            <span class="label go"><i></i>Download · preview</span>
             <h2>Get oIDE for your desktop</h2>
             <p>The same app on all three platforms. It checks for updates and asks before it installs one.</p>
           </div>

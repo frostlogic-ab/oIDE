@@ -27,7 +27,7 @@ useful kind.
 
 ## What works today
 
-oIDE is pre-1.0 and the extension API is at version `1.0.0`. Honest status:
+oIDE is in preview and the extension API is at version `1.0.0`. Honest status:
 
 | Feature | Status |
 | --- | --- |

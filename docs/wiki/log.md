@@ -919,6 +919,10 @@ process predated it. `electron-vite dev` hot-reloads the renderer but does not r
 and preload, so after pulling, restart oIDE when `packages/protocol` or `src/main` change. A router
 test now pins `git.openPr` accepting just `{ agentId }` ([screen-review](pages/screen-review.md)).
 
+## [2026-11-26] build | Remove release version labels from the website
+The landing page labels said "v0.1 preview"; they now say "preview" so they don't go stale at the
+next release. The "pre-1.0" lines in the getting-started and extensions pages now say "in preview".
+The FAQ keeps its "pre-1.0" wording because it describes the condition for a public 1.0.
 ## [2026-11-26] build | Push follow-up work to an open pull request
 After a PR is open, an agent often gets more work and makes new commits or leaves new files. Review
 now shows **Push to pull request #n** when the worktree has commits the PR branch lacks
