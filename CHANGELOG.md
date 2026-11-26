@@ -9,6 +9,37 @@ Conventional Commit titles of merged pull requests, in the release pull request 
 `main`. Do not add entries by hand; give your pull request a good title instead. The pipeline is
 described in [docs/wiki/pages/release-pipeline.md](docs/wiki/pages/release-pipeline.md).
 
+## [0.2.0](https://github.com/frostlogic-ab/oIDE/compare/v0.1.0...v0.2.0) (2026-11-26)
+
+
+### Added
+
+* **agent-core:** agents sync their branch with the base at start and before review ([2cdb54f](https://github.com/frostlogic-ab/oIDE/commit/2cdb54f1f6963bf102fb23d307a3c8402bd23dc4))
+* archive instead of PR when nothing to push ([a039289](https://github.com/frostlogic-ab/oIDE/commit/a039289c52aa7baafc09a71b7c66fe98a0e7375c))
+* follow project conventions when creating PRs ([d69ad56](https://github.com/frostlogic-ab/oIDE/commit/d69ad56442769bf94319dfb44277982a78e53ad5))
+* **git:** implement auto-stash functionality during merges ([1801249](https://github.com/frostlogic-ab/oIDE/commit/18012491580eb404ca2acc3916e927e1d354acac))
+* open pull requests that follow the project's own conventions ([e9fd936](https://github.com/frostlogic-ab/oIDE/commit/e9fd936e0cd510e926d52f139105281c531eadde))
+* **review:** push follow-up work to an open pull request ([99d0957](https://github.com/frostlogic-ab/oIDE/commit/99d0957fe7b4cbcbd6f084daa974a915a983b78a))
+* **review:** push follow-up work to an open pull request ([077e55a](https://github.com/frostlogic-ab/oIDE/commit/077e55afb0b2813d391481b0358ff208dec97a4a))
+
+
+### Fixed
+
+* **agent-core:** status-only follow-ups return to Ready for review ([183de3c](https://github.com/frostlogic-ab/oIDE/commit/183de3ce107361a3a2907307595b2dca6de1d2c2))
+* **agent-core:** status-only follow-ups return to Ready for review ([f0adb5a](https://github.com/frostlogic-ab/oIDE/commit/f0adb5a6fdc7173e44a796d7553f2ac5b3ef30fa))
+* **diagnostics:** never put a raw userData path in the report; fix e2e races ([ef85bbe](https://github.com/frostlogic-ab/oIDE/commit/ef85bbe187ca2c439ada1f2c94ebbe0f24ad564b))
+* **files:** Enter no longer runs the same search twice; fix editor test race ([e031715](https://github.com/frostlogic-ab/oIDE/commit/e031715408b5276304cf399c40ba9518898f6010))
+* fix CSP eval error in artifact preview ([9db87d6](https://github.com/frostlogic-ab/oIDE/commit/9db87d6ddc7fa7164c9460ed13e5af4af61609b2))
+* let artifact previews run claude.ai Design exports (allow eval in artifact CSP) ([63df1f7](https://github.com/frostlogic-ab/oIDE/commit/63df1f7c1b48a204de37c8f133b63c455b9c7764))
+* make CI green on main (SEC-34 check, Windows holder scan, diagnostics redaction, test races) ([c073c04](https://github.com/frostlogic-ab/oIDE/commit/c073c04676626271ac14d8b74490e792da23e0bc))
+* **reliability:** stop the Windows holder scan from autoloading modules ([277bb5c](https://github.com/frostlogic-ab/oIDE/commit/277bb5ceb7d1840b53248486de9105b4177b2ebf))
+
+
+### Security
+
+* custom model env allow-list with value checks, unspoofable confirmations ([896ca5d](https://github.com/frostlogic-ab/oIDE/commit/896ca5d025354361611aa81319531e5564e42ff3))
+* restrict custom model env, bind keys to env, dedicated CLI picker ([ea5cbd9](https://github.com/frostlogic-ab/oIDE/commit/ea5cbd998bd5a6221eb9e3fc08cc8f50190fcbad))
+
 ## 0.1.x (after 0.1.0, before automated releases)
 
 Hand-written notes for the work that landed between the internal 0.1.0 build and the first release
