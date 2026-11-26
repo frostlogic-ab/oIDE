@@ -26,6 +26,11 @@ Design: [../raw/design/Review.dc.html](../raw/design/Review.dc.html). Route `rev
 - Click a line (or its number button, "Comment on line N") → inline box "Your comment on line N ·
   goes to the agent", Cancel / Add to feedback (Ctrl/Cmd+Enter, Esc) → `review.addComment
   { agentId, path, line, body }`. Removed lines comment with their old number ("removed line N").
+- A half-written comment is a draft kept per file, side and line (`index.tsx`): clicking another
+  line or switching file keeps it, and reopening that line restores the text. A line with an unsent
+  draft shows a small accent dot and its button reads "Comment on line N (draft)". Cancel / Esc
+  discard the draft, a successful add clears it; drafts reset when the agent changes and are not
+  kept after leaving Review.
 - Existing comments render inline under their line (sent / not sent yet, delete while unsent →
   `review.deleteComment`).
 - Over 400 rows the list is virtualized (`@tanstack/react-virtual`, measured rows).
@@ -154,6 +159,7 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
 ## Tests
 
 `Review.test.tsx`: hunk numbering, reverse-apply, rendered numbers and colours, click-to-comment,
+comment drafts (kept across lines, cleared by Cancel / Esc / add),
 `review.addComment` arguments (with `side`), removed-line threads, Send feedback, Viewed toggle.
 
 ## Comment side

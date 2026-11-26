@@ -49,7 +49,11 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
   `SegmentedControl`: roving tabindex, arrow keys, Home / End): **A link** | **Files** | **Blank**.
   The last choice is kept between uses; Project and "Where it lives" are reset from the scope each
   time. The primary button stays disabled until the choice can go, with the reason beside it as
-  its `aria-describedby`; focus starts on the first field of the choice; Esc closes.
+  its `aria-describedby`; focus starts on the first field of the choice; Esc, × and Cancel close.
+  A press on the scrim closes it only while the form is untouched (no link, title or kind typed or
+  chosen, no files picked or dropped, Project and "Where it lives" still the defaults; switching
+  "Start from" alone doesn't count) and never while a create is in flight, so a stray click does
+  not throw away what was entered.
   - *A link*: "Link" (mono) checked live with `classifyClaudeLink` (reason inline, `role="alert"`,
     `aria-invalid`; a half-typed link waits for blur), hint "An agent opens the link with your
     Claude Code CLI and copies its files here. You can follow it on the Wall; the artifact fills in
@@ -197,6 +201,8 @@ event and its helper are gone.
 
 ## Tests
 
+`Dialogs.test.tsx`: New artifact closes on a scrim press only while untouched (a typed title, a changed
+project, a typed link or a dropped file keep it open; Esc, × and Cancel still close).
 `model.test.ts` (filters, use lines, reads/writes grouping, version labels, claude.ai host check and
 `importLinkError`, `kindFromFiles`, `entryCandidates`, `baseName`, `activeRetrieval` /
 `retrievalLine` / `canUpdateFromLink`, Monaco language per entry and per file, `fileTree`, image data
