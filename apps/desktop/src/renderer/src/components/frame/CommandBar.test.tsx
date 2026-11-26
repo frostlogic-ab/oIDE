@@ -55,14 +55,16 @@ describe('command bar quick open', () => {
     await setupMockApp({ screen: 'wall', params: {} });
     useUi.getState().openCommandBar('commands');
     render(<CommandBar />);
-    fireEvent.change(input(), { target: { value: 'retry' } });
+    // A name that matches no command or session: until file results arrive the list is empty.
+    fireEvent.change(input(), { target: { value: 'StatusBar' } });
     expect(within(bar()).getByText('Searching files…')).toBeTruthy();
     fireEvent.keyDown(input(), { key: 'ArrowDown' });
-    const option = await within(bar()).findByRole('option', { name: /retry\.ts/ });
+    const option = await within(bar()).findByRole('option', { name: /StatusBar\.tsx/ });
     expect(within(bar()).queryByText('Searching files…')).toBeNull();
-    expect(within(bar()).getAllByRole('option').some((o) => o.getAttribute('aria-selected') === 'true')).toBe(true);
-    expect(input().getAttribute('aria-activedescendant')).toBeTruthy();
-    expect(option).toBeTruthy();
+    expect(option.getAttribute('aria-selected')).toBe('true');
+    expect(input().getAttribute('aria-activedescendant')).toBe(option.id);
+    fireEvent.keyDown(input(), { key: 'Enter' });
+    await waitFor(() => expect(useFiles.getState().pending).toMatchObject({ path: 'src/shell/StatusBar.tsx' }));
   });
 
   it('with ">" lists commands only', async () => {
