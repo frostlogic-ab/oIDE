@@ -1,53 +1,178 @@
-/* oIDE tokens: accent #7AA2F7, link #9DBBFA, ground #0E1013, chrome #0B0D10, panel #111418, card #15181D. */
+/* oIDE docs pages: the default VitePress theme restyled with the tokens of the "oIDE Website" design
+   (theme/site.css, which only styles the home page). Dark: the app's palette; light: the design's
+   light theme. Headings use Archivo like the home page; code uses JetBrains Mono. */
+
 :root {
-  --vp-c-brand-1: #3d6fd9;
-  --vp-c-brand-2: #5585ea;
-  --vp-c-brand-3: #7aa2f7;
-  --vp-c-brand-soft: rgba(122, 162, 247, 0.14);
+  --oide-display: 'Archivo Variable', 'Archivo', 'Inter', ui-sans-serif, system-ui, sans-serif;
   --vp-font-family-base: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --vp-font-family-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  --vp-font-family-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+  /* Light (design: .site.light) */
+  --vp-c-bg: #fbfbfd;
+  --vp-c-bg-alt: #f3f4f7;
+  --vp-c-bg-elv: #ffffff;
+  --vp-c-bg-soft: #e8ebf0;
+  --vp-c-divider: #dadfe7;
+  --vp-c-gutter: #dadfe7;
+  --vp-c-border: #b9c1cd;
+  --vp-c-text-1: #0f1319;
+  --vp-c-text-2: #38414e;
+  --vp-c-text-3: #5a6372;
+  --vp-c-brand-1: #2c5bd3;
+  --vp-c-brand-2: #244cb3;
+  --vp-c-brand-3: #2c5bd3;
+  --vp-c-brand-soft: rgba(44, 91, 211, 0.09);
+  --vp-c-tip-1: #167349;
+  --vp-c-tip-soft: rgba(22, 115, 73, 0.09);
+  --vp-c-warning-1: #8f5800;
+  --vp-c-warning-soft: rgba(143, 88, 0, 0.1);
+  --vp-code-block-bg: #f3f4f7;
+  --vp-button-brand-text: #ffffff;
+  --vp-button-brand-hover-text: #ffffff;
+  --vp-button-brand-active-text: #ffffff;
 }
 
 .dark {
-  --vp-c-bg: #0e1013;
-  --vp-c-bg-alt: #0b0d10;
-  --vp-c-bg-elv: #111418;
-  --vp-c-bg-soft: #15181d;
-  --vp-c-divider: #232830;
-  --vp-c-gutter: #0b0d10;
-  --vp-c-border: #343a44;
-  --vp-c-text-1: #e6e8eb;
-  --vp-c-text-2: #c9ced6;
-  --vp-c-text-3: #9aa3ae;
+  /* Dark (design: .site) */
+  --vp-c-bg: #0a0c0f;
+  --vp-c-bg-alt: #0f1216;
+  --vp-c-bg-elv: #0f1216;
+  --vp-c-bg-soft: #161a20;
+  --vp-c-divider: #20252d;
+  --vp-c-gutter: #0a0c0f;
+  --vp-c-border: #343b46;
+  --vp-c-text-1: #e8eaed;
+  --vp-c-text-2: #b1b8c2;
+  --vp-c-text-3: #838c99;
   --vp-c-brand-1: #9dbbfa;
   --vp-c-brand-2: #7aa2f7;
-  --vp-c-brand-3: #5585ea;
-  --vp-c-brand-soft: rgba(122, 162, 247, 0.16);
-  --vp-code-block-bg: #111418;
+  --vp-c-brand-3: #7aa2f7;
+  --vp-c-brand-soft: rgba(122, 162, 247, 0.13);
   --vp-c-default-soft: #1e2430;
-  --vp-c-warning-1: #f2c078;
-  --vp-c-danger-1: #f08a8a;
   --vp-c-tip-1: #7fc8a9;
+  --vp-c-tip-soft: rgba(127, 200, 169, 0.12);
+  --vp-c-warning-1: #f2c078;
+  --vp-c-warning-soft: rgba(242, 192, 120, 0.12);
+  --vp-c-danger-1: #f08a8a;
+  --vp-code-block-bg: #0f1216;
+  --vp-button-brand-text: #0a0c0f;
+  --vp-button-brand-hover-text: #0a0c0f;
+  --vp-button-brand-active-text: #0a0c0f;
+  --vp-button-brand-bg: #7aa2f7;
+  --vp-button-brand-hover-bg: #9dbbfa;
+  --vp-button-brand-active-bg: #9dbbfa;
 }
 
-.dark .VPNav,
-.dark .VPNavBar:not(.home.top) .content-body {
-  background-color: #0b0d10;
+/* Nav: translucent bar with a hairline, like the home page */
+.VPNavBar:not(.home.top) .content-body,
+.VPNavBar.has-sidebar .content-body {
+  background-color: color-mix(in srgb, var(--vp-c-bg) 84%, transparent);
+  backdrop-filter: blur(14px) saturate(1.5);
+  -webkit-backdrop-filter: blur(14px) saturate(1.5);
+}
+.VPNavBarTitle .title {
+  font-family: var(--oide-display);
+  font-stretch: 110%;
+  font-weight: 800;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+.VPNavBarTitle .logo {
+  height: 24px;
 }
 
-.VPHero .name .clip {
-  background: none;
-  -webkit-text-fill-color: #7aa2f7;
-  color: #7aa2f7;
+/* Headings */
+.vp-doc h1,
+.vp-doc h2,
+.vp-doc h3 {
+  font-family: var(--oide-display);
+  text-wrap: balance;
+}
+.vp-doc h1 {
+  font-stretch: 112%;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.08;
+  font-size: 38px;
+}
+.vp-doc h2 {
+  font-stretch: 108%;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  border-top-color: var(--vp-c-divider);
+}
+.vp-doc h3 {
+  font-stretch: 106%;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.VPSidebarItem.level-0 > .item .text {
+  font: 500 11.5px/1.4 var(--vp-font-family-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
 }
 
-.dark .VPButton.brand {
-  color: #0e1013;
-  background-color: #7aa2f7;
-  border-color: #7aa2f7;
+/* Code, keys, tables */
+.vp-doc :not(pre) > code {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 5px;
+}
+.vp-doc kbd {
+  font: 500 12px/1 var(--vp-font-family-mono);
+  padding: 3px 6px;
+  border: 1px solid var(--vp-c-border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--vp-c-bg-soft);
+}
+.vp-doc div[class*='language-'] {
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+}
+.vp-doc th {
+  font: 500 12px/1.3 var(--vp-font-family-mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
 }
 
-.dark .VPButton.brand:hover {
-  background-color: #9dbbfa;
-  border-color: #9dbbfa;
+/* Buttons and callouts */
+.VPButton {
+  border-radius: 9px !important;
+  font-weight: 600;
+}
+.custom-block {
+  border-radius: 10px;
+}
+
+/* Footer */
+.VPFooter {
+  border-top-color: var(--vp-c-divider);
+}
+
+/* Home page (Landing.vue): smooth in-page jumps that clear its sticky nav */
+html:has(.site) {
+  scroll-behavior: smooth;
+  scroll-padding-top: 76px;
+}
+@media (prefers-reduced-motion: reduce) {
+  html:has(.site) {
+    scroll-behavior: auto;
+  }
+}
+
+/* Home page light theme: the design's .site.light tokens. Keyed on VitePress's <html class="dark"> (set
+   before hydration), not on component state, so the server-rendered page and the client agree. */
+html:not(.dark) .site{
+  --bg:#F3F4F7; --panel:#FBFBFD; --raise:#E8EBF0; --line:#DADFE7; --line-strong:#B9C1CD;
+  --fg:#0F1319; --fg-2:#38414E; --fg-3:#5A6372;
+  --accent:#2C5BD3; --accent-ink:#FFFFFF; --accent-soft:rgba(44,91,211,.09);
+  --go:#167349; --hold:#8F5800; --review:#2C5BD3;
+  --shadow:0 40px 80px -40px rgba(20,28,45,.45);
+  color-scheme:light;
+}
+html.dark .site .on-light,
+html:not(.dark) .site .on-dark {
+  display: none !important;
 }

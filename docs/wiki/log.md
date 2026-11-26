@@ -837,3 +837,12 @@ target folders must sit in a picked location or next to an open project (SEC-08)
 Telemetry `project_added` / `project_add_failed`. Pages: [new-project.md](pages/new-project.md) (new),
 [desktop-shell.md](pages/desktop-shell.md), [screen-wall.md](pages/screen-wall.md),
 [telemetry.md](pages/telemetry.md); user guide getting-started and Wall.
+
+## [2026-11-26] build | Docs site redone from the oIDE Website design
+Ingested the "oIDE Website" design artifact into [raw/design/website/](raw/design/website/). The docs
+site home page is now that design (`docs/site/.vitepress/theme/Landing.vue`, `layout: landing`), with
+the app's own logo mark instead of the design's square, and the doc pages take its palette and
+Archivo headings. Fonts are self-hosted (fontsource). The design's brew and winget commands do not
+exist, so the download cards show SHA256SUMS checks instead; downloads link to GitHub Releases. No
+telemetry change (the site has no analytics). Pages: [docs-site.md](pages/docs-site.md) (new),
+[packaging.md](pages/packaging.md).
