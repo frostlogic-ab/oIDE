@@ -886,3 +886,9 @@ uses the custom domain `getoide.com`. The VitePress base moved from `/oIDE/` to 
 `og:image` URLs follow, a sitemap is generated for `https://getoide.com`, and `docs/site/public/CNAME`
 pins the domain in the deployed artifact. `docs.yml` deploys on every push to `main` that touches
 `docs/site/**` ([docs-site](pages/docs-site.md), [release-pipeline](pages/release-pipeline.md)).
+
+## [2026-11-26] decision | Artifact previews allow 'unsafe-eval' (ADR 0015)
+claude.ai Design exports (`*.dc.html` + `_runtime/support.js`) compile their component with `new Function`,
+which the artifact CSP blocked (red CSP error box over the preview). `ARTIFACT_CSP` now allows
+`'unsafe-eval'`; network, frames, workers and the sandbox are unchanged, and inline scripts already ran, so
+an artifact gains no new capability. Updated [artifacts.md](pages/artifacts.md); test pins the CSP.

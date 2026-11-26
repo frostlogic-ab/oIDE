@@ -458,8 +458,11 @@ const MIME: Record<string, string> = {
  * CSP for artifact previews: inline scripts/styles of the artifact itself, no network at all.
  * `'self'` (not the whole `oide-artifact:` scheme) so one artifact cannot load another's scripts
  * (SEC-18). WebRTC is not covered by CSP; the session's WebRTC policy turns it off (hardening.ts).
+ * `'unsafe-eval'` because claude.ai design exports (`*.dc.html` + `_runtime/support.js`) compile
+ * their component with `new Function`; inline scripts already run, so it grants nothing new inside
+ * the sandboxed, opaque-origin, network-less frame (ADR 0015). The app's own CSP stays eval-free.
  */
-export const ARTIFACT_CSP = "default-src 'none'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline' 'self'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'";
+export const ARTIFACT_CSP = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'self'; style-src 'unsafe-inline' 'self'; img-src 'self' data: blob:; font-src 'self' data:; media-src 'self' data: blob:; connect-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'";
 
 /**
  * Resolve `oide-artifact://<id>/<path>` to a file of the artifact's current version (any file: a

@@ -421,7 +421,9 @@ See `apps/desktop/src/main/services/core.ts` (`ARTIFACT_CSP`). **Fix:** use `scr
 `session.setPermissionCheckHandler` keyed on the frame origin.
 **Status:** **fixed.** `ARTIFACT_CSP` uses `'self'` instead of the whole scheme (plus
 `worker-src 'none'`), and every webContents gets `setWebRTCIPHandlingPolicy('disable_non_proxied_udp')`.
-Files: `services/core.ts`, `security/hardening.ts`.
+Files: `services/core.ts`, `security/hardening.ts`. Later, `script-src` also gained `'unsafe-eval'`
+for claude.ai Design exports; it adds no capability next to `'unsafe-inline'`
+([ADR 0015](../../adr/0015-artifact-previews-allow-eval.md)).
 
 ### SEC-19 `isAnthropicHost` misses `claude.com`
 
