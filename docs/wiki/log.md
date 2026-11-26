@@ -886,3 +886,12 @@ uses the custom domain `getoide.com`. The VitePress base moved from `/oIDE/` to 
 `og:image` URLs follow, a sitemap is generated for `https://getoide.com`, and `docs/site/public/CNAME`
 pins the domain in the deployed artifact. `docs.yml` deploys on every push to `main` that touches
 `docs/site/**` ([docs-site](pages/docs-site.md), [release-pipeline](pages/release-pipeline.md)).
+
+## [2026-11-26] decision | CI split: what runs on pull requests
+First runs on GitHub showed CI red on every OS (5 Vitest failures on Linux, 11 on macOS, 10 on
+Windows; platform path bugs that a Windows dev machine does not hit) and every CI and CodeQL run on
+`main` cancelled by the next push. `ci.yml` now runs typecheck and lint once (Linux), unit tests on
+all three OSes, e2e on Linux for PRs and on all three OSes for main, skips the heavy jobs for
+docs-only PRs, builds the docs site when `docs/site/**` changes, never cancels runs on main, and ends
+in one `CI ok` check for branch protection. CodeQL skips docs-only PRs and no longer cancels runs on
+main ([packaging](pages/packaging.md#ci-and-release-workflows)).

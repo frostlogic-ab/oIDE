@@ -116,7 +116,8 @@ a second build racing the first.
    requires checks, add a fine-grained token or GitHub App token with Contents, Pull requests and
    Issues read/write; the workflow uses it when present. (The release build re-runs every check
    before anything is published either way.)
-4. **Branch protection on `main`** (recommended): require the CI and PR title checks.
+4. **Branch protection on `main`** (recommended): require the `CI ok` and `Conventional Commit title`
+   checks (`CI ok` aggregates every CI job, so skipped jobs on docs-only PRs do not block).
 5. **Pages:** Settings › Pages › Source "GitHub Actions" for the docs site
    (`docs.yml`, custom domain `https://getoide.com/`, base `/`, [docs-site](docs-site.md)).
 6. **Signing (optional):** the secrets and variables listed in the header of `release.yml`.
