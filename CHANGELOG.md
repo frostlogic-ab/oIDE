@@ -9,6 +9,33 @@ Conventional Commit titles of merged pull requests, in the release pull request 
 `main`. Do not add entries by hand; give your pull request a good title instead. The pipeline is
 described in [docs/wiki/pages/release-pipeline.md](docs/wiki/pages/release-pipeline.md).
 
+## [0.4.0](https://github.com/frostlogic-ab/oIDE/compare/v0.3.0...v0.4.0) (2026-11-26)
+
+
+### Added
+
+* **ui:** show "by Frostlogic" under the oIDE logo in the header ([9ac9956](https://github.com/frostlogic-ab/oIDE/commit/9ac995600d28e66e261e21bf2f47a65b3a39c602))
+* **ui:** show "by Frostlogic" under the oIDE logo in the header ([4f448d8](https://github.com/frostlogic-ab/oIDE/commit/4f448d80ce28c09133857529969874916675eadb))
+
+
+### Fixed
+
+* address review findings on recorder Esc, env row focus, drop refusal, draft test isolation ([117f460](https://github.com/frostlogic-ab/oIDE/commit/117f460785700d4b3c2916755cd15171c5790787))
+* address second review round ([d3dcc73](https://github.com/frostlogic-ab/oIDE/commit/d3dcc733d35c5e735b13d193af8598483cbed1cb))
+* address third review's minor findings ([0f442a8](https://github.com/frostlogic-ab/oIDE/commit/0f442a836288746d0bf2cbc8aba1a3ae7a91a2fd))
+* **artifacts:** a stray scrim click no longer discards a filled-in New artifact dialog ([16373dd](https://github.com/frostlogic-ab/oIDE/commit/16373dda16ca0152f8fb682a4a2a824550507ade))
+* **artifacts:** address review findings on kept drafts ([3802fe2](https://github.com/frostlogic-ab/oIDE/commit/3802fe2b988dcf7e5411c425b3af44c37bd1622e))
+* **artifacts:** unsaved edits survive leaving the Artifacts screen ([6e06fda](https://github.com/frostlogic-ab/oIDE/commit/6e06fda9623179c5ebef478605ec6cfbc6806511))
+* **extensions:** a settings reload no longer discards what the user is typing ([18584e5](https://github.com/frostlogic-ab/oIDE/commit/18584e5094ff65a193fcd49996b68ff117e6d40a))
+* **focus:** keep a half-typed message per agent across agent and screen switches ([5cf313b](https://github.com/frostlogic-ab/oIDE/commit/5cf313b94605e809cafd884316dde2470a28bf5b))
+* **marketplace:** keep typed custom-extension input, removable env rows, honest drop zone, search across categories ([dd358e2](https://github.com/frostlogic-ab/oIDE/commit/dd358e22a1ed8cbfd299051967bc5850c7eeccec))
+* **review:** escape the draft-key separator so UnifiedDiff.tsx stays a text file ([6642131](https://github.com/frostlogic-ab/oIDE/commit/66421316531f977b4817dbb6ef36d1b18364dbdd))
+* **review:** go to Source control after a local merge; archived agents are not 'gone' ([6961212](https://github.com/frostlogic-ab/oIDE/commit/6961212207b94758dc8ae26a2f57fff00df87d72))
+* **review:** keep half-written line comments when another line or file is opened ([5bb2fc1](https://github.com/frostlogic-ab/oIDE/commit/5bb2fc19b0238774d5d4ed0323e479ee68b0b4d6))
+* second usability pass: kept drafts, safer dialogs, Marketplace search and Review after merge ([0964651](https://github.com/frostlogic-ab/oIDE/commit/0964651a4d0e9e37b3f77ae042c064923c814d16))
+* **settings:** Tab leaves the shortcut recorder; focus returns to Change afterwards ([6e3ea21](https://github.com/frostlogic-ab/oIDE/commit/6e3ea21fa874b77e5c64d5f2c9ff6247dfbabf7f))
+* **source-control:** keep the commit dialog open while a commit is in flight ([3ab57b0](https://github.com/frostlogic-ab/oIDE/commit/3ab57b0872b9f6b8b7c8cf936387aa13af2605d7))
+
 ## [0.3.0](https://github.com/frostlogic-ab/oIDE/compare/v0.2.0...v0.3.0) (2026-11-26)
 
 
