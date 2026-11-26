@@ -78,6 +78,9 @@ test('killing the renderer never kills agents; the window reloads and rehydrates
   // Kill the renderer process. Main records the crash and the page load that follows it, so the
   // wait below is for the reload itself: right after the kill, `isCrashed()` can still read false
   // and the old URL is still set, which would let a plain state check pass before anything reloaded.
+  // SIGKILL, not `forcefullyCrashRenderer()`: on Linux that asks the renderer to crash itself, and a
+  // crash signal makes the kernel write a core dump first (apport on GitHub's Ubuntu runners), which
+  // held the dying renderer, and `render-process-gone`, past every timeout. A kill dumps nothing.
   await app.evaluate(({ BrowserWindow }) => {
     const wc = BrowserWindow.getAllWindows()[0]!.webContents;
     const g = globalThis as { __e2eReload?: { gone: boolean; loaded: boolean } };
@@ -89,7 +92,7 @@ test('killing the renderer never kills agents; the window reloads and rehydrates
         state.loaded = true;
       });
     });
-    wc.forcefullyCrashRenderer();
+    process.kill(wc.getOSProcessId(), 'SIGKILL');
   });
 
   // Main reloads the page on its own; the stores rehydrate from agents.list.

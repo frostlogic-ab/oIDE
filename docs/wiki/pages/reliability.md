@@ -164,7 +164,9 @@ general log redactor does not expand 8.3 names: a short-name home path in a log 
   `services/git.test.ts` (dispose awaits in-flight diff refreshes and closes watchers),
   `components/ErrorBoundary.test.tsx`, `stores/reliability.test.ts` (event caps, extension host states).
 - E2E `apps/desktop/e2e/reliability.spec.ts`: an agent waits on a permission prompt, the renderer is
-  killed with `forcefullyCrashRenderer()`, the window reloads by itself, the prompt is back, answering
+  killed (SIGKILL on its pid from main; not `forcefullyCrashRenderer()`, which on Linux makes the
+  renderer crash itself, so the kernel writes a core dump first and the process outlives every
+  timeout on CI), the window reloads by itself, the prompt is back, answering
   it finishes the run (same live process), and `main.log` / `agents/<id>.log` record it without the
   home path. Also Diagnostics over IPC and in Settings, and `app.reportError` reaching `renderer.log`.
   userData and the repo have spaces and non-ASCII names. The e2e userData is a temp folder, which is
