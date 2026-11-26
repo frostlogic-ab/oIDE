@@ -90,7 +90,7 @@ describe('verifyFeed', () => {
   });
 
   it('fails when a platform installer is missing from its feed', () => {
-    const noArm = WIN.replace(/  - url: oIDE-0\.2\.0-win-arm64\.exe\n.*\n.*\n/, '');
+    const noArm = WIN.replace(/ {2}- url: oIDE-0\.2\.0-win-arm64\.exe\n.*\n.*\n/, '');
     const f = { ...feeds, 'latest.yml': noArm };
     expect(verifyFeed({ version: '0.2.0', feeds: f, assets: assetsOf(f) })).toEqual(['latest.yml: no arm64 installer (Windows (NSIS)).']);
   });
