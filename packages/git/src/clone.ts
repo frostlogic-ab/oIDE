@@ -39,7 +39,7 @@ export type CloneFailure = 'auth' | 'not_found' | 'network' | 'exists' | 'other'
 export function cloneFailureOf(stderr: string): CloneFailure {
   const s = stderr;
   if (/already exists and is not an empty directory/i.test(s)) return 'exists';
-  if (/repository ['"].*['"] not found|Repository not found|does not appear to be a git repository|not found\.?\s*$|\b404\b/im.test(s)) return 'not_found';
+  if (/repository ['"].*['"] (not found|does not exist)|Repository not found|does not appear to be a git repository|not found\.?\s*$|\b404\b/im.test(s)) return 'not_found';
   if (/Authentication failed|could not read (Username|Password)|terminal prompts disabled|Permission denied \(publickey|Host key verification failed|\b403\b|access denied|invalid credentials/i.test(s)) return 'auth';
   if (/Could not resolve host|Failed to connect|Connection (timed out|refused|reset)|Network is unreachable|unable to access|early EOF|timed out|SSL/i.test(s)) return 'network';
   return 'other';

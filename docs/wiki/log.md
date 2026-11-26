@@ -864,3 +864,15 @@ link to the new repository; the docs site base is `/oIDE/` (`frostlogic-ab.githu
 `CHANGELOG.md` is written by release-please from now on. No telemetry change (CI only). Pages:
 [release-pipeline.md](pages/release-pipeline.md) (new), [packaging.md](pages/packaging.md),
 [docs-site.md](pages/docs-site.md).
+
+## [2026-11-26] build | CI unit tests pass on GitHub's runners
+
+CI run 45783318672 failed `pnpm test` on all three OSes, though the suite passed on a developer's
+Windows machine. Causes: macOS's temp folder is a link (`/var` → `/private/var`) and Windows runners
+use an 8.3 short temp path (`RUNNER~1`), so git's real paths never matched the tests' paths (and a `~`
+looked like a protected path to SEC-12); Windows runners set `core.autocrlf=true`; Linux/macOS git
+says "repository '…' does not exist" for a missing local clone source; two tests assumed Windows path
+rules; and the Windows holder scan's 10 s budget was used up by PowerShell start-up on a runner.
+Fixes: `test/setup/env.ts` (canonical temp, no system/global git config), the clone classifier knows
+the POSIX wording, `readAgentFile` refuses `\host\share` on every OS, `HOLDER_TIMEOUT_MS` 25 s.
+See [testing](pages/testing.md).

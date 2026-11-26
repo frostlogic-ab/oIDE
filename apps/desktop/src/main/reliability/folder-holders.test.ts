@@ -100,5 +100,5 @@ describe.skipIf(process.platform !== 'win32')('folder holders on Windows (integr
     }
     const after = await findFolderHolders(root, { excludePids: [process.pid] });
     expect(after.holders.some((h) => h.pids.includes(child.pid!))).toBe(false);
-  }, 30_000);
+  }, 60_000);
 });

@@ -109,7 +109,8 @@ export async function readAgentFile(worktreePath: string | undefined, fromFile: 
   if (!worktreePath) throw new Error('fromFile needs a working folder, and this agent has none yet.');
   const root = await realpath(worktreePath);
   const candidate = isAbsolute(fromFile) ? fromFile : resolve(root, fromFile);
-  if (fromFile.includes('\0') || /^[\\/]{2}/.test(candidate)) throw new Error(`fromFile ${fromFile} is not inside your working folder.`);
+  // A UNC path (`\\host\share`) is refused on every platform, not only where it resolves as one.
+  if (fromFile.includes('\0') || /^[\\/]{2}/.test(fromFile) || /^[\\/]{2}/.test(candidate)) throw new Error(`fromFile ${fromFile} is not inside your working folder.`);
   let real: string;
   try {
     real = await realpath(candidate);
