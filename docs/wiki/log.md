@@ -918,3 +918,9 @@ Reported as `Invalid input for git.openPr: title: expected string, received unde
 process predated it. `electron-vite dev` hot-reloads the renderer but does not rebuild or restart main
 and preload, so after pulling, restart oIDE when `packages/protocol` or `src/main` change. A router
 test now pins `git.openPr` accepting just `{ agentId }` ([screen-review](pages/screen-review.md)).
+
+## [2026-11-26] build | Direct download links on the site
+Release finalize now uploads a version-free copy of every installer (`oIDE-<os>-<x64|arm64>.<ext>`),
+so the site's download buttons and the getting-started table link to
+`releases/latest/download/<file>` for the visitor's OS instead of the release page. Updated
+[docs-site](pages/docs-site.md) and [release-pipeline](pages/release-pipeline.md).
