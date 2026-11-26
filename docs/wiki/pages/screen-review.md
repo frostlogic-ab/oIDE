@@ -60,12 +60,14 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
   tracks `origin/main`) and `WorktreeInfo.uncommitted` (files in `git status`). With either, the primary
   button is **Push to pull request #n** with a note ("Not on pull request #n yet: 2 new commits and 1
   uncommitted file. oIDE commits the files for the agent first."), and View pull request #n sits under
-  it; up to date, only View pull request #n shows. `git.pushToPr { agentId }` commits leftover files on
+  it; up to date, or while the push state is unknown (worktree not loaded yet, or no remote branch for
+  it known locally), only View pull request #n shows (`hasPendingForPr` in `gitStore.ts`). `git.pushToPr { agentId }` commits leftover files on
   the agent's behalf (subject from its latest review summary, `Oide-Agent` trailer, like Merge locally),
   then pushes the branch; it never opens a PR (no open/draft PR → `conflict`) and refuses to commit
   under a working agent (starting, running, needs permission) so it never catches half-written files.
   The Wall tile in review shows a **Push** button next to View PR (same command; the toast says how many
-  commits went up, or that the PR is already up to date).
+  commits went up), only while the worktree has new commits or uncommitted files the PR lacks; the
+  tile loads the project's `git.worktrees` for that.
 - Comment cards and the inline composer are sized to the visible diff width and stick to its left
   edge, so long lines scroll sideways under them; the diff scroller uses full-width scrollbars.
 - The file-list header sums the parsed patches; the Wall, Source control and Ready to review read

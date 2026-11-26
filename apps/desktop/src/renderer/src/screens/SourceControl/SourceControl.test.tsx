@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { useScope } from '../../stores/scope';
 import SourceControlScreen from './index';
@@ -37,6 +37,29 @@ describe('Source control screen', () => {
     // the heads-up about oide is out of scope now
     expect(screen.queryByText('Two worktrees change the same file')).toBeNull();
     expect(invoke).toHaveBeenCalledWith('scope.set', { scope: 'billing-api' });
+  });
+
+  it('reverts the uncommitted main-checkout files after a confirmation', async () => {
+    const { invoke } = await setupMockApp({ screen: 'source-control', params: {} });
+    render(<SourceControlScreen />);
+    const oide = await screen.findByRole('region', { name: 'oide' });
+    expect(await within(oide).findByText('· 1 uncommitted file (CLAUDE.md)')).toBeTruthy();
+
+    fireEvent.click(within(oide).getByRole('button', { name: 'Revert changes on main in oide' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Revert changes on main?' });
+    expect(within(dialog).getByText(/This can't be undone/)).toBeTruthy();
+    expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Cancel' }));
+    // Unpicking the only file disables the action.
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'CLAUDE.md' }));
+    expect((within(dialog).getByRole('button', { name: 'Revert 0 of 1' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'CLAUDE.md' }));
+
+    await act(async () => {
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Revert file' }));
+    });
+    expect(invoke).toHaveBeenCalledWith('git.discard', { projectId: 'oide', files: undefined });
+    await waitFor(() => expect(within(oide).queryByText(/uncommitted file/)).toBeNull());
+    expect(screen.queryByRole('dialog', { name: 'Revert changes on main?' })).toBeNull();
   });
 });
 
