@@ -12,6 +12,7 @@ export function registerGitHandlers(router: IpcRouter, s: Services, _ctx: MainCo
   router.register('git.pull', ({ projectId }) => g.pull(projectId));
   router.register('git.push', ({ projectId }) => g.push(projectId));
   router.register('git.commit', ({ projectId, message, files }) => g.commit(projectId, message, files));
+  router.register('git.discard', ({ projectId, files }) => g.discard(projectId, files));
   router.register('git.log', ({ projectId, ref, limit }) => g.log(projectId, ref, limit));
   router.register('git.worktrees', ({ projectId }) => g.worktrees(projectId));
   router.register('git.overlaps', ({ projectId }) => g.overlaps(projectId));

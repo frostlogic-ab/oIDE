@@ -439,6 +439,11 @@ export const TELEMETRY_EVENTS = {
       'Do people send follow-up work to a pull request that is already open (Push to PR), how many commits at a time, and how often were there uncommitted files that oIDE committed first?',
     props: z.object({ commits: CountBucket, committed: z.boolean() }),
   }),
+  changes_reverted: def({
+    from: 'main',
+    question: 'Do people throw away uncommitted changes in the main checkout from Source control (Revert…), how many files, and all of them or a pick?',
+    props: z.object({ files: CountBucket, all: z.boolean() }),
+  }),
   pr_view_opened: def({
     from: 'main',
     question: 'Do people follow the pull request of an agent from oIDE (View PR)?',

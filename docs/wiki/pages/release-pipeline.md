@@ -45,14 +45,17 @@ auto-update: [packaging](packaging.md).
      (`--publish always`, `releaseType=draft`) finds the draft release by its tag and uploads the
      installers (Windows NSIS + zip, macOS dmg + zip, Linux AppImage + deb + rpm, x64 and arm64) and
      the update files. Signing per platform only when its secrets exist ([packaging](packaging.md)).
-   - **finalize** adds `SHA256SUMS` (and detached GPG signatures when `GPG_PRIVATE_KEY` is set),
-     checks the update feed with `tools/release-feed/verify-feed.mjs` (every platform's `latest*.yml` is
-     attached, has the release's version, names only attached files of the right size, and offers
-     the Windows x64/arm64 installers, both macOS zips and both AppImages), then **publishes** the
-     release: marked *latest* for a plain version, *pre-release* for a version like `0.3.0-beta.1`.
+   - **finalize** uploads a version-free copy of every installer (`oIDE-<os>-<x64|arm64>.<ext>`,
+     e.g. `oIDE-mac-arm64.dmg`, `oIDE-linux-x64.deb`) so the site's download buttons can link to
+     `/releases/latest/download/<name>`, adds `SHA256SUMS` over both names (and detached GPG
+     signatures when `GPG_PRIVATE_KEY` is set), checks the update feed with
+     `tools/release-feed/verify-feed.mjs` (every platform's `latest*.yml` is attached, has the
+     release's version, names only attached files of the right size, and offers the Windows x64/arm64
+     installers, both macOS zips and both AppImages), then **publishes** the release: marked *latest*
+     for a plain version, *pre-release* for a version like `0.3.0-beta.1`.
 
 Until finalize, the release is a draft: electron-updater and the site's download buttons
-(`/releases/latest`) cannot see it, so no user ever gets a release with missing files. If any
+(`/releases/latest/download/…`) cannot see it, so no user ever gets a release with missing files. If any
 platform fails, the release stays a draft. When the failure was outside the code (a runner hiccup,
 an expired secret), fix that and use **Re-run failed jobs**. When it was in the code at the tag,
 re-running cannot help (every job checks out the tag): merge the fix and ship the next release.
@@ -62,8 +65,8 @@ unaffected).
 
 v0.2.0 was the first case: its macOS build failed `pnpm licenses:check` because chokidar's optional
 `fsevents` (macOS only) made `THIRD_PARTY_NOTICES.md` differ on macOS, so finalize never ran and the
-release stayed a draft without macOS files. `tools/licenses/platform.mjs` now lists platform-only
-optional dependencies the same way on every OS ([packaging](packaging.md), Licences).
+release stayed a draft without macOS files. `tools/licenses/notices.mjs` now lists platform-only
+optional dependencies by name from `pnpm-lock.yaml`, the same on every OS ([packaging](packaging.md), Licences).
 
 ### Checking a release's update feed by hand
 

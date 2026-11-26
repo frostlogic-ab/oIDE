@@ -1,6 +1,7 @@
 import type { CommitInfo } from '@oide/protocol';
 import { toGit, type Repo } from './git.js';
 import { AGENT_TRAILER, log } from './log.js';
+import { status } from './status.js';
 
 export interface CommitOptions {
   message: string;
@@ -34,4 +35,29 @@ export async function commit(repo: Repo, opts: CommitOptions): Promise<CommitInf
   const [head] = await log(git, 'HEAD', 1);
   if (!head) throw new Error('Commit did not produce a HEAD commit.');
   return head;
+}
+
+/**
+ * Throw away uncommitted changes: tracked files go back to HEAD (index and working tree), untracked
+ * files are deleted. `files` limits it to those paths; only paths `git status` reports as changed are
+ * touched, so a path that is not a change (or sits outside the checkout) is ignored. Returns the
+ * paths that were reverted.
+ */
+export async function discard(repo: Repo, opts: { files?: string[] } = {}): Promise<string[]> {
+  const git = toGit(repo);
+  if (opts.files && !opts.files.length) throw new Error('No files selected.');
+  const st = await status(git);
+  const want = opts.files ? new Set(opts.files) : undefined;
+  const picked = st.entries.filter((e) => e.kind !== 'ignored' && (!want || want.has(e.path)));
+  if (!picked.length) throw new Error('There are no uncommitted changes to revert.');
+  const untracked = picked.filter((e) => e.kind === 'untracked').map((e) => e.path);
+  // A staged rename reverts both sides: the new path goes away, the old one comes back.
+  const tracked = [...new Set(picked.filter((e) => e.kind !== 'untracked').flatMap((e) => (e.origPath ? [e.path, e.origPath] : [e.path])))];
+  if (tracked.length) {
+    if (!st.oid) throw new Error('Nothing is committed yet, so there is no version to revert to.');
+    // --source=HEAD also drops files that are staged but not in HEAD; pathspecs are literal.
+    await git.run(['--literal-pathspecs', 'restore', '--source=HEAD', '--staged', '--worktree', '--', ...tracked]);
+  }
+  if (untracked.length) await git.run(['--literal-pathspecs', 'clean', '-f', '-q', '--', ...untracked]);
+  return picked.map((e) => e.path);
 }

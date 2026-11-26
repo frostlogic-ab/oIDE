@@ -24,7 +24,6 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { dirname, join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { checkBuiltFonts, collectFonts, readLicenseText, renderFonts, UPSTREAM_PACKAGE_TEXTS } from './fonts.mjs';
-import { classifyOptional, lockfilePackages, lockfileSnapshots } from './platform.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DESKTOP = join(ROOT, 'apps', 'desktop');
@@ -170,7 +169,41 @@ const repoOf = (pkg) => {
   return r.replace(/^git\+/, '').replace(/\.git$/, '').replace(/^git:\/\//, 'https://').replace(/^github:/, 'https://github.com/');
 };
 
+/**
+ * Packages the lockfile restricts to some OS / CPU / libc (`os: [darwin]`, …), by name. The lockfile
+ * is the same on every OS, so this tells which optional dependencies are only installed on some
+ * platforms (e.g. `fsevents`, macOS only) without depending on what this machine installed.
+ */
+export function platformRestricted(lockText) {
+  const restricted = new Map();
+  const start = lockText.search(/^packages:\s*$/m);
+  if (start < 0) return restricted;
+  const end = lockText.slice(start).search(/^snapshots:\s*$/m);
+  const section = lockText.slice(start, end < 0 ? undefined : start + end);
+  let current = null;
+  for (const line of section.split(/\r?\n/)) {
+    const head = /^ {2}'?((?:@[^@/'\s]+\/)?[^@'\s]+)@[^:]*'?:\s*$/.exec(line);
+    if (head) {
+      current = head[1];
+      continue;
+    }
+    const field = /^ {4}(os|cpu|libc):\s*\[([^\]]*)\]/.exec(line);
+    if (current && field) {
+      const entry = restricted.get(current) ?? {};
+      entry[field[1]] = field[2].split(',').map((s) => s.trim().replace(/^'|'$/g, '')).filter(Boolean);
+      restricted.set(current, entry);
+    }
+  }
+  return restricted;
+}
+
+const OS_LABEL = { darwin: 'macOS', linux: 'Linux', win32: 'Windows', freebsd: 'FreeBSD', android: 'Android' };
+const platformLabel = (r) => (r.os?.length ? r.os.map((o) => OS_LABEL[o] ?? o).join(', ') : [...(r.cpu ?? []), ...(r.libc ?? [])].join(', '));
+
 /* ------------------------------------------------------------------ collect */
+
+const LOCKFILE = join(ROOT, 'pnpm-lock.yaml');
+const restricted = existsSync(LOCKFILE) ? platformRestricted(readFileSync(LOCKFILE, 'utf8')) : new Map();
 
 const workspace = workspacePackages();
 /** key name@version → record */
@@ -217,55 +250,28 @@ function record(dir, via, { follow = true } = {}) {
       }
       continue;
     }
-    if (optional) {
-      // An optional dependency that installs only on some OSes would make the file differ per OS.
-      const p = depDir ? readJson(join(depDir, 'package.json')) : null;
-      const installed = p && {
-        version: p.version,
-        license: licenseOf(p),
-        text: licenseFiles(depDir).map((f) => readFileSync(join(depDir, f), 'utf8').replace(/\r\n/g, '\n').trimEnd())[0] ?? null,
-        restricted: Boolean(p.os || p.cpu || p.libc),
-      };
-      const c = classifyOptional(dep, installed, lockfile, readLicenseText, lockSnapshots.get(`${pkg.name}@${pkg.version}`)?.get(dep));
-      if (c.kind === 'record') {
-        platformDrift.push(...c.problems);
-        recordPlatformOnly(dep, c.record, via);
-        continue;
+    // Other platform-only optional dependencies (`fsevents` under chokidar, …): same reason, list by
+    // name from the lockfile, check the licence wherever it is installed.
+    if (optional && restricted.has(dep)) {
+      const key = `${dep}<-${pkg.name}`;
+      if (!platformOnly.has(key)) platformOnly.set(key, { name: dep, parent: pkg.name, ...restricted.get(dep) });
+      if (depDir) {
+        const p = readJson(join(depDir, 'package.json'));
+        platformChecked.push({ name: p.name, version: p.version, license: licenseOf(p) ?? 'UNKNOWN', via: new Set([via]) });
       }
-      if (c.kind === 'unlisted') {
-        platformUnlisted.add(`${dep} (optional dependency of ${pkg.name})`);
-        continue;
-      }
+      continue;
     }
     if (depDir) record(depDir, via);
     else if (!optional) missing.push(`${dep} (needed by ${pkg.name})`);
   }
 }
-
-/** A PLATFORM_ONLY package, rendered from its record so the output is the same on every OS. */
-function recordPlatformOnly(name, rec, via) {
-  const key = `${name}@${rec.version}`;
-  const existing = shipped.get(key);
-  if (existing) {
-    existing.via.add(via);
-    return;
-  }
-  const texts = [{ file: 'LICENSE', text: readLicenseText(rec.file) }];
-  shipped.set(key, { name, version: rec.version, license: rec.license, detected: false, repo: rec.repo, texts, via: new Set([via]), platforms: rec.platforms, dir: null });
-}
-
-const lockText = existsSync(join(ROOT, 'pnpm-lock.yaml')) ? readFileSync(join(ROOT, 'pnpm-lock.yaml'), 'utf8') : '';
-const lockfile = lockfilePackages(lockText);
-const lockSnapshots = lockfileSnapshots(lockText);
-/** Drift between PLATFORM_ONLY records and the installed package or the lockfile. */
-const platformDrift = [];
-/** Platform-only optional dependencies with no PLATFORM_ONLY record. */
-const platformUnlisted = new Set();
 const missing = [];
 /** parent name → declared per-platform prebuild packages */
 const platformFamilies = new Map();
 /** installed prebuilds, licence-checked but not listed */
 const platformChecked = [];
+/** `dep<-parent` → other optional dependencies the lockfile restricts to some platforms */
+const platformOnly = new Map();
 
 // 1. Runtime node_modules of the packaged app.
 const desktopPkg = readJson(join(DESKTOP, 'package.json'));
@@ -326,7 +332,7 @@ const built = checkBuiltFonts(join(DESKTOP, 'out', 'renderer'));
 
 const list = [...shipped.values()].sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version, undefined, { numeric: true }));
 const VIA = { runtime: 'runtime module', bundled: 'bundled', injected: 'build helper', electron: 'Electron runtime' };
-const viaLabel = (r) => [...r.via].sort().map((v) => VIA[v]).join(', ') + (r.platforms ? ` (${r.platforms})` : '');
+const viaLabel = (r) => [...r.via].sort().map((v) => VIA[v]).join(', ');
 const esc = (s) => String(s).replace(/\|/g, '\\|');
 
 let md = '';
@@ -343,6 +349,14 @@ if (platformFamilies.size) {
   md += 'published from the same repository under the same licence as their parent and are not listed one by one:\n\n';
   for (const f of [...platformFamilies.values()].sort((a, b) => a.parent.localeCompare(b.parent))) {
     md += `- \`${f.parent}-<platform>\` (${f.license}): ${[...f.variants].sort().map((v) => `\`${v.slice(f.parent.length + 1)}\``).join(', ')}\n`;
+  }
+  md += '\n';
+}
+if (platformOnly.size) {
+  md += 'A few optional dependencies are only installed on some platforms. They are not listed one by one\n';
+  md += 'either; `pnpm licenses:check` checks their licence in the release build for that platform:\n\n';
+  for (const r of [...platformOnly.values()].sort((a, b) => a.name.localeCompare(b.name) || a.parent.localeCompare(b.parent))) {
+    md += `- \`${r.name}\` (${platformLabel(r)}): optional dependency of \`${r.parent}\`\n`;
   }
   md += '\n';
 }
@@ -387,12 +401,6 @@ if (CHECK) {
     console.error('Packages that could not be resolved from node_modules:');
     for (const m of missing) console.error(`  ${m}`);
   }
-  if (platformDrift.length || platformUnlisted.size) {
-    failed = true;
-    console.error('Optional dependencies that install only on some platforms (tools/licenses/platform.mjs):');
-    for (const p of platformDrift) console.error(`  ${p}`);
-    for (const u of [...platformUnlisted].sort()) console.error(`  ${u}: installs only on some OSes or CPUs; add it to PLATFORM_ONLY so the notices are the same on every OS.`);
-  }
   if (fonts.problems.length || built.problems.length) {
     failed = true;
     console.error('Shipped fonts and assets without a recorded, MIT-compatible licence:');
@@ -412,6 +420,4 @@ if (CHECK) {
   for (const p of [...fonts.problems, ...built.problems]) console.warn(`  font: ${p}`);
   for (const r of problems) console.warn(`  not MIT-compatible or unknown: ${r.name}@${r.version}: ${r.license}`);
   for (const m of missing) console.warn(`  unresolved: ${m}`);
-  for (const p of platformDrift) console.warn(`  platform-only: ${p}`);
-  for (const u of [...platformUnlisted].sort()) console.warn(`  platform-only, not in PLATFORM_ONLY: ${u}`);
 }

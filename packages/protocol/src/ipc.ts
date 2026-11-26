@@ -168,6 +168,11 @@ export const Commands = {
   'git.pull': cmd(z.object({ projectId: Id }), SyncState),
   'git.push': cmd(z.object({ projectId: Id }), SyncState),
   'git.commit': cmd(z.object({ projectId: Id, message: z.string().min(1), files: z.array(z.string()).optional() }), CommitInfo),
+  /**
+   * Revert uncommitted changes in the main checkout: tracked files go back to HEAD, untracked files are
+   * deleted. `files` limits it to those paths (only paths git reports as changed are touched).
+   */
+  'git.discard': cmd(z.object({ projectId: Id, files: z.array(z.string().min(1).max(4096)).min(1).optional() }), z.object({ reverted: z.number().int() })),
   'git.log': cmd(z.object({ projectId: Id, ref: GitRef.default('HEAD'), limit: z.number().int().default(20) }), z.array(CommitInfo)),
   'git.worktrees': cmd(z.object({ projectId: Id }), z.array(WorktreeInfo)),
   'git.overlaps': cmd(z.object({ projectId: Id }), z.array(OverlapWarning)),

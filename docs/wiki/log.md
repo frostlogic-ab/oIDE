@@ -970,13 +970,39 @@ macOS terminate the process directly. The test now kills the renderer with SIGKI
 `getOSProcessId()`, which dumps nothing and behaves the same on every OS
 ([reliability](pages/reliability.md#tests)).
 
+## [2026-11-26] build | Licence notices identical on every OS
+The release run's macOS build failed `pnpm licenses:check` ("THIRD_PARTY_NOTICES.md is stale"): chokidar's
+optional `fsevents` dependency is only installed on macOS, so the generator listed one extra package there.
+`tools/licenses/notices.mjs` now reads `os`/`cpu`/`libc` restrictions from `pnpm-lock.yaml` and lists such
+optional dependencies by name (licence checked where installed). See [packaging](pages/packaging.md).
+
+## [2026-11-26] build | DevModeWatcher test stable on macOS
+PR #14's macOS unit tests failed `DevModeWatcher … reloads on change`: the test took the first reload
+batch, but FSEvents can deliver the fixture's creation events late, in a batch before the `host.js`
+write. The test now waits (up to 5 s) for a batch naming `host.js`, rewriting it every 500 ms in case a
+write lands before the stream is live. The watcher itself is unchanged.
+## [2026-11-26] build | Direct download links on the site
+Release finalize now uploads a version-free copy of every installer (`oIDE-<os>-<x64|arm64>.<ext>`),
+so the site's download buttons and the getting-started table link to
+`releases/latest/download/<file>` for the visitor's OS instead of the release page. Updated
+[docs-site](pages/docs-site.md) and [release-pipeline](pages/release-pipeline.md).
+## [2026-11-26] build | Revert uncommitted main-checkout changes from Source control
+"Your changes on main" now offers **Revert…** next to Commit…: a confirmation dialog with per-file
+checkboxes calls the new `git.discard` IPC command (`@oide/git` `discard()`: tracked files back to HEAD,
+untracked files deleted, only paths git reports as changed). New telemetry event `changes_reverted`
+(file count bucket, whether all files were picked; never paths). Pages: screen-source-control, telemetry.
+## [2026-11-26] build | Push to PR only when there is something to push
+Review and the Wall review tile hide Push to pull request when the worktree has no new commits and no
+uncommitted files the PR lacks (or the push state is not known yet); `hasPendingForPr` in the git store.
+See [Review](pages/screen-review.md), [Wall](pages/screen-wall.md).
+
 ## [2026-11-26] review | Auto-update verified against the v0.2.0 release
 
 Checked the first GitHub release (frostlogic-ab/oIDE v0.2.0) end to end: assets, the packaged
 Windows zip (`app-update.yml`, compiled feed `publishTarget("frostlogic-ab", "oIDE")`, electron-updater
 shipped) and electron-updater's own GitHub provider run against the live repo. Findings and fixes:
 v0.2.0 is still a **draft** (the macOS build failed `licenses:check` because `fsevents` installs only
-on macOS; finalize never ran), so every client sees no release. Fixed in `tools/licenses/platform.mjs`.
+on macOS; finalize never ran), so every client sees no release (fixed on main in `notices.mjs`).
 The Windows portable zip carried `app-update.yml` and would have installed a second copy; the updater
 now needs the NSIS uninstaller next to the exe. The GitHub publisher writes no `beta*.yml` (beta users
 read `latest*.yml` through electron-updater's fallback); docs and config corrected. New finalize gate

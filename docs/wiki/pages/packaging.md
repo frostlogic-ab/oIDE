@@ -212,6 +212,10 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   `LICENSE` and `THIRD_PARTY_NOTICES.md` are copied to `resources/` (`extraResources`). As of
   2026-11-25: 368 shipped packages, all MIT-compatible (dompurify is dual MPL-2.0 OR Apache-2.0, used
   under Apache-2.0). Build-only MPL tools (@resvg/resvg-js, lightningcss) do not ship.
+  The file must come out byte-identical on every OS, since the check runs in each release build.
+  Per-platform prebuilds (`<parent>-<platform>`) and other optional dependencies that `pnpm-lock.yaml`
+  restricts by `os`/`cpu`/`libc` (e.g. `fsevents` under chokidar, macOS only) are listed by name from
+  the lockfile, never from what this machine installed; their licence is checked where installed.
 - Fonts (`tools/licenses/fonts.mjs`, section "Bundled fonts" of the notices): 12 families. Excalidraw's
   folders (Assistant, Cascadia Code, Excalifont, Lilita One, Nunito, Virgil, Xiaolai SC: OFL-1.1; Comic
   Shanns: MIT; Liberation Sans 1.05: GPL-2.0 with the font exception, shipped unmodified as a separate
@@ -223,14 +227,6 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   disagrees, a non-MIT-compatible licence without a recorded reason, and, when `out/renderer` exists,
   any built font file that matches no record. `release.yml` runs it again after `Build app` for that
   reason. Test: `tools/licenses/test/fonts.test.ts`.
-- Platform-only optional dependencies (`tools/licenses/platform.mjs`): an optional dependency that
-  installs only on some OSes (`os` / `cpu` / `libc`) and is not a `<parent>-<platform>` prebuild, such as
-  chokidar's `fsevents` (macOS), is listed on every OS from its `PLATFORM_ONLY` record and vendored
-  licence text, so the notices are byte-identical whichever OS generates them. The check compares the
-  record with the installed package (where present) and with the version `pnpm-lock.yaml` resolves for
-  that parent (`snapshots:`, everywhere), and fails
-  on any platform-only optional dependency without a record, so the Linux CI job catches what only
-  macOS or Windows would install. Test: `tools/licenses/test/platform.test.ts`.
 - Docs site: VitePress 2 (alpha, matches the repo's vite 8) in `docs/site/`, `pnpm docs:dev` /
   `pnpm docs:build`, base `/` for the custom domain `getoide.com`. Holds the user guide, the extension
   author guide, the security model and the FAQ; it links here for internals. Home page and theme:

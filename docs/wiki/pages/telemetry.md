@@ -103,6 +103,7 @@ The source of truth is `TELEMETRY_EVENTS` in `packages/protocol/src/telemetry.ts
 | `agent_deleted` | main | none | Do people delete archived agents for good? |
 | `pr_opened` | main | `existing`, `draft` (`agent` / `template` / `plain` / `given`, new PRs only) | Do people open PRs instead of merging locally? Do new PRs follow the project's conventions (agent draft, project template) or go up as the plain summary? |
 | `pr_pushed` | main | `commits` (count bucket), `committed` | Do people send follow-up work to an open PR (Push to PR), how many commits at a time, and how often did oIDE commit leftover files first? Never the URL. |
+| `changes_reverted` | main | `files` (count bucket), `all` (no file pick), from `git.discard` | Do people throw away uncommitted main-checkout changes from Source control (Revert…), how many files, all or a pick? Never the paths. |
 | `pr_view_opened` | main | none (the URL is never sent) | Do people follow an agent's PR from oIDE? |
 | `pr_merged_detected` | main | none | How often does oIDE see an agent's PR merged? |
 | `worktree_delete_failed` | main | `holder` [docker, editor, terminal, node, unknown] | How often can a worktree folder not be deleted, and what kind of program holds it? Never the program's name or any path. |
