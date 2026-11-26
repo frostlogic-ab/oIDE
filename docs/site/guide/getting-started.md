@@ -20,11 +20,15 @@ published on [GitHub Releases](https://github.com/frostlogic-ab/oIDE/releases) (
 [releases/latest](https://github.com/frostlogic-ab/oIDE/releases/latest)). Until the first release is
 published, [build from source](#build-from-source).
 
+The links below always download the newest stable release. Each release has every file twice: with
+the version in its name (`oIDE-<version>-win-x64.exe`) and without it (`oIDE-win-x64.exe`); they are
+the same file and both are in `SHA256SUMS`.
+
 | OS | Download | Install |
 | --- | --- | --- |
-| Windows | `oIDE-<version>-win-x64.exe` (or `-arm64`), or the `.zip` | Per-user NSIS installer; you can choose the folder. |
-| macOS | `oIDE-<version>-mac-arm64.dmg` (Apple silicon) or `-x64.dmg` (Intel) | Drag oIDE to Applications. |
-| Linux | `.AppImage`, `.deb` or `.rpm` for x64 or arm64 | See below. |
+| Windows | [x64 installer](https://github.com/frostlogic-ab/oIDE/releases/latest/download/oIDE-win-x64.exe), [ARM64 installer](https://github.com/frostlogic-ab/oIDE/releases/latest/download/oIDE-win-arm64.exe), or the `.zip` ([x64](https://github.com/frostlogic-ab/oIDE/releases/latest/download/oIDE-win-x64.zip), [ARM64](https://github.com/frostlogic-ab/oIDE/releases/latest/download/oIDE-win-arm64.zip)) | Per-user NSIS installer; you can choose the folder. |
+| macOS | [Apple silicon .dmg](https://github.com/frostlogic-ab/oIDE/releases/latest/download/oIDE-mac-arm64.dmg) or [Intel .dmg](https://github.com/frostlogic-ab/oIDE/releases/latest/download/oIDE-mac-x64.dmg) | Drag oIDE to Applications. |
+| Linux | `.AppImage` ([x64](https://github.com/frostlogic-ab/oIDE/releases/latest/download/oIDE-linux-x64.AppImage), [arm64](https://github.com/frostlogic-ab/oIDE/releases/latest/download/oIDE-linux-arm64.AppImage)), `.deb` ([x64](https://github.com/frostlogic-ab/oIDE/releases/latest/download/oIDE-linux-x64.deb), [arm64](https://github.com/frostlogic-ab/oIDE/releases/latest/download/oIDE-linux-arm64.deb)) or `.rpm` ([x64](https://github.com/frostlogic-ab/oIDE/releases/latest/download/oIDE-linux-x64.rpm), [arm64](https://github.com/frostlogic-ab/oIDE/releases/latest/download/oIDE-linux-arm64.rpm)) | See below. |
 
 ### Unsigned builds
 

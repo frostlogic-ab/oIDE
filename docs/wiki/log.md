@@ -970,6 +970,11 @@ macOS terminate the process directly. The test now kills the renderer with SIGKI
 `getOSProcessId()`, which dumps nothing and behaves the same on every OS
 ([reliability](pages/reliability.md#tests)).
 
+## [2026-11-26] build | Direct download links on the site
+Release finalize now uploads a version-free copy of every installer (`oIDE-<os>-<x64|arm64>.<ext>`),
+so the site's download buttons and the getting-started table link to
+`releases/latest/download/<file>` for the visitor's OS instead of the release page. Updated
+[docs-site](pages/docs-site.md) and [release-pipeline](pages/release-pipeline.md).
 ## [2026-11-26] build | Revert uncommitted main-checkout changes from Source control
 "Your changes on main" now offers **Revert…** next to Commit…: a confirmation dialog with per-file
 checkboxes calls the new `git.discard` IPC command (`@oide/git` `discard()`: tracked files back to HEAD,

@@ -325,11 +325,36 @@ jobs:
           path: dist
           merge-multiple: true
 
-      - name: SHA256SUMS
+      # Every installer also gets a copy without the version in its name (oIDE-mac-arm64.dmg,
+      # oIDE-linux-x64.deb, ...), so the site's download buttons can link straight to the file with
+      # https://github.com/<owner>/<repo>/releases/latest/download/<name>. Arch is normalised to x64 /
+      # arm64 (electron-builder writes x86_64, amd64 or aarch64 for some Linux packages). The update
+      # feeds (latest*.yml) keep pointing at the versioned files.
+      - name: Installers and version-free copies
         shell: bash
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
         run: |
           mkdir -p upload
           find dist -type f \( -name '*.exe' -o -name '*.zip' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) -exec cp {} upload/ \;
+          : > stable-names.txt
+          for f in upload/oIDE-"$VERSION"-*; do
+            rest=${f#upload/oIDE-"$VERSION"-}
+            if [[ ! "$rest" =~ ^(win|mac|linux)-([A-Za-z0-9_]+)\.(exe|zip|dmg|AppImage|deb|rpm)$ ]]; then
+              echo "::warning::No version-free copy for $(basename "$f")"; continue
+            fi
+            arch=${BASH_REMATCH[2]}
+            case "$arch" in x86_64|amd64) arch=x64 ;; aarch64) arch=arm64 ;; esac
+            stable="oIDE-${BASH_REMATCH[1]}-$arch.${BASH_REMATCH[3]}"
+            if [[ -e "upload/$stable" ]]; then echo "::error::Two installers map to $stable"; exit 1; fi
+            cp "$f" "upload/$stable"
+            echo "upload/$stable" >> stable-names.txt
+          done
+          cat stable-names.txt
+
+      - name: SHA256SUMS
+        shell: bash
+        run: |
           (cd upload && sha256sum * | sort -k2 > SHA256SUMS)
           cat upload/SHA256SUMS
 
@@ -357,10 +382,11 @@ jobs:
           done
           rm -rf "$GNUPGHOME"
 
-      - name: Upload checksums and signatures to the draft release
+      - name: Upload version-free copies, checksums and signatures to the draft release
         shell: bash
         run: |
           files=(upload/SHA256SUMS)
+          while IFS= read -r f; do [[ -n "$f" ]] && files+=("$f"); done < stable-names.txt
           for f in upload/*.asc; do [[ -f "$f" ]] && files+=("$f"); done
           gh release upload "$TAG" "${files[@]}" --clobber --repo "$GITHUB_REPOSITORY"
 
