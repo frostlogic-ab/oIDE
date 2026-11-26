@@ -864,3 +864,10 @@ link to the new repository; the docs site base is `/oIDE/` (`frostlogic-ab.githu
 `CHANGELOG.md` is written by release-please from now on. No telemetry change (CI only). Pages:
 [release-pipeline.md](pages/release-pipeline.md) (new), [packaging.md](pages/packaging.md),
 [docs-site.md](pages/docs-site.md).
+
+## [2026-11-26] decision | Docs site served from getoide.com
+The repository is now public at github.com/frostlogic-ab/oIDE and GitHub Pages (source: GitHub Actions)
+uses the custom domain `getoide.com`. The VitePress base moved from `/oIDE/` to `/`, the favicon and
+`og:image` URLs follow, a sitemap is generated for `https://getoide.com`, and `docs/site/public/CNAME`
+pins the domain in the deployed artifact. `docs.yml` deploys on every push to `main` that touches
+`docs/site/**` ([docs-site](pages/docs-site.md), [release-pipeline](pages/release-pipeline.md)).

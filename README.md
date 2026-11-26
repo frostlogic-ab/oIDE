@@ -59,7 +59,7 @@ pnpm --filter @oide/desktop dist   # build installers for this OS
 ```
 
 User guide and extension author guide: the docs site in [docs/site/](docs/site/) (`pnpm docs:dev`),
-to be published at https://frostlogic-ab.github.io/oIDE/ once the repository is public. Repo layout, conventions and hard rules: [CLAUDE.md](CLAUDE.md). Product documentation lives in the
+published at https://getoide.com/. Repo layout, conventions and hard rules: [CLAUDE.md](CLAUDE.md). Product documentation lives in the
 wiki at [docs/wiki/index.md](docs/wiki/index.md); decisions in [docs/adr/](docs/adr/).
 
 ## Status
