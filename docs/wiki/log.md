@@ -892,6 +892,17 @@ claude.ai Design exports (`*.dc.html` + `_runtime/support.js`) compile their com
 which the artifact CSP blocked (red CSP error box over the preview). `ARTIFACT_CSP` now allows
 `'unsafe-eval'`; network, frames, workers and the sandbox are unchanged, and inline scripts already ran, so
 an artifact gains no new capability. Updated [artifacts.md](pages/artifacts.md); test pins the CSP.
+## [2026-11-26] build | CI unit tests pass on GitHub's runners
+
+CI run 45783318672 failed `pnpm test` on all three OSes, though the suite passed on a developer's
+Windows machine. Causes: macOS's temp folder is a link (`/var` → `/private/var`) and Windows runners
+use an 8.3 short temp path (`RUNNER~1`), so git's real paths never matched the tests' paths (and a `~`
+looked like a protected path to SEC-12); Windows runners set `core.autocrlf=true`; Linux/macOS git
+says "repository '…' does not exist" for a missing local clone source; two tests assumed Windows path
+rules; and the Windows holder scan's 10 s budget was used up by PowerShell start-up on a runner.
+Fixes: `test/setup/env.ts` (canonical temp, no system/global git config), the clone classifier knows
+the POSIX wording, `readAgentFile` refuses `\host\share` on every OS, `HOLDER_TIMEOUT_MS` 25 s.
+See [testing](pages/testing.md).
 ## [2026-11-26] decision | CI split: what runs on pull requests
 First runs on GitHub showed CI red on every OS (5 Vitest failures on Linux, 11 on macOS, 10 on
 Windows; platform path bugs that a Windows dev machine does not hit) and every CI and CodeQL run on

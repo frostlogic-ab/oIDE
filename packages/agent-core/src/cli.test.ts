@@ -43,12 +43,21 @@ describe('CLI detection', () => {
     expect((await detectCli(join(tempDir(), 'nope.exe'))).found).toBe(false);
   });
 
-  it('finds a binary on PATH honouring PATHEXT', () => {
+  // win32 PATH entries must be drive-letter or UNC paths, so this needs a Windows temp folder.
+  it.runIf(process.platform === 'win32')('finds a binary on PATH honouring PATHEXT', () => {
     const dir = tempDir();
     writeFileSync(join(dir, 'claude.cmd'), '@echo off\r\n');
     expect(findOnPath('claude', { PATH: dir, PATHEXT: '.COM;.EXE;.CMD' }, 'win32')).toBe(join(dir, 'claude.cmd'));
     writeFileSync(join(dir, 'claude.exe'), '');
     expect(findOnPath('claude', { PATH: dir, PATHEXT: '.COM;.EXE;.CMD' }, 'win32')).toBe(join(dir, 'claude.exe'));
+  });
+
+  it.runIf(process.platform !== 'win32')('finds a binary on PATH without extensions on macOS and Linux', () => {
+    const dir = tempDir();
+    writeFileSync(join(dir, 'claude.cmd'), '');
+    expect(findOnPath('claude', { PATH: `relative:${dir}` }, process.platform)).toBeUndefined();
+    writeFileSync(join(dir, 'claude'), '');
+    expect(findOnPath('claude', { PATH: `relative:${dir}` }, process.platform)).toBe(join(dir, 'claude'));
   });
 
   it.runIf(process.platform === 'win32')('detects and spawns through a .cmd shim with safely quoted args', async () => {
