@@ -79,7 +79,14 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
   `AgentSummary.diff` / `WorktreeInfo.diff`. Both come from the same git diff in main; the mock keeps
   them equal (`lib/mock/mock.test.ts`).
 - Merge locally: confirm dialog → `git.mergeLocal`. The dialog predicts first (see
-  [Merge conflicts](#merge-conflicts)); main is never left mid-merge.
+  [Merge conflicts](#merge-conflicts)); main is never left mid-merge. After a successful merge
+  (toast "Merged X into main") Review goes to Source control, but only while the route is still
+  this agent's Review. Main archives the merged agent, so staying would show an empty screen.
+- An agent that is no longer live (merged, discarded or archived, including a PR the watcher
+  archived as merged) is looked up in the archive as Focus does (`useArchive` `byId`, then
+  `fetchOne`; a spinner while it loads). Review then says "<title> was merged and archived" (or
+  discarded / completed / archived, by reason) with **Open in Focus** (read-only). "This agent is
+  gone. It may have been removed." is only for an agent the archive doesn't know either.
 - Nothing to push (2026-11-26): when the diff is empty (committed, uncommitted and untracked), the
   worktree is known with `ahead: 0` and there is no PR, Open pull request and Merge locally are
   replaced by **Archive session** (`agents.archive`, then back to the Wall) with a note saying there
@@ -159,7 +166,9 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
 ## Tests
 
 `Review.test.tsx`: hunk numbering, reverse-apply, rendered numbers and colours, click-to-comment,
-comment drafts (kept across lines, cleared by Cancel / Esc / add),
+comment drafts (kept across lines, cleared by Cancel / Esc / add), an archived agent's "was merged
+and archived" state with Open in Focus versus "gone" for an unknown one; `MergeDialog.test.tsx`: a
+successful merge goes to Source control,
 `review.addComment` arguments (with `side`), removed-line threads, Send feedback, Viewed toggle.
 
 ## Comment side
