@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { files as mockFiles, mockHash } from '../../lib/mock/scm';
 import { useScope } from '../../stores/scope';
 import { useUi } from '../../stores/ui';
@@ -8,10 +8,20 @@ import { setupMockApp } from '../SourceControl/testing';
 import { ancestorDirs, useFiles, visibleRows } from './filesStore';
 import FilesScreen from './index';
 import { useSearch } from './searchStore';
+import type { EditorPaneProps } from './EditorPane';
+
+// Monaco does not run in jsdom: a stand-in pane that can "type" into the active tab.
+vi.mock('./EditorPane', () => ({
+  default: ({ active, onDirty }: EditorPaneProps) => (
+    <button type="button" onClick={() => onDirty(active.id, true)}>
+      Type in {active.path}
+    </button>
+  ),
+}));
 
 afterEach(cleanup);
 beforeEach(() => {
-  useFiles.setState({ openProjects: {}, checkout: {}, expanded: {}, nodes: {}, loading: {}, errors: {}, tabs: [], active: undefined, revealed: {}, pending: undefined, revealTarget: undefined });
+  useFiles.setState({ openProjects: {}, checkout: {}, expanded: {}, nodes: {}, loading: {}, errors: {}, tabs: [], active: undefined, dirty: {}, revealed: {}, pending: undefined, revealTarget: undefined });
   useSearch.setState({ open: false, query: '', replacement: '', replaceOpen: false, isRegex: false, matchCase: false, wholeWord: false, include: '', exclude: '', filtersOpen: false, scope: 'all', status: 'idle', files: [], searchId: undefined, ran: undefined });
 });
 
@@ -140,6 +150,36 @@ describe('Files tree expand and collapse', () => {
     expect(await within(tree).findByRole('treeitem', { name: /^quickstart\.mdx/ })).toBeTruthy();
     expect(screen.getByRole('tab', { name: /quickstart\.mdx/ }).getAttribute('aria-selected')).toBe('true');
     expect(useFiles.getState().pending).toBeUndefined();
+  });
+});
+
+describe('Files editor tabs', () => {
+  it('keeps the unsaved marker and the close warning after leaving Files and coming back', async () => {
+    await setupMockApp({ screen: 'files', params: {} });
+    useFiles.getState().openFile('billing-api', '/Users/you/code/billing-api', 'src/invoices/invoice.ts');
+    const first = render(<FilesScreen />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Type in src/invoices/invoice.ts' }));
+    expect(within(screen.getByRole('tab', { name: /invoice\.ts/ })).getByLabelText('unsaved changes')).toBeTruthy();
+
+    // Leave the screen (AppFrame unmounts it) and come back.
+    first.unmount();
+    render(<FilesScreen />);
+    const tab = await screen.findByRole('tab', { name: /invoice\.ts/ });
+    expect(within(tab).getByLabelText('unsaved changes')).toBeTruthy();
+
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      fireEvent.click(screen.getByRole('button', { name: 'Close invoice.ts' }));
+      expect(confirm).toHaveBeenCalledWith('src/invoices/invoice.ts has unsaved changes. Close it anyway?');
+      expect(useFiles.getState().tabs).toHaveLength(1);
+
+      confirm.mockReturnValue(true);
+      fireEvent.click(screen.getByRole('button', { name: 'Close invoice.ts' }));
+      expect(useFiles.getState().tabs).toHaveLength(0);
+      expect(useFiles.getState().dirty).toEqual({});
+    } finally {
+      confirm.mockRestore();
+    }
   });
 });
 

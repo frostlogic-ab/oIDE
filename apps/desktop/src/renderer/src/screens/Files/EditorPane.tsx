@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Spinner } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
-import type { FileTab } from './filesStore';
+import { useFiles, type FileTab } from './filesStore';
 import { BASE_OPTIONS, languageFor, languageLabel, monaco } from './monaco/setup';
 
 export interface SelectionInfo {
@@ -32,7 +32,21 @@ interface Entry {
   readOnly: boolean;
 }
 
+/**
+ * Module-level on purpose: the Files screen unmounts when you leave it, and unsaved edits must be
+ * there when you come back. Entries are dropped only when their tab closes.
+ */
 const entries = new Map<string, Entry>();
+const isDirty = (e: Entry) => e.model.getAlternativeVersionId() !== e.saved;
+
+function disposeClosed(open: Set<string>): void {
+  for (const [id, e] of entries) {
+    if (!open.has(id)) {
+      e.model.dispose();
+      entries.delete(id);
+    }
+  }
+}
 type LoadState = { state: 'loading' } | { state: 'ready' } | { state: 'binary' } | { state: 'error'; message: string };
 
 export interface EditorPaneProps {
@@ -69,7 +83,7 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
       line: pos?.lineNumber ?? 1,
       column: pos?.column ?? 1,
       language: e ? languageLabel(e.model.getLanguageId()) : '',
-      dirty: e ? e.model.getAlternativeVersionId() !== e.saved : false,
+      dirty: e ? isDirty(e) : false,
       saving,
       readOnly: e?.readOnly ?? false,
       ...overrides,
@@ -86,7 +100,7 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
     try {
       await oide.invoke('files.write', { root: tab.root, path: tab.path, content: e.model.getValue() });
       e.saved = version;
-      cb.current.onDirty(tab.id, e.model.getAlternativeVersionId() !== e.saved);
+      cb.current.onDirty(tab.id, isDirty(e));
       toast(`Saved ${tab.path}`, 'success', { duration: 2500 });
     } catch (err) {
       toast(`Couldn't save ${tab.path}: ${ipcErrorMessage(err)}`, 'error');
@@ -126,7 +140,7 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
       ed.onDidScrollChange(() => setSelection(null)),
       ed.onDidChangeModelContent(() => {
         const e = entries.get(activeRef.current.id);
-        if (e) cb.current.onDirty(activeRef.current.id, e.model.getAlternativeVersionId() !== e.saved);
+        if (e) cb.current.onDirty(activeRef.current.id, isDirty(e));
         status();
       }),
     ];
@@ -134,6 +148,10 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
       subs.forEach((d) => d.dispose());
       ed.dispose();
       editorRef.current = null;
+      // Closing the last tab unmounts the pane before the effect below sees the new tab list: drop
+      // the models of tabs that are gone, so reopening the file reads it fresh. Leaving the screen
+      // keeps the tabs (and their unsaved edits).
+      disposeClosed(new Set(useFiles.getState().tabs.map((t) => t.id)));
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -153,6 +171,7 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
       ed.updateOptions({ readOnly: e.readOnly });
       if (e.view) ed.restoreViewState(e.view);
       setLoad({ state: 'ready' });
+      cb.current.onDirty(active.id, isDirty(e));
       status();
     };
     const have = entries.get(active.id);
@@ -197,15 +216,15 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
     if (reveal.focus) ed.focus();
   }, [reveal, load.state, active.id]);
 
-  // Dispose models of closed tabs.
+  // Dispose models of closed tabs, and (on mount too) report every open tab's dirty state from its
+  // model, so the tab dots and close warnings match the editor after coming back to Files.
   const openIds = tabs.map((t) => t.id).join('\n');
   useEffect(() => {
     const open = new Set(openIds.split('\n'));
-    for (const [id, e] of entries) {
-      if (!open.has(id)) {
-        e.model.dispose();
-        entries.delete(id);
-      }
+    disposeClosed(open);
+    for (const id of open) {
+      const e = entries.get(id);
+      cb.current.onDirty(id, e ? isDirty(e) : false);
     }
   }, [openIds]);
 
