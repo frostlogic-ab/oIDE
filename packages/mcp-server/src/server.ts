@@ -60,6 +60,11 @@ const SubmitInput = z.object({
       }),
     )
     .default([]),
+  /** A malformed draft is dropped, not a reason to refuse the review. */
+  pr: z
+    .object({ title: z.string().trim().min(1).max(300), body: z.string().max(60_000).default('') })
+    .optional()
+    .catch(undefined),
 });
 const TitleInput = z.object({ title: z.string().min(1).max(1000) });
 const ListInput = z.object({ kind: ArtifactKind.optional(), query: z.string().optional() });
@@ -130,6 +135,16 @@ const TOOLS = {
             },
             required: ['name', 'status'],
           },
+        },
+        pr: {
+          type: 'object',
+          description:
+            "The pull request this branch would be opened with, written to the project's own conventions (its PR template, title rules such as Conventional Commits, CONTRIBUTING.md, CLAUDE.md or AGENTS.md). oIDE uses it when the user opens a pull request.",
+          properties: {
+            title: { type: 'string', description: "PR title in the project's title convention." },
+            body: { type: 'string', description: "PR description (markdown) following the project's PR template, every section filled in." },
+          },
+          required: ['title', 'body'],
         },
       },
       required: ['summary'],
@@ -530,7 +545,7 @@ export class OideMcpServer {
           case 'submit_for_review': {
             const r = SubmitInput.safeParse(args);
             if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
-            agent.handlers.onReview({ summary: r.data.summary, checks: r.data.checks });
+            agent.handlers.onReview({ summary: r.data.summary, checks: r.data.checks, ...(r.data.pr ? { pr: r.data.pr } : {}) });
             return text('Submitted for review. The user will review your changes in oIDE. End your turn now unless they reply.');
           }
           case 'set_title': {

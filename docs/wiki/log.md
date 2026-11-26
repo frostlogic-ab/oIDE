@@ -864,3 +864,15 @@ link to the new repository; the docs site base is `/oIDE/` (`frostlogic-ab.githu
 `CHANGELOG.md` is written by release-please from now on. No telemetry change (CI only). Pages:
 [release-pipeline.md](pages/release-pipeline.md) (new), [packaging.md](pages/packaging.md),
 [docs-site.md](pages/docs-site.md).
+
+## [2026-11-26] build | Pull requests follow the project's own conventions
+Open pull request no longer sends the agent title and a summary as is. The oIDE contract (`prContract`
+in `args.ts`) tells branch agents to look up how the project wants PRs (PR template, CONTRIBUTING.md,
+CLAUDE.md/AGENTS.md, Conventional Commits via commitlint / release-please / semantic-release / a
+PR-title workflow, recent commit style) whenever they write one, and to pass a `pr { title, body }`
+draft in `submit_for_review`. `git.openPr { agentId }` uses that draft; without one, main
+(`packages/git/src/pr-draft.ts`) fills the project's PR template with the summary and checks and
+gives the title a Conventional Commits type when the project uses them. Telemetry: `pr_opened` gains
+`draft` (agent / template / plain / given). Pages: [screen-review.md](pages/screen-review.md),
+[mcp-server.md](pages/mcp-server.md), [agent-supervisor.md](pages/agent-supervisor.md),
+[telemetry.md](pages/telemetry.md).

@@ -102,7 +102,7 @@ export interface AgentToolHandlers {
   onPermissionRequest(request: PermissionRequest): void;
   /** `reason: 'quit'` when oIDE denied the prompt because it was closing. */
   onPermissionResolved(requestId: string, behavior: 'allow' | 'deny', reason?: 'quit'): void;
-  onReview(review: { summary: string; checks: CheckResult[] }): void;
+  onReview(review: { summary: string; checks: CheckResult[]; pr?: { title: string; body: string } }): void;
   /**
    * `set_title`: the agent names its task. Returns the title oIDE kept, or why it was refused (the
    * user gave the title, or it was empty after cleaning). Optional: without it the tool is refused.
