@@ -969,3 +969,9 @@ GitHub's Ubuntu runners), so the frozen renderer outlived the poll and the teard
 macOS terminate the process directly. The test now kills the renderer with SIGKILL on
 `getOSProcessId()`, which dumps nothing and behaves the same on every OS
 ([reliability](pages/reliability.md#tests)).
+
+## [2026-11-26] build | Revert uncommitted main-checkout changes from Source control
+"Your changes on main" now offers **Revert…** next to Commit…: a confirmation dialog with per-file
+checkboxes calls the new `git.discard` IPC command (`@oide/git` `discard()`: tracked files back to HEAD,
+untracked files deleted, only paths git reports as changed). New telemetry event `changes_reverted`
+(file count bucket, whether all files were picked; never paths). Pages: screen-source-control, telemetry.

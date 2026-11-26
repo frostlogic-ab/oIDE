@@ -558,6 +558,13 @@ export function createScmHandlers({ agents, emit, fallbackDiffs = {}, artifacts 
       changed(projectId);
       return c;
     },
+    'git.discard': ({ projectId, files: picked }) => {
+      const s = syncOf(projectId);
+      const reverted = s.dirtyFiles.filter((f) => !picked || picked.includes(f));
+      state.sync[projectId] = { ...s, dirtyFiles: s.dirtyFiles.filter((f) => !reverted.includes(f)) };
+      changed(projectId);
+      return { reverted: reverted.length };
+    },
     'git.log': ({ projectId, limit }) => (state.commits[projectId] ?? []).slice(0, limit ?? 20),
     'git.worktrees': ({ projectId }) => state.worktrees[projectId] ?? [],
     'git.overlaps': ({ projectId }) => state.overlaps[projectId] ?? [],
