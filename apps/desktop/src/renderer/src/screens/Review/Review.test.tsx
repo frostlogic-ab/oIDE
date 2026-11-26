@@ -181,6 +181,13 @@ describe('Review screen', () => {
     expect(screen.queryByRole('button', { name: /Push to pull request/ })).toBeNull();
   });
 
+  it('does not offer Push when the push state is unknown and nothing is uncommitted', async () => {
+    await withOpenPr({ unpushed: undefined, uncommitted: 0 });
+    expect(await screen.findByRole('button', { name: 'View pull request #21' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Push to pull request/ })).toBeNull();
+    expect(screen.queryByText(/has everything in this worktree/)).toBeNull();
+  });
+
   it('keeps Open pull request when the branch has commits to push', async () => {
     await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook' } });
     render(<ReviewScreen />);

@@ -975,3 +975,7 @@ macOS terminate the process directly. The test now kills the renderer with SIGKI
 checkboxes calls the new `git.discard` IPC command (`@oide/git` `discard()`: tracked files back to HEAD,
 untracked files deleted, only paths git reports as changed). New telemetry event `changes_reverted`
 (file count bucket, whether all files were picked; never paths). Pages: screen-source-control, telemetry.
+## [2026-11-26] build | Push to PR only when there is something to push
+Review and the Wall review tile hide Push to pull request when the worktree has no new commits and no
+uncommitted files the PR lacks (or the push state is not known yet); `hasPendingForPr` in the git store.
+See [Review](pages/screen-review.md), [Wall](pages/screen-wall.md).
