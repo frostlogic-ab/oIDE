@@ -346,7 +346,7 @@ function OpenPrButton({ agent }: { agent: AgentSummary }) {
       disabled={busy}
       onClick={async () => {
         setBusy(true);
-        await openPullRequest(agent.id, agent.title, agent.review?.summary ?? '');
+        await openPullRequest(agent.id);
         setBusy(false);
       }}
     >

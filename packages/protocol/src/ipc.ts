@@ -199,8 +199,16 @@ export const Commands = {
   ),
   /** Idempotent: when the branch already has a pull request, it is returned instead of opening another one (`existing: true`). */
   'git.openPr': cmd(
-    z.object({ agentId: Id, title: z.string(), body: z.string().default('') }),
-    z.object({ url: z.string(), number: z.number().int().optional(), state: z.enum(['open', 'draft', 'merged', 'closed']).optional(), existing: z.boolean().optional() }),
+    /** Without `title`/`body`, main writes them: the agent's own draft, else the project's PR template and title rules. */
+    z.object({ agentId: Id, title: z.string().max(300).optional(), body: z.string().max(60_000).optional() }),
+    z.object({
+      url: z.string(),
+      number: z.number().int().optional(),
+      state: z.enum(['open', 'draft', 'merged', 'closed']).optional(),
+      existing: z.boolean().optional(),
+      /** Where the new PR's title and body came from: the agent's draft, the project's template, or the plain summary. */
+      draft: z.enum(['agent', 'template', 'plain', 'given']).optional(),
+    }),
   ),
   'git.reconcile': cmd(z.object({ projectId: Id, agentIds: z.tuple([Id, Id]) }), z.array(AgentSummary)),
   'git.pruneOrphans': cmd(z.object({ projectId: Id }), z.object({ removed: z.array(z.string()) })),

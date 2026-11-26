@@ -188,7 +188,7 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   any built font file that matches no record. `release.yml` runs it again after `Build app` for that
   reason. Test: `tools/licenses/test/fonts.test.ts`.
 - Docs site: VitePress 2 (alpha, matches the repo's vite 8) in `docs/site/`, `pnpm docs:dev` /
-  `pnpm docs:build`, base `/oIDE/` for `frostlogic-ab.github.io/oIDE`. Holds the user guide, the extension
+  `pnpm docs:build`, base `/` for the custom domain `getoide.com`. Holds the user guide, the extension
   author guide, the security model and the FAQ; it links here for internals. Home page and theme:
   [docs-site](docs-site.md).
 ## Local commands

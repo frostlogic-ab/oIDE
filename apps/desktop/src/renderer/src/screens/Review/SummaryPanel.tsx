@@ -91,8 +91,8 @@ export function SummaryPanel({ agent, worktree, comments, prAvailable, prReason,
     }
     setPrBusy(true);
     try {
-      const body = [agent.review?.summary ?? '', checksMarkdown(agent.review?.checks ?? [])].filter(Boolean).join('\n\n');
-      const { url } = await oide.invoke('git.openPr', { agentId: agent.id, title: agent.title, body });
+      // Main writes the title and body: the agent's draft, else the project's PR template and title rules.
+      const { url } = await oide.invoke('git.openPr', { agentId: agent.id });
       toast('Pull request opened', 'success', { action: { label: 'View', run: () => void oide.invoke('shell.openExternal', { url }).catch(() => {}) } });
       void oide.invoke('shell.openExternal', { url }).catch(() => {});
       void useGit.getState().load(agent.projectId);
@@ -299,10 +299,4 @@ function CheckRow({ c }: { c: CheckResult }) {
       {text} (skipped)
     </li>
   );
-}
-
-function checksMarkdown(checks: CheckResult[]): string {
-  if (!checks.length) return '';
-  const mark = { passed: '[x]', failed: '[ ] FAILED', warning: '[ ] warning', skipped: '[ ] skipped' } as const;
-  return ['Checks the agent ran:', ...checks.map((c) => `- ${mark[c.status]} ${c.name}${c.detail ? `: ${c.detail}` : ''}`)].join('\n');
 }

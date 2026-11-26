@@ -472,6 +472,18 @@ export function syncContract(opts: { branch?: string; baseRef?: string }): strin
   ];
 }
 
+/**
+ * Pull requests follow the project's own rules: the agent looks them up and drafts the PR in
+ * submit_for_review (`pr`), which oIDE uses when the user opens the PR. Only for agents on a branch.
+ */
+export function prContract(opts: { branch?: string }): string[] {
+  if (!opts.branch) return [];
+  return [
+    "- Whenever you write a pull request title or description (in submit_for_review, or when the user asks you to open a pull request), first look in the project for how pull requests should look and follow it: a PR template (.github/pull_request_template.md, .github/PULL_REQUEST_TEMPLATE/, PULL_REQUEST_TEMPLATE.md, docs/pull_request_template.md), CONTRIBUTING.md, CLAUDE.md or AGENTS.md, title rules (Conventional Commits through commitlint, release-please or semantic-release config, a PR title check in .github/workflows), and the style of recent commits on the base branch. Keep the template's headings and checklists, fill in every section, and tick only the boxes you actually did.",
+    '- In submit_for_review also pass `pr` with `title` and `body`: the pull request this branch would be opened with, written that way. Do not open a pull request yourself unless the user asks; oIDE opens it from your draft.',
+  ];
+}
+
 export function oideContract(opts: { agentName: string; agentId: string; cwd: string; branch?: string; baseRef?: string; routed: boolean; autoTitle?: boolean }): string {
   const lines = [
     `You are running inside oIDE as the agent "${opts.agentName}" (oIDE agent id ${opts.agentId}).`,
@@ -483,6 +495,7 @@ export function oideContract(opts: { agentName: string; agentId: string; cwd: st
     `- Commit your work as you go with clear messages. End every commit message with this trailer line: Oide-Agent: ${opts.agentName}`,
     '- oIDE artifacts (designs, docs, whiteboards) are available through mcp__oide__artifacts_list, mcp__oide__artifacts_read, mcp__oide__artifacts_write and mcp__oide__artifacts_create.',
     ...syncContract(opts),
+    ...prContract(opts),
   ];
   if (opts.autoTitle) {
     lines.push(

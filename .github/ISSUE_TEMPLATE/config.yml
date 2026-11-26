@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/frostlogic-ab/oIDE/security/advisories/new
     about: Please report vulnerabilities privately through a GitHub security advisory, not in a public issue.
   - name: Documentation
-    url: https://frostlogic-ab.github.io/oIDE/
+    url: https://getoide.com/
     about: Getting started, using oIDE, agents and permissions, extensions, security model and FAQ.
