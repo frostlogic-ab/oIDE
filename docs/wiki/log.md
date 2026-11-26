@@ -847,6 +847,10 @@ exist, so the download cards show SHA256SUMS checks instead; downloads link to G
 telemetry change (the site has no analytics). Pages: [docs-site.md](pages/docs-site.md) (new),
 [packaging.md](pages/packaging.md).
 
+## [2026-11-26] build | Files tree restyled like the VS Code explorer
+Flush 22px rows, chevrons, Seti-like file-type icons (`screens/Files/fileIcons.tsx`), indent guides with
+the focused folder's guide highlighted, uppercase project section headers. See [screen-files](pages/screen-files.md).
+
 ## [2026-11-26] build | Release pipeline with release-please; links to frostlogic-ab/oIDE
 The project lives at [frostlogic-ab/oIDE](https://github.com/frostlogic-ab/oIDE). Releases are now
 automated: PRs are squash-merged with Conventional Commit titles (`pr-title.yml`), release-please

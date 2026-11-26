@@ -107,7 +107,7 @@ describe('Files tree expand and collapse', () => {
     // - on a file collapses its folder and moves to it; on an open folder collapses it
     fireEvent.keyDown(within(tree).getByRole('treeitem', { name: 'loader.ts' }), { key: '-' });
     await waitFor(() => expect(within(tree).queryByRole('treeitem', { name: 'loader.ts' })).toBeNull());
-    fireEvent.keyDown(within(tree).getByRole('treeitem', { name: /^. shell$/ }), { key: '-' });
+    fireEvent.keyDown(within(tree).getByRole('treeitem', { name: 'shell' }), { key: '-' });
     await waitFor(() => expect(within(tree).queryByRole('treeitem', { name: 'Rail.tsx' })).toBeNull());
 
     // Single project scope: no per-project menu
