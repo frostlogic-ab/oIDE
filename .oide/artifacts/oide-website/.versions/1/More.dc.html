@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oIDE website · Home, bottom</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="site {{themeClass}}">
+
+  <!-- HOW IT WORKS -->
+  <section class="sec" id="how">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="label"><i></i>How it works</span>
+        <h2><span class="s">oIDE directs.</span> <span class="s">Your own CLI does the work.</span></h2>
+        <p>oIDE has no model of its own and no sign-in of its own. It starts the Claude Code CLI you already installed, one process per agent, and shows you what each one is doing.</p>
+      </div>
+      <div class="flow">
+        <div class="node"><span class="who">You</span><b>Set the goals</b><p>Spawn agents, answer them, review what they made.</p></div>
+        <div class="link">goals, answers</div>
+        <div class="node hub"><span class="who">oIDE</span><b>Runs the wall</b><p>Creates a worktree for each agent, starts a CLI process in it, and turns its event stream into a tile.</p></div>
+        <div class="link">starts it, reads its events</div>
+        <div class="yours">
+          <span class="yours-tag">Your side: sign-in and tokens stay here</span>
+          <div class="node"><span class="who">Your <code>claude</code> CLI</span><b>Does the work</b><p>The official CLI, unmodified, with its own permission modes, hooks and settings.</p></div>
+          <div class="link">your sign-in</div>
+          <div class="node"><span class="who">Anthropic</span><b>Your Claude plan</b><p>Usage counts against your account the same way it does in a terminal.</p></div>
+        </div>
+      </div>
+      <ul class="facts">
+        <li><b>oIDE never holds your credentials</b><span>You sign in through Anthropic's own flow in the CLI. oIDE does not read, store or send tokens.</span></li>
+        <li><b>The same rules as your terminal</b><span>Permissions, hooks and project settings are Claude Code's own. oIDE only shows the prompts.</span></li>
+        <li><b>Local first</b><span>Sessions, history and settings live on your machine and in each project's <span class="mono">.oide/</span> folder.</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- COMPARE -->
+  <section class="sec alt" id="compare">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="label"><i></i>Compare</span>
+        <h2>Where oIDE fits</h2>
+        <p>Plenty of tools run one coding agent well, and several run a few in parallel. oIDE is for running many across all your projects, and for giving them better tools.</p>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th scope="col"></th><th scope="col" class="us">oIDE</th><th scope="col">AI code editors</th><th scope="col">Agent desktop apps</th><th scope="col">Terminal tabs</th></tr></thead>
+          <tbody><tr><th scope="row">Uses your Claude plan through the official CLI</th><td class="us"><span class="yes">Yes</span></td><td><span class="some">Often API pricing</span></td><td><span class="yes">Yes</span></td><td><span class="yes">Yes</span></td></tr><tr><th scope="row">Agents from many projects in one window</th><td class="us"><span class="yes">Yes</span></td><td><span class="no">One project per window</span></td><td><span class="some">Some</span></td><td><span class="some">By hand</span></td></tr><tr><th scope="row">A worktree per agent, with overlap warnings</th><td class="us"><span class="yes">Yes</span></td><td><span class="some">Some</span></td><td><span class="some">Worktrees, no warnings</span></td><td><span class="no">By hand</span></td></tr><tr><th scope="row">A marketplace of tools made for agents</th><td class="us"><span class="yes">Yes</span></td><td><span class="some">Editor extensions</span></td><td><span class="no">No</span></td><td><span class="no">No</span></td></tr><tr><th scope="row">claude.ai designs, docs and whiteboards inside</th><td class="us"><span class="yes">Yes</span></td><td><span class="no">No</span></td><td><span class="no">No</span></td><td><span class="no">No</span></td></tr><tr><th scope="row">Model routing per subagent task</th><td class="us"><span class="yes">Yes</span></td><td><span class="some">One model picker</span></td><td><span class="some">One model picker</span></td><td><span class="some">Flags and config</span></td></tr><tr><th scope="row">Free and open source</th><td class="us"><span class="yes">Yes, MIT</span></td><td><span class="no">Mostly not</span></td><td><span class="some">Some</span></td><td><span class="yes">Yes</span></td></tr></tbody>
+        </table>
+      </div>
+      <p class="fine">These are categories, not specific products. Last checked November 2026. Open an issue if a row is out of date.</p>
+    </div>
+  </section>
+
+  <!-- DOWNLOAD -->
+  <section class="sec" id="download">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="label go"><i></i>Download · v0.1 preview</span>
+        <h2>Get oIDE for your desktop</h2>
+        <p>The same app on all three platforms. It updates itself.</p>
+      </div>
+      <div class="os-grid">
+        <div class="os {{ macClass }}" id="dl-mac">
+          <div class="os-top"><h3>macOS</h3><sc-if value="{{ isMac }}" hint-placeholder-val="{{ false }}"><span class="os-flag">Your system</span></sc-if></div>
+          <a class="btn btn-primary" href="#dl-mac">Download .dmg</a>
+          <div class="os-alt"><a href="#dl-mac">Apple silicon</a><a href="#dl-mac">Intel</a><a href="#dl-mac">.zip</a></div>
+          <div class="cmd"><code>brew install --cask oide</code><button type="button" onClick="{{ copyMac }}">{{ macCopyLabel }}</button></div>
+          <p class="os-req">macOS 12 or later.</p>
+        </div>
+        <div class="os {{ winClass }}" id="dl-win">
+          <div class="os-top"><h3>Windows</h3><sc-if value="{{ isWin }}" hint-placeholder-val="{{ false }}"><span class="os-flag">Your system</span></sc-if></div>
+          <a class="btn btn-primary" href="#dl-win">Download installer</a>
+          <div class="os-alt"><a href="#dl-win">x64</a><a href="#dl-win">ARM64</a><a href="#dl-win">.zip</a></div>
+          <div class="cmd"><code>winget install oide</code><button type="button" onClick="{{ copyWin }}">{{ winCopyLabel }}</button></div>
+          <p class="os-req">Windows 10 or 11.</p>
+        </div>
+        <div class="os {{ linuxClass }}" id="dl-linux">
+          <div class="os-top"><h3>Linux</h3><sc-if value="{{ isLinux }}" hint-placeholder-val="{{ false }}"><span class="os-flag">Your system</span></sc-if></div>
+          <a class="btn btn-primary" href="#dl-linux">Download AppImage</a>
+          <div class="os-alt"><a href="#dl-linux">.deb</a><a href="#dl-linux">.rpm</a><a href="#dl-linux">.tar.gz</a><a href="#dl-linux">ARM64</a></div>
+          <div class="cmd"><code>sudo apt install ./oide_amd64.deb</code><button type="button" onClick="{{ copyLinux }}">{{ linuxCopyLabel }}</button></div>
+          <p class="os-req">Ubuntu 22.04, Fedora 39 or newer.</p>
+        </div>
+      </div>
+      <p class="need"><i aria-hidden="true"></i><span><b>You also need Claude Code.</b> oIDE uses the Claude Code CLI that you install and sign in to yourself, with a Claude Pro or Max plan or your own API key. On first launch oIDE looks for it and points you to Anthropic's install guide if it is missing.</span></p>
+    </div>
+  </section>
+
+  <!-- OPEN SOURCE -->
+  <section class="sec alt" id="open">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="label"><i></i>Open source</span>
+        <h2>Built in the open, extended by anyone</h2>
+        <p>oIDE is MIT licensed. The app, the marketplace index and every first-party extension live on GitHub.</p>
+      </div>
+      <div class="doors">
+        <a href="#open"><b>Read the docs</b><span>Getting started, keyboard shortcuts, settings, and how agents, worktrees and permissions fit together.</span><code>wiki/Home →</code></a>
+        <a href="#open"><b>Write an extension</b><span>Package an MCP server or a view, declare its tools and what they are allowed to do, and publish it.</span><code>wiki/Extensions →</code></a>
+        <a href="#open"><b>Contribute</b><span>Pick up a good first issue, propose a feature, or share the techniques that make your agents better.</span><code>CONTRIBUTING.md →</code></a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="sec">
+    <div class="wrap faq-grid">
+      <div class="sec-head"><span class="label"><i></i>FAQ</span><h2>Questions people ask first</h2></div>
+      <div class="faq">
+        <details open="open"><summary>Do I need an Anthropic API key?</summary><p>No. oIDE runs the Claude Code CLI you already use, so it works with whatever that CLI is signed in to: a Claude Pro or Max plan, or an API key if you prefer one. Usage counts against that account the same way it does in your terminal.</p></details>
+        <details><summary>Can oIDE see my credentials?</summary><p>No. You sign in through Anthropic's own flow in the CLI. oIDE starts the CLI and reads its event stream. It does not touch tokens and it does not modify the CLI.</p></details>
+        <details><summary>Is oIDE made by Anthropic?</summary><p>No. oIDE is an independent open-source project that works with Claude Code. It is not affiliated with or endorsed by Anthropic.</p></details>
+        <details><summary>Can I still edit files myself?</summary><p>Yes. There is a file editor with tabs, search and a terminal. It is simple on purpose, because most of your time in oIDE goes into directing and reviewing agents.</p></details>
+        <details><summary>How many agents can I run at once?</summary><p>As many as your machine and your plan's limits allow. The status bar shows session and weekly usage, so you can see how fast you are spending it.</p></details>
+        <details><summary>Does it work with local models?</summary><p>Yes, through the CLI's own environment variables. Add an endpoint under Settings › Models and it appears next to the built-in models. A model needs tool use to work well as an agent.</p></details>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLOSE -->
+  <section class="sec alt">
+    <div class="wrap close">
+      <h2><span class="s">Stop babysitting terminals.</span> <span class="s">Run your agents from one window.</span></h2>
+      <div class="dl">
+        <a class="btn btn-primary btn-lg dl-main" href="#download"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path></svg><span>{{ dlLong }}</span></a>
+        <button class="btn btn-primary btn-lg dl-caret" type="button" aria-expanded="{{ closeExpanded }}" aria-label="Choose another platform" onClick="{{ toggleClose }}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+        <sc-if value="{{ closeOpen }}" hint-placeholder-val="{{ false }}">
+          <div class="dl-menu up">
+            <a href="#dl-mac">macOS <small>universal · .dmg</small></a>
+            <a href="#dl-win">Windows <small>x64 · ARM64</small></a>
+            <a href="#dl-linux">Linux <small>.deb · .rpm · AppImage</small></a>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot-band">
+    <div class="wrap">
+      <div class="foot">
+        <div><a class="brand" href="Main.dc.html"><i aria-hidden="true"></i>oIDE</a><p>The open desktop app for running teams of coding agents.</p></div>
+        <div><h4>Product</h4><ul><li><a href="Main.dc.html">Features</a></li><li><a href="Features.dc.html">Extensions</a></li><li><a href="#download">Download</a></li><li><a href="#open">Release notes</a></li></ul></div>
+        <div><h4>Docs</h4><ul><li><a href="#open">Getting started</a></li><li><a href="#open">Keyboard shortcuts</a></li><li><a href="#open">Writing extensions</a></li><li><a href="#how">Architecture</a></li></ul></div>
+        <div><h4>Community</h4><ul><li><a href="#open">GitHub</a></li><li><a href="#open">Discussions</a></li><li><a href="#open">Issues</a></li><li><a href="#open">Security policy</a></li></ul></div>
+      </div>
+      <p class="legal">oIDE is an independent open-source project released under the MIT License. It is not affiliated with, sponsored by or endorsed by Anthropic. Claude and Claude Code are trademarks of Anthropic, PBC, and are used here only to describe compatibility.</p>
+    </div>
+  </footer>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"visitor":{"editor":"enum","options":["Detect","macOS","Windows","Linux"],"default":"Detect","section":"Download button"},"$preview":{"width":1440,"height":4640}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { menu: false, os: null, copied: null };
+  }
+  componentDidMount() {
+    // Highlight the visitor's system in the download cards.
+    var hint = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+    var ua = navigator.userAgent || '';
+    if (/Android|iPhone|iPad|iPod/i.test(ua)) return;
+    var os = /Win/i.test(hint) ? 'win' : /Mac/i.test(hint) ? 'mac' : /Linux|X11|CrOS/i.test(hint + ua) ? 'linux' : null;
+    if (os) this.setState({ os: os });
+  }
+  renderVals() {
+    var NAME = { mac: 'macOS', win: 'Windows', linux: 'Linux' };
+    var CMD = { mac: 'brew install --cask oide', win: 'winget install oide', linux: 'sudo apt install ./oide_amd64.deb' };
+    var pick = this.props.visitor ?? 'Detect';
+    var os = pick === 'Detect' ? this.state.os : { macOS: 'mac', Windows: 'win', Linux: 'linux' }[pick];
+    var copied = this.state.copied;
+    var self = this;
+    function copy(key) {
+      return function () {
+        function done() {
+          self.setState({ copied: key });
+          setTimeout(function () { self.setState({ copied: null }); }, 1400);
+        }
+        try { navigator.clipboard.writeText(CMD[key]).then(done, function () {}); } catch (err) {}
+      };
+    }
+    return {
+      themeClass: (this.props.theme ?? 'Dark') === 'Light' ? 'light' : '',
+      dlLong: os ? 'Download for ' + NAME[os] : 'Download oIDE',
+      isMac: os === 'mac', isWin: os === 'win', isLinux: os === 'linux',
+      macClass: os === 'mac' ? 'yours-os' : '',
+      winClass: os === 'win' ? 'yours-os' : '',
+      linuxClass: os === 'linux' ? 'yours-os' : '',
+      copyMac: copy('mac'), copyWin: copy('win'), copyLinux: copy('linux'),
+      macCopyLabel: copied === 'mac' ? 'Copied' : 'Copy',
+      winCopyLabel: copied === 'win' ? 'Copied' : 'Copy',
+      linuxCopyLabel: copied === 'linux' ? 'Copied' : 'Copy',
+      closeOpen: this.state.menu,
+      closeExpanded: this.state.menu ? 'true' : 'false',
+      toggleClose: function () { self.setState({ menu: !self.state.menu }); },
+    };
+  }
+}
+</script>
+</body>
+</html>
