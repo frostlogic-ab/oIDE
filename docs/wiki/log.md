@@ -981,3 +981,17 @@ PR #14's macOS unit tests failed `DevModeWatcher … reloads on change`: the tes
 batch, but FSEvents can deliver the fixture's creation events late, in a batch before the `host.js`
 write. The test now waits (up to 5 s) for a batch naming `host.js`, rewriting it every 500 ms in case a
 write lands before the stream is live. The watcher itself is unchanged.
+## [2026-11-26] build | Direct download links on the site
+Release finalize now uploads a version-free copy of every installer (`oIDE-<os>-<x64|arm64>.<ext>`),
+so the site's download buttons and the getting-started table link to
+`releases/latest/download/<file>` for the visitor's OS instead of the release page. Updated
+[docs-site](pages/docs-site.md) and [release-pipeline](pages/release-pipeline.md).
+## [2026-11-26] build | Revert uncommitted main-checkout changes from Source control
+"Your changes on main" now offers **Revert…** next to Commit…: a confirmation dialog with per-file
+checkboxes calls the new `git.discard` IPC command (`@oide/git` `discard()`: tracked files back to HEAD,
+untracked files deleted, only paths git reports as changed). New telemetry event `changes_reverted`
+(file count bucket, whether all files were picked; never paths). Pages: screen-source-control, telemetry.
+## [2026-11-26] build | Push to PR only when there is something to push
+Review and the Wall review tile hide Push to pull request when the worktree has no new commits and no
+uncommitted files the PR lacks (or the push state is not known yet); `hasPendingForPr` in the git store.
+See [Review](pages/screen-review.md), [Wall](pages/screen-wall.md).

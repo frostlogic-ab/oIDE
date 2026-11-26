@@ -3,6 +3,7 @@ import {
   GhCli,
   Git,
   commit as gitCommit,
+  discard as gitDiscard,
   detectOverlaps,
   diffStat,
   fileDiffs,
@@ -247,6 +248,19 @@ export class GitService {
       return c;
     } catch (err) {
       throw new IpcError((err as Error).message, 'git_failed');
+    }
+  }
+
+  /** Revert uncommitted changes in the project's main checkout (all of them, or `files`). */
+  async discard(projectId: string, files?: string[]): Promise<{ reverted: number }> {
+    const p = this.project(projectId);
+    try {
+      const reverted = await gitDiscard(p.path, files ? { files } : {});
+      return { reverted: reverted.length };
+    } catch (err) {
+      throw new IpcError((err as Error).message, 'git_failed');
+    } finally {
+      this.changed(projectId);
     }
   }
 

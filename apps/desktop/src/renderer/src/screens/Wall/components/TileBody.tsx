@@ -11,6 +11,7 @@ import { freshnessText, useMergePrediction } from '../../../stores/mergePredicti
 import { useSetting } from '../../../stores/settings';
 import { AttachFileButton, AttachmentTray, useAttachments } from '../../../components/Attachments';
 import { PrLink } from '../../../components/PrLink';
+import { findWorktree, hasPendingForPr, useGit, useGitData } from '../../SourceControl/gitStore';
 import { answerPermission, openPullRequest, pushToPullRequest, resumeAgent, sendReply, type PermissionChoice } from '../actions';
 import { canArchive, interruptionText, parseActivity, permissionView, tileBodyKind } from '../logic';
 
@@ -356,9 +357,15 @@ function OpenPrButton({ agent }: { agent: AgentSummary }) {
   );
 }
 
-/** Follow-up work after the PR was opened goes up to that PR (main commits leftover files first). */
+/**
+ * Follow-up work after the PR was opened goes up to that PR (main commits leftover files first).
+ * Shown only while the worktree has something the PR lacks: new commits or uncommitted files.
+ */
 function PushToPrButton({ agent, number }: { agent: AgentSummary; number: number }) {
   const [busy, setBusy] = useState(false);
+  useGitData([agent.projectId]);
+  const pending = useGit((s) => hasPendingForPr(findWorktree(s.byProject, agent.id)));
+  if (!pending && !busy) return null;
   return (
     <Button
       variant="review-outline"
@@ -369,6 +376,7 @@ function PushToPrButton({ agent, number }: { agent: AgentSummary; number: number
       onClick={async () => {
         setBusy(true);
         await pushToPullRequest(agent.id);
+        await useGit.getState().load(agent.projectId);
         setBusy(false);
       }}
     >

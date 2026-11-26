@@ -362,6 +362,17 @@ describe('archived agents and the PR lifecycle', () => {
     expect(events).toEqual([{ name: 'pr_opened', props: { existing: false, draft: 'template' } }]);
   });
 
+  it('changes_reverted buckets the reverted files and says whether all were picked, never the paths', () => {
+    const { o, events } = make();
+    o.command('git.discard', { projectId: 'p1' }, { reverted: 1 });
+    o.command('git.discard', { projectId: 'p1', files: ['secret/plan.md', 'b.ts', 'c.ts'] }, { reverted: 3 });
+    expect(events).toEqual([
+      { name: 'changes_reverted', props: { files: '1', all: true } },
+      { name: 'changes_reverted', props: { files: '2-5', all: false } },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/secret|plan|p1/);
+  });
+
   it('pr_pushed buckets the commits sent to an open PR and says whether oIDE committed files first, never the URL', () => {
     const { o, events } = make();
     o.command('git.pushToPr', { agentId: 'a1' }, { url: 'https://github.com/acme/private/pull/13', number: 13, state: 'open', committed: true, pushed: 3 });

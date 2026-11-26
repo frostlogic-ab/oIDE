@@ -44,12 +44,15 @@ auto-update: [packaging](packaging.md).
      (`--publish always`, `releaseType=draft`) finds the draft release by its tag and uploads the
      installers (Windows NSIS + zip, macOS dmg + zip, Linux AppImage + deb + rpm, x64 and arm64) and
      the update files. Signing per platform only when its secrets exist ([packaging](packaging.md)).
-   - **finalize** adds `SHA256SUMS` (and detached GPG signatures when `GPG_PRIVATE_KEY` is set), then
+   - **finalize** uploads a version-free copy of every installer (`oIDE-<os>-<x64|arm64>.<ext>`,
+     e.g. `oIDE-mac-arm64.dmg`, `oIDE-linux-x64.deb`) so the site's download buttons can link to
+     `/releases/latest/download/<name>`, adds `SHA256SUMS` over both names (and detached GPG
+     signatures when `GPG_PRIVATE_KEY` is set), then
      **publishes** the release: marked *latest* for a plain version, *pre-release* for a version like
      `0.3.0-beta.1`.
 
 Until finalize, the release is a draft: electron-updater and the site's download buttons
-(`/releases/latest`) cannot see it, so no user ever gets a release with missing files. If any
+(`/releases/latest/download/…`) cannot see it, so no user ever gets a release with missing files. If any
 platform fails, the release stays a draft; fix the cause and use **Re-run failed jobs** on the run.
 
 ## Versions

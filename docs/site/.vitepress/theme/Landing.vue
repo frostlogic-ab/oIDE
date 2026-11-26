@@ -7,6 +7,11 @@ import { useData, withBase } from 'vitepress';
 
 const repo = 'https://github.com/frostlogic-ab/oIDE';
 const releases = `${repo}/releases/latest`;
+// Direct links to the newest installer. release.yml uploads a copy of every installer without the
+// version in its name (oIDE-mac-arm64.dmg, oIDE-linux-x64.deb, ...) next to the versioned file, so
+// GitHub's /releases/latest/download/<name> redirect always serves the latest stable release.
+type Arch = 'x64' | 'arm64';
+const file = (name: string) => `${releases}/download/oIDE-${name}`;
 
 const { isDark } = useData();
 
@@ -22,6 +27,31 @@ onMounted(() => {
   if (/Android|iPhone|iPad|iPod/i.test(ua)) return;
   os.value = /Win/i.test(hint) ? 'win' : /Mac/i.test(hint) ? 'mac' : /Linux|X11|CrOS/i.test(hint + ua) ? 'linux' : null;
 });
+
+// Apple silicon, x64 Windows and x64 Linux unless the browser says otherwise (Chromium only).
+const arch = ref<Record<Os, Arch>>({ mac: 'arm64', win: 'x64', linux: 'x64' });
+onMounted(async () => {
+  const uad = (navigator as Navigator & {
+    userAgentData?: { getHighEntropyValues?: (hints: string[]) => Promise<{ architecture?: string }> };
+  }).userAgentData;
+  if (!os.value || !uad?.getHighEntropyValues) return;
+  try {
+    const { architecture } = await uad.getHighEntropyValues(['architecture']);
+    if (architecture === 'arm' || architecture === 'x86') {
+      arch.value = { ...arch.value, [os.value]: architecture === 'arm' ? 'arm64' : 'x64' };
+    }
+  } catch {
+    // Keep the defaults.
+  }
+});
+
+// The main installer for each system, and where the big Download button goes.
+const installer = computed<Record<Os, string>>(() => ({
+  mac: file(`mac-${arch.value.mac}.dmg`),
+  win: file(`win-${arch.value.win}.exe`),
+  linux: file(`linux-${arch.value.linux}.AppImage`),
+}));
+const dlHref = computed(() => (os.value ? installer.value[os.value] : '#download'));
 
 const dlLong = computed(() => (os.value ? `Download for ${NAME[os.value]}` : 'Download oIDE'));
 const alsoFor = computed(() => {
@@ -57,23 +87,37 @@ const platforms = [
 ];
 
 // Download cards. Builds are on GitHub Releases with a SHA256SUMS file (.github/workflows/release.yml).
-const cards = [
+const cards = computed(() => [
   {
     os: 'mac' as Os, id: 'dl-mac', title: 'macOS', button: 'Download .dmg',
-    alt: ['Apple silicon', 'Intel', '.zip'],
+    alt: [
+      { label: 'Apple silicon', href: file('mac-arm64.dmg') },
+      { label: 'Intel', href: file('mac-x64.dmg') },
+      { label: '.zip', href: file(`mac-${arch.value.mac}.zip`) },
+    ],
     cmd: 'shasum -a 256 -c SHA256SUMS --ignore-missing', req: 'macOS 12 or later.',
   },
   {
     os: 'win' as Os, id: 'dl-win', title: 'Windows', button: 'Download installer',
-    alt: ['x64', 'ARM64', '.zip'],
+    alt: [
+      { label: 'x64', href: file('win-x64.exe') },
+      { label: 'ARM64', href: file('win-arm64.exe') },
+      { label: '.zip', href: file(`win-${arch.value.win}.zip`) },
+    ],
     cmd: 'Get-FileHash .\\oIDE-*-win-x64.exe', req: 'Windows 10 or 11.',
   },
   {
     os: 'linux' as Os, id: 'dl-linux', title: 'Linux', button: 'Download AppImage',
-    alt: ['.deb', '.rpm', 'ARM64'],
+    alt: [
+      { label: '.deb', href: file(`linux-${arch.value.linux}.deb`) },
+      { label: '.rpm', href: file(`linux-${arch.value.linux}.rpm`) },
+      arch.value.linux === 'arm64'
+        ? { label: 'x64', href: file('linux-x64.AppImage') }
+        : { label: 'ARM64', href: file('linux-arm64.AppImage') },
+    ],
     cmd: 'sha256sum -c SHA256SUMS --ignore-missing', req: 'Ubuntu 22.04, Fedora 39 or newer.',
   },
-];
+]);
 
 const copied = ref<Os | null>(null);
 let copiedTimer: ReturnType<typeof setTimeout> | undefined;
@@ -155,7 +199,7 @@ const img = (name: string) => withBase(`/shots/${name}`);
           <svg class="ic on-light" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>
         </button>
         <div class="dl">
-          <a class="btn btn-primary dl-main" :href="releases">
+          <a class="btn btn-primary dl-main" :href="dlHref">
             <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg><span>Download<span v-if="os" class="os-name"> for {{ NAME[os] }}</span></span>
           </a>
           <button class="btn btn-primary dl-caret" type="button" :aria-expanded="menu === 'nav'" aria-label="Choose another platform" @click="toggle('nav')">
@@ -183,7 +227,7 @@ const img = (name: string) => withBase(`/shots/${name}`);
             <div class="cta">
               <div class="cta-btns">
                 <div class="dl">
-                  <a class="btn btn-primary btn-lg dl-main" :href="releases">
+                  <a class="btn btn-primary btn-lg dl-main" :href="dlHref">
                     <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg><span>{{ dlLong }}</span>
                   </a>
                   <button class="btn btn-primary btn-lg dl-caret" type="button" :aria-expanded="menu === 'hero'" aria-label="Choose another platform" @click="toggle('hero')">
@@ -473,8 +517,8 @@ const img = (name: string) => withBase(`/shots/${name}`);
           <div class="os-grid">
             <div v-for="c in cards" :id="c.id" :key="c.id" class="os" :class="{ 'yours-os': os === c.os }">
               <div class="os-top"><h3>{{ c.title }}</h3><span v-if="os === c.os" class="os-flag">Your system</span></div>
-              <a class="btn btn-primary" :href="releases">{{ c.button }}</a>
-              <div class="os-alt"><a v-for="a in c.alt" :key="a" :href="releases">{{ a }}</a></div>
+              <a class="btn btn-primary" :href="installer[c.os]">{{ c.button }}</a>
+              <div class="os-alt"><a v-for="a in c.alt" :key="a.label" :href="a.href">{{ a.label }}</a></div>
               <span class="cmd-label">Check the download against SHA256SUMS</span>
               <div class="cmd">
                 <code>{{ c.cmd }}</code>
@@ -522,7 +566,7 @@ const img = (name: string) => withBase(`/shots/${name}`);
         <div class="wrap close">
           <h2><span class="s">Stop babysitting terminals.</span> <span class="s">Run your agents from one window.</span></h2>
           <div class="dl">
-            <a class="btn btn-primary btn-lg dl-main" :href="releases">
+            <a class="btn btn-primary btn-lg dl-main" :href="dlHref">
               <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg><span>{{ dlLong }}</span>
             </a>
             <button class="btn btn-primary btn-lg dl-caret" type="button" :aria-expanded="menu === 'close'" aria-label="Choose another platform" @click="toggle('close')">
