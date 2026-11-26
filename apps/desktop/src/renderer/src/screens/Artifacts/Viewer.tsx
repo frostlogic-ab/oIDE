@@ -126,6 +126,18 @@ export function Viewer({
   /** The entry file the editor's text belongs to (`live.entry` moves as soon as an agent changes it). */
   const draftEntry = useRef(meta.entry);
   live.current = { ...live.current, base, dirty };
+  // A kept draft of an entry file the artifact no longer opens on (an agent changed its page since):
+  // it is not this file's text, so it is dropped (by the effect below) and the user is told.
+  const [staleDraft] = useState(() => {
+    const d = useArtifactDrafts.getState().drafts[detail.meta.id];
+    return Boolean(d && d.entry !== detail.meta.entry);
+  });
+  const staleToasted = useRef(false);
+  useEffect(() => {
+    if (!staleDraft || staleToasted.current) return;
+    staleToasted.current = true;
+    toast(`${meta.title} now opens on another page, so your unsaved edits to the old one were discarded.`, 'warning');
+  }, [staleDraft, meta.title]);
   // Keep the unsaved entry edits outside this component so leaving the screen does not lose them.
   // Not cleared on unmount: that is the point. Save, "Use theirs" and Discard make it not dirty or clear it.
   useEffect(() => {

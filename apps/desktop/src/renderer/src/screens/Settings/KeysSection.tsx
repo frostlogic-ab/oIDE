@@ -106,7 +106,7 @@ export function KeysSection({ km = keymap }: { km?: Keymap }) {
                   >
                     {rec.combo ? comboLabel(rec.combo, mac) : 'Press keys…'}
                   </button>
-                  <span id={`${titleId}-rec`} className="basis-full text-right text-[11.5px] text-ink-3 order-last">
+                  <span id={`${titleId}-rec`} className="basis-full text-right text-[11.5px] text-ink-2 order-last">
                     Press the new keys · Tab to move on · Esc to cancel
                   </span>
                   <button

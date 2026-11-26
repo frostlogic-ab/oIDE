@@ -165,17 +165,20 @@ export default function ArtifactsScreen() {
     }
     setOpened(false);
   }, [selectedId]);
-  // Remember which Viewer is open so leaving the screen mid-edit can bring it back; closing it to the grid forgets.
-  const openId = opened ? selectedId : undefined;
+  const shown = detail?.meta.id === selectedId ? detail : null;
+  // Remember which Viewer is open so leaving the screen mid-edit can bring it back. Derived from what is
+  // actually rendered (not the route), so a selection change while open never records an artifact
+  // whose Viewer the user did not see; any close (grid, another selection, deletion) forgets it.
+  // Unmounting does not re-run the effect, so leaving the screen keeps the value.
+  const openId = opened && shown ? shown.meta.id : undefined;
   useEffect(() => {
-    if (openId) useArtifactDrafts.getState().setLastOpen(openId);
+    useArtifactDrafts.getState().setLastOpen(openId ?? null);
   }, [openId]);
   const closeViewer = () => {
     setOpened(false);
     useArtifactDrafts.getState().setLastOpen(null);
   };
 
-  const shown = detail?.meta.id === selectedId ? detail : null;
   const actionDialogs = shown && (
     <>
       <RenameDialog

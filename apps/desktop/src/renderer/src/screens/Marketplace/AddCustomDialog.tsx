@@ -135,7 +135,8 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
     ? name !== editing.name || savedTo !== editing.savedTo || JSON.stringify(editTools) !== JSON.stringify(editing.tools) || selected.join() !== (editing.allProjects ? allIds : editing.projects).join()
     : Boolean(
         name || url.trim() || probe || token || cmdLine.trim() || json.trim() || gitUrl.trim() || ext || imported || picked.length || draftSaved ||
-          env.some((r) => r.key || r.value) || selected.join() !== allIds.join() || savedTo !== 'my-settings',
+          env.some((r) => r.key || r.value) || useToken || tokenHeader !== 'Authorization' || !devMode || cmdMode !== 'form' ||
+          selected.join() !== allIds.join() || savedTo !== 'my-settings',
       );
 
   const placement = () => ({

@@ -11,7 +11,7 @@ import { useProjects } from '../../stores/projects';
 import { useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useSettings } from '../../stores/settings';
-import { Composer } from './components/Composer';
+import { Composer, afterSent } from './components/Composer';
 import { clearDraft, getDraft, resetDrafts } from './composerDrafts';
 import { PermissionPrompt } from './components/PermissionPrompt';
 import FocusScreen from './index';
@@ -302,6 +302,39 @@ describe('Composer', () => {
       } finally {
         invoke.mockImplementation(impl);
       }
+    });
+
+    it('keeps only what was typed after the sent text while the send was in flight', async () => {
+      let release: () => void = () => {};
+      const impl = invoke.getMockImplementation()!;
+      invoke.mockImplementation(async (command: string, input?: unknown) => {
+        if (command === 'agents.send') await new Promise<void>((r) => (release = r));
+        return impl(command, input);
+      });
+      try {
+        render(<Composer agentId="a-bridge" {...props} />);
+        fireEvent.change(box(), { target: { value: 'fix the test' } });
+        fireEvent.keyDown(box(), { key: 'Enter' });
+        await waitFor(() => expect(calls('agents.send')).toHaveLength(1));
+        fireEvent.change(box(), { target: { value: 'fix the test also lint' } });
+        await act(async () => release());
+        // The sent part is gone, so Enter would not send it twice.
+        expect(box().value).toBe('also lint');
+        expect(getDraft('a-bridge')).toBe('also lint');
+      } finally {
+        invoke.mockImplementation(impl);
+      }
+    });
+
+    it('afterSent: what stays once a message went out', () => {
+      expect(afterSent('hi', 'hi')).toBe('');
+      expect(afterSent('hi there', 'hi')).toBe('there');
+      expect(afterSent('hi\n\nmore', 'hi')).toBe('more');
+      // Rewritten while sending: nothing of it was sent, keep it all.
+      expect(afterSent('something else', 'hi')).toBe('something else');
+      // An artifact-only send (no text) keeps whatever was typed meanwhile.
+      expect(afterSent('typed', '')).toBe('typed');
+      expect(afterSent('', '')).toBe('');
     });
 
     it('drops the draft when the agent is removed', () => {

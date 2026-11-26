@@ -487,8 +487,8 @@ describe('Unsaved edits survive leaving the screen', () => {
     fireEvent.click(within(viewer).getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(within(viewer).getByText(/Doc · oide · v2/)).toBeTruthy());
     expect(calls('artifacts.save')).toEqual([{ id: 'a-doc', content: '# Retry\n\nhalf-written', note: 'Edited by you', baseVersion: 1 }]);
-    expect(draftsOf()['a-doc']).toBeUndefined();
-    expect(within(viewer).queryByText('Unsaved changes')).toBeNull();
+    await waitFor(() => expect(draftsOf()['a-doc']).toBeUndefined());
+    await waitFor(() => expect(within(viewer).queryByText('Unsaved changes')).toBeNull());
   });
 
   it('marks the artifact in the grid when the route points at another one (no auto-open)', async () => {
@@ -584,6 +584,46 @@ describe('Unsaved edits survive leaving the screen', () => {
     await screen.findByRole('button', { name: /Docs site/ });
     await waitFor(() => expect(draftsOf()['a-site']).toBeUndefined());
     expect(viewerOpen()).toBeNull();
+    expect(useUi.getState().toasts.map((t) => t.message)).toContain('Docs site now opens on another page, so your unsaved edits to the old one were discarded.');
+    expect(calls('artifacts.writeFiles')).toEqual([]);
+  });
+
+  it('does not remember an artifact whose Viewer was never shown when the route moves while one is open', async () => {
+    // a-doc has a kept draft (Unsaved badge); the user then opens another artifact.
+    await typeAndLeave('draft text');
+    useRouter.setState({ route: { screen: 'artifacts', params: { artifactId: 'a-board' } }, back: [], forward: [] });
+    render(<ArtifactsScreen />);
+    const board = await gridCard(/Session lifecycle/);
+    fireEvent.click(board);
+    fireEvent.doubleClick(board);
+    await screen.findByRole('region', { name: /\(open\)/ });
+    // A toast action or Ctrl+K moves the route to a-doc: the Viewer closes, its editor was never shown.
+    act(() => useRouter.getState().replace('artifacts', { artifactId: 'a-doc' }));
+    await waitFor(() => expect(viewerOpen()).toBeNull());
+    expect(useArtifactDrafts.getState().lastOpenId).toBeNull();
+    // Back by the rail later: the grid, not a-doc's editor.
+    cleanup();
+    viaRail();
+    render(<ArtifactsScreen />);
+    expect(within(await gridCard(/Webhook retry design/)).getByText('Unsaved')).toBeTruthy();
+    expect(viewerOpen()).toBeNull();
+  });
+
+  it('tells the user when a kept draft is dropped on reopening from the card because the page changed meanwhile', async () => {
+    const viewer = await openArtifact(/Docs site/);
+    fireEvent.change(await within(viewer).findByLabelText('Source of Docs site'), { target: { value: '<h1>Home mine</h1>' } });
+    fireEvent.click(within(viewer).getByRole('button', { name: 'Artifacts' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Discard your changes?' })).getByRole('button', { name: 'Keep as draft' }));
+    await waitFor(() => expect(viewerOpen()).toBeNull());
+    // While the grid is shown, an agent makes about.html the page.
+    const a = arts['a-site']!;
+    const v = writeSet(a, { ...a.files![a.meta.version]! }, 'about.html', 'agent:ag-fix');
+    emit('artifacts.changed', { id: 'a-site', change: 'saved', version: v, author: 'agent:ag-fix' });
+    const card = await gridCard(/Docs site/);
+    fireEvent.click(card);
+    fireEvent.doubleClick(card);
+    await screen.findByRole('region', { name: /\(open\)/ });
+    await waitFor(() => expect(draftsOf()['a-site']).toBeUndefined());
     expect(useUi.getState().toasts.map((t) => t.message)).toContain('Docs site now opens on another page, so your unsaved edits to the old one were discarded.');
     expect(calls('artifacts.writeFiles')).toEqual([]);
   });

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { MergePrediction } from '@oide/protocol';
 import { useAgents } from '../../stores/agents';
@@ -33,19 +33,34 @@ const prediction = (p: Partial<MergePrediction>): MergePrediction => ({
 });
 
 async function openDialog(agentId: string) {
-  const { invoke } = await setupMockApp({ screen: 'review', params: { agentId } });
+  const { invoke, real } = await setupMockApp({ screen: 'review', params: { agentId } });
   render(<ReviewScreen />);
   fireEvent.click(await screen.findByRole('button', { name: /Merge worktree into .* locally/ }));
-  return { invoke, dialog: await screen.findByRole('dialog') };
+  return { invoke, real, dialog: await screen.findByRole('dialog') };
 }
 
 describe('merge dialog', () => {
-  it('a successful local merge leaves the review for Source control (the agent is archived by then)', async () => {
-    const { dialog, invoke } = await openDialog('a-webhook');
+  it('a successful local merge leaves the review for Source control once main archived the agent', async () => {
+    const { dialog, invoke, real } = await openDialog('a-webhook');
+    // Main archives a fully merged agent before it answers (the agents.archived event removes it).
+    invoke.mockImplementation(async (command, input) => {
+      const res = await real(command, input as never);
+      if (command === 'git.mergeLocal') act(() => useAgents.getState().remove('a-webhook'));
+      return res;
+    });
     await waitFor(() => expect(dialog.textContent).toMatch(/merges cleanly/));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Merge' }));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('git.mergeLocal', { agentId: 'a-webhook' }));
     await waitFor(() => expect(useRouter.getState().route.screen).toBe('source-control'));
+  });
+
+  it('stays on the review when the merge left the agent live (not fully merged)', async () => {
+    const { dialog, invoke } = await openDialog('a-webhook');
+    await waitFor(() => expect(dialog.textContent).toMatch(/merges cleanly/));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Merge' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('git.mergeLocal', { agentId: 'a-webhook' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(useRouter.getState().route).toMatchObject({ screen: 'review', params: { agentId: 'a-webhook' } });
   });
 
   it('predicted clean: says so with the target commit; Merge is the action', async () => {

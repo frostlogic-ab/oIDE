@@ -31,6 +31,13 @@ export interface ComposerProps {
  * Attach file; they show as chips and go with the next message. Attach artifact picks from
  * `artifacts.list` and sends an artifact UserMessage.
  */
+/** What is left of the composer text once `sent` went out: text typed after it, else what is there. */
+export function afterSent(current: string, sent: string): string {
+  if (current === sent) return '';
+  if (sent !== '' && current.startsWith(sent)) return current.slice(sent.length).replace(/^\s+/, '');
+  return current;
+}
+
 export function Composer({ agentId, projectId, placeholder, commands, subagentName, disabledReason, onCompact, onCycleMode }: ComposerProps) {
   // The text belongs to one agent. Switching agents swaps in that agent's saved draft during render
   // (no flash of the previous agent's text); every edit is mirrored into the draft store.
@@ -99,11 +106,14 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
     setSending(true);
     try {
       await oide.invoke('agents.send', { agentId, message: intent.message });
-      // Only the draft that was sent goes; text typed while it was in flight stays. If the user has
-      // switched agents meanwhile, the visible composer belongs to someone else: leave it alone.
-      if (getDraft(agentId) === text) clearDraft(agentId);
+      // The sent text goes; anything typed after it while the send was in flight stays (without the
+      // sent part, so Enter does not send it again). If the user has switched agents meanwhile, the
+      // visible composer belongs to someone else: only that agent's stored draft changes.
+      const rest = afterSent(getDraft(agentId), text);
+      if (rest === '') clearDraft(agentId);
+      else setDraft(agentId, rest);
       if (agentRef.current === agentId) {
-        if (getDraft(agentId) === '') setDraftState({ agentId, text: '' });
+        setDraftState({ agentId, text: rest });
         setArtifact(null);
         atts.clear();
       }

@@ -81,7 +81,9 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
 - Merge locally: confirm dialog → `git.mergeLocal`. The dialog predicts first (see
   [Merge conflicts](#merge-conflicts)); main is never left mid-merge. After a successful merge
   (toast "Merged X into main") Review goes to Source control, but only while the route is still
-  this agent's Review. Main archives the merged agent, so staying would show an empty screen.
+  this agent's Review and main has archived the agent (it does when the branch is fully merged).
+  A merge that left the agent live keeps Review open; if the archive event lands after the reply,
+  Review shows the agent as merged and archived (below).
 - An agent that is no longer live (merged, discarded or archived, including a PR the watcher
   archived as merged) is looked up in the archive as Focus does (`useArchive` `byId`, then
   `fetchOne`; a spinner while it loads). Review then says "<title> was merged and archived" (or
@@ -168,7 +170,7 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
 `Review.test.tsx`: hunk numbering, reverse-apply, rendered numbers and colours, click-to-comment,
 comment drafts (kept across lines, cleared by Cancel / Esc / add), an archived agent's "was merged
 and archived" state with Open in Focus versus "gone" for an unknown one; `MergeDialog.test.tsx`: a
-successful merge goes to Source control,
+successful merge goes to Source control once the agent is archived and stays when it is still live,
 `review.addComment` arguments (with `side`), removed-line threads, Send feedback, Viewed toggle.
 
 ## Comment side
