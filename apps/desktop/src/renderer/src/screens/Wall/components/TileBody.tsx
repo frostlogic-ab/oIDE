@@ -11,7 +11,7 @@ import { freshnessText, useMergePrediction } from '../../../stores/mergePredicti
 import { useSetting } from '../../../stores/settings';
 import { AttachFileButton, AttachmentTray, useAttachments } from '../../../components/Attachments';
 import { PrLink } from '../../../components/PrLink';
-import { answerPermission, openPullRequest, resumeAgent, sendReply, type PermissionChoice } from '../actions';
+import { answerPermission, openPullRequest, pushToPullRequest, resumeAgent, sendReply, type PermissionChoice } from '../actions';
 import { canArchive, interruptionText, parseActivity, permissionView, tileBodyKind } from '../logic';
 
 /**
@@ -230,6 +230,7 @@ export function TileFooter({ agent, projectName, focused }: { agent: AgentSummar
             Review diff
           </LinkButton>
           {agent.pr ? <PrLink pr={agent.pr} /> : <OpenPrButton agent={agent} />}
+          {agent.pr && (agent.pr.state === 'open' || agent.pr.state === 'draft') && <PushToPrButton agent={agent} number={agent.pr.number} />}
           <div className="flex-1" />
           <ArchiveButton agent={agent} />
         </div>
@@ -351,6 +352,27 @@ function OpenPrButton({ agent }: { agent: AgentSummary }) {
       }}
     >
       Open PR
+    </Button>
+  );
+}
+
+/** Follow-up work after the PR was opened goes up to that PR (main commits leftover files first). */
+function PushToPrButton({ agent, number }: { agent: AgentSummary; number: number }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <Button
+      variant="review-outline"
+      icon="arrow-up"
+      disabled={busy}
+      aria-label={`Push new changes to pull request #${number}`}
+      title={`Push new changes to pull request #${number}`}
+      onClick={async () => {
+        setBusy(true);
+        await pushToPullRequest(agent.id);
+        setBusy(false);
+      }}
+    >
+      {busy ? 'Pushing…' : 'Push'}
     </Button>
   );
 }

@@ -62,6 +62,24 @@ export async function openPullRequest(agentId: string): Promise<boolean> {
   return ok;
 }
 
+/**
+ * Push to PR: follow-up work after the PR was opened (new commits, and files the agent did not
+ * commit, which main commits on its behalf) goes up to the same pull request.
+ */
+export async function pushToPullRequest(agentId: string): Promise<boolean> {
+  let result: { url: string; number: number; committed: boolean; pushed: number } | undefined;
+  const ok = await run(async () => {
+    result = await oide.invoke('git.pushToPr', { agentId });
+  }, 'Could not push to the pull request');
+  if (ok && result) {
+    const r = result;
+    const view = { label: 'View', run: () => void oide.invoke('shell.openExternal', { url: r.url }).catch(() => {}) };
+    if (r.pushed === 0) toast(`Pull request #${r.number} is already up to date.`, 'info', { agentId });
+    else toast(`Pushed ${r.pushed} ${r.pushed === 1 ? 'commit' : 'commits'} to pull request #${r.number}${r.committed ? ' (uncommitted files committed first)' : ''}.`, 'success', { agentId, action: view });
+  }
+  return ok;
+}
+
 // ---------- shared clock (one interval for every tile) ----------
 
 const subscribers = new Set<() => void>();

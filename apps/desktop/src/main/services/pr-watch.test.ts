@@ -196,7 +196,7 @@ describe('GitService.openPr is idempotent', () => {
       store: {} as never,
       settings: { get: () => ({ agents: { fetchIntervalMinutes: 10, cleanup: 'never' } }) } as never,
       worktrees: {} as never,
-      projects: { get: () => ({ trusted: true }) } as never,
+      projects: { get: () => ({ trusted: true }), require: () => ({ id: 'p1', name: 'P', path: '/not-the-worktree', trusted: true }) } as never,
       agents: { list: () => [a], get: () => a, setDiff: () => {}, setPr: (_id, pr) => void setPr.push(pr) },
       archiveMerged: async () => {},
       removeWorktreeOf: async () => false,
@@ -271,5 +271,43 @@ describe('GitService.openPr is idempotent', () => {
     expect(await svc2.openPr('a')).toMatchObject({ draft: 'agent' });
     expect(gh2.drafts[0]).toEqual(pr);
     await svc2.dispose();
+  });
+
+  it('Push to PR commits follow-up files, pushes them to the open PR and never opens another', async () => {
+    const repo = repoWithRemote();
+    const git = (...a: string[]) => execFileSync('git', a, { cwd: repo, encoding: 'utf8' }).trim();
+    const gh = new FakeGh();
+    const a = agent('a', { worktreePath: repo, baseRef: 'main', review: { agentId: 'a', summary: 'Fix the follow-up review comments', checks: [], submittedAt: 1 } });
+    const { svc } = service(a, gh);
+    // No PR yet: refused, so Review offers Open pull request instead.
+    await expect(svc.pushToPr('a')).rejects.toThrow(/no open pull request/);
+    gh.prs.set('oide/a', { state: 'open', number: 12, url: URL1 });
+    await svc.openPr('a', 'T', 'B');
+    expect(git('rev-parse', 'HEAD')).toBe(git('rev-parse', 'origin/oide/a'));
+
+    // Follow-up work after the PR: one commit by the agent, one new file it did not commit.
+    writeFileSync(join(repo, 'g.txt'), 'g\n');
+    git('add', '-A');
+    git('commit', '-q', '-m', 'agent follow-up');
+    writeFileSync(join(repo, 'new-file.txt'), 'new\n');
+    expect(await svc.pushToPr('a')).toEqual({ url: URL1, number: 12, state: 'open', committed: true, pushed: 2 });
+    expect(git('status', '--porcelain')).toBe('');
+    expect(git('rev-parse', 'HEAD')).toBe(git('rev-parse', 'origin/oide/a'));
+    expect(git('log', '-1', '--format=%s%n%b')).toMatch(/^Fix the follow-up review comments\n[\s\S]*Oide-Agent: Agent a/);
+    expect(gh.created).toEqual([]);
+
+    // Nothing new: still fine, nothing pushed.
+    expect(await svc.pushToPr('a')).toMatchObject({ committed: false, pushed: 0 });
+    await svc.dispose();
+  });
+
+  it('Push to PR waits for a working agent before committing its files', async () => {
+    const repo = repoWithRemote();
+    const gh = new FakeGh();
+    gh.prs.set('oide/a', { state: 'open', number: 12, url: URL1 });
+    const { svc } = service(agent('a', { status: 'running', worktreePath: repo, baseRef: 'main' }), gh);
+    writeFileSync(join(repo, 'half-written.txt'), 'h\n');
+    await expect(svc.pushToPr('a')).rejects.toThrow(/still working/);
+    await svc.dispose();
   });
 });

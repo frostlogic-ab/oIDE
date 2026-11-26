@@ -72,7 +72,7 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   scope) when more than one project is in scope; "Files to include and exclude" (comma-separated
   globs: a name without `/` matches at any depth, `src/**` is relative to the root, a folder covers its
   contents, `{a,b}` and `[...]` work). Invalid regexes are reported inline and not searched.
-- Searches as you type (250 ms) and on Enter; Esc cancels a running search. `files.searchContent`
+- Searches as you type (250 ms) and on Enter (which drops the pending debounce, so a search never runs twice); Esc cancels a running search. `files.searchContent`
   returns at once; batches arrive as `files.searchResults { searchId }` (25 files or 80 ms), the last
   with `done`, `truncated` and stats. The status line reads "Searching…" with Cancel, "N results in
   M files", "No results." or the first-2000 note.
