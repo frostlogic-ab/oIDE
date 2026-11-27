@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AgentStatus, Id, MessageAttachments, PermissionRequest, ReviewSubmission, SubagentInfo, TodoItem, TokenUsage } from './agent.js';
+import { AgentStatus, Effort, Id, MessageAttachments, PermissionRequest, ReviewSubmission, SubagentInfo, TodoItem, TokenUsage } from './agent.js';
 
 /**
  * Normalized agent events. `packages/agent-core` parses raw CLI stream-json into these.
@@ -98,6 +98,8 @@ export const AgentEvent = z.discriminatedUnion('type', [
   }),
   /** Permission mode changed (from a set_permission_mode control request or plan-mode exit). */
   z.object({ ...base, type: z.literal('mode-changed'), mode: z.string() }),
+  /** The user picked another model or effort (`agents.setModel`); the next turn uses it. */
+  z.object({ ...base, type: z.literal('model-changed'), model: z.string().min(1), effort: Effort.optional() }),
   /** `/compact` lifecycle: `started` on status=compacting, `done` on compact_boundary. */
   z.object({
     ...base,

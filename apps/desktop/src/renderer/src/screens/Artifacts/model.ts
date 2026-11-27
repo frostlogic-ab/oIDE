@@ -366,3 +366,106 @@ export function fileTree(files: readonly ArtifactFile[]): FileRow[] {
   walk(root, '', 0);
   return rows;
 }
+
+/* ------------------------------------------------------------------ artifact agent */
+
+/**
+ * The artifact's agent (Artifacts › open view › Agent panel): a live (not archived) agent whose
+ * summary names this artifact; with several, the newest.
+ */
+export function artifactAgentOf(agents: Iterable<AgentSummary>, artifactId: string): AgentSummary | undefined {
+  let best: AgentSummary | undefined;
+  for (const a of agents) {
+    if (a.artifactId !== artifactId || a.archived) continue;
+    if (!best || a.createdAt > best.createdAt) best = a;
+  }
+  return best;
+}
+
+/** Statuses in which the agent is working (or about to): New conversation waits, Stop is offered. */
+const WORKING: ReadonlySet<AgentStatus> = new Set(['queued', 'starting', 'running', 'needs-permission']);
+export function isAgentWorking(status: AgentStatus): boolean {
+  return WORKING.has(status);
+}
+
+/* ------------------------------------------------------------------ point and comment */
+
+/** One comment the user pinned on the preview, waiting to be sent to the artifact agent. */
+export interface FeedbackPin {
+  id: string;
+  /** The marker's number in the preview (stable while the pin lives). */
+  n: number;
+  /** Design: the page inside the artifact (`index.html`). */
+  page?: string;
+  /** Design: the element's CSS selector (from the frame's picker; untrusted text). */
+  selector?: string;
+  /** Design: the element's tag name. */
+  tag?: string;
+  /** Doc: the nearest heading above the block (or the block itself, when it is a heading). */
+  heading?: string;
+  /** Doc: the block's kind ("paragraph", "list item", "heading"…) and its index among the blocks. */
+  block?: string;
+  blockIndex?: number;
+  /** The start of the element's text, whitespace collapsed. */
+  text: string;
+  comment: string;
+  /** Sent with the next "Send N to agent". */
+  checked: boolean;
+}
+
+/** Collapse whitespace and cut to `max` characters (with an ellipsis). Text only, never HTML. */
+export function snippet(text: string, max = 120): string {
+  const t = text.replace(/\s+/g, ' ').trim();
+  return t.length > max ? `${t.slice(0, max - 1).trimEnd()}…` : t;
+}
+
+/** A quoted snippet that cannot break out of its quotes. */
+function quoted(text: string, max = 120): string {
+  return `"${snippet(text, max).replace(/"/g, "'")}"`;
+}
+
+/** A selector inside a code span (backticks in it would end the span early). */
+function code(text: string): string {
+  return `\`${text.replace(/`/g, "'").slice(0, 500)}\``;
+}
+
+/** Where a pin points, for the tray and the message: "index.html › `main > h2`", 'Under "Retry" › paragraph'. */
+export function pinWhere(pin: Pick<FeedbackPin, 'page' | 'selector' | 'tag' | 'heading' | 'block'>): string {
+  if (pin.selector !== undefined || pin.page !== undefined) {
+    const el = pin.selector ? code(pin.selector) : pin.tag ? `<${pin.tag}>` : 'the page';
+    return pin.page ? `${pin.page} › ${el}` : el;
+  }
+  const block = pin.block ?? 'block';
+  if (block === 'heading' && pin.heading) return `Heading ${quoted(pin.heading, 80)}`;
+  return pin.heading ? `Under ${quoted(pin.heading, 80)} › ${block}` : `Before the first heading › ${block}`;
+}
+
+/**
+ * The one text message "Send N to agent" sends: the checked pins in marker order, numbered 1..N,
+ * each with where it points, the quoted text and the user's comment; then what the user typed in
+ * the composer, if anything. Plain text: comments and snippets are the user's or the page's words,
+ * sent as they are (no HTML, no markup beyond the selector's code span).
+ */
+export function buildFeedbackMessage(input: { title: string; version: number; pins: readonly FeedbackPin[]; text?: string }): string {
+  const pins = input.pins.filter((p) => p.checked && p.comment.trim()).sort((a, b) => a.n - b.n);
+  const extra = input.text?.trim() ?? '';
+  if (!pins.length) return extra;
+  const lines = pins.map((p, i) => {
+    const said = p.comment.trim().replace(/\s*\n\s*/g, ' ');
+    const text = p.text.trim() ? ` (${quoted(p.text)})` : '';
+    return `${i + 1}. ${pinWhere(p)}${text}: ${said}`;
+  });
+  return [
+    `Feedback on the preview of ${input.title} (v${input.version}):`,
+    '',
+    ...lines,
+    ...(extra ? ['', extra] : []),
+    '',
+    pins.length === 1 ? 'Change the artifact to address this point.' : 'Change the artifact to address each point.',
+  ].join('\n');
+}
+
+/** The next marker number for an artifact's pins. */
+export function nextPinNumber(pins: readonly FeedbackPin[]): number {
+  return pins.reduce((m, p) => Math.max(m, p.n), 0) + 1;
+}

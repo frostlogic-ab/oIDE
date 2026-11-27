@@ -49,6 +49,11 @@ export function registerArtifactHandlers(router: IpcRouter, s: Services, ctx: Ma
     // A running retrieval stops first, so its agent does not hand files to an artifact that is gone.
     if (metaOf(id).retrieval?.status === 'retrieving') await s.retrieval.cancel(id).catch(() => undefined);
     if (!(await wrap(a.delete(id)))) throw new IpcError(`Unknown artifact ${id}`, 'not_found');
+    // Its artifact agent has nothing left to edit: stop it and archive it with its folder.
+    for (const agent of s.agents.list().filter((x) => x.artifactId === id)) {
+      await s.agents.supervisor.stop(agent.id).catch(() => undefined);
+      await s.agents.archiveAgent(agent.id, { reason: 'archived-by-user', deleteWorktree: true }).catch((err) => ctx.log.warn('could not archive the artifact agent', err));
+    }
     return OK;
   });
   router.register('artifacts.restore', ({ id, version, baseVersion }) => wrap(a.restore(id, version, { author: 'user', ...(baseVersion !== undefined ? { baseVersion } : {}) })));
@@ -116,6 +121,10 @@ export function registerArtifactHandlers(router: IpcRouter, s: Services, ctx: Ma
     return wrap(s.retrieval.start(id, trigger, where));
   });
   router.register('artifacts.cancelRetrieval', ({ id }) => wrap(s.retrieval.cancel(id)));
+  // The artifact agent: edits this artifact only, in an empty folder of its own (services/artifact-agent.ts).
+  router.register('artifacts.startAgent', ({ id, projectId, text, attachments, mode, model }) =>
+    s.artifactAgents.start({ id, text, ...(projectId ? { projectId } : {}), ...(attachments?.length ? { attachments } : {}), ...(mode ? { mode } : {}), ...(model ? { model } : {}) }),
+  );
   router.register('artifacts.files', ({ id, version }) => wrap(a.files(id, version)));
   router.register('artifacts.readFile', ({ id, path, version }) => wrap(a.readFile(id, path, version)));
   router.register('artifacts.writeFiles', ({ id, files, deletes, entry, note, baseVersion }) =>

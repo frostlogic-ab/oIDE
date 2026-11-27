@@ -9,6 +9,7 @@
  * - a perf summary every 30 minutes: sampled IPC round trips (p50 / p95), long tasks, JS heap bucket,
  *   and Wall render time with the number of agents on it;
  * - built-in command bar commands (never extension commands);
+ * - messages to an artifact agent (kind, number of preview comments, whether text was typed);
  * - uncaught errors and unhandled rejections (main scrubs them before anything leaves).
  *   Screen error boundaries already report through `app.reportError`.
  */
@@ -17,6 +18,7 @@ import {
   countBucket,
   memoryBucket,
   TELEMETRY_SCREENS,
+  type ArtifactKind,
   type TelemetryScreen,
   type TelemetryTrackInput,
 } from '@oide/protocol';
@@ -90,6 +92,15 @@ export function takePerfSummary(windowMin: number): Record<string, number | stri
 export function trackCommand(id: string, source: 'core' | 'extension' | undefined): void {
   if (source !== 'core' || !usageOn() || !(BUILTIN_COMMAND_IDS as readonly string[]).includes(id)) return;
   send({ type: 'event', name: 'command_palette_used', props: { command: id } });
+}
+
+/**
+ * A message to an artifact agent (Artifacts › open view): the artifact's kind, how many preview
+ * comments went with it and whether the user typed text too. Never the text or the comments.
+ */
+export function trackArtifactAgentMessage(kind: ArtifactKind, feedback: number, hasText: boolean): void {
+  if (!usageOn()) return;
+  send({ type: 'event', name: 'artifact_agent_message', props: { kind, feedback: Math.max(0, Math.min(10_000, Math.round(feedback))), has_text: hasText } });
 }
 
 // ----------------------------------------------------------------------------- vitals

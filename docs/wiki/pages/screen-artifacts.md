@@ -75,9 +75,16 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
     needs a project; or "Personal"). Default: the repo for a blank artifact with a project, Personal
     for a link or files, until the user picks.
 - **Open (Viewer.tsx)**: back button, title, "Kind · project · vN" (plus "· 9 files" for several
-  files, "no files yet" at version 0), Unsaved changes badge, view tabs, Save, and a "More actions"
-  menu (Rename, Delete). Tabs: docs and designs Edit / Preview / Compare; whiteboards Board /
-  Compare. Unsaved entry edits are kept in `draftStore.ts` (a module-level zustand store keyed by
+  files, "no files yet" at version 0), Unsaved changes badge, Save, and a "More actions" menu
+  (Rename, Delete). Below it, left to right: the **Agent panel** (`AgentPanel.tsx`, below), the
+  Files panel when there are several files, and one content pane (a `<main>`). The pane's toolbar
+  has a **View** switch, the shared `SegmentedControl` (a radio group: roving tabindex, arrow keys,
+  Home / End): docs and designs **Preview | Code | Compare**, whiteboards **Board | Compare**; and,
+  on Preview of a doc or design, the **Comment** toggle (point and comment, below). Code is the
+  Monaco editor as before (Save, Ctrl/Cmd+S, dirty tracking, conflict banners); Preview renders a
+  doc's draft live and a design's saved version. A doc or design opens on the last choice of
+  Preview or Code (in memory, `feedbackStore.ts`, Preview at first), on Code when unsaved edits come
+  back, and on Preview for an extension artifact type (its own viewer). Unsaved entry edits are kept in `draftStore.ts` (a module-level zustand store keyed by
   artifact id: base version and content, baseline, the entry file, draft; in memory only), so leaving
   the screen from the rail, Ctrl+K or a toast does not lose them. The store also remembers which
   artifact's Viewer was open when the screen was left (`lastOpenId`, taken from the Viewer actually
@@ -101,23 +108,24 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
   only (`draftIdsKey`), not to the draft text, so typing does not re-render it. Unsaved edits to a
   non-entry file in the Files panel are not kept. Editors are lazy chunks:
 
-  | Kind | Edit | Preview |
+  | Kind | Code | Preview |
   | --- | --- | --- |
-  | Doc | Monaco (Markdown, word wrap) beside the rendered Markdown, live as you type | Rendered Markdown |
-  | Design | Monaco (HTML, or JavaScript when `meta.entry` is `App.jsx`; the entry's language otherwise) beside the sandboxed preview of the **saved** version, which reloads on save ("Showing v3. Save to refresh the preview.") | Sandboxed preview |
-  | Whiteboard | Embedded Excalidraw (`WhiteboardEditor.tsx`), dark theme on the oIDE tokens | (the board is the view) |
+  | Doc | Monaco (Markdown, word wrap) | Rendered Markdown of the draft, live as you type |
+  | Design | Monaco (HTML, or JavaScript when `meta.entry` is `App.jsx`; the entry's language otherwise) | Sandboxed preview of the **saved** version, which reloads on save ("Showing v3. Save to refresh the preview.") |
+  | Whiteboard | (Board) Embedded Excalidraw (`WhiteboardEditor.tsx`), dark theme on the oIDE tokens | (the board is the view) |
 
   Monaco reuses the Files screen setup (`screens/Files/monaco/setup.ts`: local package, `oide-dark`
   theme, inlined editor worker) through a dynamic import, so the Artifacts chunk stays small.
   Ctrl/Cmd+S saves in every editor. Plain keys typed in an editor stay there (`keepKeysInEditor`):
   Monaco types through an EditContext element and Excalidraw through its canvas, which the keymap
   does not see as editable, so J / K / N / Esc would otherwise also run app shortcuts.
-  With no files yet (version 0) the retrieval block stands in for the tabs, editors and Save.
+  With no files yet (version 0), and for a broken import, the retrieval block (or the fix panel)
+  stands in for the Agent panel, the View switch, the editors and Save.
 - **Files panel** (`FilesPanel.tsx`, open view, when `fileCount > 1`): a 232px `nav` "Files" left of
   the editors: a compact tree (folders first, then files, sorted; 12px indent per level; JetBrains
   Mono), the open file `aria-current`, the entry marked with an accent "Opens on" badge, size in the
   tooltip. Selecting the entry shows the tabs and editors above. Selecting another file replaces
-  them (the tabs hide):
+  them (the View switch hides):
   - a text file opens in Monaco (language by extension, `languageForPath`), with a design's
     preview beside it; Save writes it (below); switching away from unsaved edits asks "Discard your
     changes?";
@@ -133,6 +141,56 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
   failure, with the reason; not offered for an old chat link, which can't be retrieved), **Choose
   files…** and **Delete**. While the retrieval runs the retrieval block shows in its place. In the
   open view the first action has focus.
+- **Agent panel** (`AgentPanel.tsx`, open view, left of the content; a `ResizableAside`, panel
+  `artifacts.agent`: 400px default, 320 to 720, width saved in `settings.ui.panelWidths`). Heading
+  "Agent" and an icon button **Hide the agent panel** (chevron); hidden, it is a 40px strip with
+  **Show the agent panel**, the agent's status dot and the number of unsent comments (the choice is
+  kept in memory for every artifact). The artifact's agent is the newest live summary in the agents
+  store whose `artifactId` is this artifact (`artifactAgentOf` in `model.ts`; archived ones never).
+  - *No agent yet*: "Tell an agent what to change. It can edit, add and delete this artifact's
+    files; each change is a new version you can compare or restore." and a hint to use Comment;
+    **Permission mode**, **Model** and **Effort** selects (defaults as Spawn picks them: the
+    project's Spawn default mode from `settings.forProject`, else Settings' default mode, else Auto;
+    the lead of the project's or the default focus preset, family aliases resolved through Settings ›
+    Models › Model versions; a custom-model preset falls back to Opus); a composer ("What should
+    change?", Enter sends, Shift+Enter a new line, paste / drop / Attach file). Sending starts the
+    agent. `needs_project` shows "Run the agent under" (a project select) with Start and Cancel,
+    inline; `busy` reloads the agents list and toasts main's reason with "Your message is still
+    here."
+  - *With an agent*: status (dot and label), **Open in Focus** (icon button) and a "More agent
+    actions" menu with **New conversation** (archives the agent so the next message starts a new
+    one; disabled while it works). A settings row: the context ring button (Focus's
+    `ContextRingButton`, warn / danger from `agents.contextWarnAt` / `agents.contextSuggestCompactAt`;
+    opens Focus's `CompactDialog` → `agents.compact`), **Model** and **Effort** selects (the families
+    Spawn offers; efforts gated by the CLI's `effort` / `effort:<level>` features; "Model and effort
+    apply from the next message." as their description and tooltip, and a toast after the change;
+    an agent on a custom model shows its model name instead), **Permission mode** (Focus's
+    `modeChoices`; an artifact agent counts as "in a worktree", so Bypass is offered when Settings
+    allow it), and **Stop** while it works. Then Focus's own pieces, unchanged: `Transcript`
+    (`useTranscriptHistory` / `useFocusHistory`, `buildRows`), `Streaming`, `PermissionPrompt`
+    pinned above the composer, and `Composer` (its `compact` prop shows Attach artifact as an icon;
+    `/compact` asks first; Shift+Tab cycles the mode). The panel is a size container, so the
+    permission prompt stacks its buttons as it does in a narrow Focus.
+- **Point and comment** (`Comments.tsx`, Preview of a doc or design): **Comment** (speech-bubble
+  icon and text, `aria-pressed`) on the pane's toolbar. While on, the preview has an accent border,
+  a line says what to do, and Esc (or Esc inside the frame) turns it off instead of closing the
+  Viewer. A pick opens a small form at that point ("What should change here?", where it points and
+  the quoted text above it; **Add** or Ctrl/Cmd+Enter, **Cancel** or Esc). Added comments are
+  numbered **pins**:
+  - *Design*: the frame draws the numbered markers (the screen sends it the pins of the page it is
+    on). Disabled, with the reason as its description, when main does not serve the preview (the
+    `srcdoc` fallback runs no scripts: past versions, the dev mock without a URL) or for a React
+    notice: "Comments need the live preview, which the desktop app serves for the saved version."
+  - *Doc*: a click on a heading, paragraph, list item, code block, quote, table or image picks it
+    (links do not open while commenting); "where" is the nearest heading above ('Under "Limits" ›
+    list item'). Picked blocks get an accent outline and their number in the margin
+    (`data-oide-pin`, drawn by CSS).
+  - **Feedback** tray (Agent panel, above the composer, only when there are pins): "N comments",
+    then each pin: a checkbox (ticked by default, "Send comment N"), its number, where, the quoted
+    text, the comment, **Edit** (inline, Save / Cancel) and **Remove**. **Send N to agent** sends the
+    ticked ones with whatever is typed in the composer as one text message (`buildFeedbackMessage`);
+    with no agent yet it starts one with that text. Sent pins are removed; unsent ones stay while
+    oIDE runs (in memory, per artifact, `feedbackStore.ts`), also after closing the Viewer.
 - **Compare**: From / To selects (every version, plus "Your unsaved changes" when dirty) over a
   read-only Monaco diff (`VersionDiff.tsx`, same theme as the Review split view) with a "+N −M
   lines" count. Whiteboard JSON is pretty-printed first so the diff is per property.
@@ -160,6 +218,9 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
 | New artifact › A link | `artifacts.importLink({ url, title?, kind?, projectId, location })`. Main creates the artifact at version 0 with `retrieval.status: 'retrieving'` and starts an ordinary agent in the project (on the Wall, queued behind Max running); oIDE never downloads claude.ai content itself. The dialog closes, the new artifact is selected and shows its retrieving state, and a toast says "Retrieving <title> with an agent. You can follow it on the Wall." |
 | New artifact › Files | `dialog.pickArtifactFiles({ folder: false })` (several files, any type) or `({ folder: true })` (one folder); main registers the picks. Dropped files go through the preload drop bridge (`window.oide.attachDropped`, `drop.ts`, at most 50): non-image files come back by path (main registers them as picked); images come back inline with no path, so they are added right after the import with `artifacts.writeFiles({ id, files: [{ path: name, encoding: 'base64', data }], baseVersion, note: 'Added the dropped images' })`; a dropped folder is refused ("Use Choose a folder… instead"). Then `artifacts.importFiles({ filePaths, folderPath?, entry? (Opens on, when there are several pages), url? (Came from), title?, kind?, projectId?, location })`. Outside the desktop app (dev mock) a drop says "Dropping files needs the desktop app. Use Choose files… instead." |
 | New artifact › Blank | `artifacts.create({ title, kind, projectId?, location })` |
+| Agent panel | The agent from the agents store (`summary.artifactId`). First message → `artifacts.startAgent({ id, text, mode, model: { model, effort? }, projectId? (after needs_project), attachments? })` → the `AgentSummary` (applied to the store at once; `agents.summary` follows). Main starts it with `workIn: 'artifact-folder'`, title "Edit <title>", queued behind Max running; it edits only this artifact through oIDE's MCP artifact tools, so each change is a new version that reaches the Viewer as an ordinary agent write (`artifacts.changed`). Errors: `needs_project` (inline project select), `busy` (it already has a live agent, or a retrieval is writing it), `not_found`. Later messages: Focus's `Composer` → `agents.send`. Transcript: `agents.events` (500 newest, older on scroll) plus the live tail. Model / effort → `agents.setModel({ agentId, model, effort? })` (applies from the next message; main emits `model-changed`, so the summary's `model` / `effort` update at once; `conflict` for a custom model). Mode → `agents.setMode`. Compact → `agents.compact`. Stop → `agents.stop`. New conversation → `agents.archive` (`archiveAgent`). Open in Focus → `navigate('focus', { agentId })` |
+| Point and comment (design) | Every HTML page main serves loads `/__oide/picker.js`. Screen → frame, `contentWindow.postMessage(msg, '*')` (the frame is an opaque origin): `{ type: 'oide-pick-mode', on }` and `{ type: 'oide-pins', pins: [{ n, selector }] }` (that page's pins, at most 100, selectors at most 500 characters). Frame → screen: `oide-picked` (selector, tag, text, page, rect, viewport), `oide-pick-cancel` (Esc), `oide-picker-ready` (each load; the screen sends mode and pins again). A message counts only when `event.source` is the preview frame's own window and it parses with `PreviewPickerMessage` (`@oide/protocol`); its text only fills the note the user writes and chooses to send |
+| Feedback message | `buildFeedbackMessage` (`model.ts`): "Feedback on the preview of <title> (v5):", a blank line, the ticked pins in marker order numbered 1..N ("1. index.html › \`main > h2\` ("Pricing that scales"): Make this heading smaller."; docs 'Under "Limits" › list item ("Five attempts"): Say three.'), the composer's text, then "Change the artifact to address each point." (one pin: "this point"). Plain text: comments and snippets are sent as written, quotes in snippets become apostrophes and backticks in selectors too. With an agent `agents.send({ kind: 'text' })` and the composer draft is cleared; without, `artifacts.startAgent` |
 
 The Project select is the shared project scope (`useScope`): choosing a project here also scopes the
 Wall, Files and Source control, and a scope chosen there filters this grid. Selection lives in the
@@ -174,9 +235,14 @@ route (`artifacts.artifactId`, via `replace`).
 `cancelRetrieval`, `files`, `readFile`, `writeFiles`, `importFiles`, `dialog.pickArtifactFiles`,
 `retrieval` / `fileCount` on `ArtifactMeta` (version 0 allowed) and change `retrieval` on
 `artifacts.changed`; the screen uses all of them and needed no further contract change.
-`artifacts.import` and `dialog.pickFile` are no longer used by this screen. No renderer telemetry
-events: retrieval is observed in main ([telemetry.md](telemetry.md)); the "Fetch with an agent"
-event and its helper are gone.
+`artifacts.import` and `dialog.pickFile` are no longer used by this screen. The artifact agent
+added `artifacts.startAgent`, `agents.setModel` (and the `model-changed` event), `artifactId` and
+`effort` on `AgentSummary`, `workIn: 'artifact-folder'` and `PreviewPickerMessage` (main side and
+the picker script: [artifacts.md](artifacts.md)). Telemetry ([telemetry.md](telemetry.md)):
+retrieval and `artifact_agent_started` are observed in main; the renderer reports
+`artifact_agent_message` (`lib/telemetry.ts` `trackArtifactAgentMessage`) for each message to an
+artifact agent from this panel: `kind`, `feedback` (number of comments sent with it, 0 for a plain
+message) and `has_text` (whether the user typed text), never the text or the comments.
 
 ## Excalidraw, CSP and bundle
 
@@ -220,10 +286,30 @@ event and its helper are gone.
   claude.site links, which are not on the external-link allow-list).
 - Grid thumbnails stay stylised as drawn; the detail pane shows the real content.
 - The 190px doc preview fades its last line out (`.oide-md-fade`) instead of slicing it.
+- The design has no agent in the open view, no point and comment and no Preview | Code switch: the
+  Agent panel replaces the design's side-by-side editor and preview (the editor is now Code, in the
+  same pane as Preview), and Edit / Preview / Compare became a segmented View switch on the content
+  pane's toolbar instead of tabs in the header.
 
 ## Tests
 
-`Editors.test.tsx` "Unsaved edits survive leaving the screen": draft and badge back after a remount,
+`AgentPanel.test.tsx`: the View switch opens on Preview and moves to Code and back with the arrow
+keys and Home (and is remembered), hide / show the panel; starting the agent (intro, mode and model
+picked, `artifacts.startAgent` with text, mode and model, the panel switching to the agent,
+`artifact_agent_message` with `feedback: 0`), `needs_project` answered with "Run the agent under";
+with an agent: the transcript region and its `agents.events` page, Compact through the dialog,
+model and effort through `agents.setModel`, mode through `agents.setMode`, Bypass only when Settings
+allow it, no model picker for a custom model, Stop; point and comment: a pick from the frame's own
+window opens the form while picks from another source or malformed messages are ignored, two pins
+with one unticked send a text with only the ticked one (exact text), the frame gets the pick mode
+and the markers and gets them again on `oide-picker-ready`, the unsent pin stays, comments start an
+agent when there is none (with the typed text), Esc in the frame turns Comment off, a doc block
+picked by click with its heading, marked and removed, Comment disabled with a reason on the
+`srcdoc` fallback. `model.test.ts` also covers `artifactAgentOf`, `isAgentWorking`, `pinWhere`,
+`buildFeedbackMessage` (order, ticked only, quotes, typed text, text-only) and `nextPinNumber`;
+`lib/mock/library.test.ts` the mock artifact agent (writes a version, `busy`, a new one after
+archiving, `needs_project`). `Editors.test.tsx` runs with Code remembered and switches to Preview to
+check the live doc render. `Editors.test.tsx` "Unsaved edits survive leaving the screen": draft and badge back after a remount,
 reopening from the rail (no artifact in the route), Keep as draft (grid kept, badge, no auto-reopen,
 the card reopens it), no Keep as draft without edits, a failed `artifacts.list` keeps the drafts
 and resumes on the next good load, drafts of deleted artifacts are pruned, a changed entry file
@@ -293,3 +379,13 @@ packaged-CSP build and save v2 with bundled fonts and no CSP violations.
   claude.ai/design links work when the CLI has those connectors.
 - A replacement made from a broken import's files gets a new id, so agents that knew the old id
   must be pointed at the new one.
+- Agent panel: not offered at version 0 or on a broken import (the retrieval block and the fix
+  panel own that space), so an agent cannot create the first files of an empty artifact from here.
+  Its rows are Focus's, at Focus's sizes; subagent cards open Focus. A model change applies from the
+  next message, not to a turn already running. The transcript store is Focus's single-agent store,
+  so the panel and Focus never show two agents at once (they are never on screen together).
+- Point and comment: picking in a doc is by pointer only (no keyboard way to pick a block; typing in
+  the composer is the alternative). Doc markers follow the block's index, so an edit that adds or
+  removes blocks above a pin moves its marker. Design pins point at the saved version's elements
+  by selector; after the agent changes the page a selector may match another element or none. Pins
+  live in memory only (lost when oIDE quits). Whiteboards have no point and comment.

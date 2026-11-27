@@ -59,13 +59,18 @@ test('edit a doc artifact in Monaco and save it as version 2', async () => {
   await page.getByRole('button', { name: 'Open', exact: true }).click();
   const viewer = page.getByRole('region', { name: 'E2E retry notes (open)' });
   await expect(viewer.getByText('Doc · Personal · v1')).toBeVisible();
+  // The agent lives on the left; the content pane switches between Preview and Code.
+  await expect(viewer.getByRole('complementary', { name: /agent/i }).first()).toBeVisible();
+  await page.screenshot({ path: join(shots, 'artifact-agent-panel.png') });
+  await viewer.getByRole('radio', { name: 'Code' }).click();
   const editor = viewer.locator('.monaco-editor .view-lines');
   await expect(editor).toBeVisible();
   await editor.click();
   await page.keyboard.press(DOC_END);
   await page.keyboard.type('# Retry policy\n\nBack off with **jitter**.\n');
   await expect(viewer.getByText('Unsaved changes')).toBeVisible();
-  // Live preview beside the editor.
+  // The preview shows the unsaved draft.
+  await viewer.getByRole('radio', { name: 'Preview' }).click();
   await expect(
     viewer.getByRole('region', { name: 'Preview of E2E retry notes' }).locator('strong'),
   ).toHaveText('jitter');
@@ -220,4 +225,29 @@ test('a pasted claude.ai React design renders offline in the preview frame', asy
   await page.screenshot({ path: join(shots, 'artifact-react-preview.png') });
   await page.evaluate(() => document.getElementById('e2e-react-preview')?.remove());
   expect(violations).toEqual([]);
+});
+
+test('point and comment: pick an element in the design preview and queue the comment for the agent', async () => {
+  const { page } = ctx;
+  await openArtifacts(page);
+  await page.evaluate(async () => {
+    const oide = (window as unknown as { oide: { invoke: Invoke } }).oide;
+    await oide.invoke('artifacts.create', { title: 'E2E landing', kind: 'design', location: 'app-data', content: '<!doctype html><html><body><main><h1 class="hero">Pricing that scales</h1><p>Plans</p></main></body></html>' });
+  });
+  await page.getByRole('button', { name: /E2E landing/ }).first().dblclick();
+  const viewer = page.getByRole('region', { name: 'E2E landing (open)' });
+  await expect(viewer.getByRole('radio', { name: 'Preview' })).toHaveAttribute('aria-checked', 'true');
+  const frame = viewer.frameLocator('iframe');
+  await expect(frame.getByRole('heading', { name: 'Pricing that scales' })).toBeVisible({ timeout: 20_000 });
+  await viewer.getByRole('button', { name: 'Comment' }).click();
+  await expect(viewer.getByRole('button', { name: 'Comment' })).toHaveAttribute('aria-pressed', 'true');
+  // The served picker (oide-artifact://…/__oide/picker.js) reports the clicked element to the screen.
+  await frame.getByRole('heading', { name: 'Pricing that scales' }).click();
+  const box = page.getByLabel('What should change here?');
+  await expect(box).toBeVisible();
+  await expect(page.getByText('Pricing that scales', { exact: false }).first()).toBeVisible();
+  await box.fill('Make the heading smaller and left-aligned.');
+  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Send 1 to agent' })).toBeVisible();
+  await page.screenshot({ path: join(shots, 'artifact-point-and-comment.png') });
 });

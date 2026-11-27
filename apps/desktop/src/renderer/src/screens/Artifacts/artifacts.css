@@ -89,3 +89,35 @@
   --shadow-island: 0 0 0 1px var(--color-line-2);
 }
 .oide-whiteboard .excalidraw .Island { border-radius: 10px; }
+
+/* Point and comment on a doc (Comments.tsx): picking outlines the block under the pointer; a picked
+   block carries its pin numbers in data-oide-pin, drawn as an accent badge in the left margin. */
+.oide-md-picking :is(h1, h2, h3, h4, h5, h6, p, li, pre, blockquote, table, img) { cursor: crosshair; }
+.oide-md-picking :is(h1, h2, h3, h4, h5, h6, p, li, pre, blockquote, table, img):hover {
+  outline: 1px dashed var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.oide-md-pins [data-oide-pin] {
+  position: relative;
+  outline: 1px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.oide-md-pins [data-oide-pin]::before {
+  content: attr(data-oide-pin);
+  position: absolute;
+  left: -17px;
+  top: 1px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 7px;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font: 600 10px/14px var(--font-sans);
+  text-align: center;
+  white-space: nowrap;
+}
+.oide-md-pins li[data-oide-pin]::before { left: -37px; }

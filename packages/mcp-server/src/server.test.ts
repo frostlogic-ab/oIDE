@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { ArtifactMeta, ArtifactUse, CheckResult, PermissionRequest } from '@oide/protocol';
-import { OideMcpServer } from './server.js';
+import { applyTextEdits, OideMcpServer } from './server.js';
 import type { AgentToolHandlers, ArtifactsBackend } from './types.js';
 import { suggestRule, summarizeTool } from './rules.js';
 
@@ -316,7 +316,13 @@ describe('OideMcpServer', () => {
     expect((await client.callTool({ name: 'artifacts_write', arguments: { id: 'art-m', files: [{ path: 'a.css', content: 'x', base64: 'eA==' }] } })).isError).toBe(true);
     expect((await client.callTool({ name: 'artifacts_write', arguments: { id: 'art-m' } })).isError).toBe(true);
     await client.callTool({ name: 'artifacts_create', arguments: { title: 'T', kind: 'design', files: [{ path: 'p/Main.html', fromFile: 'out/Main.html' }], entry: 'p/Main.html' } });
-    expect(calls).toEqual(['writeFiles:art-m:a.css,b.png:old.css:a.html:undefined', 'create:p/Main.html:p/Main.html']);
+    // edits: search and replace in the entry (no path) and another text file, as one version.
+    expect(JSON.parse(textOf(await client.callTool({ name: 'artifacts_write', arguments: { id: 'art-m', edits: [{ oldString: 'x', newString: 'y' }, { path: 'site.css', oldString: '<p>', newString: '<div>' }] } })))).toMatchObject({ ok: true });
+    // Not found, not unique, binary, or both edited and replaced: refused with a reason, nothing written.
+    expect(textOf(await client.callTool({ name: 'artifacts_write', arguments: { id: 'art-m', edits: [{ oldString: 'nope', newString: 'y' }] } }))).toMatch(/not found in index\.html/);
+    expect((await client.callTool({ name: 'artifacts_write', arguments: { id: 'art-m', edits: [{ path: 'shots/a.png', oldString: 'i', newString: 'j' }] } })).isError).toBe(true);
+    expect((await client.callTool({ name: 'artifacts_write', arguments: { id: 'art-m', files: [{ path: 'index.html', content: 'z' }], edits: [{ oldString: 'x', newString: 'y' }] } })).isError).toBe(true);
+    expect(calls).toEqual(['writeFiles:art-m:a.css,b.png:old.css:a.html:undefined', 'create:p/Main.html:p/Main.html', 'writeFiles:art-m:index.html,site.css:undefined:undefined:undefined']);
     // No retrieval backend: the retrieval tools are neither listed nor usable.
     expect((await client.listTools()).tools.map((t) => t.name)).not.toContain('artifact_retrieval_finish');
     expect((await client.callTool({ name: 'artifact_retrieval_finish', arguments: { id: 'art-0', ok: false } })).isError).toBe(true);
@@ -395,5 +401,18 @@ describe('rules', () => {
     expect(suggestRule('Bash', { command: 'a\nb' })).toBeUndefined();
     expect(suggestRule('WebFetch', { url: 'https://docs.example.com/x' })).toBe('WebFetch(domain:docs.example.com)');
     expect(suggestRule('Edit', { file_path: 'x' })).toBe('Edit');
+  });
+});
+
+describe('applyTextEdits', () => {
+  it('replaces each unique match in order, or every match with replaceAll', () => {
+    expect(applyTextEdits('a.html', '<h1>Hi</h1><p>Hi</p>', [{ oldString: '<h1>Hi', newString: '<h1>Hello' }])).toBe('<h1>Hello</h1><p>Hi</p>');
+    expect(applyTextEdits('a.html', 'a a a', [{ oldString: 'a', newString: 'b', replaceAll: true }])).toBe('b b b');
+    expect(applyTextEdits('a.html', 'x', [{ oldString: 'x', newString: '$&$1' }])).toBe('$&$1');
+    expect(applyTextEdits('a.html', 'one', [{ oldString: 'one', newString: 'two' }, { oldString: 'two', newString: 'three' }])).toBe('three');
+  });
+  it('refuses a missing or ambiguous match with a reason', () => {
+    expect(() => applyTextEdits('a.html', 'abc', [{ oldString: 'z', newString: 'y' }])).toThrow(/not found in a\.html/);
+    expect(() => applyTextEdits('a.html', 'aa', [{ oldString: 'a', newString: 'b' }])).toThrow(/occurs 2 times/);
   });
 });

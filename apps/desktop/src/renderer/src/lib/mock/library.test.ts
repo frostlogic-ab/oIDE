@@ -20,6 +20,7 @@ describe('mock artifacts: retrieval and files', () => {
       getSettings: () => settings,
       setSettings: () => {},
       putAgent: (a) => agents.set(a.id, a),
+      getAgent: (id) => agents.get(id),
     }) as Record<string, (i: unknown) => unknown>;
     call = async (name, input) => Commands[name].output.parse(await handlers[name]!(Commands[name].input.parse(input))) as CommandOutput<typeof name>;
   });
@@ -65,5 +66,24 @@ describe('mock artifacts: retrieval and files', () => {
     const c = await call('artifacts.cancelRetrieval', { id: m.id });
     expect(c.retrieval).toMatchObject({ status: 'failed', error: 'Cancelled.' });
     expect(c.version).toBe(1);
+  });
+
+  it('starts an artifact agent that writes a new version, refuses a second one, and asks for a project when there is none', async () => {
+    const doc = await call('artifacts.create', { title: 'Notes', kind: 'doc', projectId: 'oide', location: 'app-data' });
+    const a = await call('artifacts.startAgent', { id: doc.id, text: 'Add a summary', mode: 'acceptEdits', model: { model: 'sonnet', effort: 'low' } });
+    expect(a).toMatchObject({ artifactId: doc.id, workIn: 'artifact-folder', projectId: 'oide', mode: 'acceptEdits', model: 'sonnet', effort: 'low', status: 'running' });
+    await expect(call('artifacts.startAgent', { id: doc.id, text: 'Again' })).rejects.toThrow(/\[busy\]/);
+    await vi.advanceTimersByTimeAsync(4000);
+    const { meta, content } = await call('artifacts.get', { id: doc.id });
+    expect(meta.version).toBe(2);
+    expect(content).toContain('Changed by the artifact agent: Add a summary');
+    expect(agents.get(a.id)?.status).toBe('done');
+    // Archived (gone from the Wall): the next message starts a new one.
+    agents.delete(a.id);
+    await expect(call('artifacts.startAgent', { id: doc.id, text: 'Next' })).resolves.toMatchObject({ artifactId: doc.id });
+
+    const loose = await call('artifacts.create', { title: 'Loose', kind: 'doc', location: 'app-data' });
+    await expect(call('artifacts.startAgent', { id: loose.id, text: 'Hi' })).rejects.toThrow(/\[needs_project\]/);
+    await expect(call('artifacts.startAgent', { id: loose.id, text: 'Hi', projectId: 'docs-site' })).resolves.toMatchObject({ projectId: 'docs-site' });
   });
 });

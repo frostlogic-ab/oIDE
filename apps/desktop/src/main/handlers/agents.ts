@@ -20,6 +20,11 @@ export function registerAgentHandlers(router: IpcRouter, s: Services, ctx: MainC
     await a.answerPermission(agentId, answer);
     return OK;
   });
+  // From the next turn: an idle process restarts with --resume and the new flags; a working turn finishes first.
+  router.register('agents.setModel', async ({ agentId, model, effort }) => {
+    await a.setModel(agentId, model, effort);
+    return OK;
+  });
   router.register('agents.setMode', async ({ agentId, mode }) => {
     await a.setMode(agentId, mode);
     return OK;

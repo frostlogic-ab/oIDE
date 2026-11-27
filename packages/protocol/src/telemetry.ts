@@ -546,6 +546,21 @@ export const TELEMETRY_EVENTS = {
       files: CountBucket,
     }),
   }),
+  artifact_agent_started: def({
+    from: 'main',
+    question: 'Do people work on artifacts with an agent in the open view, on which kinds, and in which permission mode?',
+    props: z.object({ kind: ArtifactKind, mode: PermissionMode }),
+  }),
+  artifact_agent_message: def({
+    from: 'renderer',
+    question: 'Do people point at the preview to give an artifact agent feedback, and how many comments do they send at once?',
+    props: z.object({ kind: ArtifactKind, feedback: SmallCount, has_text: z.boolean() }),
+  }),
+  agent_model_changed: def({
+    from: 'main',
+    question: 'Do people switch the model or effort of a running agent, and to what?',
+    props: z.object({ model: ModelFamilyValue, effort: z.union([Effort, z.literal('default')]), artifact_agent: z.boolean() }),
+  }),
   project_added: def({
     from: 'main',
     question:

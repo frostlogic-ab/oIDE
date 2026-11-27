@@ -52,6 +52,10 @@ export interface LibraryMockContext {
   setSettings: (s: Settings) => void;
   /** Adds or updates an agent on the Wall (the retrieval agents of linked artifacts). */
   putAgent?: (a: AgentSummary) => void;
+  /** The agent as the Wall has it now (undefined once archived or removed). */
+  getAgent?: (id: string) => AgentSummary | undefined;
+  /** Appends events to an agent's transcript (and emits them). */
+  addEvents?: (agentId: string, events: Array<Record<string, unknown>>) => void;
 }
 
 const MIN = 60_000;
@@ -682,7 +686,69 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
     }
   };
 
+  /*
+   * Artifact agents (Artifacts › open view › Agent panel), simulated: the first message starts an
+   * agent with `artifactId` and `workIn: 'artifact-folder'`; it answers, writes a new version of the
+   * entry a moment later (a visible line at the end) and is done. Its later messages go through the
+   * ordinary agents.send of the mock bridge.
+   */
+  const artifactAgents = new Map<string, string>();
+  const runArtifactAgent = (a: MockArtifact, agentId: string, text: string) => {
+    const said = text.replace(/\s+/g, ' ').trim().slice(0, 80);
+    setTimeout(() => {
+      const cur = ctx.getAgent?.(agentId) ?? agentFor.get(agentId);
+      if (!cur) return;
+      ctx.addEvents?.(agentId, [{ type: 'assistant-text', text: `I'll change ${a.meta.title}: ${said}` }]);
+      putAgent({ ...cur, activity: [...cur.activity, `artifacts_write ${a.meta.entry}`].slice(-6), contextUsed: cur.contextUsed + 12_000, updatedAt: Date.now() });
+    }, 1200);
+    setTimeout(() => {
+      const cur = ctx.getAgent?.(agentId) ?? agentFor.get(agentId);
+      if (!cur || artifacts.get(a.meta.id) !== a) return;
+      const set = { ...filesAt(a, a.meta.version) };
+      const entry = set[a.meta.entry];
+      if (entry?.encoding === 'utf8') {
+        const line = a.meta.kind === 'design' ? `\n<!-- Changed by the artifact agent: ${said.replace(/--/g, '-')} -->\n` : a.meta.kind === 'doc' ? `\n\n_Changed by the artifact agent: ${said}_\n` : '';
+        if (line) {
+          set[a.meta.entry] = { encoding: 'utf8', data: entry.data + line };
+          uses = [...uses, ArtifactUse.parse({ artifactId: a.meta.id, agentId, op: 'write', ts: Date.now() })];
+          writeVersion(a, set, a.meta.entry, `agent:${agentId}`, said || 'Changed by the artifact agent');
+        }
+      }
+      ctx.addEvents?.(agentId, [{ type: 'assistant-text', text: `Done: v${a.meta.version} has the change. Compare it with the version before, or tell me what to adjust.` }]);
+      putAgent({ ...(ctx.getAgent?.(agentId) ?? cur), status: 'done', updatedAt: Date.now() });
+    }, 3200);
+  };
+
   return {
+    'artifacts.startAgent': ({ id, projectId, text, mode, model }) => {
+      const a = getArt(id);
+      const prev = artifactAgents.get(id);
+      if (prev && (ctx.getAgent ? ctx.getAgent(prev) : agentFor.get(prev))) fail('busy', 'This artifact already has an agent: send it a message instead.');
+      const runIn = a.meta.projectId ?? projectId;
+      if (!runIn) fail('needs_project', 'Pick the project whose settings the agent runs under.');
+      const agentId = newId('a-artifact');
+      const now = Date.now();
+      const summary = AgentSummary.parse({
+        id: agentId,
+        projectId: runIn,
+        title: `Edit ${a.meta.title}`,
+        status: 'running',
+        mode: mode ?? 'acceptEdits',
+        model: model?.model ?? 'opus',
+        ...(model?.effort ? { effort: model.effort } : {}),
+        workIn: 'artifact-folder',
+        artifactId: id,
+        activity: ['Reading the artifact…'],
+        contextUsed: 18_000,
+        createdAt: now,
+        updatedAt: now,
+      });
+      artifactAgents.set(id, agentId);
+      putAgent(summary);
+      ctx.addEvents?.(agentId, [{ type: 'user-text', text }]);
+      runArtifactAgent(a, agentId, text);
+      return summary;
+    },
     /* ---- artifacts */
     'artifacts.list': ({ projectId, kind }) =>
       [...artifacts.values()].map((a) => a.meta).filter((m) => (!projectId || m.projectId === projectId) && (!kind || m.kind === kind)).sort((a, b) => b.updatedAt - a.updatedAt),
