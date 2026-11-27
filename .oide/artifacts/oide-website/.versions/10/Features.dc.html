@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oIDE website · Home, lower middle</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="site {{themeClass}}">
+
+  <!-- REVIEW -->
+  <section class="sec" id="review">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="label review"><i></i>Review</span>
+        <h2>Nothing reaches main until you say so.</h2>
+        <p>Every agent works on its own branch in its own git worktree. You review the result the way you would review a teammate's pull request.</p>
+      </div>
+
+      <article class="feat">
+        <div class="feat-head">
+          <span class="label review"><i></i>Source control</span>
+          <h3>Every project, every worktree, one screen</h3>
+          <div class="feat-body">
+            <p>See what each agent changed, which branches are behind, and what is ready for review. oIDE warns you when two agents edit the same file, before it turns into a merge conflict.</p>
+          </div>
+        </div>
+        <figure class="fig">
+          <div class="shot"><img src="shots/source-control.jpg" width="2766" height="992" alt="Source control screen: the oide project with its main branch state and three agent worktrees with status and diff stats, a review queue, and a heads-up that two worktrees change the same file."></div>
+          <figcaption><b>Source control.</b> One card per repository. The heads-up on the right appeared because two agents both edited <span class="mono">package.json</span>.</figcaption>
+        </figure>
+      </article>
+
+      <article class="feat split rev">
+        <div class="feat-copy">
+          <span class="label review"><i></i>Review</span>
+          <h3><span class="s">Comment on the diff.</span> <span class="s">The agent fixes it.</span></h3>
+          <p>Leave comments on lines and send them back as one round of feedback. The agent revises in the same worktree. When you are happy, open a pull request or merge locally.</p>
+          <ul class="ticks">
+            <li>The agent's own summary and the checks it ran sit next to the diff.</li>
+            <li>Unified or split view, with a Viewed mark per file.</li>
+          </ul>
+        </div>
+        <figure class="fig">
+          <div class="shot"><img src="shots/review.jpg" width="1646" height="1172" alt="A diff of retry.ts with added lines in green, and an inline comment box on line 12 saying: Add jitter so retries from many events don't line up. Button: Add to feedback."></div>
+        </figure>
+      </article>
+    </div>
+  </section>
+
+  <!-- EXTEND -->
+  <section class="sec alt" id="extend">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="label hold"><i></i>Extend</span>
+        <h2>Give each agent the right tools and the right model.</h2>
+        <p>An agent is only as good as what it can reach. oIDE has a marketplace of tools made for agents, connects any MCP server, and lets you choose which model does which job.</p>
+      </div>
+
+      <article class="feat">
+        <div class="feat-head">
+          <span class="label hold"><i></i>Marketplace</span>
+          <h3>A marketplace where the customer is the agent</h3>
+          <div class="feat-body">
+            <p>Extensions add tools that agents can call: inspect a database, preview the app in a browser, deploy a branch. Every extension declares what its tools do. Read-only tools just run. Tools that change things ask first.</p>
+          </div>
+        </div>
+        <figure class="fig">
+          <div class="shot"><img src="shots/marketplace.jpg" width="2766" height="1120" alt="Extension marketplace listing agent tools: Postgres inspector, Browser preview, Preview deploys, Git, Error tracker and a custom Team wiki. A detail panel lists the three read-only tools Postgres inspector gives agents and the projects it is enabled for."></div>
+          <figcaption><b>Marketplace.</b> Install per project. The panel on the right lists exactly which tools an extension hands to agents.</figcaption>
+        </figure>
+      </article>
+
+      <article class="feat split">
+        <div class="feat-copy">
+          <span class="label hold"><i></i>Custom tools</span>
+          <h3><span class="s">Not in the marketplace?</span> <span class="s">Paste the URL.</span></h3>
+          <p>Give oIDE the address of any MCP server. It works out how to connect, how to sign in and which tools the server offers.</p>
+          <ul class="ticks">
+            <li>Imports the servers you already set up in other apps on this computer.</li>
+            <li>Switch single tools off, or make one ask first.</li>
+            <li>Keep it to yourself, or share it with the project through git.</li>
+          </ul>
+        </div>
+        <figure class="fig">
+          <div class="shot fade"><img src="shots/add-custom.jpg" width="1440" height="1280" alt="Add a custom tool dialog. After pasting an MCP server URL, oIDE reports the server it reached, that it uses OAuth sign-in, and six tools found, each labelled read only or asks first."></div>
+        </figure>
+      </article>
+
+      <article class="feat split rev">
+        <div class="feat-copy">
+          <span class="label hold"><i></i>Models</span>
+          <h3>Decide where your usage goes</h3>
+          <p>A preset sets which model leads and which models take the simple, standard and complex subagent tasks, each with its own effort level. Add a local or self-hosted model and it shows up in every picker.</p>
+          <div class="usage">
+            <div class="shot"><img src="shots/statusbar.jpg" width="1008" height="52" alt="Status bar reading: Max plan, Session 62 percent, Week 38 percent, 3 projects open."></div>
+            <span>Session and weekly usage stay in the status bar, so you see what a wall of agents costs you.</span>
+          </div>
+        </div>
+        <figure class="fig">
+          <div class="shot"><img src="shots/models.jpg" width="1584" height="1000" alt="Models settings. The Balanced preset uses Opus as orchestrator and routes simple subagent tasks to Haiku, standard tasks to Sonnet and complex tasks to Opus, each with an effort level."></div>
+        </figure>
+      </article>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":4093}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { themeClass: (this.props.theme ?? 'Dark') === 'Light' ? 'light' : '' };
+  }
+}
+</script>
+</body>
+</html>

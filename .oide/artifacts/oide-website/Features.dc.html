@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>oIDE website · Home, middle</title>
+<title>oIDE website · Home, lower middle</title>
 <script src="./_runtime/react.js"></script>
 <script src="./_runtime/react-dom.js"></script>
 <script src="./_runtime/support.js"></script>
@@ -64,8 +64,8 @@ body{margin:0}
     <div class="wrap">
       <div class="sec-head">
         <span class="label hold"><i></i>Extend</span>
-        <h2>Give agents better tools and better context.</h2>
-        <p>An agent is only as good as what it can reach. oIDE has a marketplace of tools made for agents, and it brings your designs and docs into the project.</p>
+        <h2>Give each agent the right tools and the right model.</h2>
+        <p>An agent is only as good as what it can reach. oIDE has a marketplace of tools made for agents, connects any MCP server, and lets you choose which model does which job.</p>
       </div>
 
       <article class="feat">
@@ -98,20 +98,6 @@ body{margin:0}
         </figure>
       </article>
 
-      <article class="feat">
-        <div class="feat-head">
-          <span class="label hold"><i></i>Artifacts</span>
-          <h3>Designs, docs and whiteboards next to the code</h3>
-          <div class="feat-body">
-            <p>Import artifacts from claude.ai or let an agent write one. Hand a design to an agent as its spec, and see which agents are reading or writing each artifact.</p>
-          </div>
-        </div>
-        <figure class="fig">
-          <div class="shot"><img src="shots/artifacts.jpg" width="2766" height="972" alt="Artifacts library with design, doc and whiteboard cards from three projects. The selected design, Main window v2, is synced from claude.ai and read by two agents, with buttons Open, Give to an agent and Open in claude.ai."></div>
-          <figcaption><b>Artifacts.</b> "Give to an agent" starts a new agent with the artifact attached.</figcaption>
-        </figure>
-      </article>
-
       <article class="feat split rev">
         <div class="feat-copy">
           <span class="label hold"><i></i>Models</span>
@@ -131,7 +117,7 @@ body{margin:0}
 
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":4737}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":4093}}'>
 class Component extends DCLogic {
   renderVals() {
     return { themeClass: (this.props.theme ?? 'Dark') === 'Light' ? 'light' : '' };

@@ -40,5 +40,47 @@
     "author": "agent:agt-4b4c40fa-ab18-4c82-829d-c5955d4ea57f",
     "note": "Use the live oIDE logo mark (dark and light variants) in the nav and footer",
     "entry": "Main.dc.html"
+  },
+  {
+    "version": 7,
+    "ts": 1795806040895,
+    "author": "agent:agt-c794635a-d9a4-4894-a0dd-3dcfd63694c7",
+    "note": "Reposition as a Developer Cowork: new hero, a Plan → Direct → Review loop, a Plan section with artifacts and the coming backlog, Direct on its own artboard",
+    "entry": "Main.dc.html"
+  },
+  {
+    "version": 8,
+    "ts": 1795806186037,
+    "author": "user",
+    "note": "Opens on Direct.dc.html",
+    "entry": "Direct.dc.html"
+  },
+  {
+    "version": 9,
+    "ts": 1795806201338,
+    "author": "user",
+    "note": "Opens on Main.dc.html",
+    "entry": "Main.dc.html"
+  },
+  {
+    "version": 10,
+    "ts": 1795806213679,
+    "author": "agent:agt-c794635a-d9a4-4894-a0dd-3dcfd63694c7",
+    "note": "Add the Product Hunt badge under the hero download button, dark or light to match the theme",
+    "entry": "Main.dc.html"
+  },
+  {
+    "version": 11,
+    "ts": 1795806237267,
+    "author": "user",
+    "note": "Opens on More.dc.html",
+    "entry": "More.dc.html"
+  },
+  {
+    "version": 12,
+    "ts": 1795806250109,
+    "author": "user",
+    "note": "Opens on Main.dc.html",
+    "entry": "Main.dc.html"
   }
 ]

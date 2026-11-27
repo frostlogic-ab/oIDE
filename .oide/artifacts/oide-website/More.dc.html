@@ -53,7 +53,7 @@ body{margin:0}
       <div class="sec-head">
         <span class="label"><i></i>Compare</span>
         <h2>Where oIDE fits</h2>
-        <p>Plenty of tools run one coding agent well, and several run a few in parallel. oIDE is for running many across all your projects, and for giving them better tools.</p>
+        <p>Plenty of tools run one coding agent well, and several run a few in parallel. oIDE is the workspace around them: shared specs, many sessions across all your projects, better tools, and a review before anything merges.</p>
       </div>
       <div class="table-scroll">
         <table>
@@ -124,7 +124,9 @@ body{margin:0}
     <div class="wrap faq-grid">
       <div class="sec-head"><span class="label"><i></i>FAQ</span><h2>Questions people ask first</h2></div>
       <div class="faq">
-        <details open="open"><summary>Do I need an Anthropic API key?</summary><p>No. oIDE runs the Claude Code CLI you already use, so it works with whatever that CLI is signed in to: a Claude Pro or Max plan, or an API key if you prefer one. Usage counts against that account the same way it does in your terminal.</p></details>
+        <details open="open"><summary>What is a Developer Cowork?</summary><p>It is our name for a workspace that you share with coding agents. An AI code editor helps you write code. oIDE also holds the work around the code: the designs and docs your agents work from, the sessions that do the work, and the review before anything merges.</p></details>
+        <details><summary>Is the backlog available yet?</summary><p>Not yet. The shared backlog and PM agents are in development. Today you plan with artifacts: write a doc or a design, then give it to an agent as its spec. The release notes will say when the backlog lands.</p></details>
+        <details><summary>Do I need an Anthropic API key?</summary><p>No. oIDE runs the Claude Code CLI you already use, so it works with whatever that CLI is signed in to: a Claude Pro or Max plan, or an API key if you prefer one. Usage counts against that account the same way it does in your terminal.</p></details>
         <details><summary>Can oIDE see my credentials?</summary><p>No. You sign in through Anthropic's own flow in the CLI. oIDE starts the CLI and reads its event stream. It does not touch tokens and it does not modify the CLI.</p></details>
         <details><summary>Is oIDE made by Anthropic?</summary><p>No. oIDE is an independent open-source project that works with Claude Code. It is not affiliated with or endorsed by Anthropic.</p></details>
         <details><summary>Can I still edit files myself?</summary><p>Yes. There is a file editor with tabs, search and a terminal. It is simple on purpose, because most of your time in oIDE goes into directing and reviewing agents.</p></details>
@@ -137,7 +139,7 @@ body{margin:0}
   <!-- CLOSE -->
   <section class="sec alt">
     <div class="wrap close">
-      <h2><span class="s">Stop babysitting terminals.</span> <span class="s">Run your agents from one window.</span></h2>
+      <h2><span class="s">Stop babysitting terminals.</span> <span class="s">Give your agents a place to work.</span></h2>
       <div class="dl">
         <a class="btn btn-primary btn-lg dl-main" href="#download"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path></svg><span>{{ dlLong }}</span></a>
         <button class="btn btn-primary btn-lg dl-caret" type="button" aria-expanded="{{ closeExpanded }}" aria-label="Choose another platform" onClick="{{ toggleClose }}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
@@ -155,8 +157,8 @@ body{margin:0}
   <footer class="foot-band">
     <div class="wrap">
       <div class="foot">
-        <div><a class="brand" href="Main.dc.html"><img class="on-dark" src="logo-mark.svg" width="24" height="24" alt=""><img class="on-light" src="logo-mark-light.svg" width="24" height="24" alt="">oIDE</a><p>The open desktop app for running teams of coding agents.</p></div>
-        <div><h4>Product</h4><ul><li><a href="Main.dc.html">Features</a></li><li><a href="Features.dc.html">Extensions</a></li><li><a href="#download">Download</a></li><li><a href="#open">Release notes</a></li></ul></div>
+        <div><a class="brand" href="Main.dc.html"><img class="on-dark" src="logo-mark.svg" width="24" height="24" alt=""><img class="on-light" src="logo-mark-light.svg" width="24" height="24" alt="">oIDE</a><p>The open-source Developer Cowork: one desktop workspace for you and your coding agents.</p></div>
+        <div><h4>Product</h4><ul><li><a href="Main.dc.html">Features</a></li><li><a href="Direct.dc.html">The agent wall</a></li><li><a href="Features.dc.html">Extensions</a></li><li><a href="#download">Download</a></li><li><a href="#open">Release notes</a></li></ul></div>
         <div><h4>Docs</h4><ul><li><a href="#open">Getting started</a></li><li><a href="#open">Keyboard shortcuts</a></li><li><a href="#open">Writing extensions</a></li><li><a href="#how">Architecture wiki</a></li></ul></div>
         <div><h4>Community</h4><ul><li><a href="#open">GitHub</a></li><li><a href="#open">Discussions</a></li><li><a href="#open">Issues</a></li><li><a href="#open">Security policy</a></li></ul></div>
       </div>
@@ -166,7 +168,7 @@ body{margin:0}
 
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"visitor":{"editor":"enum","options":["Detect","macOS","Windows","Linux"],"default":"Detect","section":"Download button"},"$preview":{"width":1440,"height":4640}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"visitor":{"editor":"enum","options":["Detect","macOS","Windows","Linux"],"default":"Detect","section":"Download button"},"$preview":{"width":1440,"height":4905}}'>
 class Component extends DCLogic {
   constructor(props) {
     super(props);

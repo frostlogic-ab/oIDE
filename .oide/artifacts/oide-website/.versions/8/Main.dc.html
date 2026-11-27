@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oIDE website · Home, top</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="site {{themeClass}}">
+
+  <header class="nav">
+    <div class="wrap">
+      <a class="brand" href="#top"><img class="on-dark" src="logo-mark.svg" width="24" height="24" alt=""><img class="on-light" src="logo-mark-light.svg" width="24" height="24" alt="">oIDE</a>
+      <nav class="nav-links" aria-label="Main">
+        <a href="#plan">Features</a>
+        <a href="Features.dc.html">Extensions</a>
+        <a href="More.dc.html">How it works</a>
+        <a href="More.dc.html">Compare</a>
+        <a href="More.dc.html">Docs</a>
+      </nav>
+      <a class="nav-gh" href="More.dc.html"><svg class="ic solid" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg><span>GitHub</span></a>
+      <div class="dl">
+        <a class="btn btn-primary dl-main" href="More.dc.html"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path></svg><span>{{ dlShort }}</span></a>
+        <button class="btn btn-primary dl-caret" type="button" aria-expanded="{{ navExpanded }}" aria-label="Choose another platform" onClick="{{ toggleNav }}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+        <sc-if value="{{ navOpen }}" hint-placeholder-val="{{ false }}">
+          <div class="dl-menu">
+            <a href="More.dc.html">macOS <small>Apple silicon · Intel</small></a>
+            <a href="More.dc.html">Windows <small>x64 · ARM64</small></a>
+            <a href="More.dc.html">Linux <small>AppImage · .deb · .rpm</small></a>
+            <a class="all" href="More.dc.html">All downloads and checksums</a>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+
+    <!-- HERO: the position, the moat, then proof -->
+    <section class="hero">
+      <div class="wrap">
+        <span class="label go"><i></i>Developer Cowork · open source · preview</span>
+        <h1><span>Your agents</span> <span>work here.</span> <span class="punch">So do you.</span></h1>
+        <div class="hero-row">
+          <p class="lede">oIDE is a Developer Cowork: one desktop workspace for you and a team of coding agents. Plan in shared designs and docs, run many Claude Code sessions side by side across all your repos, and review every change, <b>on the Claude plan you already have</b>.</p>
+          <div class="cta">
+            <div class="cta-btns">
+              <div class="dl">
+                <a class="btn btn-primary btn-lg dl-main" href="More.dc.html"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path></svg><span>{{ dlLong }}</span></a>
+                <button class="btn btn-primary btn-lg dl-caret" type="button" aria-expanded="{{ heroExpanded }}" aria-label="Choose another platform" onClick="{{ toggleHero }}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+                <sc-if value="{{ heroOpen }}" hint-placeholder-val="{{ false }}">
+                  <div class="dl-menu">
+                    <a href="More.dc.html">macOS <small>Apple silicon · Intel</small></a>
+                    <a href="More.dc.html">Windows <small>x64 · ARM64</small></a>
+                    <a href="More.dc.html">Linux <small>AppImage · .deb · .rpm</small></a>
+                    <a class="all" href="More.dc.html">All downloads and checksums</a>
+                  </div>
+                </sc-if>
+              </div>
+              <a class="btn btn-ghost btn-lg" href="More.dc.html">Star on GitHub</a>
+            </div>
+            <small>Free, MIT licensed. {{ alsoFor }}</small>
+          </div>
+        </div>
+
+        <ol class="moat">
+          <li><i class="pin" aria-hidden="true">1</i><b>Many sessions, one window</b><span>Agents from all your repos on one wall, each working in its own git worktree.</span></li>
+          <li><i class="pin" aria-hidden="true">2</i><b>Artifacts you both work in</b><span>Designs, docs and whiteboards that you and your agents read and write.</span></li>
+          <li><i class="pin" aria-hidden="true">3</i><b>A marketplace of agent tools</b><span>Extensions give agents new abilities. Any MCP server works too, listed or not.</span></li>
+          <li><i class="pin" aria-hidden="true">4</i><b>Runs on your Claude plan</b><span>oIDE drives your own signed-in <span class="mono">claude</span> CLI. No API key, and it never sees your credentials.</span></li>
+        </ol>
+      </div>
+
+      <div class="hero-shot">
+        <div class="window">
+          <img src="shots/wall.jpg" width="2880" height="1928" alt="The oIDE agent wall. Six agent tiles from three projects show live activity, subagents and context use. One tile asks permission to run npm install, one has a question, one is ready for review. A projects list is on the left, artifacts and the marketplace on the right, and plan usage in the status bar.">
+          <span class="needs-you" aria-hidden="true"></span>
+          <i class="pin" style="left: 64.2%; top: 98.6%;" aria-hidden="true">4</i>
+          <i class="pin" style="left: 11.2%; top: 7.6%;" aria-hidden="true">1</i>
+          <i class="pin" style="left: 97.1%; top: 82.7%;" aria-hidden="true">3</i>
+          <i class="pin" style="left: 87.6%; top: 8%;" aria-hidden="true">2</i>
+        </div>
+      </div>
+    </section>
+
+    <!-- THE LOOP: what "Developer Cowork" means -->
+    <section class="sec alt" id="cowork">
+      <div class="wrap">
+        <div class="sec-head">
+          <span class="label go"><i></i>Developer Cowork</span>
+          <h2><span class="s">One workspace for the plan,</span> <span class="s">the agents and the review.</span></h2>
+          <p>Writing the code is one part of shipping it. Someone has to decide what gets built, and someone has to check the result. oIDE keeps all three in one window, and your agents take part in each.</p>
+        </div>
+        <div class="doors">
+          <a href="#plan"><em class="step">01 · Plan</em><b>Decide what gets built</b><span>Write the spec as a design, a doc or a whiteboard that your agents read and write. A shared backlog, kept by you and PM agents, is coming next.</span><code>Plan in oIDE →</code></a>
+          <a href="Direct.dc.html"><em class="step">02 · Direct</em><b>Hand it to an agent</b><span>Start a session for each task, across all your repos. The wall shows who is working and who needs you.</span><code>The agent wall →</code></a>
+          <a href="Features.dc.html"><em class="step">03 · Review</em><b>Check it, then merge</b><span>Each agent works in its own worktree. Comment on the diff, the agent fixes it, and nothing reaches main until you say so.</span><code>Review and merge →</code></a>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLAN -->
+    <section class="sec" id="plan">
+      <div class="wrap">
+        <div class="sec-head">
+          <span class="label"><i></i>Plan</span>
+          <h2>Give every agent a plan to work from.</h2>
+          <p>An agent does its best work from a clear brief. In oIDE the brief sits next to the code, as designs, docs and whiteboards that you and your agents both edit. A shared backlog is next.</p>
+        </div>
+
+        <article class="feat">
+          <div class="feat-head">
+            <span class="label"><i></i>Artifacts</span>
+            <h3>Designs, docs and whiteboards next to the code</h3>
+            <div class="feat-body">
+              <p>Import artifacts from claude.ai or let an agent write one. Hand a design to an agent as its spec, and see which agents are reading or writing each artifact.</p>
+              <ul class="ticks">
+                <li>Open an artifact and tell its agent what to change, or pin a comment on the preview.</li>
+                <li>Every change is a version you can compare or restore.</li>
+              </ul>
+            </div>
+          </div>
+          <figure class="fig">
+            <div class="shot"><img src="shots/artifacts.jpg" width="2766" height="972" alt="Artifacts library with design, doc and whiteboard cards from three projects. The selected design, Main window v2, is synced from claude.ai and read by two agents, with buttons Open, Give to an agent and Open in claude.ai."></div>
+            <figcaption><b>Artifacts.</b> "Give to an agent" starts a new agent with the artifact attached.</figcaption>
+          </figure>
+        </article>
+
+        <article class="feat split">
+          <div class="feat-copy">
+            <span class="label soon"><i></i>Backlog · coming next</span>
+            <h3><span class="s">One backlog,</span> <span class="s">kept by you and your agents</span></h3>
+            <p>The project backlog is moving into oIDE. You and your agents both add items and keep them in order, and PM agents do the upkeep. When an item is ready, you start an agent on it from the list.</p>
+            <ul class="ticks">
+              <li>PM agents write up new items and link the design or doc that describes them.</li>
+              <li>You decide what goes in and what comes first.</li>
+              <li>Start an agent session from any item, with the item and its spec as the goal.</li>
+            </ul>
+          </div>
+          <figure class="fig">
+            <div class="shot mock" role="img" aria-label="Concept drawing of the oIDE backlog for the project billing-api. Five items, each with a number, a title, where it came from and a status. Two are ready and have a Start agent button. One has an agent working on it that asked a question, one is ready for review, and one is being written up by a PM agent.">
+              <div class="mock-bar"><b>Backlog</b><span class="proj">billing-api</span><span class="mock-pm"><i></i>PM agent sorted 3 items · 12 min ago</span></div>
+              <ul class="mock-rows">
+                <li class="next"><span class="id">#142</span><div class="what"><b>Add proration to plan changes</b><small>Doc: Proration rules · added by you</small></div><div class="do"><span class="st go"><i></i>Ready</span><span class="act primary">Start agent</span></div></li>
+                <li><span class="id">#147</span><div class="what"><b>Export invoices as CSV</b><small>Design: Invoice page · written up by PM agent</small></div><div class="do"><span class="st go"><i></i>Ready</span><span class="act">Start agent</span></div></li>
+                <li><span class="id">#143</span><div class="what"><b>Fix the flaky invoice test</b><small>Agent working · asked a question 2 min ago</small></div><div class="do"><span class="st hold"><i></i>Has a question</span><span class="act">Answer</span></div></li>
+                <li><span class="id">#139</span><div class="what"><b>Retry failed Stripe webhooks</b><small>Agent finished · 8 files changed</small></div><div class="do"><span class="st review"><i></i>Ready for review</span><span class="act">Review diff</span></div></li>
+                <li><span class="id">#150</span><div class="what"><b>Refunds fail for zero-amount invoices</b><small>From issue #212 · PM agent is writing it up</small></div><div class="do"><span class="st"><i></i>Needs a spec</span></div></li>
+              </ul>
+            </div>
+            <figcaption><b>Concept.</b> A drawing, not a screenshot. The backlog and PM agents are in development.</figcaption>
+          </figure>
+        </article>
+      </div>
+    </section>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"visitor":{"editor":"enum","options":["Detect","macOS","Windows","Linux"],"default":"Detect","section":"Download button"},"$preview":{"width":1440,"height":4038}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { menu: null, os: null };
+  }
+  componentDidMount() {
+    // Name the visitor's system on the download buttons.
+    var hint = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+    var ua = navigator.userAgent || '';
+    if (/Android|iPhone|iPad|iPod/i.test(ua)) return;
+    var os = /Win/i.test(hint) ? 'win' : /Mac/i.test(hint) ? 'mac' : /Linux|X11|CrOS/i.test(hint + ua) ? 'linux' : null;
+    if (os) this.setState({ os: os });
+  }
+  renderVals() {
+    var NAME = { mac: 'macOS', win: 'Windows', linux: 'Linux' };
+    var pick = this.props.visitor ?? 'Detect';
+    var os = pick === 'Detect' ? this.state.os : { macOS: 'mac', Windows: 'win', Linux: 'linux' }[pick];
+    var rest = ['mac', 'win', 'linux'].filter(function (k) { return k !== os; });
+    var menu = this.state.menu;
+    var self = this;
+    function toggle(id) { return function () { self.setState({ menu: self.state.menu === id ? null : id }); }; }
+    return {
+      themeClass: (this.props.theme ?? 'Dark') === 'Light' ? 'light' : '',
+      dlShort: os ? 'Download for ' + NAME[os] : 'Download',
+      dlLong: os ? 'Download for ' + NAME[os] : 'Download oIDE',
+      alsoFor: os ? 'Also for ' + NAME[rest[0]] + ' and ' + NAME[rest[1]] + '.' : 'For macOS, Windows and Linux.',
+      navOpen: menu === 'nav',
+      heroOpen: menu === 'hero',
+      navExpanded: menu === 'nav' ? 'true' : 'false',
+      heroExpanded: menu === 'hero' ? 'true' : 'false',
+      toggleNav: toggle('nav'),
+      toggleHero: toggle('hero'),
+    };
+  }
+}
+</script>
+</body>
+</html>
