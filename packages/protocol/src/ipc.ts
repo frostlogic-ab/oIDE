@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AgentSpec, AgentStatus, AgentSummary, GitRef, Id, MessageAttachments, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
+import { AgentSpec, AgentStatus, AgentSummary, Effort, GitRef, Id, MessageAttachments, ModelSlot, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
 import { ArtifactFile, ArtifactFileContent, ArtifactKind, ArtifactMeta, ArtifactPath, ArtifactUse, ArtifactVersion, ARTIFACT_LIMITS, IMPORT_NEEDS_CONTENT } from './artifacts.js';
 import { AgentEvent } from './events.js';
 import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
@@ -127,11 +127,18 @@ export const Commands = {
 
   // Agents
   'agents.list': cmd(Void, z.array(AgentSummary)),
+  /** Spawn: `artifactId` and `workIn: 'artifact-folder'` are refused here (artifact agents start with `artifacts.startAgent`). */
   'agents.spawn': cmd(AgentSpec, z.array(AgentSummary)),
   /** `merge-conflicts` messages come from main only (`git.askToResolve`): the renderer cannot send one. */
   'agents.send': cmd(z.object({ agentId: Id, message: UserMessage.refine((m) => m.kind !== 'merge-conflicts', { message: 'merge-conflicts messages are sent by oIDE only' }) }), Ok),
   'agents.answerPermission': cmd(z.object({ agentId: Id, answer: PermissionAnswer }), Ok),
   'agents.setMode': cmd(z.object({ agentId: Id, mode: PermissionMode }), Ok),
+  /**
+   * Another model or effort for the lead. Applied from the next turn: an idle process restarts with
+   * `--resume` and the new flags when the next message is sent; a working turn is left to finish.
+   * Refused (`conflict`) for an agent on a custom model.
+   */
+  'agents.setModel': cmd(z.object({ agentId: Id, model: z.string().trim().min(1).max(200), effort: Effort.optional() }), Ok),
   'agents.stop': cmd(z.object({ agentId: Id }), Ok),
   'agents.pause': cmd(z.object({ agentId: Id }), Ok),
   'agents.resume': cmd(z.object({ agentId: Id }), Ok),
@@ -418,6 +425,25 @@ export const Commands = {
   'artifacts.refresh': cmd(z.object({ id: Id, projectId: Id.optional() }), ArtifactMeta),
   /** Stops a running retrieval: the agent is stopped, nothing is written, the status becomes `failed`. */
   'artifacts.cancelRetrieval': cmd(z.object({ id: Id }), ArtifactMeta),
+  /**
+   * The artifact agent (Artifacts › open view): starts an agent that edits this artifact's files (and
+   * only this artifact's) through oIDE's MCP artifact tools, with the user's first direction. It works
+   * in an empty scratch folder of its own, never in a repo, and is queued behind Max running like any
+   * agent. `projectId` is the project whose settings it runs under when the artifact has none
+   * (`needs_project` otherwise). Refused with `busy` while the artifact already has a live agent:
+   * send that one a message instead.
+   */
+  'artifacts.startAgent': cmd(
+    z.object({
+      id: Id,
+      projectId: Id.optional(),
+      text: z.string().trim().min(1).max(100_000),
+      attachments: MessageAttachments.optional(),
+      mode: PermissionMode.optional(),
+      model: ModelSlot.optional(),
+    }),
+    AgentSummary,
+  ),
   /** Files of the current version, or of `version`. */
   'artifacts.files': cmd(z.object({ id: Id, version: z.number().int().positive().optional() }), z.array(ArtifactFile)),
   /** One file of the current version, or of `version`. */

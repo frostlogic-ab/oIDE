@@ -3,6 +3,13 @@ import { ArtifactMeta, ArtifactUse, type AgentSummary } from '@oide/protocol';
 import {
   activeRetrieval,
   agentsUsing,
+  artifactAgentOf,
+  buildFeedbackMessage,
+  isAgentWorking,
+  nextPinNumber,
+  pinWhere,
+  snippet,
+  type FeedbackPin,
   authorLabel,
   baseName,
   canOpenClaudeLink,
@@ -176,5 +183,72 @@ describe('artifact editors model', () => {
     expect(validateTitle('  Main   window ')).toEqual({ title: 'Main window' });
     expect(validateTitle('   ')).toEqual({ error: 'Give it a title.' });
     expect(validateTitle('x'.repeat(201))).toEqual({ error: 'Use at most 200 characters.' });
+  });
+});
+
+describe('artifact agent', () => {
+  const agent = (id: string, extra: Partial<AgentSummary> = {}) => ({ id, artifactId: 'art-1', createdAt: 1, status: 'done', ...extra }) as AgentSummary;
+
+  it('picks the newest live agent of the artifact', () => {
+    expect(artifactAgentOf([agent('a', { createdAt: 1 }), agent('b', { createdAt: 5 }), agent('c', { createdAt: 9, artifactId: 'other' })], 'art-1')?.id).toBe('b');
+    expect(artifactAgentOf([agent('a', { createdAt: 9, archived: { at: 1, reason: 'archived-by-user', worktreeRemoved: false } }), agent('b', { createdAt: 2 })], 'art-1')?.id).toBe('b');
+    expect(artifactAgentOf([agent('a', { artifactId: undefined })], 'art-1')).toBeUndefined();
+  });
+
+  it('knows when it is working', () => {
+    expect(['queued', 'starting', 'running', 'needs-permission'].every((s) => isAgentWorking(s as AgentSummary['status']))).toBe(true);
+    expect(isAgentWorking('done')).toBe(false);
+    expect(isAgentWorking('stopped')).toBe(false);
+  });
+});
+
+describe('point and comment', () => {
+  const pin = (n: number, extra: Partial<FeedbackPin> = {}): FeedbackPin => ({ id: `p${n}`, n, text: '', comment: `Comment ${n}`, checked: true, ...extra });
+
+  it('describes where a pin points', () => {
+    expect(pinWhere({ page: 'index.html', selector: 'main > section:nth-of-type(2) > h2' })).toBe('index.html › `main > section:nth-of-type(2) > h2`');
+    expect(pinWhere({ page: 'a.html', selector: 'p`x`' })).toBe("a.html › `p'x'`");
+    expect(pinWhere({ page: 'a.html', tag: 'div', selector: '' })).toBe('a.html › <div>');
+    expect(pinWhere({ heading: 'Limits', block: 'list item' })).toBe('Under "Limits" › list item');
+    expect(pinWhere({ heading: 'Limits', block: 'heading' })).toBe('Heading "Limits"');
+    expect(pinWhere({ block: 'paragraph' })).toBe('Before the first heading › paragraph');
+  });
+
+  it('builds one plain-text message from the ticked pins, numbered in marker order', () => {
+    const text = buildFeedbackMessage({
+      title: 'Pricing',
+      version: 5,
+      pins: [
+        pin(3, { page: 'index.html', selector: 'footer', text: 'Say "hi"\n there', comment: 'Remove\nit.' }),
+        pin(1, { page: 'index.html', selector: 'main > section:nth-of-type(2) > h2', text: 'Pricing that scales', comment: 'Make this heading smaller and left-aligned.' }),
+        pin(2, { heading: 'Intro', block: 'paragraph', checked: false }),
+        pin(4, { comment: '   ' }),
+      ],
+      text: '  Keep the brand colours. ',
+    });
+    expect(text).toBe(
+      [
+        'Feedback on the preview of Pricing (v5):',
+        '',
+        '1. index.html › `main > section:nth-of-type(2) > h2` ("Pricing that scales"): Make this heading smaller and left-aligned.',
+        `2. index.html › \`footer\` ("Say 'hi' there"): Remove it.`,
+        '',
+        'Keep the brand colours.',
+        '',
+        'Change the artifact to address each point.',
+      ].join('\n'),
+    );
+  });
+
+  it('sends only the typed text when no pin is ticked, and treats markup as text', () => {
+    expect(buildFeedbackMessage({ title: 'T', version: 1, pins: [pin(1, { checked: false })], text: 'hi' })).toBe('hi');
+    expect(buildFeedbackMessage({ title: 'T', version: 1, pins: [pin(1, { comment: '<b>bold</b>', heading: 'H', block: 'paragraph' })] })).toContain(': <b>bold</b>\n');
+  });
+
+  it('cuts snippets and numbers new pins after the highest', () => {
+    expect(snippet('  a\n\n b  ')).toBe('a b');
+    expect(snippet('x'.repeat(200), 10)).toBe(`${'x'.repeat(9)}…`);
+    expect(nextPinNumber([])).toBe(1);
+    expect(nextPinNumber([pin(2), pin(5)])).toBe(6);
   });
 });

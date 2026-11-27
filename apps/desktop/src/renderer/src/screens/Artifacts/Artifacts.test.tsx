@@ -538,7 +538,8 @@ describe('Retrieval by an agent', () => {
     const viewer = await screen.findByRole('region', { name: 'Pricing calculator (open)' });
     expect(within(viewer).getByRole('heading', { name: 'Retrieving from claude.ai' })).toBeTruthy();
     expect(within(viewer).getByText(/no files yet/)).toBeTruthy();
-    expect(within(viewer).queryByRole('tab', { name: 'Edit' })).toBeNull();
+    expect(within(viewer).queryByRole('radiogroup', { name: 'View' })).toBeNull();
+    expect(within(viewer).queryByRole('complementary', { name: 'Agent' })).toBeNull();
     expect(within(viewer).queryByRole('button', { name: 'Save' })).toBeNull();
   });
 });
@@ -644,7 +645,7 @@ describe('Broken imports', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open' }));
     await waitFor(() => expect(screen.getByRole('region', { name: 'Pricing page (open)' })).toBeTruthy());
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Retrieve with an agent' }));
-    expect(screen.queryByRole('tab', { name: 'Preview' })).toBeNull();
+    expect(screen.queryByRole('radio', { name: 'Preview' })).toBeNull();
   });
 });
 

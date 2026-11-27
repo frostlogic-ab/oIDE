@@ -124,6 +124,14 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
     'agents.resume': ({ agentId }) => (updateAgent(agentId, { status: 'running' }), { ok: true as const }),
     'agents.stop': ({ agentId }) => (updateAgent(agentId, { status: 'stopped' }), { ok: true as const }),
     'agents.setMode': ({ agentId, mode }) => (updateAgent(agentId, { mode }), { ok: true as const }),
+    // Like main: refused for a custom model; the next message uses the new model and effort.
+    'agents.setModel': ({ agentId, model, effort }) => {
+      const a = agents.get(agentId);
+      if (!a) throw new Error(`[not_found] No agent ${agentId}`);
+      if (!/haiku|sonnet|opus|fable/i.test(a.model)) throw new Error('[conflict] This agent runs on a custom model; start a new agent to change it.');
+      updateAgent(agentId, { model, effort });
+      return { ok: true as const };
+    },
     'agents.archive': ({ agentId }) => {
       const a = agents.get(agentId);
       if (!a) throw new Error(`[not_found] No agent ${agentId}`);
@@ -199,6 +207,14 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
       putAgent: (a) => {
         agents.set(a.id, a);
         emit('agents.summary', a);
+      },
+      getAgent: (id) => agents.get(id),
+      addEvents: (agentId, raw) => {
+        const list = events.get(agentId) ?? [];
+        const parsed = raw.map((e, i) => AgentEvent.parse({ ...e, agentId, seq: (list[list.length - 1]?.seq ?? -1) + 1 + i, ts: Date.now() }));
+        list.push(...parsed);
+        events.set(agentId, list);
+        emit('agents.batch', { events: parsed });
       },
     }),
   };

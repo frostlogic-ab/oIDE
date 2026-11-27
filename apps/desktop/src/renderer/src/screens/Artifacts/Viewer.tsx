@@ -1,10 +1,13 @@
 /**
- * "Open": the artifact full size, with an editor per kind (all lazy chunks):
- * - doc: Monaco (Markdown) with the rendered preview live beside it.
- * - design: Monaco (HTML) beside the sandboxed preview, which reloads when you save.
+ * "Open": the artifact full size. Left, the Agent panel (AgentPanel.tsx): the artifact's own agent,
+ * which edits its files on request. Right, one content pane with a Preview | Code | Compare switch
+ * (whiteboards: Board | Compare); editors are lazy chunks:
+ * - doc: Preview renders the draft live; Code is Monaco (Markdown).
+ * - design: Preview is the sandboxed frame of the saved version (reloads when you save); Code is
+ *   Monaco (HTML).
  * - whiteboard: the embedded Excalidraw editor.
- * Plus Preview (docs, designs) and Compare (a side-by-side diff of any two versions, or of a version
- * and your unsaved edits).
+ * Compare is a side-by-side diff of any two versions, or of a version and your unsaved edits.
+ * Preview has Comment (Comments.tsx): point at the preview and pin a note for the agent.
  *
  * Save writes a new numbered version (`artifacts.save` with `baseVersion`; `artifacts.writeFiles`
  * for an artifact of several files). When an agent saves while the artifact is open
@@ -16,9 +19,9 @@
  * "Open on this page". With no files yet (version 0, a link being retrieved or a failed retrieval)
  * the retrieval status stands in for the editors.
  */
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ArtifactFile, ArtifactMeta, CommandOutput } from '@oide/protocol';
-import { Badge, Button, Dialog, DiffStat, Icon, Menu, Select, Spinner, Tabs, tabPanelProps } from '@oide/ui';
+import { Badge, Button, Dialog, DiffStat, Icon, Menu, SegmentedControl, Select, Spinner } from '@oide/ui';
 import { formatSize } from '../../lib/attachments';
 import { invokeOr, ipcErrorCode, ipcErrorMessage, oide } from '../../lib/bridge';
 import { useKeymapScope } from '../../lib/useKeymap';
@@ -27,10 +30,12 @@ import { toast } from '../../stores/ui';
 import { ExtensionArtifactView } from '../../extensions/ExtensionArtifactView';
 import { artifactTypeOf } from '../../extensions/model';
 import { useExtensions } from '../../extensions/store';
+import { AgentPanel, AgentPanelStrip } from './AgentPanel';
+import { CommentToggle, DesignCommentPreview, DocCommentPreview } from './Comments';
 import { FilesPanel, useArtifactFile, type ArtifactFileState } from './FilesPanel';
 import { useArtifactDrafts } from './draftStore';
+import { useArtifactFeedback } from './feedbackStore';
 import { FixImportPanel } from './FixImportPanel';
-import { DesignFrame, MarkdownView } from './Preview';
 import { RetrievalStatus, useRetrieval } from './Retrieval';
 import {
   KIND_LABEL,
@@ -51,6 +56,7 @@ const VersionDiff = lazy(() => import('./VersionDiff'));
 const WhiteboardEditor = lazy(() => import('./WhiteboardEditor'));
 
 type Detail = CommandOutput<'artifacts.get'>;
+/** The content pane: `edit` is Code (whiteboards: the Board), `preview` the preview, `compare` the diff. */
 export type ViewerMode = 'edit' | 'preview' | 'compare';
 /** A side of the comparison: a version number or the unsaved draft. */
 export type CompareSide = number | 'draft';
@@ -96,8 +102,6 @@ export function Viewer({
 
   const installed = useExtensions((s) => s.installed);
   const extType = artifactTypeOf(installed, meta.type);
-  // An extension artifact type opens in its own viewer (Preview); everything else in the editor.
-  const [mode, setMode] = useState<ViewerMode>(initialMode ?? (meta.type ? 'preview' : 'edit'));
   /** The saved version the editor is based on. */
   // Unsaved edits kept when the screen was left (draftStore.ts): resume them. When the artifact moved
   // on meanwhile, the draft keeps its old base and the conflict banner below takes over.
@@ -106,6 +110,20 @@ export function Viewer({
     // A draft of another entry file (an agent moved the artifact's page) is not this file's text.
     return d && d.entry === detail.meta.entry && d.baseVersion <= detail.meta.version && d.draft !== d.baseline ? d : undefined;
   });
+  // Whiteboards open on the board; docs and designs on the last choice of Preview or Code, or on
+  // Code when unsaved edits come back (extension types always start on their own viewer, Preview).
+  const [mode, setModeState] = useState<ViewerMode>(
+    () => initialMode ?? (kind === 'whiteboard' ? 'edit' : meta.type ? 'preview' : resumed ? 'edit' : useArtifactFeedback.getState().view === 'code' ? 'edit' : 'preview'),
+  );
+  const [commenting, setCommenting] = useState(false);
+  /** Whether the design frame is served by main with its picker (not srcdoc, not a React notice). */
+  const [pickable, setPickable] = useState(false);
+  const panelOpen = useArtifactFeedback((s) => s.panelOpen);
+  const setMode = (m: ViewerMode) => {
+    setModeState(m);
+    if (m !== 'preview') setCommenting(false);
+    if (kind !== 'whiteboard' && m !== 'compare') useArtifactFeedback.getState().setView(m === 'edit' ? 'code' : 'preview');
+  };
   const [base, setBase] = useState(resumed ? { version: resumed.baseVersion, content: resumed.baseContent } : { version: meta.version, content: detail.content });
   const [draft, setDraft] = useState(resumed ? resumed.draft : detail.content);
   /** What "unchanged" looks like: the base content, or (whiteboards) Excalidraw's serialisation of it. */
@@ -165,8 +183,10 @@ export function Viewer({
     };
   }, [meta.id, meta.version, multi]);
 
-  // A broken import puts the cursor in its paste box instead.
-  useEffect(() => {
+  // A broken import puts the cursor in its paste box instead. A layout effect, so focus moves in
+  // the commit that opens the view: a passive effect could run after the first keypress and take
+  // focus back from what that key moved it to (seen as a flaky test on a slow CI runner).
+  useLayoutEffect(() => {
     if (!meta.brokenImport) headingRef.current?.focus();
     // On open only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -237,11 +257,14 @@ export function Viewer({
     },
   });
 
+  // A ref, not state: two Ctrl/Cmd+S handlers (the editor's and the view's) can fire in one tick.
+  const savingNow = useRef(false);
   const save = async () => {
-    if (!dirty || saving) return;
+    if (!dirty || saving || savingNow.current) return;
     const content = draft;
     const invalid = validateContent(kind, content);
     if (invalid) return setError(invalid);
+    savingNow.current = true;
     setSaving(true);
     setError(null);
     // With a conflict open, saving keeps your version on top of theirs (theirs stays in History).
@@ -275,21 +298,24 @@ export function Viewer({
         }
       } else setError(ipcErrorMessage(err));
     } finally {
+      savingNow.current = false;
       setSaving(false);
     }
   };
 
-  const tabs: Array<{ id: ViewerMode; label: string }> =
+  const views: Array<{ value: ViewerMode; label: string }> =
     kind === 'whiteboard'
       ? [
-          { id: 'edit', label: 'Board' },
-          { id: 'compare', label: 'Compare' },
+          { value: 'edit', label: 'Board' },
+          { value: 'compare', label: 'Compare' },
         ]
       : [
-          { id: 'edit', label: 'Edit' },
-          { id: 'preview', label: 'Preview' },
-          { id: 'compare', label: 'Compare' },
+          { value: 'preview', label: 'Preview' },
+          { value: 'edit', label: 'Code' },
+          { value: 'compare', label: 'Compare' },
         ];
+  const canComment = mode === 'preview' && kind !== 'whiteboard' && !extType;
+  const commentBlocked = kind === 'design' && !pickable ? 'Comments need the live preview, which the desktop app serves for the saved version.' : undefined;
 
   const openCompare = (sides: { from: CompareSide; to: CompareSide }) => {
     setCompare(sides);
@@ -328,7 +354,18 @@ export function Viewer({
   const canSave = fileMode ? file.dirty && !file.saving : dirty && !saving;
 
   return (
-    <section aria-label={`${meta.title} (open)`} className="flex-1 min-w-0 flex flex-col">
+    <section
+      aria-label={`${meta.title} (open)`}
+      className="flex-1 min-w-0 flex flex-col"
+      onKeyDown={(e) => {
+        // Ctrl/Cmd+S saves from anywhere in the open view (the Preview, the agent panel); the editors
+        // handle it themselves, so a key from inside one is left to it.
+        if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 's' || e.defaultPrevented) return;
+        if ((e.target as Element | null)?.closest?.('.monaco-editor, .excalidraw')) return;
+        e.preventDefault();
+        void save();
+      }}
+    >
       <div className="flex items-center gap-3 px-5 py-3 border-b border-line bg-panel flex-wrap">
         <Button size={32} icon="chevron-left" onClick={requestClose}>
           Artifacts
@@ -344,7 +381,6 @@ export function Viewer({
         </div>
         {anyDirty && <Badge tone="warn">Unsaved changes</Badge>}
         <div className="flex-1" />
-        {!meta.brokenImport && !noFiles && !fileMode && <Tabs label="View" idPrefix="viewer" variant="pill" tabs={tabs} value={mode} onChange={setMode} />}
         {!meta.brokenImport && !noFiles && (
           <Button size={32} variant="primary" onClick={() => void (fileMode ? file.save() : save())} disabled={!canSave}>
             {(fileMode ? file.saving : saving) ? 'Saving…' : 'Save'}
@@ -428,7 +464,13 @@ export function Viewer({
           </div>
         </div>
       ) : (
-      <div className="flex-1 min-h-0 flex gap-4 p-4">
+      <div className="flex-1 min-h-0 flex">
+        {panelOpen ? (
+          <AgentPanel meta={meta} version={base.version} onCollapse={() => useArtifactFeedback.getState().setPanelOpen(false)} />
+        ) : (
+          <AgentPanelStrip meta={meta} onExpand={() => useArtifactFeedback.getState().setPanelOpen(true)} />
+        )}
+      <main aria-label={`${meta.title} content`} className="flex-1 min-w-[360px] min-h-0 flex gap-4 p-4">
         {multi && <FilesPanel files={files} entry={meta.entry} selected={otherPath} onSelect={select} />}
         {fileMode ? (
           <OtherFile
@@ -439,10 +481,16 @@ export function Viewer({
             busy={saving}
             entryDirty={dirty}
             onOpenOn={(p) => void openOn(p)}
-            preview={kind === 'design' ? <PreviewPane kind={kind} meta={meta} draft={draft} saved={base} dirty={dirty} /> : null}
+            preview={kind === 'design' ? <PreviewPane kind={kind} meta={meta} draft={draft} saved={base} dirty={dirty} commenting={false} onCommenting={setCommenting} onPickable={setPickable} /> : null}
           />
         ) : (
-      <div {...tabPanelProps('viewer', mode)} className="flex-1 min-w-0 min-h-0 flex gap-4 outline-none">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <SegmentedControl label="View" options={views} value={mode} onChange={setMode} />
+          <span className="flex-1" />
+          {canComment && <CommentToggle on={commenting && !commentBlocked} onChange={setCommenting} disabledReason={commentBlocked} />}
+        </div>
+      <div className="flex-1 min-w-0 min-h-0 flex gap-4">
         <Suspense fallback={<Loading />}>
           {mode === 'edit' && kind === 'whiteboard' && (
             <div className="flex-1 min-w-0 min-h-0 rounded-xl border border-line-2 overflow-hidden">
@@ -462,21 +510,18 @@ export function Viewer({
             </div>
           )}
           {mode === 'edit' && kind !== 'whiteboard' && (
-            <>
-              <div className="flex-1 min-w-0 min-h-0 flex flex-col">
-                <SourceEditor
-                  value={draft}
-                  language={sourceLanguage(kind, meta.entry)}
-                  label={`Source of ${meta.title}`}
-                  onChange={(v) => {
-                    setDraft(v);
-                    setError(null);
-                  }}
-                  onSave={() => void save()}
-                />
-              </div>
-              <PreviewPane kind={kind} meta={meta} draft={draft} saved={base} dirty={dirty} />
-            </>
+            <div className="flex-1 min-w-0 min-h-0 flex flex-col">
+              <SourceEditor
+                value={draft}
+                language={sourceLanguage(kind, meta.entry)}
+                label={`Source of ${meta.title}`}
+                onChange={(v) => {
+                  setDraft(v);
+                  setError(null);
+                }}
+                onSave={() => void save()}
+              />
+            </div>
           )}
           {mode === 'preview' &&
             (extType ? (
@@ -485,7 +530,7 @@ export function Viewer({
                 <ExtensionArtifactView meta={meta} content={base.content} type={extType} onSaved={onSaved} />
               </div>
             ) : (
-              <PreviewPane kind={kind} meta={meta} draft={draft} saved={base} dirty={dirty} />
+              <PreviewPane kind={kind} meta={meta} draft={draft} saved={base} dirty={dirty} commenting={commenting && !commentBlocked} onCommenting={setCommenting} onPickable={setPickable} />
             ))}
           {mode === 'compare' && (
             <Compare
@@ -498,7 +543,9 @@ export function Viewer({
           )}
         </Suspense>
       </div>
+      </div>
         )}
+      </main>
       </div>
       )}
 
@@ -731,49 +778,31 @@ function Banner({
   );
 }
 
-/** Doc: live render of the draft. Design: the saved version in the sandboxed frame (reloads on save). */
+/**
+ * Doc: live render of the draft. Design: the saved version in the sandboxed frame (reloads on save).
+ * Both take comments while `commenting` (Comments.tsx).
+ */
 function PreviewPane({
   kind,
   meta,
   draft,
   saved,
   dirty,
+  commenting,
+  onCommenting,
+  onPickable,
 }: {
   kind: ArtifactMeta['kind'];
   meta: ArtifactMeta;
   draft: string;
   saved: { version: number; content: string };
   dirty: boolean;
+  commenting: boolean;
+  onCommenting: (on: boolean) => void;
+  onPickable: (pickable: boolean) => void;
 }) {
-  const savedVersion = saved.version;
-  if (kind === 'doc')
-    return (
-      <div
-        className="flex-1 min-w-0 min-h-0 rounded-xl border border-line-2 bg-raised overflow-auto"
-        aria-label={`Preview of ${meta.title}`}
-        role="region"
-      >
-        <MarkdownView source={draft} />
-      </div>
-    );
-  return (
-    <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-1.5">
-      <div className="flex-1 min-h-0 rounded-xl border border-line-2 bg-raised overflow-hidden">
-        <DesignFrame
-          artifactId={meta.id}
-          title={meta.title}
-          html={saved.content}
-          version={savedVersion}
-          className="w-full h-full"
-        />
-      </div>
-      <span className="text-[11.5px] text-ink-3">
-        {dirty
-          ? `Showing v${savedVersion}. Save to refresh the preview.`
-          : `v${savedVersion}, sandboxed: no network, no access to oIDE.`}
-      </span>
-    </div>
-  );
+  if (kind === 'doc') return <DocCommentPreview meta={meta} source={draft} commenting={commenting} onCommenting={onCommenting} />;
+  return <DesignCommentPreview meta={meta} saved={saved} dirty={dirty} commenting={commenting} onCommenting={onCommenting} onPickable={onPickable} />;
 }
 
 interface CompareProps {

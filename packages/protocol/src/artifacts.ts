@@ -463,3 +463,36 @@ export function titleFromContent(kind: ArtifactKind, content: string): string | 
   t = t?.replace(/\s+/g, ' ').trim().slice(0, 200).trim();
   return t || undefined;
 }
+
+// ------------------------------------------------------------------ preview feedback (point and comment)
+
+/**
+ * Messages the design preview's picker script (`oide-artifact://<id>/__oide/picker.js`, injected into
+ * every HTML page main serves) posts to the Artifacts screen. The page is the user's or an agent's
+ * code in a sandboxed, opaque-origin frame, so anything it posts is untrusted: the renderer accepts
+ * only messages from that frame's window that parse here, and uses them only to fill a feedback note
+ * the user writes and chooses to send.
+ */
+const PickRect = z.object({ x: z.number().finite(), y: z.number().finite(), w: z.number().finite().nonnegative(), h: z.number().finite().nonnegative() });
+export const PreviewPicked = z.object({
+  type: z.literal('oide-picked'),
+  /** A CSS selector for the element (id, or tag/class path with :nth-of-type), at most 500 characters. */
+  selector: z.string().max(500),
+  tag: z.string().max(40),
+  /** The start of the element's visible text, whitespace collapsed. */
+  text: z.string().max(300).default(''),
+  /** The page's path inside the artifact (`index.html`, `pages/about.html`). */
+  page: z.string().max(500).default(''),
+  /** The element's box in the frame's viewport, and the viewport's size, in CSS pixels. */
+  rect: PickRect,
+  viewport: z.object({ w: z.number().finite().positive(), h: z.number().finite().positive() }),
+});
+export type PreviewPicked = z.infer<typeof PreviewPicked>;
+export const PreviewPickerMessage = z.discriminatedUnion('type', [
+  PreviewPicked,
+  /** Esc pressed inside the frame while picking. */
+  z.object({ type: z.literal('oide-pick-cancel') }),
+  /** The picker loaded (sent on each page load, so the screen re-sends the pick mode and the pins). */
+  z.object({ type: z.literal('oide-picker-ready'), page: z.string().max(500).default('') }),
+]);
+export type PreviewPickerMessage = z.infer<typeof PreviewPickerMessage>;

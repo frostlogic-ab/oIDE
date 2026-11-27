@@ -456,3 +456,15 @@ describe('pull request contract', () => {
     expect(prompt({ branch: undefined })).not.toContain('pull request');
   });
 });
+
+describe('artifact agent contract', () => {
+  it('an artifact agent gets the artifact contract: its artifact, the MCP tools, no git, commits or review', () => {
+    const p = flagValue(buildLaunch(spec({ artifactId: 'art-42', workIn: 'artifact-folder' }), ctx({ branch: undefined, baseRef: undefined })).args, '--append-system-prompt')!;
+    expect(p).toContain('artifact agent');
+    expect(p).toContain('"art-42"');
+    expect(p).toContain('mcp__oide__artifacts_write');
+    expect(p).toContain('`edits`');
+    expect(p).toContain('do not call submit_for_review');
+    expect(p).not.toMatch(/Oide-Agent:|git merge|Commit your work/);
+  });
+});

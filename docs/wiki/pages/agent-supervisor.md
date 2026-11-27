@@ -45,6 +45,7 @@ await sup.spawn(spec)            // N attempts (spec.attempts) sharing attemptGr
 sup.send(agentId, userMessage)   // held while paused/queued; respawns a dead process with --resume
 await sup.answerPermission(agentId, answer)  // exact pending id only; "Always" → settings.addAllowRule + session rule
 await sup.setMode(agentId, mode) // control request, fallback interrupt + --resume; calls run in order per agent; the spec follows the CLI's own mode changes
+await sup.setModel(agentId, model, effort?) // spec + `model-changed` event at once; an idle process ends now, a working one after its turn (`relaunch`), and the next message resumes with the new --model / --effort; refused for a custom model
 await sup.stop / pause / resume(agentId); sup.compact(agentId); await sup.remove(agentId, { deleteWorktree })
 sup.stopSubagent(agentId, subagentId)
 sup.restore([{ spec, summary, lastSeq }])    // after an app restart
@@ -125,7 +126,11 @@ really 15%) and 184k (92%, really 18%) before any result arrived. Token counting
 `contextWindow`, `localCommand`, `apiErrorStatus`; `error` event `code`; new events `mode-changed`,
 `compact`, `subagent-task`, `background-tasks`, `plan-usage`; `result.contextWindows`, `context-usage`,
 `AgentSummary.contextBaseline`, `SubagentInfo.contextWindow` (context ring accuracy). `AgentSpec.autoTitle` and the
-`title-changed` event (agent-named titles, below).
+`title-changed` event (agent-named titles, below). Artifact agents ([ADR 0017](../../adr/0017-artifact-agents.md)):
+`AgentSpec.artifactId`, `WorkIn` `artifact-folder` (an empty folder from the worktree provider, no setup),
+`AgentSummary.artifactId` / `.effort`, the `model-changed` event (`setModel`), `artifactContract` in place of
+the oIDE contract, and `ownArtifactWrite` (its `mcp__oide__artifacts_write` calls on its own artifact are
+allowed without a prompt in acceptEdits / auto / bypass).
 
 ## Agent-named titles
 

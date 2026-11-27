@@ -9,7 +9,9 @@ import {
   type AgentStatus,
   type AgentSummary,
   type ArchiveReason,
+  type Effort,
   type MessageAttachment,
+  type ModelSlot,
   type PermissionAnswer,
   type PermissionMode,
   type PermissionRequest,
@@ -92,6 +94,8 @@ interface AgentRecord {
   firstAttachments?: MessageAttachment[];
   /** Mode changes run one at a time, so a slow fallback cannot overtake a later pick. */
   modeChain?: Promise<void>;
+  /** A model or effort was picked while the process ran: restart it with `--resume` once it is idle. */
+  relaunch?: boolean;
 }
 
 export interface RestoreEntry {
@@ -124,6 +128,22 @@ function specFromSaved(spec: AgentSpec, s: AgentSummary): AgentSpec {
     return { ...rest, title: s.title };
   }
   return parsed;
+}
+
+/** Writes that only touch an artifact agent's own artifact, from the artifact tools. */
+const ARTIFACT_WRITE_TOOL = 'mcp__oide__artifacts_write';
+/** Modes in which an artifact agent's writes to its own artifact go without a prompt (they are its edits). */
+const ARTIFACT_EDIT_MODES: ReadonlySet<PermissionMode> = new Set(['acceptEdits', 'auto', 'bypassPermissions']);
+
+/**
+ * True for an artifact agent writing its own artifact in a mode that edits without asking (Edit
+ * automatically, Auto, Bypass). Manual and Plan still ask. Other artifacts are refused by main anyway.
+ */
+export function ownArtifactWrite(rec: { spec: Pick<AgentSpec, 'artifactId'>; reducer: { summary: Pick<AgentSummary, 'mode'> } }, req: Pick<PermissionRequest, 'toolName' | 'input' | 'subagentId'>): boolean {
+  const id = rec.spec.artifactId;
+  if (!id || req.toolName !== ARTIFACT_WRITE_TOOL || !ARTIFACT_EDIT_MODES.has(rec.reducer.summary.mode)) return false;
+  const input = req.input && typeof req.input === 'object' ? (req.input as Record<string, unknown>) : {};
+  return input.id === id;
 }
 
 export class Supervisor {
@@ -225,6 +245,8 @@ export class Supervisor {
         sessionId: randomUUID(),
         workIn: s.workIn,
         ...(attemptGroup ? { attemptGroup } : {}),
+        ...(s.artifactId ? { artifactId: s.artifactId } : {}),
+        ...(s.strategy.lead.effort ? { effort: s.strategy.lead.effort } : {}),
       });
       const rec = this.newRecord(s, summary, 0, false);
       if (firstAttachments?.length) rec.firstAttachments = firstAttachments;
@@ -443,7 +465,10 @@ export class Supervisor {
     for (const sub of res.subagents) this.emitDraft(rec, { type: 'subagent', subagent: sub });
     if (res.changed) this.publishSummary(rec);
     const status = rec.reducer.summary.status;
-    if (status !== prevStatus && ACTIVE.has(prevStatus) && !ACTIVE.has(status)) void this.pump();
+    if (status !== prevStatus && ACTIVE.has(prevStatus) && !ACTIVE.has(status)) {
+      if (rec.relaunch) void this.relaunchIfIdle(rec);
+      void this.pump();
+    }
   }
 
   private emitDraft(rec: AgentRecord, draft: AgentEventDraft): void {
@@ -495,7 +520,7 @@ export class Supervisor {
       this.deps.broker.answer(req.requestId, { requestId: req.requestId, behavior: 'deny', message: 'Stopped by the user. Do not continue; report back to the lead agent now.' });
       return;
     }
-    if (this.alwaysAllows(rec, request)) {
+    if (this.alwaysAllows(rec, request) || ownArtifactWrite(rec, request)) {
       this.deps.broker.answer(req.requestId, { requestId: req.requestId, behavior: 'allow', always: false });
       return;
     }
@@ -572,6 +597,13 @@ export class Supervisor {
     if (rec.reducer.summary.resumeBlocked && !rec.handle?.alive) throw new LaunchError(rec.reducer.summary.resumeBlocked);
     if (status === 'paused' || status === 'queued' || rec.launching) {
       rec.held.push(msg);
+      return;
+    }
+    if (rec.handle?.alive && rec.relaunch && !ACTIVE.has(status)) {
+      // A model or effort change is waiting for this idle process: restart it, then deliver.
+      rec.held.push(msg);
+      rec.relaunch = false;
+      void this.killProcess(rec).then(() => this.enqueueResume(rec));
       return;
     }
     if (rec.handle?.alive) {
@@ -652,6 +684,28 @@ export class Supervisor {
       this.queue.unshift({ id: rec.id, resume: true });
       void this.pump();
     }
+  }
+
+  /**
+   * Another model or effort for the lead (Focus, the artifact agent panel). The CLI reads both only at
+   * launch, so a live process ends once it is idle (now, or when its turn ends: a working turn is
+   * never cut short) and the next message resumes the session with the new flags.
+   */
+  async setModel(agentId: string, model: string, effort?: Effort): Promise<void> {
+    const rec = this.require(agentId);
+    if (rec.spec.customModel) throw new LaunchError('This agent runs on a custom model. Spawn a new agent to use another model.');
+    const lead: ModelSlot = { model, ...(effort ? { effort } : {}) };
+    rec.spec = { ...rec.spec, strategy: { ...rec.spec.strategy, lead } };
+    this.emitDraft(rec, { type: 'model-changed', model, ...(effort ? { effort } : {}) });
+    if (!rec.handle?.alive && !rec.launching) return;
+    rec.relaunch = true;
+    await this.relaunchIfIdle(rec);
+  }
+
+  private async relaunchIfIdle(rec: AgentRecord): Promise<void> {
+    if (!rec.relaunch || rec.launching || !rec.handle?.alive || ACTIVE.has(rec.reducer.summary.status)) return;
+    rec.relaunch = false;
+    await this.killProcess(rec);
   }
 
   private async killProcess(rec: AgentRecord): Promise<void> {

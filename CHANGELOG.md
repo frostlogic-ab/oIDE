@@ -9,6 +9,32 @@ Conventional Commit titles of merged pull requests, in the release pull request 
 `main`. Do not add entries by hand; give your pull request a good title instead. The pipeline is
 described in [docs/wiki/pages/release-pipeline.md](docs/wiki/pages/release-pipeline.md).
 
+## [0.5.1](https://github.com/frostlogic-ab/oIDE/compare/v0.5.0...v0.5.1) (2026-11-27)
+
+
+### Fixed
+
+* **artifacts:** focus the open view's heading in the opening commit ([#32](https://github.com/frostlogic-ab/oIDE/issues/32)) ([9cfe1dd](https://github.com/frostlogic-ab/oIDE/commit/9cfe1dd69e9023b35856b75540a6cbefbaa4c889))
+
+## [0.5.0](https://github.com/frostlogic-ab/oIDE/compare/v0.4.0...v0.5.0) (2026-11-27)
+
+
+### Added
+
+* **artifacts:** work on artifacts with an agent in the open view ([#31](https://github.com/frostlogic-ab/oIDE/issues/31)) ([8c32f37](https://github.com/frostlogic-ab/oIDE/commit/8c32f37db0379c1d427d10abf6bf6a975b1854cd))
+* **desktop:** show CI checks status next to an agent's pull request ([#30](https://github.com/frostlogic-ab/oIDE/issues/30)) ([5f211ca](https://github.com/frostlogic-ab/oIDE/commit/5f211caa6eff3e5c81ac9aa78d5f50b5bb8da496))
+* **wall:** remove the redundant "Next that needs you" header button ([4ce1dd2](https://github.com/frostlogic-ab/oIDE/commit/4ce1dd28c3255fa1cacf90c1c2377db5c44eb8f4))
+* **wall:** remove the redundant "Next that needs you" header button ([00229aa](https://github.com/frostlogic-ab/oIDE/commit/00229aa47eebe1e50513011ff1d415a153c7ea1b))
+
+
+### Fixed
+
+* **desktop:** installed app no longer shows a blank taskbar icon on Windows ([12a180f](https://github.com/frostlogic-ab/oIDE/commit/12a180f5546b73e1351479d8919562aeed252aa4))
+* **desktop:** installed app no longer shows a blank taskbar icon on Windows ([449b366](https://github.com/frostlogic-ab/oIDE/commit/449b3660f8b92126f08abf1ccb035c197a41d4a9))
+* **windows:** notifications come from oIDE, not Electron ([#26](https://github.com/frostlogic-ab/oIDE/issues/26)) ([334f57e](https://github.com/frostlogic-ab/oIDE/commit/334f57e3b663709914f47c2f91a1308ca7afd935))
+* **worktrees:** oIDE no longer keeps deleted worktree folders open on Windows ([2a81d16](https://github.com/frostlogic-ab/oIDE/commit/2a81d16712878ab87a257db1b9e69d98f46a828f))
+* **worktrees:** oIDE no longer keeps deleted worktree folders open on Windows ([c46655e](https://github.com/frostlogic-ab/oIDE/commit/c46655e6f7729fa095c066796dcfddb48789901d))
+
 ## [0.4.0](https://github.com/frostlogic-ab/oIDE/compare/v0.3.0...v0.4.0) (2026-11-26)
 
 
