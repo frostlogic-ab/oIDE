@@ -235,6 +235,10 @@ function TreeLegend() {
         </span>
         Deleted
       </span>
+      <span className="flex items-center gap-1.5">
+        <span aria-hidden="true" className="w-[7px] h-[2px] rounded-full bg-ink-4" />
+        Greyed out: ignored by .gitignore
+      </span>
       <span className="leading-[1.45] mt-0.5">Each project shows its own branch or agent worktree. The menu next to a project switches it.</span>
     </div>
   );
@@ -591,7 +595,7 @@ function ProjectTree({
                     )}
                   </span>
                 ) : (
-                  <FileIcon name={r.label} />
+                  <FileIcon name={r.label} dim={r.ignored} />
                 )}
                 {r.draft ? (
                   <>
@@ -599,10 +603,15 @@ function ProjectTree({
                     <NameInput row={r} root={root} onDone={afterEdit} />
                   </>
                 ) : (
-                  <span className={`flex-1 min-w-0 ml-1.5 truncate whitespace-pre ${r.error ? 'text-bad' : problemText || (change ? STATUS_TEXT[change] : '')} ${struck ? 'line-through' : ''}`}>{r.label}</span>
+                  <span
+                    className={`flex-1 min-w-0 ml-1.5 truncate whitespace-pre ${r.error ? 'text-bad' : problemText || (change ? STATUS_TEXT[change] : r.ignored ? 'text-ink-3' : '')} ${struck ? 'line-through' : ''}`}
+                  >
+                    {r.label}
+                  </span>
                 )}
                 {change && !r.draft && (r.kind === 'file' || r.ghost) && <span className="sr-only">, {STATUS_LABEL[change].toLowerCase()}</span>}
                 {change && !r.draft && r.kind === 'dir' && !r.ghost && <span className="sr-only">, contains changes</span>}
+                {r.ignored && !r.draft && <span className="sr-only">, ignored by git</span>}
                 {fileProblems && <span className="sr-only">, {problemSummary(fileProblems)}</span>}
                 {!fileProblems && problem && <span className="sr-only">, contains {problem === 'error' ? 'errors' : 'warnings'}</span>}
                 {r.kind === 'dir' && r.error && <span className="sr-only">, failed to load. Press Enter to retry.</span>}

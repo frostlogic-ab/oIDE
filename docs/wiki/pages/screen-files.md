@@ -77,7 +77,15 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   files, show as rows that are not on disk: red (`text-bad`) and struck through, letter D. They come
   from `visibleRows(root, state, ghosts)`, sorted in with the listing; a deleted folder opens from
   the changes, never from the disk. Tooltip "path • Modified"; screen readers hear ", modified" /
-  ", contains changes". The legend under the tree explains M and D.
+  ", contains changes". The legend under the tree explains M, D and the greyed-out ignored rows.
+- Ignored files and folders are greyed out, as in the VS Code explorer: `files.tree` asks
+  `@oide/git` `ignoredPaths` (one `git check-ignore -z --stdin` per listed folder, so `.gitignore`,
+  `.git/info/exclude` and `core.excludesFile` all count, tracked files never do) and sets
+  `FileNode.ignored`. `visibleRows` marks the row and everything under an ignored folder
+  (`TreeRow.ignored`) and never compacts an ignored folder into a chain with one that is not. The
+  name is `text-ink-3` (unless a git or problem colour applies), the file icon at 50% opacity;
+  screen readers hear ", ignored by git". Outside a git checkout, or when git fails, nothing is
+  greyed out. The flag is as fresh as the folder's listing.
 - Language-server problems (see [Language servers](#language-servers)) win over the git colour of
   the name, as in VS Code: a file with errors is red (`text-bad`), with only warnings amber
   (`text-warn`), with the number of errors and warnings before the git letter; folders above it are
@@ -382,7 +390,8 @@ that runs the fixture: running status, problem counts, red tree row, Problems li
 `e2e/files-diff.spec.ts` (a changed file opens on its unified diff, Split shows both sides, the
 right side saves, File shows the plain editor; an unchanged file has no Changes view).
 Git colours: `changesStore.test.ts` (folder tints, deleted entries per folder, ghost rows in
-`visibleRows`), `TreeActions.test.tsx` (green M / U, red struck-through D, Discard changes on a
+`visibleRows`), `Files.test.tsx` (ignored rows and their contents in `visibleRows`),
+`packages/git/test/ignored.test.ts` (`ignoredPaths` against a real repo), `TreeActions.test.tsx` (green M / U, red struck-through D, Discard changes on a
 modified, a new and a deleted file), `packages/git/test/changes.test.ts` (against HEAD and against a
 base branch with real repos, before the first commit, discard of each kind; `originalContent`
 against HEAD and the merge-base, binary, missing, before the first commit).

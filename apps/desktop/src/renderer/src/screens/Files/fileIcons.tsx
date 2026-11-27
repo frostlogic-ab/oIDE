@@ -219,10 +219,11 @@ export function fileKind(name: string): FileKind {
 }
 
 /** 16px file-type icon, decorative (the row's label carries the name). */
-export function FileIcon({ name }: { name: string }) {
+/** `dim`: a git-ignored file (greyed out in the tree, VS Code style). */
+export function FileIcon({ name, dim }: { name: string; dim?: boolean }) {
   const { glyph, color } = fileKind(name);
   return (
-    <span aria-hidden="true" className="w-4 h-4 shrink-0 flex items-center justify-center" style={{ color }}>
+    <span aria-hidden="true" className={`w-4 h-4 shrink-0 flex items-center justify-center ${dim ? 'opacity-50' : ''}`} style={{ color }}>
       {glyph.kind === 'svg' ? (
         <svg viewBox="0 0 24 24" width={15} height={15} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           {glyph.node}

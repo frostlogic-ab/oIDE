@@ -500,6 +500,36 @@ describe('tree model', () => {
   });
 });
 
+describe('visibleRows with git-ignored entries', () => {
+  const dir = (path: string, ignored?: boolean) => ({ name: path.split('/').pop()!, path, kind: 'dir' as const, ...(ignored ? { ignored } : {}) });
+  const file = (path: string, ignored?: boolean) => ({ name: path.split('/').pop()!, path, kind: 'file' as const, ...(ignored ? { ignored } : {}) });
+
+  it('greys out ignored rows and everything under an ignored folder, and never compacts across the boundary', () => {
+    const s = {
+      nodes: {
+        r: {
+          '': [dir('dist', true), dir('src'), file('debug.log', true), file('README.md')],
+          dist: [file('dist/a.js')],
+          src: [dir('src/gen', true)],
+          'src/gen': [file('src/gen/x.ts')],
+        },
+      },
+      expanded: { r: { dist: true, src: true, 'src/gen': true } },
+      loading: {},
+      errors: {},
+    };
+    expect(visibleRows('r', s).map((r) => [r.label, !!r.ignored])).toEqual([
+      ['dist', true],
+      ['a.js', true],
+      ['src', false],
+      ['gen', true],
+      ['x.ts', true],
+      ['debug.log', true],
+      ['README.md', false],
+    ]);
+  });
+});
+
 describe('Files tree legend', () => {
   it('closes with its × for good: the choice is saved in settings and the legend stays gone', async () => {
     const { invoke } = await setupMockApp({ screen: 'files', params: {} });
