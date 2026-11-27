@@ -145,6 +145,9 @@ const withAgent = (extra: Partial<AgentSummary> = {}) => {
 describe('Preview | Code', () => {
   it('opens on Preview and switches to Code (and back) from the keyboard', async () => {
     const viewer = await open(/Retry design/);
+    // The heading has focus in the commit that opens the view, so it can't take focus back from a
+    // key pressed straight after (this raced on a slow CI runner when it was a passive effect).
+    expect(document.activeElement).toBe(within(viewer).getByRole('heading', { name: 'Retry design' }));
     const preview = within(viewer).getByRole('radio', { name: 'Preview' });
     expect(preview.getAttribute('aria-checked')).toBe('true');
     expect(within(viewer).getByRole('region', { name: 'Preview of Retry design' })).toBeTruthy();
