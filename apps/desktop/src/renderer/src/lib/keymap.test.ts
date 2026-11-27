@@ -174,3 +174,69 @@ describe('Keymap', () => {
     expect(next).not.toHaveBeenCalled();
   });
 });
+
+function mouse(button: number, target: unknown = null) {
+  const e = new Event('mouseup', { cancelable: true }) as Event & { button: number } & Pick<KeyEventLike, 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>;
+  Object.assign(e, { button, ctrlKey: false, metaKey: false, altKey: false, shiftKey: false });
+  if (target) Object.defineProperty(e, 'target', { value: target });
+  return e;
+}
+
+describe('mouse back / forward buttons', () => {
+  it('run nav.back (button 3) and nav.forward (button 4) and prevent the default', () => {
+    const km = new Keymap();
+    const back = vi.fn();
+    const forward = vi.fn();
+    km.pushScope('app', { 'nav.back': back, 'nav.forward': forward });
+    const e = mouse(3);
+    expect(km.handleMouseButton(e)).toBe(true);
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(e.defaultPrevented).toBe(true);
+    expect(km.handleMouseButton(mouse(4))).toBe(true);
+    expect(forward).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignore the primary, middle and secondary buttons', () => {
+    const km = new Keymap();
+    const back = vi.fn();
+    km.pushScope('app', { 'nav.back': back, 'nav.forward': back });
+    for (const b of [0, 1, 2]) expect(km.handleMouseButton(mouse(b))).toBe(false);
+    expect(back).not.toHaveBeenCalled();
+  });
+
+  it('work inside inputs and editors, unlike unchorded keys', () => {
+    const km = new Keymap();
+    const back = vi.fn();
+    km.pushScope('app', { 'nav.back': back });
+    expect(km.handleMouseButton(mouse(3, input))).toBe(true);
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+
+  it('are blocked by a modal scope, like the keyboard shortcut', () => {
+    const km = new Keymap();
+    const back = vi.fn();
+    km.pushScope('app', { 'nav.back': back });
+    km.pushScope('dialog', {}, { modal: true });
+    expect(km.handleMouseButton(mouse(3))).toBe(false);
+    expect(back).not.toHaveBeenCalled();
+  });
+
+  it('attach listens for mouseup and swallows the side-button mousedown; detach stops it', () => {
+    const km = new Keymap();
+    const back = vi.fn();
+    km.pushScope('app', { 'nav.back': back });
+    const target = new EventTarget() as unknown as Window;
+    const detach = km.attach(target);
+    const down = Object.assign(new Event('mousedown', { cancelable: true }), { button: 3 });
+    target.dispatchEvent(down);
+    expect(down.defaultPrevented).toBe(true);
+    const left = Object.assign(new Event('mousedown', { cancelable: true }), { button: 0 });
+    target.dispatchEvent(left);
+    expect(left.defaultPrevented).toBe(false);
+    target.dispatchEvent(mouse(3));
+    expect(back).toHaveBeenCalledTimes(1);
+    detach();
+    target.dispatchEvent(mouse(3));
+    expect(back).toHaveBeenCalledTimes(1);
+  });
+});
