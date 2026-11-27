@@ -78,6 +78,7 @@ export {
 } from './misc.js';
 export { Dialog, type DialogProps } from './Dialog.js';
 export { Menu, type MenuProps, type MenuItem } from './Menu.js';
+export { ContextMenu, type ContextMenuProps, type ContextMenuEntry } from './ContextMenu.js';
 export { Tooltip, type TooltipProps, type TooltipPlacement } from './Tooltip.js';
 export { Logo, type LogoProps } from './Logo.js';
 export { FrostlogicLogo, FROSTLOGIC_BLUE, type FrostlogicLogoProps } from './FrostlogicLogo.js';

@@ -261,6 +261,21 @@ export class TelemetryObservers {
           this.contentSearches.delete(this.contentSearches.keys().next().value!);
         return;
       }
+      // Files tree management: the action only (never a path or name).
+      case 'files.create':
+        this.sink.track('file_managed', { action: (input as { kind: string }).kind === 'dir' ? 'create_folder' : 'create_file' });
+        return;
+      case 'files.rename':
+        this.sink.track('file_managed', { action: 'rename' });
+        return;
+      case 'files.delete':
+        this.sink.track('file_managed', { action: 'delete' });
+        return;
+      case 'files.copy': {
+        const i = input as { fromRoot: string; toRoot: string; move?: boolean };
+        this.sink.track('file_managed', { action: i.move ? 'move' : 'copy', crossCheckout: i.fromRoot !== i.toRoot });
+        return;
+      }
       case 'files.replace': {
         const results = (output as { results?: Array<{ status: string }> }).results ?? [];
         this.sink.track('file_search_used', {

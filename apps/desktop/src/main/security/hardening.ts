@@ -1,11 +1,12 @@
 import { app, session, shell, type WebContents } from 'electron';
 import { isAllowedExternalUrl } from './external.js';
 import { buildCsp } from './csp.js';
+import { permissionAllowed } from './permissions.js';
 
 /**
  * Process-wide Electron hardening: every webContents (current and future) refuses navigation away
  * from the app, refuses window.open and <webview>, and opens allow-listed https links in the
- * system browser. Permissions are denied except clipboard writes.
+ * system browser. Permissions are denied except clipboard writes (and clipboard reads by the app page).
  */
 /**
  * Proxy of the default session (the app window, artifact previews and extension panels; the
@@ -44,9 +45,10 @@ export async function hardenApp(opts: { isAppUrl: (url: string) => boolean; dev:
   app.on('web-contents-created', (_e, contents) => guard(contents));
 
   const ses = session.defaultSession;
-  const allowed = new Set(['clipboard-sanitized-write']);
-  ses.setPermissionRequestHandler((_wc, permission, callback) => callback(allowed.has(permission)));
-  ses.setPermissionCheckHandler((_wc, permission) => allowed.has(permission));
+  ses.setPermissionRequestHandler((_wc, permission, callback, details) =>
+    callback(permissionAllowed(permission, details, opts.isAppUrl)),
+  );
+  ses.setPermissionCheckHandler((_wc, permission, _origin, details) => permissionAllowed(permission, details, opts.isAppUrl));
   await ses.setProxy({ ...NO_NETWORK_PROXY });
 
   // Header CSP for http(s) responses (the dev server). Packaged builds load file:// where the

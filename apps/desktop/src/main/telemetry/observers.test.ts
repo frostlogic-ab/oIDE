@@ -244,6 +244,25 @@ describe('commands', () => {
     ]);
   });
 
+  it('file_managed: the action only, never a path or name', () => {
+    const { o, events } = make();
+    o.command('files.create', { root: '/p', path: 'src/secret-plan.ts', kind: 'file' }, { ok: true });
+    o.command('files.create', { root: '/p', path: 'docs', kind: 'dir' }, { ok: true });
+    o.command('files.rename', { root: '/p', from: 'a.ts', to: 'b.ts' }, { ok: true });
+    o.command('files.copy', { fromRoot: '/p', from: 'a.ts', toRoot: '/p', toDir: '', move: false }, { path: 'a copy.ts' });
+    o.command('files.copy', { fromRoot: '/p', from: 'a.ts', toRoot: '/wt', toDir: 'src', move: true }, { path: 'src/a.ts' });
+    o.command('files.delete', { root: '/p', path: 'b.ts' }, { ok: true });
+    expect(events).toEqual([
+      { name: 'file_managed', props: { action: 'create_file' } },
+      { name: 'file_managed', props: { action: 'create_folder' } },
+      { name: 'file_managed', props: { action: 'rename' } },
+      { name: 'file_managed', props: { action: 'copy', crossCheckout: false } },
+      { name: 'file_managed', props: { action: 'move', crossCheckout: true } },
+      { name: 'file_managed', props: { action: 'delete' } },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/secret-plan|a\.ts|src/);
+  });
+
   it('extension_installed: official marketplace ids only, never folder, git or a custom index', () => {
     const ext = (source: string, name = 'oide-browser-preview') => ({
       id: 'x',

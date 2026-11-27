@@ -497,8 +497,12 @@ function StartAgent({ meta, version, onCollapse }: { meta: ArtifactMeta; version
   const effectiveMode: PermissionMode = mode ?? (allowed(wantedMode) ? wantedMode : allowed('auto') ? 'auto' : 'default');
   const effectiveSlot = slot ?? defaultLeadSlot(settings, projectDefaults?.presetId);
 
+  // Preselect the first project, never over a pick: this effect can run after the user's change
+  // event (it reads `projectId` from the render that showed the picker), so it updates from the
+  // latest state instead of overwriting it.
   useEffect(() => {
-    if (askProject && !projectId && projects[0]) setProjectId(projects[0].id);
+    const first = projects[0]?.id;
+    if (askProject && !projectId && first) setProjectId((cur) => cur || first);
   }, [askProject, projectId, projects]);
 
   const start = async (body: string, pinIds: string[], hasText: boolean, runUnder?: string) => {

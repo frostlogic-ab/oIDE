@@ -45,8 +45,7 @@ apps/desktop/
   `OIDE_USER_DATA` overrides userData (tests); the single-instance lock is per userData folder.
 - **Hardening** (`security/hardening.ts`, applied to every webContents): navigation away from the app
   and `window.open` are refused; allow-listed `https` URLs (`security/external.ts`, extend with
-  `allowExternalHost(host)`) open in the system browser; `<webview>` refused; permissions denied
-  except `clipboard-sanitized-write`.
+  `allowExternalHost(host)`) open in the system browser; `<webview>` refused; permissions denied except `clipboard-sanitized-write` (every frame) and `clipboard-read` for the app's own top-level page only (`security/permissions.ts`; the editor's right-click Paste reads through `navigator.clipboard`; artifact previews and extension panels are iframes and are refused).
 - **CSP** (`security/csp.ts`): `script-src 'self'` (no inline, no eval), styles allow inline (Monaco,
   xterm), fonts/images allow `data:`/`blob:`, workers allow `blob:`, `frame-src` = `APP_FRAME_SRC`
   (`oide-artifact:`, the sandboxed artifact previews; see [security](security.md)). Injected as a

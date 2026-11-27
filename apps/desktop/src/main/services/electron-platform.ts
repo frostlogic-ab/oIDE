@@ -160,6 +160,7 @@ export function electronPlatform(ctx: MainContext, terminals: TerminalService): 
     },
     openExternal: (url) => shell.openExternal(url),
     openPath: (path) => shell.openPath(path),
+    trashItem: (path) => shell.trashItem(path),
     forkHost: utilityProcessFork(utilityProcess),
     hostEntry: join(import.meta.dirname, 'host-process.js'),
     builtinExtensionDirs: app.isPackaged ? [join(process.resourcesPath, 'extensions')] : [join(repoRoot, 'extensions')],

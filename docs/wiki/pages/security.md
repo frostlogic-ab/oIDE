@@ -12,8 +12,7 @@ rules in [constraints](constraints.md). Where things live: [desktop-shell](deskt
 - One `BrowserWindow`: `contextIsolation`, `sandbox`, `nodeIntegration: false` (also in workers and
   subframes), `webSecurity`, no `<webview>`, `app.enableSandbox()`.
 - Every webContents refuses navigation away from the app and `window.open`; allow-listed `https` hosts
-  open in the system browser (`security/external.ts`). Permissions are denied except
-  `clipboard-sanitized-write`.
+  open in the system browser (`security/external.ts`). Permissions are denied except `clipboard-sanitized-write` (every frame) and `clipboard-read` for the app's own top-level page only (`security/permissions.ts`; the editor's right-click Paste reads through `navigator.clipboard`; artifact previews and extension panels are iframes and are refused).
 - CSP (`security/csp.ts`, injected as `<meta>` at build and as a header for the dev server):
   `script-src 'self'` (no inline, no eval), `object-src 'none'`, `base-uri 'none'`,
   `form-action 'none'`, `frame-src oide-artifact: oide-ext:` (artifact previews and extension panels only,

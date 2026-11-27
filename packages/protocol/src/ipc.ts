@@ -256,6 +256,20 @@ export const Commands = {
   'files.tree': cmd(z.object({ root: z.string(), dir: z.string().default('') }), z.array(FileNode)),
   'files.read': cmd(z.object({ root: z.string(), path: z.string() }), z.object({ content: z.string(), binary: z.boolean() })),
   'files.write': cmd(z.object({ root: z.string(), path: z.string(), content: z.string() }), Ok),
+  /** Files tree › New file / New folder: `path` may hold `/` (missing folders are created); refuses an existing path. */
+  'files.create': cmd(z.object({ root: z.string(), path: z.string().min(1).max(1024), kind: z.enum(['file', 'dir']) }), Ok),
+  /** Files tree › Rename: `to` is the new relative path in the same checkout; refuses an existing target. */
+  'files.rename': cmd(z.object({ root: z.string(), from: z.string().min(1), to: z.string().min(1).max(1024) }), Ok),
+  /**
+   * Files tree › Paste: copies (or with `move`, moves) a file or folder into `toDir` of `toRoot`
+   * (any project or worktree). A name already taken gets " copy", " copy 2"... Returns the new path.
+   */
+  'files.copy': cmd(
+    z.object({ fromRoot: z.string(), from: z.string().min(1), toRoot: z.string(), toDir: z.string().default(''), move: z.boolean().default(false) }),
+    z.object({ path: z.string() }),
+  ),
+  /** Files tree › Delete: moves the file or folder to the system trash (Recycle Bin). */
+  'files.delete': cmd(z.object({ root: z.string(), path: z.string().min(1) }), Ok),
   'files.history': cmd(z.object({ root: z.string(), path: z.string() }), z.array(CommitInfo)),
   'files.editingAgents': cmd(z.object({ path: z.string() }), z.array(Id)),
   /** Artifacts that mention this file (Files › Mentioned in). Path is relative to root. */

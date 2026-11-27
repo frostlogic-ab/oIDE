@@ -512,6 +512,15 @@ export const TELEMETRY_EVENTS = {
       engine: z.enum(['git-grep', 'scan', 'mixed']).optional(),
     }),
   }),
+  file_managed: def({
+    from: 'main',
+    question: 'Do people manage files from the Files tree (new, rename, copy, move, delete), and which actions?',
+    props: z.object({
+      action: z.enum(['create_file', 'create_folder', 'rename', 'copy', 'move', 'delete']),
+      /** The copy or move went to another checkout (main ↔ an agent worktree). */
+      crossCheckout: z.boolean().optional(),
+    }),
+  }),
   artifact_imported: def({
     from: 'main',
     question:
