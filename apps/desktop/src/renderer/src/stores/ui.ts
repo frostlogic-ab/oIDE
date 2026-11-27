@@ -12,6 +12,8 @@ export interface Toast {
   message: string;
   agentId?: string;
   action?: { label: string; run: () => void };
+  /** A second answer (a question's "No"); shown in place of Dismiss, and closes the toast too. */
+  secondary?: { label: string; run: () => void };
   /** ms; 0 = sticky (closed with its button). Defaults: `TOAST_DURATION`. */
   duration?: number;
   /** Toasts with the same key are one toast: a repeat refreshes it instead of stacking. */

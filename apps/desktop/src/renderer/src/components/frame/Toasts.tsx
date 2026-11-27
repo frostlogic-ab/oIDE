@@ -54,14 +54,27 @@ export function Toasts() {
               {t.action.label}
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => dismiss(t.id)}
-            aria-label={`Dismiss: ${t.message}`}
-            className="h-[26px] px-2 rounded-sm border border-ink-3 bg-transparent text-on-accent text-[12px]"
-          >
-            Dismiss
-          </button>
+          {t.secondary ? (
+            <button
+              type="button"
+              onClick={() => {
+                t.secondary?.run();
+                dismiss(t.id);
+              }}
+              className="h-[26px] px-2 rounded-sm border border-ink-3 bg-transparent text-on-accent text-[12px]"
+            >
+              {t.secondary.label}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => dismiss(t.id)}
+              aria-label={`Dismiss: ${t.message}`}
+              className="h-[26px] px-2 rounded-sm border border-ink-3 bg-transparent text-on-accent text-[12px]"
+            >
+              Dismiss
+            </button>
+          )}
         </div>
       ))}
     </div>

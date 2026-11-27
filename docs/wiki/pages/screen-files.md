@@ -242,6 +242,23 @@ ADR [0019](../../adr/0019-language-servers-in-main-with-a-monaco-bridge.md). Mai
   covers TypeScript/JavaScript, Python, Rust, Go, C/C++, CSS, HTML, JSON, YAML and Bash with the
   servers installed on PATH (or in the checkout's `node_modules/.bin`). The first matching
   contribution (by extension, or whole file name) wins.
+- Servers that come with oIDE ([ADR 0020](../../adr/0020-bundle-common-language-servers.md)):
+  TypeScript/JavaScript (`typescript-language-server` + TypeScript 5.9), CSS, HTML and JSON
+  (`vscode-langservers-extracted`) and YAML (`yaml-language-server`) ship in
+  `<resources>/language-servers` (`packages/language-servers`; in development the workspace
+  `node_modules`). When a built-in server's command is not on PATH or in the checkout, main runs the
+  bundled script with the user's `node` (`LanguageServiceOptions.bundled`); the status tooltip says
+  "comes with oIDE". The user's own install always wins. Without Node.js the server is "not
+  installed" and Install installs Node.js (`winget install --id OpenJS.NodeJS.LTS -e` on Windows,
+  `brew install node` on macOS; Linux keeps the npm command).
+- Missing servers: the first time a document's server is "not installed" (and it has an install
+  command), a sticky toast asks "<server> is not installed. Install it now? It runs: <command>" with
+  Install and No (`lspInstall.ts`, once per language per run). No is remembered per language
+  (`localStorage` `oide.lsp.installDeclined`) and that language is never asked about again.
+  Install opens a terminal in the Files panel ("Install <server>", download icon) through
+  `lsp.install { root, path }`: only the document goes over IPC; main takes the install command
+  from the extension's manifest (SEC-05), types it into a new interactive shell in the checkout, and
+  then looks for the server on PATH every 3 s for 10 minutes, starting it as soon as it is there.
 - One server per (language, checkout): the main checkout and each agent worktree get their own,
   rooted at that folder. It starts on the first open tab of its language and stops 3 minutes after
   its last tab closes, when the project is untrusted or removed, when the extension goes off, when
@@ -273,8 +290,10 @@ ADR [0019](../../adr/0019-language-servers-in-main-with-a-monaco-bridge.md). Mai
 - File status bar (`LspStatus.tsx`): problem counts (error and warning icons; click = next problem, F8) and
   the server: a dot (green running, grey starting, amber not installed, red failed, dim when off)
   and its name; the tooltip explains the state. Its menu has Restart language server (or Try again)
-  and, when the command was not found, Copy install command.
-- Telemetry: `language_server_started { language, outcome }` per start attempt.
+  and, when the command was not found, Install (the same terminal as the toast's Install; offered
+  even after No).
+- Telemetry: `language_server_started { language, outcome }` per start attempt;
+  `language_server_install { choice, via }` for Install / No (toast) and Install (menu).
 
 ## Search
 

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import type { LspDiagnosticsEvent, LspStateEvent } from '@oide/protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { toHover, toLocations, toSignatureHelp, toSymbols, toTextEdits } from './convert.js';
-import { LanguageServerService, languageIdFor, lspLanguageBucket, matchServer, serverEnv, whichCommand, windowsCmd, type LanguageServerDef, type LanguageServiceOptions, type SpawnFn } from './language-servers.js';
+import { LanguageServerService, languageIdFor, lspLanguageBucket, matchServer, serverEnv, nodeInstallHint, whichCommand, windowsCmd, type LanguageServerDef, type LanguageServiceOptions, type SpawnFn } from './language-servers.js';
 
 const FIXTURE = fileURLToPath(new URL('./fixtures/fake-lsp.mjs', import.meta.url));
 const DOC = 'src/a.fk';
@@ -217,6 +217,65 @@ describe('LanguageServerService against the fixture server', () => {
     expect(t.spawned).toEqual([]);
     // The real lookup agrees.
     expect(whichCommand('fake-lsp-not-on-path', t.root)).toBeUndefined();
+  });
+
+  it("a built-in server not on PATH runs oIDE's bundled copy with the user's node", async () => {
+    const t = setup({
+      options: { which: (c) => (c === 'node' ? process.execPath : undefined), bundled: (c) => (c === 'fake-lsp-not-on-path' ? FIXTURE : undefined) },
+      defs: [def([], { command: 'fake-lsp-not-on-path', args: ['--stdio'], builtin: true })],
+    });
+    await t.svc.open(t.root, DOC, 1, TEXT);
+    await t.running();
+    expect(t.spawned[0]).toMatchObject({ command: process.execPath, args: [FIXTURE, '--stdio'] });
+    expect(await t.svc.status(t.root, DOC)).toMatchObject({ state: 'running', bundled: true });
+  });
+
+  it('the bundled copy is only for built-in servers, and PATH comes first', async () => {
+    const onPath = setup({ options: { which: (c) => (c === 'node' || c === 'my-lsp' ? process.execPath : undefined), bundled: () => '/never.js' }, defs: [def([], { command: 'my-lsp', builtin: true })] });
+    await onPath.svc.open(onPath.root, DOC, 1, TEXT);
+    await onPath.running();
+    expect(onPath.spawned[0]?.args[0]).toBe(FIXTURE);
+    expect((await onPath.svc.status(onPath.root, DOC)).bundled).toBeUndefined();
+    const ext = setup({ options: { which: (c) => (c === 'node' ? process.execPath : undefined), bundled: () => FIXTURE }, defs: [def([], { command: 'ext-lsp', builtin: false })] });
+    expect(await ext.svc.open(ext.root, DOC, 1, TEXT)).toMatchObject({ state: 'not-installed', install: 'npm install -g fake-lsp' });
+    expect(ext.spawned).toEqual([]);
+  });
+
+  it('a bundled server without Node.js: not installed, and Install installs Node.js', async () => {
+    const t = setup({ options: { which: () => undefined, bundled: () => FIXTURE, platform: 'win32' }, defs: [def([], { command: 'fake-lsp-not-on-path', builtin: true })] });
+    const st = await t.svc.open(t.root, DOC, 1, TEXT);
+    expect(st).toMatchObject({ state: 'not-installed', install: 'winget install --id OpenJS.NodeJS.LTS -e' });
+    expect(st.message).toMatch(/needs Node\.js/);
+    expect(t.svc.installCommand(t.root, DOC)).toEqual({ command: 'winget install --id OpenJS.NodeJS.LTS -e', server: 'Fake LSP' });
+    expect(nodeInstallHint('darwin')).toBe('brew install node');
+    expect(nodeInstallHint('linux')).toBeUndefined();
+  });
+
+  it('Install: gives the install command only while not installed, then starts the server once it is on PATH', async () => {
+    let installed = false;
+    const t = setup({ options: { which: (c) => (installed ? c : undefined), installPollMs: 20 } });
+    expect(t.svc.installCommand(t.root, DOC)).toBeUndefined(); // not open
+    await t.svc.open(t.root, DOC, 1, TEXT);
+    expect(t.svc.installCommand(t.root, DOC)).toEqual({ command: 'npm install -g fake-lsp', server: 'Fake LSP' });
+    t.svc.watchInstall(t.root, DOC);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(t.spawned).toEqual([]);
+    installed = true;
+    await t.running();
+    expect(t.spawned).toHaveLength(1);
+    expect(t.svc.installCommand(t.root, DOC)).toBeUndefined();
+  });
+
+  it('Install: stops looking after installWatchMs', async () => {
+    let installed = false;
+    const t = setup({ options: { which: (c) => (installed ? c : undefined), installPollMs: 20, installWatchMs: 50 } });
+    await t.svc.open(t.root, DOC, 1, TEXT);
+    t.svc.watchInstall(t.root, DOC);
+    await new Promise((r) => setTimeout(r, 150));
+    installed = true;
+    await new Promise((r) => setTimeout(r, 100));
+    expect(t.spawned).toEqual([]);
+    expect((await t.svc.status(t.root, DOC)).state).toBe('not-installed');
   });
 
   it('closing the last document stops the server after idleMs and clears its diagnostics', async () => {

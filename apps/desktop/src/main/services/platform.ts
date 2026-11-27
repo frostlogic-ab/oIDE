@@ -36,6 +36,8 @@ export interface Platform {
   hostEntry?: string;
   /** Folders whose subfolders are built-in extensions. */
   builtinExtensionDirs: string[];
+  /** `node_modules` folders holding oIDE's bundled language servers (`@oide/language-servers`, ADR 0020). */
+  languageServerDirs?: string[];
   /** `tools/marketplace-index/bundled/index.json` (or the packaged copy). */
   bundledIndexPath?: string;
   /**

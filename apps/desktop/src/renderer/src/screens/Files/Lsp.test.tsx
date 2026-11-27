@@ -7,6 +7,10 @@ import { setupMockApp } from '../SourceControl/testing';
 import { useChanges } from './changesStore';
 import { useFiles } from './filesStore';
 import FilesScreen from './index';
+import { Toasts } from '../../components/frame/Toasts';
+import { useTerminals } from '../../stores/terminals';
+import { useUi } from '../../stores/ui';
+import { promptInstall, resetInstallPrompts } from './lspInstall';
 import { LspStatusControl } from './LspStatus';
 import { docKey, problemsOf, problemSummary, useLsp } from './lspStore';
 import { useSearch } from './searchStore';
@@ -104,23 +108,24 @@ describe('Files tree problem decorations', () => {
 });
 
 describe('LspStatusControl', () => {
-  it('not installed: says so, and offers the install command and Try again', async () => {
+  it('not installed: says so, and offers Install (a terminal runs the command) and Try again', async () => {
     const onRestart = vi.fn();
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
+    const onInstall = vi.fn();
     render(
       <LspStatusControl
         status={{ state: 'not-installed', language: 'typescript', server: 'TypeScript language server', install: 'npm install -g typescript-language-server typescript' }}
         onNextProblem={() => {}}
         onRestart={onRestart}
+        onInstall={onInstall}
       />,
     );
     const btn = screen.getByRole('button', { name: 'Language server: TypeScript language server not installed' });
     expect(btn.getAttribute('title')).toContain('npm install -g typescript-language-server typescript');
     fireEvent.click(btn);
     const menu = await screen.findByRole('menu', { name: 'Language server' });
-    fireEvent.click(within(menu).getByRole('menuitem', { name: /Copy install command/ }));
-    expect(writeText).toHaveBeenCalledWith('npm install -g typescript-language-server typescript');
+    expect(within(menu).queryByRole('menuitem', { name: /Copy install command/ })).toBeNull();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^Install/ }));
+    expect(onInstall).toHaveBeenCalled();
     fireEvent.click(btn);
     fireEvent.click(within(await screen.findByRole('menu', { name: 'Language server' })).getByRole('menuitem', { name: /Try again/ }));
     expect(onRestart).toHaveBeenCalled();
@@ -128,18 +133,64 @@ describe('LspStatusControl', () => {
 
   it('running: the server name and the problem counts, which go to the next problem', () => {
     const onNext = vi.fn();
-    render(<LspStatusControl status={{ state: 'running', server: 'Pyright' }} problems={{ errors: 2, warnings: 0, list: [] }} onNextProblem={onNext} onRestart={() => {}} />);
+    render(<LspStatusControl status={{ state: 'running', server: 'Pyright' }} problems={{ errors: 2, warnings: 0, list: [] }} onNextProblem={onNext} onRestart={() => {}} onInstall={() => {}} />);
     expect(screen.getByRole('button', { name: 'Language server: Pyright' }).getAttribute('data-lsp-state')).toBe('running');
     fireEvent.click(screen.getByRole('button', { name: '2 errors. Go to the next problem' }));
     expect(onNext).toHaveBeenCalled();
   });
 
   it('untrusted: off, no menu; nothing at all without a server or problems', () => {
-    const { container, rerender } = render(<LspStatusControl status={{ state: 'untrusted', server: 'gopls' }} onNextProblem={() => {}} onRestart={() => {}} />);
+    const { container, rerender } = render(<LspStatusControl status={{ state: 'untrusted', server: 'gopls' }} onNextProblem={() => {}} onRestart={() => {}} onInstall={() => {}} />);
     const btn = screen.getByRole('button', { name: 'Language server: Language server off' });
     expect(btn.hasAttribute('disabled')).toBe(true);
     expect(btn.getAttribute('title')).toMatch(/not trusted/);
-    rerender(<LspStatusControl onNextProblem={() => {}} onRestart={() => {}} />);
+    rerender(<LspStatusControl onNextProblem={() => {}} onRestart={() => {}} onInstall={() => {}} />);
     expect(container.textContent).toBe('');
+  });
+});
+
+describe('install prompt for a missing language server', () => {
+  const missing = { state: 'not-installed' as const, language: 'python', server: 'Pyright', install: 'npm install -g pyright' };
+  beforeEach(() => {
+    resetInstallPrompts();
+    localStorage.clear();
+    useUi.setState({ toasts: [] });
+    useTerminals.setState({ sessions: {}, groups: {} });
+  });
+
+  it('asks once; Install opens a Files terminal that installs the document’s server', async () => {
+    render(<Toasts />);
+    promptInstall(ROOT, 'src/app.py', missing);
+    promptInstall(ROOT, 'src/other.py', missing); // same language: asked already
+    const t = await screen.findByRole('status');
+    expect(t.textContent).toContain('Pyright is not installed. Install it now?');
+    expect(t.textContent).toContain('npm install -g pyright');
+    expect(useUi.getState().toasts).toHaveLength(1);
+    fireEvent.click(within(t).getByRole('button', { name: 'Install' }));
+    const sessions = Object.values(useTerminals.getState().sessions);
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toMatchObject({ group: 'files', kind: 'install', title: 'Install Pyright', cwd: ROOT, install: { root: ROOT, path: 'src/app.py' } });
+    expect(useTerminals.getState().groups.files?.open).toBe(true);
+    expect(useUi.getState().toasts).toEqual([]);
+  });
+
+  it('No: never asked again for that language, even in a new run', async () => {
+    render(<Toasts />);
+    promptInstall(ROOT, 'src/app.py', missing);
+    fireEvent.click(within(await screen.findByRole('status')).getByRole('button', { name: 'No' }));
+    expect(useUi.getState().toasts).toEqual([]);
+    expect(useTerminals.getState().sessions).toEqual({});
+    resetInstallPrompts();
+    promptInstall(ROOT, 'src/app.py', missing);
+    expect(useUi.getState().toasts).toEqual([]);
+    // Another language still asks.
+    promptInstall(ROOT, 'src/main.go', { state: 'not-installed', language: 'go', server: 'gopls', install: 'go install golang.org/x/tools/gopls@latest' });
+    expect(useUi.getState().toasts).toHaveLength(1);
+  });
+
+  it('no prompt without an install command, or when the server is not missing', () => {
+    promptInstall(ROOT, 'a.rs', { state: 'not-installed', language: 'rust', server: 'rust-analyzer' });
+    promptInstall(ROOT, 'a.py', { ...missing, state: 'running' });
+    expect(useUi.getState().toasts).toEqual([]);
   });
 });
