@@ -92,7 +92,7 @@ Injected interfaces (`ports.ts`):
 | Status | Rule |
 | --- | --- |
 | queued / starting / paused / stopped | Set by the supervisor (`status` events). |
-| running | A user message was sent (`status running`), or `init` while starting; still `running` after a `result` when `backgroundTasks > 0` (async subagents). |
+| running | A user message was sent (`status running`), or `init` while starting; still `running` after a `result` when `backgroundTasks > 0` (async subagents); back to `running` from has-question / ready-for-review when the lead thinks, writes or calls a tool in a turn the CLI started on its own (a subagent report woke it; no user message). The next `result` settles it again. |
 | needs-permission | A `permission-request` is pending; back to running on `permission-resolved` for that id. |
 | has-question | `result` and no `submit_for_review` since the last user message, unless the next row applies. |
 | ready-for-review | `review-submitted` since the last user message (kept through `/compact`); or a `result` after a review from an earlier turn whose final message asks nothing (`asksUser`: no `?` outside code and links, no "let me know"), [ADR 0016](../../adr/0016-follow-up-turns-return-to-ready-for-review.md). |
