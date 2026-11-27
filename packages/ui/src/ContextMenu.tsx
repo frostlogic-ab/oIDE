@@ -121,8 +121,8 @@ export function ContextMenu({ at, items, label, onClose }: ContextMenuProps) {
               it.onSelect();
             }}
             className={cn(
-              'w-full flex items-center gap-2 h-7 px-3 border-0 text-left text-[12.5px] bg-transparent cursor-pointer disabled:opacity-50 disabled:cursor-default outline-none',
-              i === active ? 'bg-selected' : '',
+              'w-full flex items-center gap-2 h-7 px-3 border-0 text-left text-[12.5px] cursor-pointer disabled:opacity-50 disabled:cursor-default outline-none',
+              i === active ? 'bg-selected' : 'bg-transparent',
               it.danger ? 'text-bad' : 'text-ink',
             )}
           >
