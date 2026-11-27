@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
-import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Git, GitError, isInside as lexicallyInside, pathKey } from '@oide/git';
+import { Git, GitError, isInside as lexicallyInside, pathKey, plainFsPromises } from '@oide/git';
 import {
   applyReplacements,
   buildSearchRegExp,
@@ -15,6 +14,9 @@ import {
   type SearchResultsEvent,
 } from '@oide/protocol';
 import { isInside } from '../security/paths.js';
+
+// Not node:fs: in Electron it treats `*.asar` files as folders and keeps them open (@oide/git plain-fs).
+const { readdir, readFile, stat, writeFile } = plainFsPromises;
 
 /**
  * Files › quick open and Files › Search in main (wiki: screen-files.md, security.md › Search and
