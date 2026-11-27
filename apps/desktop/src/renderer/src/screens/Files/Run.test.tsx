@@ -43,8 +43,9 @@ describe('Files › Run', () => {
 
     fireEvent.click(run);
     const menu = await screen.findByRole('menu', { name: 'Run a script' });
-    // Every shown project is listed, prefixed with its name (All projects scope).
-    fireEvent.click(within(menu).getAllByRole('menuitem', { name: /^oide ›\s?dev:watch/ })[0]!);
+    // Like the other toolbar buttons it acts on the open trees: only oide is open.
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['buildpnpm', 'devpnpm', 'dev:watchpnpm', 'testpnpm', 'lintpnpm', 'typecheckpnpm']);
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^dev:watch/ }));
 
     const tabs = await screen.findByRole('tablist', { name: 'Terminals: open terminals' });
     const tab = within(tabs).getByRole('tab', { name: /dev:watch/ });
@@ -53,6 +54,13 @@ describe('Files › Run', () => {
     const session = Object.values(useTerminals.getState().sessions)[0]!;
     expect(session).toMatchObject({ kind: 'script', cwd: OIDE, context: 'oide', script: { id: 'pnpm:package.json:dev:watch', command: 'pnpm run dev:watch' } });
     expect(await screen.findByRole('log', { name: `dev:watch terminal, in ${OIDE}` })).toBeTruthy();
+
+    // With a second tree open, each script is prefixed with its project.
+    fireEvent.click(screen.getByRole('button', { name: /^billing-api/ }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('scripts.list', { root: '/Users/you/code/billing-api' }));
+    fireEvent.click(await within(toolbar).findByRole('button', { name: 'Run a script' }));
+    const both = await screen.findByRole('menu', { name: 'Run a script' });
+    await waitFor(() => expect(within(both).getAllByRole('menuitem', { name: /^billing-api ›\s?build/ })).toHaveLength(1));
   });
 
   it('opens, switches and closes several terminals, and hides the panel', async () => {

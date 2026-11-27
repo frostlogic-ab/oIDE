@@ -85,8 +85,9 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
   const activeTab = s.tabs.find((t) => t.id === s.active);
   const all = (fn: (root: string) => void) => () => openRoots.forEach(fn);
 
-  // Files › Run: the scripts of every shown checkout (package.json, Makefile, Cargo…).
-  const shownRoots = trees.map((t) => ({ project: t.project, root: s.checkout[t.project.id] ?? t.project.path, label: checkoutLabel(t, s.checkout[t.project.id] ?? t.project.path) }));
+  // Files › Run: like the other toolbar buttons it acts on the open trees, listing the scripts of
+  // each one's checkout (package.json, Makefile, Cargo…).
+  const shownRoots = trees.filter((t, i) => scoped || (s.openProjects[t.project.id] ?? i === 0)).map((t) => ({ project: t.project, root: s.checkout[t.project.id] ?? t.project.path, label: checkoutLabel(t, s.checkout[t.project.id] ?? t.project.path) }));
   const rootsKey = JSON.stringify(shownRoots.map((r) => r.root));
   const scriptsByRoot = useScripts((st) => st.byRoot);
   useEffect(() => {
@@ -96,12 +97,13 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [rootsKey]);
+  const prefix = shownRoots.filter((r) => scriptsByRoot[r.root]?.length).length > 1;
   const runItems: MenuItem[] = shownRoots.flatMap(({ project, root, label }) =>
     (scriptsByRoot[root] ?? []).map((sc) => ({
       id: `${root}::${sc.id}`,
       label: (
-        <span className="font-mono text-[12px]">
-          {trees.length > 1 && <span className="text-ink-3">{project.name} › </span>}
+        <span className="font-mono text-[12px] whitespace-nowrap">
+          {prefix && <span className="text-ink-3">{project.name} › </span>}
           {sc.name}
         </span>
       ),
@@ -124,7 +126,7 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
             <Menu
               label="Run a script"
               triggerTitle={`Run a script (${runItems.length} found)`}
-              align="end"
+              align="start"
               portal
               triggerClassName="w-7 h-7 px-0 flex items-center justify-center rounded-sm border-0 bg-transparent text-ink-3 cursor-pointer hover:bg-raised hover:text-ok"
               trigger={<Icon name="play" size={15} />}

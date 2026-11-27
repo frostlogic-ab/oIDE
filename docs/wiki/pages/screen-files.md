@@ -87,8 +87,9 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   or file targets); justfile recipes; fixed verbs for Cargo.toml, go.mod, *.sln / *.csproj,
   gradle(w), pom.xml and Django's manage.py. Names that are not plain words (spaces, shell
   metacharacters) are skipped. At most 100 per source; manifests over 1 MB are ignored.
-- Run (`scriptsStore.ts`, toolbar play button): a portalled menu of every shown checkout's scripts
-  (prefixed "project ›" with All projects; the hint is the package manager or the source file; the
+- Run (`scriptsStore.ts`, toolbar play button, shown only when scripts were found): like the other
+  toolbar buttons it acts on the open trees, a portalled menu of each open checkout's scripts
+  (prefixed "project ›" when more than one open tree has scripts; the hint is the package manager or the source file; the
   tooltip is the command). Lists refresh when the window regains focus or the button is pointed at
   (at most every 4 s). Picking one opens a new terminal tab that runs it: `terminal.runScript { cwd,
   scriptId }`. Main finds the script again by id in that checkout and types its command into a new
