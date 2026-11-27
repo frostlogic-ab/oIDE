@@ -2,11 +2,15 @@
  * The single live Monaco editor of the Files screen (lazy chunk: Monaco loads only when a file is
  * opened). One model per open tab, view state kept per tab, Ctrl/Cmd+S saves through files.write.
  * Markdown tabs show the rendered page alone (`mdView` preview) or the source beside it (edit).
+ * A changed file (`diff`) shows a Monaco diff editor instead: the version `files.changes` compares
+ * against on the left (or above, unified), the tab's own model on the right, still editable (the
+ * same model, so unsaved edits, the dirty dot and Ctrl/Cmd+S work in both views).
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Spinner } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
+import type { DiffLayout } from './diffView';
 import { onTabsMoved, onTabsReloaded, useFiles, type FileTab } from './filesStore';
 import { MarkdownPreview } from './MarkdownPreview';
 import type { MarkdownView } from './markdownLinks';
@@ -26,6 +30,8 @@ export interface EditorStatus {
   dirty: boolean;
   saving: boolean;
   readOnly: boolean;
+  /** Set while the changes show: what they are measured against (HEAD, or the branch's base). */
+  against?: 'head' | 'branch';
 }
 
 interface Entry {
@@ -76,14 +82,19 @@ onTabsReloaded((ids) => {
   }
 });
 
+/** Detaches a model from the live diff editor before it is disposed (Monaco throws otherwise). */
+let releaseDiff: (model: monaco.editor.ITextModel) => void = () => {};
+
 function disposeClosed(open: Set<string>): void {
   for (const [id, e] of entries) {
     if (!open.has(id)) {
+      releaseDiff(e.model);
       e.model.dispose();
       entries.delete(id);
     }
   }
 }
+type OriginalState = 'loading' | 'ready' | 'binary' | 'error';
 type LoadState = { state: 'loading' } | { state: 'ready' } | { state: 'binary' } | { state: 'error'; message: string };
 
 export interface EditorPaneProps {
@@ -103,14 +114,26 @@ export interface EditorPaneProps {
   mdView?: MarkdownView;
   /** A relative link in the Markdown preview: open this path of the active tab's checkout. */
   onOpenFile?(path: string): void;
+  /**
+   * Show the active tab's changes. `oldPath` is a rename's source; a new `refresh` value (the
+   * checkout's changes were reloaded) reads the original again.
+   */
+  diff?: { layout: DiffLayout; oldPath?: string; refresh?: unknown };
 }
 
 /** Re-render the preview this long after the last keystroke. */
 const PREVIEW_DEBOUNCE_MS = 150;
 
-export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, onAsk, sendTo, saveRef, mdView, onOpenFile }: EditorPaneProps) {
+export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, onAsk, sendTo, saveRef, mdView, onOpenFile, diff }: EditorPaneProps) {
   const host = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  const diffHost = useRef<HTMLDivElement>(null);
+  const diffRef = useRef<monaco.editor.IStandaloneDiffEditor | null>(null);
+  const diffSubs = useRef<monaco.IDisposable[]>([]);
+  /** The left side of the diff, and the tab it was read for. */
+  const originalRef = useRef<{ model: monaco.editor.ITextModel; tabId: string } | null>(null);
+  const [original, setOriginal] = useState<OriginalState>('loading');
+  const againstRef = useRef<'head' | 'branch'>(undefined);
   const activeRef = useRef(active);
   activeRef.current = active;
   const [load, setLoad] = useState<LoadState>({ state: 'loading' });
@@ -125,9 +148,17 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
   const [rev, setRev] = useState(0);
   const revTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const showEditor = mdView !== 'preview';
+  // The diff replaces the editor (and the Markdown preview) while it can show; a binary or
+  // unreadable original falls back to the plain editor with a note.
+  const showDiff = Boolean(diff) && load.state === 'ready' && (original === 'loading' || original === 'ready');
+  const diffReady = showDiff && original === 'ready';
+  const diffActive = useRef(false);
+  diffActive.current = diffReady;
+  /** The editor the user types in: the diff's modified side while the changes show. */
+  const current = (): monaco.editor.ICodeEditor | null => (diffActive.current && diffRef.current ? diffRef.current.getModifiedEditor() : editorRef.current);
 
   const status = (overrides: Partial<EditorStatus> = {}) => {
-    const ed = editorRef.current;
+    const ed = current();
     const e = entries.get(activeRef.current.id);
     const pos = ed?.getPosition();
     cb.current.onStatus({
@@ -137,6 +168,7 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
       dirty: e ? isDirty(e) : false,
       saving,
       readOnly: e?.readOnly ?? false,
+      ...(diffActive.current && againstRef.current ? { against: againstRef.current } : {}),
       ...overrides,
     });
   };
@@ -206,9 +238,20 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
         }
       }),
     ];
+    releaseDiff = (model) => {
+      const de = diffRef.current;
+      if (de && de.getModel()?.modified === model) de.setModel(null);
+    };
     return () => {
       clearTimeout(revTimer.current);
       subs.forEach((d) => d.dispose());
+      releaseDiff = () => {};
+      diffSubs.current.forEach((d) => d.dispose());
+      diffSubs.current = [];
+      diffRef.current?.dispose();
+      diffRef.current = null;
+      originalRef.current?.model.dispose();
+      originalRef.current = null;
       ed.dispose();
       editorRef.current = null;
       // Closing the last tab unmounts the pane before the effect below sees the new tab list: drop
@@ -270,11 +313,101 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active.id]);
 
+  // The diff editor, created the first time a changed file shows its changes.
+  const ensureDiff = (): monaco.editor.IStandaloneDiffEditor | null => {
+    if (diffRef.current || !diffHost.current) return diffRef.current;
+    const de = monaco.editor.createDiffEditor(diffHost.current, {
+      ...BASE_OPTIONS,
+      originalEditable: false,
+      renderSideBySide: diff?.layout === 'split',
+      // The layout is the user's pick: never switch to unified on its own when the pane is narrow.
+      useInlineViewWhenSpaceIsLimited: false,
+      renderMarginRevertIcon: false,
+      ignoreTrimWhitespace: false,
+      diffAlgorithm: 'advanced',
+    });
+    diffRef.current = de;
+    const me = de.getModifiedEditor();
+    me.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => void save());
+    me.addAction({
+      id: 'oide.askAgent',
+      label: 'Ask an agent about this',
+      contextMenuGroupId: 'navigation',
+      contextMenuOrder: 0,
+      run: (e) => {
+        const sel = currentSelection(e, activeRef.current.path);
+        if (sel) cb.current.onAsk(sel);
+      },
+    });
+    diffSubs.current = [me.onDidChangeCursorPosition(() => status())];
+    return de;
+  };
+
+  // Read the original whenever a tab shows its changes, and again when the checkout's changes reload
+  // (a commit moves HEAD, a save changes the file list). Only a new tab shows the spinner.
+  const diffOn = Boolean(diff);
+  useEffect(() => {
+    if (!diffOn || load.state !== 'ready') return;
+    const e = entries.get(active.id);
+    const de = ensureDiff();
+    if (!e || !de) return;
+    let cancelled = false;
+    const left = originalRef.current;
+    const sameTab = left && left.tabId === active.id && !left.model.isDisposed() && de.getModel()?.modified === e.model;
+    if (!sameTab) setOriginal('loading');
+    oide
+      .invoke('files.original', { root: active.root, path: active.path, ...(diff?.oldPath ? { oldPath: diff.oldPath } : {}) })
+      .then((r) => {
+        if (cancelled || entries.get(active.id) !== e || e.model.isDisposed() || diffRef.current !== de) return;
+        againstRef.current = r.against;
+        if (r.kind === 'binary') return setOriginal('binary');
+        const content = r.kind === 'text' ? r.content : '';
+        const lang = e.model.getLanguageId();
+        let o = originalRef.current;
+        if (!o || o.model.isDisposed()) {
+          o = { model: monaco.editor.createModel(content, lang), tabId: active.id };
+          originalRef.current = o;
+        } else {
+          o.tabId = active.id;
+          if (o.model.getValue() !== content) o.model.setValue(content);
+          if (o.model.getLanguageId() !== lang) monaco.editor.setModelLanguage(o.model, lang);
+        }
+        const cur = de.getModel();
+        if (cur?.original !== o.model || cur?.modified !== e.model) de.setModel({ original: o.model, modified: e.model });
+        de.getModifiedEditor().updateOptions({ readOnly: e.readOnly });
+        setOriginal('ready');
+        status();
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        console.warn('files.original failed', ipcErrorMessage(err));
+        setOriginal('error');
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diffOn, active.id, load.state, diff?.oldPath, diff?.refresh]);
+
+  useEffect(() => {
+    diffRef.current?.updateOptions({ renderSideBySide: diff?.layout === 'split' });
+  }, [diff?.layout]);
+
+  // Switching between the changes and the editor: lay the shown one out at once, report its cursor.
+  useEffect(() => {
+    if (diffReady) diffRef.current?.layout();
+    else editorRef.current?.layout();
+    setSelection(null);
+    status();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diffReady]);
+
   // Reveal a line (Review "Open in editor", quick open "file.ts:42", a search result), once each.
   const revealed = useRef<number>(undefined);
   useEffect(() => {
-    const ed = editorRef.current;
+    const ed = current();
     if (!ed || !reveal || reveal.tabId !== active.id || revealed.current === reveal.nonce || load.state !== 'ready' || !showEditor) return;
+    if (showDiff && !diffReady) return; // wait for the diff to have the file
     revealed.current = reveal.nonce;
     ed.layout(); // it may have just been shown (preview → edit): measure before centring the line
     const lineNumber = Math.max(1, Math.min(reveal.line, ed.getModel()?.getLineCount() ?? reveal.line));
@@ -283,7 +416,7 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
     if (reveal.length) ed.setSelection({ startLineNumber: lineNumber, startColumn, endLineNumber: lineNumber, endColumn: startColumn + reveal.length });
     else ed.setPosition({ lineNumber, column: startColumn });
     if (reveal.focus) ed.focus();
-  }, [reveal, load.state, active.id, showEditor]);
+  }, [reveal, load.state, active.id, showEditor, showDiff, diffReady]);
 
   // Leaving the preview: lay the editor out at once (its ResizeObserver fires a frame later).
   useEffect(() => {
@@ -312,11 +445,28 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
     <div className="relative flex-1 min-h-0 flex">
       <div
         ref={host}
-        className={showEditor ? 'flex-1 min-w-0 min-h-0' : 'hidden'}
+        className={showEditor && !showDiff ? 'flex-1 min-w-0 min-h-0' : 'hidden'}
         data-testid="monaco-host"
         style={{ visibility: load.state === 'ready' ? 'visible' : 'hidden' }}
       />
-      {mdView && load.state === 'ready' && (
+      <div
+        ref={diffHost}
+        className={showDiff ? 'flex-1 min-w-0 min-h-0' : 'hidden'}
+        data-testid="monaco-diff-host"
+        data-layout={diff?.layout}
+        style={{ visibility: diffReady ? 'visible' : 'hidden' }}
+      />
+      {showDiff && !diffReady && (
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Spinner label={`Loading the changes to ${active.path}`} />
+        </div>
+      )}
+      {diff && load.state === 'ready' && (original === 'binary' || original === 'error') && (
+        <div role="status" className="absolute top-0 right-0 z-10 m-2 px-2.5 py-1 rounded-md bg-card border border-line-2 font-sans text-[11.5px] text-ink-3">
+          {original === 'binary' ? 'The changes to this file cannot be shown (binary or too large).' : 'The changes to this file could not be read.'}
+        </div>
+      )}
+      {mdView && !showDiff && load.state === 'ready' && (
         <MarkdownPreview
           source={previewSource}
           path={active.path}
@@ -336,7 +486,7 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
           Couldn't open {active.path}: {load.message}
         </div>
       )}
-      {selection && load.state === 'ready' && showEditor && (
+      {selection && load.state === 'ready' && showEditor && !showDiff && (
         <div
           className="absolute z-10 flex gap-1 p-1 rounded-[9px] bg-card border border-line-3 shadow-[0_8px_24px_rgba(0,0,0,0.45)] font-sans"
           style={{ top: selection.top, left: selection.left }}

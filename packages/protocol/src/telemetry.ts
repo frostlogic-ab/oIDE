@@ -544,6 +544,11 @@ export const TELEMETRY_EVENTS = {
     question: 'Do people read Markdown files in the Files preview or switch to editing them beside it, and with the button or the shortcut?',
     props: z.object({ view: z.enum(['preview', 'edit']), via: z.enum(['button', 'shortcut']) }),
   }),
+  files_diff_view: def({
+    from: 'renderer',
+    question: 'When a changed file opens on its changes in Files, do people read them unified, side by side, or switch to the plain editor?',
+    props: z.object({ view: z.enum(['off', 'unified', 'split']) }),
+  }),
   file_managed: def({
     from: 'main',
     question: 'Do people manage files from the Files tree (new, rename, copy, move, delete), and which actions?',

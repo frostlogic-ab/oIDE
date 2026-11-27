@@ -285,6 +285,14 @@ export const Commands = {
     z.object({ root: z.string(), paths: z.array(z.string().min(1).max(4096)).min(1).max(5000) }),
     z.object({ reverted: z.number().int(), against: z.enum(['head', 'branch']) }),
   ),
+  /**
+   * Files editor diff: the version of a changed file that `files.changes` compares against (pass the
+   * rename source as `oldPath`). `missing` for a new file; `binary` for binary or very large files.
+   */
+  'files.original': cmd(
+    z.object({ root: z.string(), path: z.string().min(1).max(4096), oldPath: z.string().min(1).max(4096).optional() }),
+    z.object({ kind: z.enum(['text', 'binary', 'missing']), content: z.string().default(''), against: z.enum(['head', 'branch']) }),
+  ),
   'files.history': cmd(z.object({ root: z.string(), path: z.string() }), z.array(CommitInfo)),
   'files.editingAgents': cmd(z.object({ path: z.string() }), z.array(Id)),
   /** Artifacts that mention this file (Files › Mentioned in). Path is relative to root. */

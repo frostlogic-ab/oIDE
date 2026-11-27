@@ -282,6 +282,23 @@ const P = {
       <path d="M12 16l-3 3 3 3" />
     </>
   ),
+  /** Files editor: changes in one column (removed lines above added ones). */
+  'diff-unified': (
+    <>
+      <rect x="4" y="3.5" width="16" height="17" rx="2" />
+      <path d="M8 9h8" />
+      <path d="M8 15h8M12 12v6" />
+    </>
+  ),
+  /** Files editor: changes side by side (before | after). */
+  'diff-split': (
+    <>
+      <rect x="3" y="3.5" width="18" height="17" rx="2" />
+      <path d="M12 3.5v17" />
+      <path d="M6 12h3" />
+      <path d="M15 12h3M16.5 10.5v3" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof P;
