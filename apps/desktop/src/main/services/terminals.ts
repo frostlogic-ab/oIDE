@@ -41,6 +41,11 @@ export interface CreateTerminalOptions {
   rows?: number;
   /** Extra env vars (merged over the base env). */
   env?: Record<string, string>;
+  /**
+   * Typed into the interactive shell once it has started (its first output), as if the user typed
+   * it: Files › Run uses it so the shell stays open after the script, with the command in history.
+   */
+  input?: string;
 }
 
 export interface TerminalServiceOptions {
@@ -102,7 +107,7 @@ export class TerminalService {
     this.flushMs = opts.flushMs ?? 8;
   }
 
-  async create({ cwd, command, cols = 100, rows = 30, env }: CreateTerminalOptions): Promise<{ terminalId: string }> {
+  async create({ cwd, command, cols = 100, rows = 30, env, input }: CreateTerminalOptions): Promise<{ terminalId: string }> {
     const spawn = this.opts.spawn ?? (await loadNodePty());
     const { file, args } = defaultShell(this.platform, command);
     const terminalId = randomUUID();
@@ -119,8 +124,14 @@ export class TerminalService {
       throw new IpcError(`Could not start a terminal: ${err instanceof Error ? err.message : String(err)}`, 'unavailable');
     }
     const entry: Entry = { pty, buffer: '', timer: null, disposables: [] };
+    let pendingInput = input;
     entry.disposables.push(
       pty.onData((data) => {
+        if (pendingInput !== undefined) {
+          const text = pendingInput;
+          pendingInput = undefined;
+          pty.write(text);
+        }
         entry.buffer += data;
         entry.timer ??= setTimeout(() => this.flush(terminalId), this.flushMs);
       }),

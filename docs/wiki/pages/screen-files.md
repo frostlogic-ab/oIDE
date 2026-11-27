@@ -7,17 +7,20 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
 ## Layout
 
 - Header: title + shared scope switcher; on the right a "Search" button (`aria-pressed`, Ctrl/Cmd+Shift+F
-  hint) that toggles the Search panel.
+  hint) that toggles the Search panel, and a "Terminal" button (`aria-pressed`, Ctrl+` on every
+  platform, keymap action `files.terminal`) that shows or hides the terminal panel.
 - Left (270px, "File tree", `TreePanel.tsx`): a toolbar ("FILES" label; 28px icon buttons Search in
-  files, Reveal active file, Expand loaded folders, an "Expand to depth" 1/2/3 menu, Collapse all
+  files, Run a script (only when scripts were found, see [Run scripts](#run-scripts-and-terminals)),
+  Reveal active file, Expand loaded folders, an "Expand to depth" 1/2/3 menu, Collapse all
   folders; they act on every open tree), then per project in scope a header row (expand toggle, name,
   number of agent worktrees, a 96px branch / worktree `<select>`: main + each worktree's short
   branch, and with All projects a "Folder actions for <project>" menu: Collapse all, Expand loaded
-  folders, Expand to depth 1/2/3, Reveal active file) and a `role="tree"`. With All projects the
+  folders, Expand to depth 1/2/3, Reveal active file, Open terminal here) and a `role="tree"`. With All projects the
   first project starts open; with one project in scope its tree is always open. Legend box at the
   bottom. When Search is open the column is the 300px Search panel instead.
 - Middle: open-file tabs (`role="tablist"`, accent top border, close ×, ● when unsaved; right side
-  "Ln, Col · Language" and Save), the agent banner, the editor.
+  "Ln, Col · Language" and Save), the agent banner, the editor, and under it the terminal panel
+  when shown (`TerminalDock.tsx`).
 - Right ("File activity"): This file's history, Mentioned in, the language-servers note.
 
 ## Tree (`filesStore.ts`)
@@ -73,6 +76,36 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   deleting a symlink acts on the link; `.git` is refused; a folder cannot go into itself; moves to
   another disk copy then delete. Each success refreshes the quick-open index and the git status.
   Telemetry: `file_managed { action, crossCheckout }`.
+
+## Run scripts and terminals
+
+- Detection (main, `services/scripts.ts`, `scripts.list { root }`): reads only the checkout's top
+  folder, never runs anything. package.json `scripts` → `<pm> run <name>` (pm from `packageManager`,
+  else `pnpm-lock.yaml` / `yarn.lock` / `bun.lock(b)`, else npm; on Windows `npm.cmd` / `pnpm.cmd` /
+  `yarn.cmd` when on PATH, because PowerShell's default execution policy refuses `npm.ps1`);
+  deno.json(c) `tasks`; composer.json `scripts`; Makefile targets (not `.PHONY`, variables, pattern
+  or file targets); justfile recipes; fixed verbs for Cargo.toml, go.mod, *.sln / *.csproj,
+  gradle(w), pom.xml and Django's manage.py. Names that are not plain words (spaces, shell
+  metacharacters) are skipped. At most 100 per source; manifests over 1 MB are ignored.
+- Run (`scriptsStore.ts`, toolbar play button, shown only when scripts were found): like the other
+  toolbar buttons it acts on the open trees, a portalled menu of each open checkout's scripts
+  (prefixed "project ›" when more than one open tree has scripts; the hint is the package manager or the source file; the
+  tooltip is the command). Lists refresh when the window regains focus or the button is pointed at
+  (at most every 4 s). Picking one opens a new terminal tab that runs it: `terminal.runScript { cwd,
+  scriptId }`. Main finds the script again by id in that checkout and types its command into a new
+  **interactive** shell (`TerminalService.create({ input })`, written after the shell's first
+  output), so the shell stays open after the script ends and ↑ re-runs it, as in VS Code. The
+  renderer never sends a command line (SEC-05). Telemetry: `script_run { runner }`.
+- Terminal panel (`TerminalDock.tsx` → `components/terminal/TerminalTabs.tsx`): one tab per session
+  (play icon for scripts, "project › Terminal N" for shells, "exited N" / "failed" once over), a
+  close × per tab that kills its process (Delete on a focused tab), ←/→/Home/End between tabs,
+  "New terminal" (in the active file's checkout, else the first project's), and Hide (terminals keep
+  running). Top edge drags (and ↑/↓ on the focused separator) between 120px and 70% of the window;
+  closing the last tab hides the panel; showing it with none open starts a shell.
+- Sessions (`stores/terminals.ts`) are grouped (`files`, `agent:<id>` for Focus) and outlive their
+  view: each keeps its own xterm (`TerminalView.tsx` moves the xterm element into whichever host
+  shows it), so a dev server keeps running across screens. Terminals of an agent that is archived or
+  removed, and Files terminals inside its worktree, are closed so Windows can delete the folder.
 
 ## Editor (`EditorPane.tsx`, `monaco/setup.ts`)
 

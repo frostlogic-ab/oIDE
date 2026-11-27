@@ -70,6 +70,18 @@ describe('TerminalService', () => {
     expect(svc.list()).toEqual([]);
   });
 
+  it('types `input` into the interactive shell once it has started', async () => {
+    const pty = fakePty();
+    const spawn = vi.fn<PtySpawn>(() => pty);
+    const svc = new TerminalService({ emit: () => true, spawn, platform: 'linux', baseEnv: () => ({}), flushMs: 0 });
+    await svc.create({ cwd: '/w', input: 'pnpm run dev\r' });
+    expect(spawn.mock.calls[0]![1]).toEqual(['-l']); // an interactive shell, not `-c`
+    expect(pty.written).toEqual([]);
+    pty.emitData('$ ');
+    pty.emitData('more');
+    expect(pty.written).toEqual(['pnpm run dev\r']);
+  });
+
   it('picks a platform shell', () => {
     // Absolute, never a bare name a repo folder could shadow (SEC-01).
     expect(defaultShell('win32').file).toMatch(/^[A-Za-z]:\\.*\\powershell\.exe$/i);

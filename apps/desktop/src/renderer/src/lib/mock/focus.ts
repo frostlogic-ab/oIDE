@@ -9,7 +9,7 @@
  * - `a-invoice`, `a-webhook`: short transcripts for the question and review states.
  * Every event is parsed through the protocol schema, like fixtures.ts.
  */
-import { AgentEvent, FileDiff, type AgentEventDraft, type AgentSummary, type CommandInput, type CommandName, type CommandOutput, type EventName, type EventPayload } from '@oide/protocol';
+import { AgentEvent, FileDiff, type AgentEventDraft, type AgentSummary, type CommandInput, type CommandName, type CommandOutput, type EventName, type EventPayload, type ProjectScript } from '@oide/protocol';
 import { NOW } from './fixtures';
 
 const MIN = 60_000;
@@ -337,6 +337,14 @@ export function patchFocusAgent(a: AgentSummary): AgentSummary {
 
 type Handlers = { [K in CommandName]?: (input: CommandInput<K>) => CommandOutput<K> | Promise<CommandOutput<K>> };
 
+const MOCK_SCRIPTS: ProjectScript[] = ['build', 'dev', 'dev:watch', 'test', 'lint', 'typecheck'].map((name) => ({
+  id: `pnpm:package.json:${name}`,
+  name,
+  runner: 'pnpm',
+  command: `pnpm run ${name}`,
+  file: 'package.json',
+}));
+
 /**
  * Focus commands: a pretend shell for the Terminal tab (echoes lines; `ls`, `pwd`, `git status`)
  * and Stop subagent.
@@ -380,6 +388,16 @@ export function focusHandlers(emit: <K extends EventName>(e: K, p: EventPayload<
       }
       if (echo) emit('terminal.data', { terminalId, data: echo });
       return { ok: true as const };
+    },
+    // Files › Run (dev:web): a package.json's scripts, run by typing the command into a mock shell.
+    'scripts.list': () => MOCK_SCRIPTS,
+    'terminal.runScript': ({ cwd, scriptId }) => {
+      const script = MOCK_SCRIPTS.find((x) => x.id === scriptId);
+      if (!script) throw new Error('[not_found] That script is no longer in this checkout.');
+      const terminalId = `term-focus-${++n}`;
+      terms.set(terminalId, { cwd, line: '' });
+      setTimeout(() => emit('terminal.data', { terminalId, data: `${prompt(cwd)}${script.command}\r\n\x1b[38;2;107;117;132m(mock shell) ${script.command}\x1b[0m\r\n${prompt(cwd)}` }), 50);
+      return { terminalId, script };
     },
     'terminal.resize': () => ({ ok: true as const }),
     'terminal.kill': ({ terminalId }) => {

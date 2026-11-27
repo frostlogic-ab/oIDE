@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { ArchiveReason, Effort, PermissionMode, WorkIn } from './agent.js';
 import { ArtifactKind } from './artifacts.js';
+import { ScriptRunner } from './scripts.js';
 import { UpdateChannel, UpdateInstallTrigger } from './updates.js';
 
 /**
@@ -540,6 +541,14 @@ export const TELEMETRY_EVENTS = {
       action: z.enum(['create_file', 'create_folder', 'rename', 'copy', 'move', 'delete']),
       /** The copy or move went to another checkout (main ↔ an agent worktree). */
       crossCheckout: z.boolean().optional(),
+    }),
+  }),
+  script_run: def({
+    from: 'main',
+    question: 'Do people run project scripts from Files › Run, and for which kinds of project (npm, pnpm, make, cargo…)?',
+    props: z.object({
+      /** The tool that runs it, from a fixed list (never the script name or its command). */
+      runner: ScriptRunner,
     }),
   }),
   artifact_imported: def({
