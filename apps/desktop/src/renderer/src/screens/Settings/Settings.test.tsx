@@ -28,6 +28,14 @@ const invoke = vi.fn(async (command: string, input: unknown): Promise<unknown> =
       return [];
     case 'settings.techniques':
       return builtInTechniques;
+    case 'accounts.add': {
+      const account = { id: 'acc-new001', label: (input as { label: string }).label };
+      current = Settings.parse({ ...current, accounts: { ...current.accounts, list: [...current.accounts.list, account] } });
+      useSettings.getState().apply(current);
+      return account;
+    }
+    case 'accounts.openSignIn':
+      return { terminalId: 'term-1' };
     case 'settings.saveCustomModel': {
       const { model, apiKey } = input as { model: CustomModel; apiKey?: string };
       const saved = CustomModel.parse({ ...model, hasKey: Boolean(apiKey) });
@@ -140,5 +148,34 @@ describe('Settings screen', () => {
     expect(updates()).toContainEqual({ ui: { panelWidths: null } });
     expect(current.ui.panelWidths).toEqual({});
     await waitFor(() => expect((screen.getByRole('button', { name: 'Reset sidebar widths' }) as HTMLButtonElement).disabled).toBe(true));
+  });
+});
+
+describe('Settings › Claude Code › Accounts', () => {
+  it("lists the CLI's own account, adds one and opens its sign-in terminal", async () => {
+    open('cli');
+    const list = screen.getByRole('list', { name: 'Claude Code accounts' });
+    expect(list.querySelectorAll('li')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: '+ Add account' }));
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Work' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Add and sign in' }));
+    });
+    expect(invoke).toHaveBeenCalledWith('accounts.add', { label: 'Work' });
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('accounts.openSignIn', { id: 'acc-new001' }));
+    expect(screen.getByRole('list', { name: 'Claude Code accounts' }).querySelectorAll('li')).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Remove Work' })).toBeTruthy();
+    // The default account cannot be removed.
+    expect(screen.queryByRole('button', { name: 'Remove Default' })).toBeNull();
+  });
+
+  it('saves the default account for new agents', () => {
+    current = Settings.parse({ ...current, accounts: { defaultLabel: 'Personal', list: [{ id: 'acc-work01', label: 'Work' }] } });
+    useSettings.setState({ settings: current });
+    open('cli');
+    const radios = screen.getAllByRole('radio', { name: 'Default for new agents' });
+    expect((radios[0] as HTMLInputElement).checked).toBe(true);
+    fireEvent.click(radios[1]!);
+    expect(updates()).toContainEqual({ accounts: { spawnDefault: 'acc-work01' } });
   });
 });

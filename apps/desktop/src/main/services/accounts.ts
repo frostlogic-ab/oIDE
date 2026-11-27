@@ -4,12 +4,12 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import {
   AccountId,
-  AccountKey,
   AccountUsage,
   DEFAULT_ACCOUNT,
   PlanWindowUsage,
   accountKeys,
   accountLabel,
+  type AccountKey,
   type AgentEvent,
   type ClaudeAccount,
   type Settings,
@@ -118,7 +118,7 @@ export class AccountsService {
   /** Feed an agent event of an agent on `key` (agents.ts eventSink). */
   observe(key: AccountKey, e: AgentEvent): void {
     const st = (this.state[key] ??= { signedIn: 'unknown', windows: [] });
-    let changed = false;
+    let changed: boolean;
     switch (e.type) {
       case 'init':
         changed = st.signedIn !== 'yes';

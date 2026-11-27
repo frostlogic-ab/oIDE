@@ -368,8 +368,12 @@ prompt, `--safe-mode`/`--restricted`/`--bare`), whatever their spelling or numbe
 - Agent env is built from an allow-list (`ENV_ALLOW_LIST` in agent-core) plus `OIDE_AGENT_ID`, custom
   model env, the agent's own MCP header values and any leftover MCP placeholder values (see
   above), and `NoDefaultCurrentDirectoryInExePath=1` on Windows. Electron/Node variables are not passed.
-- Sign-in is only through Anthropic's flow: `cli.openSignIn` opens a terminal running the user's
-  `claude`. `test/no-credentials.test.ts` fails the build if credential paths appear in code.
+- `CLAUDE_CONFIG_DIR` is the agent's Claude Code account ([claude-accounts](claude-accounts.md)): the
+  user's own value for the default account, `<userData>/claude-accounts/<id>/` (made by main from an
+  `acc-<hex>` id, never a renderer path) for an extra one. It is set after extension env, so extension
+  env cannot change it. oIDE never reads, copies or deletes what the CLI writes in those folders.
+- Sign-in is only through Anthropic's flow: `cli.openSignIn` (or `accounts.openSignIn` with the
+  account's `CLAUDE_CONFIG_DIR`) opens a terminal running the user's `claude`. `test/no-credentials.test.ts` fails the build if credential paths appear in code.
 
 ## Logs and redaction
 

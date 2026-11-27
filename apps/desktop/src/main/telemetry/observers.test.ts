@@ -67,6 +67,7 @@ describe('commands', () => {
           techniques: 0,
           extensions: 0,
           auto_title: false,
+          other_account: false,
         },
       },
       { name: 'attachments_sent', props: { where: 'spawn', images: 1, files: 0 } },
