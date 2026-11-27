@@ -275,7 +275,7 @@ placeholders marked `PLACEHOLDER` (the Wall placeholder lists agents with the sh
 
 `lib/keymap.ts` holds every shortcut in one rebindable map (`DEFAULT_BINDINGS`): J next agent,
 K previous, N next that needs you, Y allow, D deny, Esc back, Mod+K command bar, Mod+Enter send,
-Shift+Tab switch mode, Alt+←/→ history, Mod+Shift+F search in files (Files screen scope). `Mod` is Cmd on macOS, Ctrl elsewhere. It listens on the
+Shift+Tab switch mode, Alt+←/→ history, Mod+Shift+F search in files and Mod+Shift+V Markdown preview / edit (Files screen scope). `Mod` is Cmd on macOS, Ctrl elsewhere. It listens on the
 renderer window only (never OS-global). Screens activate a scope while mounted:
 
 ```ts

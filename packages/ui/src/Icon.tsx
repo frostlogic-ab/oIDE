@@ -234,6 +234,13 @@ const P = {
       <path d="M13.5 6.5l4 4" />
     </>
   ),
+  /** Extra: Preview (Markdown in Files). */
+  eye: (
+    <>
+      <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
   /** Extra: Cut. */
   scissors: (
     <>

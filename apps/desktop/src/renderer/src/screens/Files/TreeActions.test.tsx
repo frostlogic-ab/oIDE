@@ -22,7 +22,7 @@ let snapshot: Map<string, string>;
 
 beforeEach(() => {
   snapshot = new Map(mockFiles.get(ROOT));
-  useFiles.setState({ openProjects: {}, checkout: {}, expanded: {}, nodes: {}, loading: {}, errors: {}, tabs: [], active: undefined, dirty: {}, revealed: {}, pending: undefined, revealTarget: undefined, edit: undefined, clipboard: undefined });
+  useFiles.setState({ openProjects: {}, checkout: {}, expanded: {}, nodes: {}, loading: {}, errors: {}, tabs: [], active: undefined, dirty: {}, mdView: {}, revealed: {}, pending: undefined, revealTarget: undefined, edit: undefined, clipboard: undefined });
   useSearch.setState({ open: false });
 });
 afterEach(() => {
