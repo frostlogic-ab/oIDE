@@ -12,6 +12,9 @@ import { ResizableAside } from '../../components/ResizableAside';
 import { PANELS } from '../../lib/panels';
 import { useTerminals } from '../../stores/terminals';
 import { useScripts } from './scriptsStore';
+import { useSetting, useSettings } from '../../stores/settings';
+import { toast } from '../../stores/ui';
+import { ipcErrorMessage } from '../../lib/bridge';
 
 /** Row pitch: 22px, flush rows as in the VS Code explorer. */
 export const ROW_H = 22;
@@ -183,28 +186,57 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
         })}
         {trees.length === 0 && <p className="m-0 px-4 py-1 text-[12px] text-ink-3">No projects in this scope.</p>}
       </div>
-      <div className="mt-2 flex flex-col gap-1.5 p-2.5 rounded-lg border border-line-2 text-[11.5px] text-ink-3 shrink-0">
-        <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="w-[7px] h-[7px] rounded-full bg-ok" />
-          An agent is changing this file
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="w-[7px] h-[7px] rounded-full bg-warn" />
-          That agent is waiting on you
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span aria-hidden="true" className="w-[7px] text-center text-[11px] font-semibold text-ok">
-            M
-          </span>
-          Changed in this checkout
-          <span aria-hidden="true" className="ml-1.5 text-[11px] font-semibold text-bad line-through">
-            D
-          </span>
-          Deleted
-        </span>
-        <span className="leading-[1.45] mt-0.5">Each project shows its own branch or agent worktree. The menu next to a project switches it.</span>
-      </div>
+      <TreeLegend />
     </ResizableAside>
+  );
+}
+
+/**
+ * The key under the tree (agent dots, M and D). Its × hides it for good (`settings.ui.filesLegendHidden`)
+ * and the tree takes the room. It hides at once; if saving fails it stays hidden for this session.
+ */
+function TreeLegend() {
+  const saved = useSetting((st) => st.ui.filesLegendHidden, false);
+  const [closed, setClosed] = useState(false);
+  if (saved || closed) return null;
+  const close = () => {
+    setClosed(true);
+    useSettings
+      .getState()
+      .update({ ui: { filesLegendHidden: true } })
+      .catch((err: unknown) => toast(`Could not save that the legend is closed: ${ipcErrorMessage(err)}`, 'error'));
+  };
+  return (
+    <div role="note" aria-label="File tree legend" className="relative mt-2 flex flex-col gap-1.5 p-2.5 pr-7 rounded-lg border border-line-2 text-[11.5px] text-ink-3 shrink-0">
+      <button
+        type="button"
+        aria-label="Close the legend"
+        title="Close the legend (it won't show again)"
+        onClick={close}
+        className="absolute top-1.5 right-1.5 w-5 h-5 p-0 flex items-center justify-center rounded-sm border-0 bg-transparent text-ink-3 cursor-pointer hover:bg-raised hover:text-ink focus-visible:outline focus-visible:outline-1 focus-visible:outline-accent"
+      >
+        <Icon name="close" size={12} />
+      </button>
+      <span className="flex items-center gap-1.5">
+        <span aria-hidden="true" className="w-[7px] h-[7px] rounded-full bg-ok" />
+        An agent is changing this file
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span aria-hidden="true" className="w-[7px] h-[7px] rounded-full bg-warn" />
+        That agent is waiting on you
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span aria-hidden="true" className="w-[7px] text-center text-[11px] font-semibold text-ok">
+          M
+        </span>
+        Changed in this checkout
+        <span aria-hidden="true" className="ml-1.5 text-[11px] font-semibold text-bad line-through">
+          D
+        </span>
+        Deleted
+      </span>
+      <span className="leading-[1.45] mt-0.5">Each project shows its own branch or agent worktree. The menu next to a project switches it.</span>
+    </div>
   );
 }
 

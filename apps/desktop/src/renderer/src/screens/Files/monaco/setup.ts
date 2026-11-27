@@ -95,6 +95,13 @@ monaco.editor.defineTheme(THEME, {
     'scrollbarSlider.background': '#343A4466',
     'scrollbarSlider.hoverBackground': '#4A515C88',
     'scrollbarSlider.activeBackground': '#4A515CAA',
+    // Files minimap: same ground as the editor, a soft slider over the visible lines.
+    'minimap.background': '#0E1013',
+    'minimap.selectionHighlight': '#7AA2F766',
+    'minimap.findMatchHighlight': '#F2C07899',
+    'minimapSlider.background': '#9AA3AE1F',
+    'minimapSlider.hoverBackground': '#9AA3AE2E',
+    'minimapSlider.activeBackground': '#9AA3AE40',
     'editorGutter.background': '#0E1013',
     // Brackets stay in the text colour (the canvas has no bracket-pair colours).
     'editorBracketHighlight.foreground1': '#C9CED6',
@@ -143,6 +150,20 @@ export const BASE_OPTIONS: monaco.editor.IStandaloneEditorConstructionOptions = 
   contextmenu: true,
   bracketPairColorization: { enabled: false },
   guides: { indentation: false },
+};
+
+/**
+ * The Files editor's minimap: a small rendering of the whole file on the right, with a slider over
+ * the lines in view. Click to jump, drag the slider to scroll. Diffs and artifact editors keep it off.
+ */
+export const FILE_MINIMAP: monaco.editor.IEditorMinimapOptions = {
+  enabled: true,
+  side: 'right',
+  showSlider: 'always',
+  renderCharacters: true,
+  size: 'proportional',
+  scale: 1,
+  maxColumn: 100,
 };
 
 const EXT_LANG: Record<string, string> = {

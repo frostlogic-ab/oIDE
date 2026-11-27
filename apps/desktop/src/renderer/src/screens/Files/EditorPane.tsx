@@ -11,7 +11,7 @@ import { onTabsMoved, onTabsReloaded, useFiles, type FileTab } from './filesStor
 import { MarkdownPreview } from './MarkdownPreview';
 import type { MarkdownView } from './markdownLinks';
 import { adoptPeekModel, lspAttach, lspDetach, modelUri, setLspOpenHandler } from './monaco/lsp';
-import { BASE_OPTIONS, languageFor, languageLabel, monaco } from './monaco/setup';
+import { BASE_OPTIONS, FILE_MINIMAP, languageFor, languageLabel, monaco } from './monaco/setup';
 
 export interface SelectionInfo {
   path: string;
@@ -191,6 +191,7 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
     if (!host.current) return;
     const ed = monaco.editor.create(host.current, {
       ...BASE_OPTIONS,
+      minimap: FILE_MINIMAP,
       model: null,
       // Language servers: go straight to the definition; several references open the peek.
       gotoLocation: { multipleDefinitions: 'goto', multipleTypeDefinitions: 'goto', multipleDeclarations: 'goto', multipleImplementations: 'peek', multipleReferences: 'peek' },

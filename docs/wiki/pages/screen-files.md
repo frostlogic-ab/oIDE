@@ -17,7 +17,8 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   branch, and with All projects a "Folder actions for <project>" menu: Collapse all, Expand loaded
   folders, Expand to depth 1/2/3, Reveal active file, Open terminal here) and a `role="tree"`. With All projects the
   first project starts open; with one project in scope its tree is always open. Legend box at the
-  bottom. When Search is open the column is the 300px Search panel instead.
+  bottom; its × ("Close the legend") hides it for good (`settings.update({ ui: { filesLegendHidden: true } })`,
+  hidden at once, a toast if saving fails) and the tree takes the room. When Search is open the column is the 300px Search panel instead.
 - Middle: open-file tabs (`role="tablist"`, accent top border, close ×, ● when unsaved; right side
   the language-server status and problem counts, "Ln, Col · Language" and Save; for a Markdown file a "Markdown view" Preview / Edit toggle before
   them), the agent banner, the editor, and under it the terminal panel when shown (`TerminalDock.tsx`).
@@ -156,6 +157,10 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   works under `file://`).
 - Theme `oide-dark` from the tokens (ground background, `#5E6774` line numbers, `#1B2333`
   selection, keywords `#C4A7E7`, strings `#A8E0C6`, types `#9DBBFA`, comments `#7A8494`).
+- Minimap on the right of the Files editor (`FILE_MINIMAP` in `monaco/setup.ts`): the whole file in
+  miniature with the slider always shown over the lines in view; click to jump, drag the slider to
+  scroll. Themed from the tokens (editor ground, soft `#9AA3AE` slider, accent selection, amber find
+  matches). Diff editors and artifact source editors keep `BASE_OPTIONS`' minimap off.
 - At most one live editor; one model per tab with saved view state; models of closed tabs are disposed.
 - Ctrl/Cmd+S or Save → `files.write`. Files over 5 MB open read only; binary files show a notice.
 - Cut / Copy / Paste work from the keyboard and Monaco's context menu (Paste reads the system
