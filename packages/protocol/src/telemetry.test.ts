@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  appVersionValue,
   BUILTIN_SLASH_COMMANDS,
   cliVersionBucket,
   countBucket,
@@ -123,6 +124,19 @@ describe('telemetry helpers', () => {
     expect(screenBucket(1920, 1080)).toBe('1900x1000');
     expect(cliVersionBucket('2.1.325')).toBe('2.1');
     expect(cliVersionBucket('garbage')).toBe('unknown');
+  });
+
+  it('sends the running app version on app_started, or unknown, never free text', () => {
+    expect(appVersionValue('0.5.1')).toBe('0.5.1');
+    expect(appVersionValue('0.6.0-beta.2')).toBe('0.6.0-beta.2');
+    expect(appVersionValue('my build /Users/me')).toBe('unknown');
+    expect(appVersionValue(undefined)).toBe('unknown');
+    const props = { cold_start_ms: 1200, cli_found: true, cli_version: '2.1', projects: '1', agents: '2-5' };
+    expect(validateTelemetryEvent('app_started', { ...props, app_version: '0.5.1' })?.props).toMatchObject({
+      app_version: '0.5.1',
+    });
+    expect(validateTelemetryEvent('app_started', { ...props, app_version: 'unknown' })).not.toBeNull();
+    expect(validateTelemetryEvent('app_started', { ...props, app_version: 'C:/Users/me' })).toBeNull();
   });
 
   it('maps models to a family and tools to a category, never a raw name', () => {
