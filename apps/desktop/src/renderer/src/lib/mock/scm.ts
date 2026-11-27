@@ -466,6 +466,13 @@ export function mockChanges(root: string): FileChange[] {
   return out.sort((a, b) => a.path.localeCompare(b.path));
 }
 
+/** Mock `files.original`: the baseline copy of a file. */
+export function mockOriginal(root: string, path: string): { kind: 'text' | 'missing'; content: string } {
+  treeOf(root);
+  const was = baselines.get(root)?.get(path);
+  return was === undefined ? { kind: 'missing', content: '' } : { kind: 'text', content: was };
+}
+
 /** Mock `files.discardChanges`: changed paths go back to the baseline. */
 export function mockDiscard(root: string, paths: string[]): number {
   const tree = treeOf(root);
@@ -836,6 +843,7 @@ export function createScmHandlers({ agents, emit, fallbackDiffs = {}, artifacts 
     },
     'files.history': ({ root, path }) => fileHistory(path, root),
     'files.changes': ({ root }) => ({ against: root.startsWith(WT_ROOT) ? ('branch' as const) : ('head' as const), changes: mockChanges(root), truncated: false }),
+    'files.original': ({ root, path, oldPath }) => ({ ...mockOriginal(root, oldPath ?? path), against: root.startsWith(WT_ROOT) ? ('branch' as const) : ('head' as const) }),
     'files.discardChanges': ({ root, paths }) => {
       const reverted = mockDiscard(root, paths);
       const p = Object.values(state.worktrees).flat().find((w) => w.path === root)?.projectId ?? Object.entries(PROJECT_PATHS).find(([, v]) => v === root)?.[0];
