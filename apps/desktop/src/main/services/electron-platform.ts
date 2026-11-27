@@ -164,6 +164,7 @@ export function electronPlatform(ctx: MainContext, terminals: TerminalService): 
     forkHost: utilityProcessFork(utilityProcess),
     hostEntry: join(import.meta.dirname, 'host-process.js'),
     builtinExtensionDirs: app.isPackaged ? [join(process.resourcesPath, 'extensions')] : [join(repoRoot, 'extensions')],
+    languageServerDirs: app.isPackaged ? [join(process.resourcesPath, 'language-servers', 'node_modules')] : [join(repoRoot, 'node_modules')],
     bundledIndexPath: app.isPackaged ? join(process.resourcesPath, 'marketplace', 'index.json') : join(repoRoot, 'tools', 'marketplace-index', 'bundled', 'index.json'),
     ...(process.env.OIDE_CLAUDE_PATH ? { cliPathOverride: process.env.OIDE_CLAUDE_PATH } : {}),
     ...(openable ? { openablePaths: openable } : {}),

@@ -21,7 +21,7 @@ export function statusText(s: Status): { label: string; title: string } {
   const name = s.server ?? s.language ?? 'Language server';
   switch (s.state) {
     case 'running':
-      return { label: name, title: `${name} is running${s.extension ? ` (from ${s.extension})` : ''}. Hover, completions, go to definition (F12), references (Shift+F12), symbols (Ctrl+Shift+O) and Format Document come from it.` };
+      return { label: name, title: `${name} is running${s.bundled ? ' (comes with oIDE, run with your Node.js)' : s.extension ? ` (from ${s.extension})` : ''}. Hover, completions, go to definition (F12), references (Shift+F12), symbols (Ctrl+Shift+O) and Format Document come from it.` };
     case 'starting':
       return { label: `${name}…`, title: s.message ? `Starting ${name}. ${s.message}` : `Starting ${name}` };
     case 'not-installed':

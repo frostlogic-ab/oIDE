@@ -7,6 +7,8 @@
 // What ships (see docs/wiki/pages/packaging.md):
 //   1. Runtime modules in the app's node_modules: `dependencies` of apps/desktop and their
 //      transitive dependencies (installed optional dependencies included).
+//   1b. The bundled language servers (packages/language-servers, ADR 0020) and their dependencies,
+//      shipped as files in <resources>/language-servers.
 //   2. Libraries bundled into out/ by electron-vite. These are found by scanning the bare imports of
 //      the shipped sources (apps/desktop/src and every @oide/* workspace package they reach), not
 //      from a hand-written list. Test files, mocks and type-only imports are skipped. Each bundled
@@ -281,6 +283,15 @@ for (const dep of Object.keys(desktopPkg.dependencies ?? {}).sort()) {
   else missing.push(`${dep} (apps/desktop dependency)`);
 }
 
+// 1b. Language servers shipped as files in <resources>/language-servers (packages/language-servers,
+//     ADR 0020): its dependencies and everything they need.
+const LANGUAGE_SERVERS = join(ROOT, 'packages', 'language-servers');
+for (const dep of Object.keys(readJson(join(LANGUAGE_SERVERS, 'package.json')).dependencies ?? {}).sort()) {
+  const dir = resolvePackage(dep, LANGUAGE_SERVERS);
+  if (dir) record(dir, 'language-server');
+  else missing.push(`${dep} (packages/language-servers dependency)`);
+}
+
 // 2. Bundled into out/: bare imports of shipped sources, following workspace packages.
 const bundledRoots = new Map(); // name → dir it was imported from
 const seenWorkspace = new Set();
@@ -331,7 +342,7 @@ const built = checkBuiltFonts(join(DESKTOP, 'out', 'renderer'));
 /* ------------------------------------------------------------------ render */
 
 const list = [...shipped.values()].sort((a, b) => a.name.localeCompare(b.name) || a.version.localeCompare(b.version, undefined, { numeric: true }));
-const VIA = { runtime: 'runtime module', bundled: 'bundled', injected: 'build helper', electron: 'Electron runtime' };
+const VIA = { runtime: 'runtime module', 'language-server': 'language server', bundled: 'bundled', injected: 'build helper', electron: 'Electron runtime' };
 const viaLabel = (r) => [...r.via].sort().map((v) => VIA[v]).join(', ');
 const esc = (s) => String(s).replace(/\|/g, '\\|');
 

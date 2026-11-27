@@ -2,7 +2,7 @@
   "name": "@oide/ext-languages",
   "version": "1.0.0",
   "private": true,
-  "description": "Language servers for the Files editor: TypeScript and JavaScript, Python, Rust, Go, C and C++, CSS, HTML, JSON, YAML and shell scripts. Uses the servers you have installed.",
+  "description": "Language servers for the Files editor: TypeScript and JavaScript, Python, Rust, Go, C and C++, CSS, HTML, JSON, YAML and shell scripts. Uses the servers you have installed; TypeScript and JavaScript, CSS, HTML, JSON and YAML also come with oIDE and run with your Node.js.",
   "license": "MIT",
   "type": "module",
   "files": ["dist"],

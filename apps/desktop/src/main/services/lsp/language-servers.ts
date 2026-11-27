@@ -59,6 +59,11 @@ export interface LanguageServiceOptions {
   spawn?: SpawnFn;
   /** Full path of an executable, or undefined (injected in tests). */
   which?(command: string, root: string): string | undefined;
+  /**
+   * The script of oIDE's bundled copy of a built-in server (`@oide/language-servers`), run with
+   * the user's `node` when the command is neither on PATH nor in the checkout's node_modules.
+   */
+  bundled?(command: string): string | undefined;
   /** Env for server processes (an allow-list; default `serverEnv()`). */
   env?(): Record<string, string>;
   platform?: NodeJS.Platform;
@@ -180,6 +185,10 @@ const MAX_CRASHES = 5;
 class Session {
   state: LspState = 'starting';
   message: string | undefined;
+  /** Running oIDE's bundled copy of the server (with the user's Node.js), not one from PATH. */
+  bundled = false;
+  /** Overrides the manifest's install command (the bundled server needs Node.js, not the server). */
+  installHint: string | undefined;
   child: ChildProcess | undefined;
   conn: JsonRpcConnection | undefined;
   caps: Obj = {};
@@ -209,7 +218,9 @@ class Session {
 
   status(): LspStatus {
     const s: LspStatus = { state: this.state, language: this.def.language, server: this.def.name, extension: this.def.extension };
-    if (this.def.install && this.state === 'not-installed') s.install = this.def.install;
+    const install = this.installHint ?? this.def.install;
+    if (install && this.state === 'not-installed') s.install = install;
+    if (this.bundled && this.state !== 'not-installed') s.bundled = true;
     if (this.message) s.message = this.message;
     return s;
   }
@@ -419,8 +430,8 @@ export class LanguageServerService {
    */
   installCommand(root: string, path: string): { command: string; server: string } | undefined {
     const s = this.sessionOf(root, path);
-    if (!s || s.state !== 'not-installed' || !s.def.install) return undefined;
-    return { command: s.def.install, server: s.def.name };
+    const command = s?.state === 'not-installed' ? (s.installHint ?? s.def.install) : undefined;
+    return s && command ? { command, server: s.def.name } : undefined;
   }
 
   /**
@@ -433,10 +444,9 @@ export class LanguageServerService {
     this.stopInstallWatch(s);
     const every = this.o.installPollMs ?? 3000;
     const until = Date.now() + (this.o.installWatchMs ?? 10 * 60_000);
-    const which = this.o.which ?? ((c, r) => whichCommand(c, r, process.env, this.platform));
     s.installTimer = setInterval(() => {
       if (this.disposed || this.sessions.get(s.id) !== s || s.state !== 'not-installed' || Date.now() > until) return this.stopInstallWatch(s);
-      if (!which(s.def.command, s.root)) return;
+      if (!('exe' in this.locate(s))) return;
       this.stopInstallWatch(s);
       s.crashes = [];
       this.start(s);
@@ -558,20 +568,46 @@ export class LanguageServerService {
     child.kill('SIGKILL');
   }
 
+  private which(command: string, root: string): string | undefined {
+    return (this.o.which ?? ((c, r) => whichCommand(c, r, process.env, this.platform)))(command, root);
+  }
+
+  /**
+   * How to start the server: the user's own (PATH, then the checkout's node_modules/.bin) first,
+   * else oIDE's bundled copy of a built-in server run with the user's `node`. `needsNode`: only
+   * Node.js is missing.
+   */
+  private locate(s: Session): { exe: string; args: string[]; bundled: boolean } | { needsNode: boolean } {
+    const exe = this.which(s.def.command, s.root);
+    if (exe) return { exe, args: s.def.args, bundled: false };
+    const script = s.def.builtin ? this.o.bundled?.(s.def.command) : undefined;
+    if (!script) return { needsNode: false };
+    const node = this.which('node', s.root);
+    return node ? { exe: node, args: [script, ...s.def.args], bundled: true } : { needsNode: true };
+  }
+
   private start(s: Session): void {
     if (this.disposed) return;
     const gen = ++s.generation;
     s.stopping = false;
     s.stderrTail = '';
     this.setState(s, 'starting');
-    const exe = (this.o.which ?? ((c, r) => whichCommand(c, r, process.env, this.platform)))(s.def.command, s.root);
-    if (!exe) {
-      this.setState(s, 'not-installed', `${s.def.command} was not found on PATH.`);
+    const found = this.locate(s);
+    if (!('exe' in found)) {
+      s.bundled = false;
+      s.installHint = found.needsNode ? nodeInstallHint(this.platform) : undefined;
+      const message = found.needsNode
+        ? `oIDE comes with ${s.def.name}, but it needs Node.js, which was not found on PATH.`
+        : `${s.def.command} was not found on PATH.`;
+      this.setState(s, 'not-installed', message);
       this.o.onOutcome?.(s.def, 'not_installed');
       return;
     }
+    s.bundled = found.bundled;
+    s.installHint = undefined;
+    const exe = found.exe;
     let command = exe;
-    let args = s.def.args;
+    let args = found.args;
     let verbatim = false;
     if (this.platform === 'win32' && /\.(cmd|bat)$/i.test(exe)) {
       // Inside quotes cmd.exe still expands %VAR%; outside them it also splits on & | < > ^ ( ).
@@ -581,7 +617,7 @@ export class LanguageServerService {
         return;
       }
       command = windowsCmd();
-      args = ['/d', '/s', '/c', `"${[`"${exe}"`, ...s.def.args].join(' ')}"`];
+      args = ['/d', '/s', '/c', `"${[`"${exe}"`, ...found.args].join(' ')}"`];
       verbatim = true;
     }
     let child: ChildProcess;
@@ -771,6 +807,13 @@ const BUCKETS: Record<string, LspLanguageBucket> = {
   typescript: 'typescript', python: 'python', rust: 'rust', go: 'go', cpp: 'c_cpp', c: 'c_cpp',
   css: 'css', html: 'html', json: 'json', yaml: 'yaml', shellscript: 'shell', bash: 'shell',
 };
+/** How to install Node.js, for a bundled server that has no `node` to run with (none on Linux: distributions differ). */
+export function nodeInstallHint(platform: NodeJS.Platform): string | undefined {
+  if (platform === 'win32') return 'winget install --id OpenJS.NodeJS.LTS -e';
+  if (platform === 'darwin') return 'brew install node';
+  return undefined;
+}
+
 export function lspLanguageBucket(def: Pick<LanguageServerDef, 'language' | 'builtin'>): LspLanguageBucket {
   return def.builtin ? (BUCKETS[def.language] ?? 'other') : 'other';
 }

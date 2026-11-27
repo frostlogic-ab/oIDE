@@ -46,6 +46,8 @@ export const LspStatus = z.object({
   /** Install hint for `not-installed` (`npm i -g typescript-language-server typescript`). */
   install: z.string().max(500).optional(),
   message: z.string().max(2000).optional(),
+  /** The server is oIDE's bundled copy (`@oide/language-servers`), run with the user's Node.js. */
+  bundled: z.boolean().optional(),
 });
 export type LspStatus = z.infer<typeof LspStatus>;
 
