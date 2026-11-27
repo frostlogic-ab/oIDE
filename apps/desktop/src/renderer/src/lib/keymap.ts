@@ -41,6 +41,7 @@ export const DEFAULT_BINDINGS: Readonly<Record<string, readonly string[]>> = {
   'files.search': ['Mod+Shift+F'],
   // As in VS Code: Ctrl+` on every platform (Cmd+` cycles windows on macOS).
   'files.terminal': ['Ctrl+`'],
+  'files.togglePreview': ['Mod+Shift+V'],
 };
 
 export const ACTION_LABELS: Readonly<Record<string, string>> = {
@@ -57,6 +58,7 @@ export const ACTION_LABELS: Readonly<Record<string, string>> = {
   'nav.forward': 'Go forward',
   'files.search': 'Files: search in files',
   'files.terminal': 'Files: show or hide the terminal panel',
+  'files.togglePreview': 'Files: switch a Markdown file between preview and edit',
   'review.nextFile': 'Review: next file',
   'review.prevFile': 'Review: previous file',
   'review.nextHunk': 'Review: next change',

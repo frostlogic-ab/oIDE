@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { FileChange, FileNode } from '@oide/protocol';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { useChanges } from './changesStore';
+import type { MarkdownView } from './markdownLinks';
 import { isUnder, joinRel, parentDir, remapPath } from './treeOps';
 
 /**
@@ -100,6 +101,11 @@ interface FilesState {
    * close warning survive leaving Files and coming back: the editor models outlive the screen too.
    */
   dirty: Record<string, boolean>;
+  /**
+   * Markdown tab id → how it shows, once the user switched it. Missing = the preview (the default
+   * for Markdown files); closing the tab forgets it, so a file always reopens in the preview.
+   */
+  mdView: Record<string, MarkdownView>;
   /** Projects whose agent-touched folders were auto-expanded once. */
   revealed: Record<string, boolean>;
   /** Recently opened files, most recent first (quick open ranks them first). */
@@ -121,6 +127,7 @@ interface FilesState {
   openFile(projectId: string, root: string, path: string): void;
   closeTab(id: string): void;
   setDirty(id: string, dirty: boolean): void;
+  setMdView(id: string, view: MarkdownView): void;
   setActive(id: string): void;
   markRevealed(key: string): void;
   /** Open a file (and reveal it in the tree) from anywhere; switch to Files separately. */
@@ -175,6 +182,7 @@ export const useFiles = create<FilesState>()((set, get) => ({
   tabs: [],
   active: undefined,
   dirty: {},
+  mdView: {},
   revealed: {},
   recent: loadRecent(),
   pending: undefined,
@@ -236,12 +244,16 @@ export const useFiles = create<FilesState>()((set, get) => ({
     const next = tabs.filter((t) => t.id !== id);
     const active = get().active === id ? (next[Math.min(i, next.length - 1)]?.id ?? undefined) : get().active;
     const { [id]: _closed, ...dirty } = get().dirty;
-    set({ tabs: next, active, dirty });
+    const { [id]: _view, ...mdView } = get().mdView;
+    set({ tabs: next, active, dirty, mdView });
   },
   setDirty: (id, d) => {
     if (Boolean(get().dirty[id]) === d) return;
     const { [id]: _prev, ...rest } = get().dirty;
     set({ dirty: d ? { ...rest, [id]: true } : rest });
+  },
+  setMdView: (id, view) => {
+    if (get().mdView[id] !== view) set({ mdView: { ...get().mdView, [id]: view } });
   },
   setActive: (id) => set({ active: id }),
   markRevealed: (key) => set({ revealed: { ...get().revealed, [key]: true } }),
@@ -412,6 +424,7 @@ function moved(fromRoot: string, from: string, toRoot: string, to: string, toPro
   });
   const ids = new Map(moves.map((m) => [m.from, m.to]));
   const dirty = Object.fromEntries(Object.entries(s.dirty).map(([k, v]) => [ids.get(k) ?? k, v]));
+  const mdView = Object.fromEntries(Object.entries(s.mdView).map(([k, v]) => [ids.get(k) ?? k, v]));
   const recent = s.recent.map((r) => (r.root === fromRoot && isUnder(r.path, from) ? { root: toRoot, path: remapPath(r.path, from, to) } : r));
   saveRecent(recent);
   const reopen = Object.keys(s.expanded[fromRoot] ?? {})
@@ -422,7 +435,7 @@ function moved(fromRoot: string, from: string, toRoot: string, to: string, toPro
   for (const d of reopen) expanded = put(expanded, toRoot, d, true);
   // Listeners first: the editor re-keys its models before it renders the renamed tabs.
   if (moves.length) for (const fn of tabMoveListeners) fn(moves);
-  useFiles.setState({ ...dropped, expanded, tabs, dirty, recent, active: s.active ? (ids.get(s.active) ?? s.active) : s.active });
+  useFiles.setState({ ...dropped, expanded, tabs, dirty, mdView, recent, active: s.active ? (ids.get(s.active) ?? s.active) : s.active });
   for (const d of reopen) void useFiles.getState().loadDir(toRoot, d);
 }
 
