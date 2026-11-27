@@ -133,12 +133,15 @@ export class AgentsService {
   private readonly leftoverChecks = new Set<string>();
   extensions: ExtensionsService | undefined;
   git: GitService | undefined;
+  /** Let go of a worktree folder before it is deleted (language servers running in it). */
+  releaseFolder: ((path: string) => Promise<void>) | undefined;
   /** Event appends: a full disk or a locked database queues events (bounded) and tells the user once. */
   private readonly eventWriter: BufferedWriter<{ e: AgentEvent; raw: string | undefined }>;
 
   constructor(private readonly o: AgentsServiceOptions) {
     this.extensions = o.extensions;
     this.git = o.git;
+    this.releaseFolder = undefined;
     const storeErrors = new StorageErrorReporter({ notify: (level, message) => o.ctx.emit('notify', { level, message }), log: o.ctx.log });
     this.eventWriter = new BufferedWriter(({ e, raw }) => void o.store.events.append(e, safeJson(raw)), storeErrors);
     this.supervisor = new Supervisor({
@@ -238,6 +241,8 @@ export class AgentsService {
         const p = o.projects.get(projectId);
         if (!p || samePath(path, p.path)) return false;
         await this.git?.unwatch(path);
+        // Language servers run with the worktree as their folder: Windows cannot delete it under them.
+        await this.releaseFolder?.(path).catch(() => undefined);
         try {
           await o.worktrees.remove(p.path, path, { force: true, deleteBranch: true });
         } catch (err) {

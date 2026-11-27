@@ -81,7 +81,7 @@ describe('marketplace index validation', () => {
     const json = JSON.parse(readFileSync(bundledFile, 'utf8'));
     const { index: idx, errors } = validateIndex(json);
     expect(errors).toEqual([]);
-    expect(idx!.extensions.map((e: { name: string }) => e.name)).toEqual(['@oide/ext-browser-preview', '@oide/ext-git', '@oide/ext-themes']);
+    expect(idx!.extensions.map((e: { name: string }) => e.name)).toEqual(['@oide/ext-browser-preview', '@oide/ext-git', '@oide/ext-languages', '@oide/ext-themes']);
     expect(idx!.extensions.every((e: { source: string; verified: boolean }) => e.source === 'builtin' && e.verified)).toBe(true);
     expect(typeof entryFromLoaded).toBe('function');
   });

@@ -205,6 +205,15 @@ importers:
         specifier: workspace:*
         version: link:../../packages/extension-host
 
+  extensions/languages:
+    devDependencies:
+      '@oide/extension-api':
+        specifier: workspace:*
+        version: link:../../packages/extension-api
+      '@oide/extension-host':
+        specifier: workspace:*
+        version: link:../../packages/extension-host
+
   extensions/themes:
     devDependencies:
       '@oide/extension-api':

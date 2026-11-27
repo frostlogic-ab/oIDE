@@ -7,6 +7,7 @@ import { registerArtifactHandlers } from './artifacts.js';
 import { registerDialogHandlers } from './dialog.js';
 import { registerExtensionHandlers } from './extensions.js';
 import { registerFileHandlers } from './files.js';
+import { registerLspHandlers } from './lsp.js';
 import { registerGitHandlers, registerReviewHandlers } from './git.js';
 import { registerCliHandlers, registerProjectHandlers } from './projects.js';
 import { registerSettingsHandlers } from './settings.js';
@@ -25,6 +26,7 @@ export function registerDomainHandlers(router: IpcRouter, services: Services, ct
   registerGitHandlers(router, services, ctx);
   registerReviewHandlers(router, services, ctx);
   registerFileHandlers(router, services, ctx);
+  registerLspHandlers(router, services, ctx);
   registerSettingsHandlers(router, services, ctx);
   registerExtensionHandlers(router, services, ctx);
   registerArtifactHandlers(router, services, ctx);

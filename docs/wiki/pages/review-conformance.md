@@ -164,7 +164,7 @@ Paths are relative to the repo root.
 | Spawn | done | Builds `AgentSpec`; presets and techniques from settings |
 | Source control | done | Loading state while git answers (m2, fixed) |
 | Review | partial | Merge is wrong (B1). Toasts no longer cover the actions (M2, fixed). Comments on removed lines keep their side. |
-| Files | done | Language servers from extensions deferred (ADR 0008) |
+| Files | done | Language servers from extensions: built since (ADR 0019, superseding the deferral in ADR 0008) |
 | Artifacts | partial | Whiteboard is a read-only SVG render, not an embedded editor ([ADR 0005](../../adr/0005-whiteboard-read-only-render-in-v1.md)). claude.ai stays manual import (as briefed). |
 | Marketplace | done (packaged) | Not available in e2e-style launches (M4) |
 | Settings | done | Extension `settings` fields in Settings › Extensions (M1 fixed) |
