@@ -1,5 +1,5 @@
 import { basename, dirname, extname, join, relative } from 'node:path';
-import { checkoutChanges, discardCheckoutChanges, fileHistory, originalContent, isInside as gitIsInside, plainFs, samePath } from '@oide/git';
+import { checkoutChanges, discardCheckoutChanges, fileHistory, ignoredPaths, originalContent, isInside as gitIsInside, plainFs, samePath } from '@oide/git';
 import { buildSearchRegExp, type ArtifactMeta, type FileNode } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
@@ -66,6 +66,9 @@ export function registerFileHandlers(router: IpcRouter, s: Services, ctx: MainCo
       if (!kind) continue;
       out.push({ name: e.name, path: toPosix(relative(r, full)), kind });
     }
+    // Ignored entries (VS Code explorer style): one `git check-ignore` per listed folder.
+    const ignored = await ignoredPaths(r, out.map((n) => n.path));
+    if (ignored.size) for (const n of out) if (ignored.has(n.path)) n.ignored = true;
     return out.sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1));
   });
 

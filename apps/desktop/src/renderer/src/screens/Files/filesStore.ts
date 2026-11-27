@@ -484,6 +484,8 @@ export interface TreeRow {
   draft?: 'create' | 'rename';
   /** Deleted (git colours): not on disk, shown struck through; only Discard changes brings it back. */
   ghost?: boolean;
+  /** Excluded by the checkout's ignore rules (or inside an ignored folder): shown greyed out. */
+  ignored?: boolean;
 }
 
 /** Key of the new-entry row (no real path holds a NUL). */
@@ -514,25 +516,29 @@ export function visibleRows(
     for (const g of add) ghostPaths.add(g.path);
     return [...(listed ?? []), ...add].sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1));
   };
-  const walk = (dir: string, depth: number, parent?: string) => {
+  const walk = (dir: string, depth: number, parent?: string, inIgnored = false) => {
     if (edit?.mode === 'create' && edit.dir === dir) {
       out.push({ key: DRAFT_KEY, path: dir, contentPath: dir, label: '', kind: edit.kind, depth, expanded: false, loading: false, parent, draft: 'create' });
     }
     for (const n of childrenOf(dir) ?? []) {
       const ghost = ghostPaths.has(n.path) ? { ghost: true as const } : {};
+      const ignored = inIgnored || n.ignored === true;
+      const ign = ignored ? { ignored: true as const } : {};
       if (n.kind === 'file') {
         const draft = edit?.mode === 'rename' && edit.path === n.path ? { draft: 'rename' as const } : {};
-        out.push({ key: n.path, path: n.path, contentPath: n.path, label: n.name, kind: 'file', depth, expanded: false, loading: false, parent, ...draft, ...ghost });
+        out.push({ key: n.path, path: n.path, contentPath: n.path, label: n.name, kind: 'file', depth, expanded: false, loading: false, parent, ...draft, ...ghost, ...ign });
         continue;
       }
       let label = n.name;
       let cur = n.path;
       for (;;) {
         const kids = childrenOf(cur);
-        // A deleted folder is never merged into a chain with a real one (its rows act differently).
-        if (kids && kids.length === 1 && kids[0]!.kind === 'dir' && ghostPaths.has(kids[0]!.path) === ghostPaths.has(n.path)) {
-          label += `/${kids[0]!.name}`;
-          cur = kids[0]!.path;
+        // A deleted folder is never merged into a chain with a real one (its rows act differently),
+        // nor an ignored folder with one that is not (the chain would be greyed out as a whole).
+        const kid = kids?.length === 1 ? kids[0]! : undefined;
+        if (kid?.kind === 'dir' && ghostPaths.has(kid.path) === ghostPaths.has(n.path) && (ignored || kid.ignored === true) === ignored) {
+          label += `/${kid.name}`;
+          cur = kid.path;
         } else break;
       }
       const expanded = Boolean(s.expanded[root]?.[n.path]);
@@ -550,8 +556,9 @@ export function visibleRows(
         parent,
         ...(edit?.mode === 'rename' && edit.path === cur ? { draft: 'rename' as const } : {}),
         ...ghost,
+        ...ign,
       });
-      if (expanded) walk(cur, depth + 1, n.path);
+      if (expanded) walk(cur, depth + 1, n.path, ignored);
     }
   };
   walk('', 0);
