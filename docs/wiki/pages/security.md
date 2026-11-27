@@ -114,7 +114,9 @@ confirmation first; nothing goes to the trash, so the dialog says it can't be un
 `apps/desktop/src/main/services/lsp/`):
 
 - Servers run repository code (tsserver plugins, `build.rs`, proc macros), so they start only for
-  **trusted** projects, and only from extensions that are on for the project. Revoking trust,
+  **trusted** projects, and only from extensions that are on for the project and declare
+  `capabilities.spawn` (so "runs programs" is in the install consent; other extensions' languages are
+  ignored with a log line). Revoking trust,
   turning the extension off or removing the project stops them; deleting a worktree waits for them.
 - Every `lsp.*` root must be a `project` or `worktree` root (never an artifact folder); the document
   path goes through `assertInside` and `.git` is refused. Each feature is its own Zod-validated

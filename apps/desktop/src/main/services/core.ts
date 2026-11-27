@@ -307,8 +307,16 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     },
     servers: async (projectId) => {
       const on = await extensions.registry.enabledFor(projectId);
-      return on.flatMap((rec) =>
-        (extensions.registry.resolved(rec.id)?.languages ?? []).map(
+      return on.flatMap((rec) => {
+        const loaded = extensions.registry.resolved(rec.id);
+        // A language server is a process: only extensions that declare `capabilities.spawn` (shown
+        // in the install consent) may start one; the others' languages are ignored.
+        if (!loaded?.languages.length) return [];
+        if (!loaded.manifest.oide.capabilities.spawn) {
+          ctx.log.warn(`[lsp] ${rec.name} contributes languages without capabilities.spawn; not starting them`);
+          return [];
+        }
+        return loaded.languages.map(
           (l): LanguageServerDef => ({
             key: `${rec.id}:${l.id}`,
             language: l.id,
@@ -321,8 +329,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
             initializationOptions: l.initializationOptions,
             builtin: rec.source === 'builtin',
           }),
-        ),
-      );
+        );
+      });
     },
     emitDiagnostics: (e) => void ctx.emit('lsp.diagnostics', e),
     emitState: (e) => void ctx.emit('lsp.state', e),

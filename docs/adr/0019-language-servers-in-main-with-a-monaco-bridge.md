@@ -21,7 +21,7 @@ editor is now stable enough (tabs, rename-follow, reload on discard) to carry it
    extension code needs to run, and main already owns the path guard and roots. An extension without
    host code (the built-in Languages extension) contributes servers too.
 2. **Trust.** Servers execute repository code, so they start only for **trusted** projects, and only
-   for extensions that are on for the project (built-ins are on by default; folder and git
+   for extensions that are on for the project and declare `capabilities.spawn` (built-ins are on by default; folder and git
    extensions show the server command line in their first-run consent). Revoking trust, turning the
    extension off, removing the project or deleting a worktree stops its servers (`recheck`,
    `stopUnder`; worktree deletion waits for them so Windows can remove the folder).
