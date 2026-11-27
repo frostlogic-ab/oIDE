@@ -14,8 +14,13 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
   "Import from claude.ai" button is gone: creating from a link is a choice inside New artifact).
   The search field sits in the header's actions slot (`<HeaderSlot name="actions">`), because a
   fifth control would wrap the designed toolbar at 1440px.
-- **Grid**: `repeat(auto-fill, minmax(220px, 1fr))`, 12px gap. Each card is a `<button>` with the
-  design's stylised kind thumbnail (grey blocks, not real content; version-0 cards too), title,
+- **Grid**: `repeat(auto-fill, minmax(220px, 1fr))`, 12px gap. Each card is a `<button>` with a
+  live thumbnail (`ArtifactThumbnail`, `Thumbnail.tsx`): the real design in the same sandboxed,
+  network-less `oide-artifact://` frame as the detail pane, scaled from 1280px and without a
+  scrollbar; the rendered doc; the whiteboard drawing. It is decorative (`aria-hidden`, no pointer
+  events, `tabindex=-1`), mounts when the card nears the viewport (IntersectionObserver) and falls
+  back to the design's stylised kind blocks for version-0 cards, a running or failed retrieval, a
+  broken import, or when main serves no preview URL (dev:web). Then the title,
   "Kind · project" and a third line. Normally the use line: "Being written by an agent" (green),
   "Written by an agent · 1h ago", "Read by 2 agents", "Not used by agents". While a retrieval runs:
   a running-green dot that pulses (`motion-safe:animate-pulse`, still under prefers-reduced-motion)
@@ -284,7 +289,8 @@ message) and `has_text` (whether the user typed text), never the text or the com
   version." instead of "synced from claude.ai": nothing syncs on its own.
 - Open in claude.ai and Update are hidden for artifacts that did not come from claude.ai (and for
   claude.site links, which are not on the external-link allow-list).
-- Grid thumbnails stay stylised as drawn; the detail pane shows the real content.
+- Grid thumbnails show the real content, not the stylised blocks drawn on the canvas (those are the
+  placeholder until it loads, and for artifacts with nothing to show).
 - The 190px doc preview fades its last line out (`.oide-md-fade`) instead of slicing it.
 - The design has no agent in the open view, no point and comment and no Preview | Code switch: the
   Agent panel replaces the design's side-by-side editor and preview (the editor is now Code, in the

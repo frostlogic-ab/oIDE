@@ -23,6 +23,7 @@ import { draftIdsKey, useArtifactDrafts } from './draftStore';
 import { useFileDrop, type DroppedFiles } from './drop';
 import { BrokenImportBadge, FixImportPanel } from './FixImportPanel';
 import { ArtifactPreview, KindThumb } from './Preview';
+import { ArtifactThumbnail } from './Thumbnail';
 import { ProjectPrompt, RetrievalCardLine, RetrievalStatus, useRetrieval } from './Retrieval';
 import { Viewer, type CompareSide, type ViewerMode } from './Viewer';
 import {
@@ -316,9 +317,7 @@ export default function ArtifactsScreen() {
                   }}
                   className={cn('flex flex-col p-0 rounded-xl border bg-card overflow-hidden text-left text-ink', sel ? 'border-accent' : 'border-line-2 hover:border-line-hover')}
                 >
-                  <div className="h-[120px] w-full bg-raised relative box-border">
-                    <KindThumb kind={a.kind} />
-                  </div>
+                  <ArtifactThumbnail meta={a} placeholder={<KindThumb kind={a.kind} />} className="h-[120px] w-full bg-raised box-border" />
                   <div className="flex flex-col gap-[3px] px-3 py-2.5 w-full box-border">
                     <span className="flex items-center gap-1.5 min-w-0">
                       <span className="font-semibold truncate">{a.title}</span>
