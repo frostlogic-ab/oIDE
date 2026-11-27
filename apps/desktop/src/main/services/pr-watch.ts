@@ -9,18 +9,25 @@ import type { AgentPrInfo, AgentSummary } from '@oide/protocol';
  *   find a PR opened outside oIDE (finished agents only). Lookups run one at a time.
  * - Runs after the background fetch (Settings › Agents › Fetch interval) and on window focus
  *   (at most every FOCUS_MIN_MS); never while offline, never when gh is missing or signed out.
+ * - While a PR's CI checks are still running, `poll('checks')` (every CHECKS_POLL_MS from the git
+ *   service) looks at just those PRs, so the tile's CI indicator follows the run. It stops by itself
+ *   once every check finished; offline, backoff and a missing gh skip it like any other round.
  * - A gh error stops the round and backs off exponentially (interval × 2^n, capped at MAX_BACKOFF_MS).
  *
  * A PR seen merged hands the agent to `onMerged` (archive with reason `merged`), once.
  */
 export const FOCUS_MIN_MS = 2 * 60_000;
 export const MAX_BACKOFF_MS = 2 * 60 * 60_000;
+/** How often PRs with running CI checks are looked at again. */
+export const CHECKS_POLL_MS = 60_000;
+/** After a push, how long a PR without checks yet is still watched for CI to start. */
+export const CHECKS_EXPECT_MS = 10 * 60_000;
 const MIN_INTERVAL_MS = 60_000;
 
 /** Statuses at which an agent's branch may have a PR worth discovering (its work is done or paused). */
 const DISCOVER: ReadonlySet<AgentSummary['status']> = new Set(['ready-for-review', 'has-question', 'stopped', 'done', 'error', 'paused']);
 
-export type PollReason = 'timer' | 'focus' | 'manual';
+export type PollReason = 'timer' | 'focus' | 'manual' | 'checks';
 export type PollSkip = 'busy' | 'offline' | 'backoff' | 'throttled' | 'gh-unavailable';
 
 export interface PrWatcherDeps {
@@ -45,7 +52,8 @@ export function toAgentPr(pr: PrInfo | undefined, now: number): AgentPrInfo | un
   if (!pr?.url || !pr.number || !/^https:\/\//.test(pr.url)) return undefined;
   const state = pr.state === 'open' || pr.state === 'draft' || pr.state === 'merged' || pr.state === 'closed' ? pr.state : undefined;
   if (!state) return undefined;
-  return { number: pr.number, url: pr.url, state, ...(pr.mergeCommit ? { mergeCommit: pr.mergeCommit } : {}), checkedAt: now };
+  const checks = state === 'open' || state === 'draft' ? pr.checks : undefined;
+  return { number: pr.number, url: pr.url, state, ...(pr.mergeCommit ? { mergeCommit: pr.mergeCommit } : {}), ...(checks ? { checks: { ...checks } } : {}), checkedAt: now };
 }
 
 export class PrWatcher {
@@ -55,6 +63,8 @@ export class PrWatcher {
   private lastFocusAt = 0;
   private readonly discovered = new Set<string>();
   private readonly mergedHandled = new Set<string>();
+  /** Agents whose branch was just pushed: CI checks may start soon (agent id → watch until). */
+  private readonly expecting = new Map<string, number>();
 
   constructor(private readonly d: PrWatcherDeps) {}
 
@@ -82,9 +92,31 @@ export class PrWatcher {
     this.discovered.add(agentId);
   }
 
-  private targets(): AgentSummary[] {
+  /** The branch was just pushed to its PR: watch for CI checks for CHECKS_EXPECT_MS. */
+  expectChecks(agentId: string): void {
+    this.expecting.set(agentId, this.now() + CHECKS_EXPECT_MS);
+  }
+
+  /** An open or draft PR whose CI checks are still running, or expected to start after a push. */
+  private checksRunning(a: AgentSummary): boolean {
+    if (!a.pr || (a.pr.state !== 'open' && a.pr.state !== 'draft')) return false;
+    if (a.pr.checks?.state === 'pending') return true;
+    const until = this.expecting.get(a.id);
+    if (until === undefined) return false;
+    if (until > this.now() && !a.pr.checks) return true;
+    this.expecting.delete(a.id);
+    return false;
+  }
+
+  /** Some agent's PR has CI checks still running (the git service then polls every CHECKS_POLL_MS). */
+  hasRunningChecks(): boolean {
+    return this.d.agents.list().some((a) => this.checksRunning(a) && this.d.trusted(a.projectId));
+  }
+
+  private targets(reason: PollReason): AgentSummary[] {
     return this.d.agents.list().filter((a) => {
       if (!a.branch || !a.worktreePath || !this.d.trusted(a.projectId)) return false;
+      if (reason === 'checks') return this.checksRunning(a);
       if (a.pr) return a.pr.state === 'open' || a.pr.state === 'draft';
       return !this.discovered.has(a.id) && DISCOVER.has(a.status);
     });
@@ -99,7 +131,7 @@ export class PrWatcher {
       if (now - this.lastFocusAt < FOCUS_MIN_MS) return { checked: 0, skipped: 'throttled' };
       this.lastFocusAt = now;
     }
-    let targets = this.targets();
+    let targets = this.targets(reason);
     if (!targets.length) return { checked: 0 };
     this.running = true;
     let checked = 0;

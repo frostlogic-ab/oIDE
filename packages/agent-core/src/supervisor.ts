@@ -726,7 +726,8 @@ export class Supervisor {
     const rec = this.agents.get(agentId);
     if (!rec) return;
     const cur = rec.reducer.summary.pr;
-    if (cur?.number === pr?.number && cur?.state === pr?.state && cur?.url === pr?.url && cur?.mergeCommit === pr?.mergeCommit) return;
+    const sameChecks = cur?.checks?.state === pr?.checks?.state && cur?.checks?.total === pr?.checks?.total && cur?.checks?.completed === pr?.checks?.completed && cur?.checks?.failed === pr?.checks?.failed;
+    if (cur?.number === pr?.number && cur?.state === pr?.state && cur?.url === pr?.url && cur?.mergeCommit === pr?.mergeCommit && sameChecks) return;
     if (pr) rec.reducer.summary.pr = pr;
     else delete rec.reducer.summary.pr;
     this.publishSummary(rec);

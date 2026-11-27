@@ -483,6 +483,27 @@ describe('archived agents and the PR lifecycle', () => {
     expect(events.map((e) => e.props.reason)).toEqual(['bad_path', 'bad_path', 'other', 'bad_link', 'bad_link']);
   });
 
+  it('pr_checks_finished once per CI run, never on first sight; pr_checks_opened from the CI indicator', () => {
+    const { o, events } = make();
+    const checks = (state: string) => ({ ...pr('open'), checks: { state, total: 3, completed: state === 'pending' ? 1 : 3, failed: state === 'failure' ? 1 : 0 } });
+    o.emitted('agents.summary', summary({ pr: checks('success') })); // first sight: not a transition
+    o.emitted('agents.summary', summary({ pr: checks('pending') }));
+    o.emitted('agents.summary', summary({ pr: checks('pending') }));
+    o.emitted('agents.summary', summary({ pr: checks('failure') }));
+    o.emitted('agents.summary', summary({ pr: checks('failure') }));
+    o.emitted('agents.summary', summary({ pr: pr('open') })); // pushed: old checks dropped
+    o.emitted('agents.summary', summary({ pr: checks('pending') }));
+    o.emitted('agents.summary', summary({ pr: checks('success') }));
+    o.command('shell.openExternal', { url: 'https://github.com/acme/private/pull/12/checks' }, { ok: true });
+    o.command('shell.openExternal', { url: 'https://github.com/acme/other/pull/1/checks' }, { ok: true });
+    expect(events).toEqual([
+      { name: 'pr_checks_finished', props: { result: 'failure' } },
+      { name: 'pr_checks_finished', props: { result: 'success' } },
+      { name: 'pr_checks_opened', props: {} },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/acme|github/);
+  });
+
   it('pr_merged_detected when a known PR turns merged, once', () => {
     const { o, events } = make();
     o.emitted('agents.summary', summary({ pr: pr('merged') })); // first sight: not a transition

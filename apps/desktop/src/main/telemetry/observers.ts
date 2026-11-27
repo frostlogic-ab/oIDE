@@ -103,6 +103,8 @@ export class TelemetryObservers {
   private readonly errorCodeSeen = new Map<string, number>();
   private readonly prUrls = new Set<string>();
   private readonly prState = new Map<string, string>();
+  /** CI checks state per agent (pending/success/failure), so a finished run is reported once. */
+  private readonly prChecks = new Map<string, string>();
   private readonly archived = new Map<string, ArchiveReason>();
   /** Mode per agent from its summaries, and the one before it (the summary may change before setMode returns). */
   private readonly modes = new Map<string, { now: PermissionMode; before?: PermissionMode }>();
@@ -244,7 +246,9 @@ export class TelemetryObservers {
         return;
       case 'shell.openExternal': {
         // View PR: the URL itself is never sent; it only has to be the PR of an agent main knows.
-        if (this.prUrls.has((input as { url: string }).url)) this.sink.track('pr_view_opened', {});
+        const url = (input as { url: string }).url;
+        if (this.prUrls.has(url)) this.sink.track('pr_view_opened', {});
+        else if (url.endsWith('/checks') && this.prUrls.has(url.slice(0, -'/checks'.length))) this.sink.track('pr_checks_opened', {});
         return;
       }
       case 'files.findByName':
@@ -491,8 +495,15 @@ export class TelemetryObservers {
   // ------------------------------------------------------------------------- emitted events
 
   /** PR state per agent and archive reason per agent (memory only), so each change is reported once. */
-  private notePr(summary: { id?: string; pr?: { url: string; state: string } }): void {
+  private notePr(summary: { id?: string; pr?: { url: string; state: string; checks?: { state: string } } }): void {
     if (!summary.id || !summary.pr) return;
+    // CI finished: reported once per run (pending → success/failure), never on first sight.
+    const checks = summary.pr.checks?.state;
+    const prevChecks = this.prChecks.get(summary.id);
+    if (checks) this.prChecks.set(summary.id, checks);
+    else this.prChecks.delete(summary.id);
+    if (this.prChecks.size > 5000) this.prChecks.delete(this.prChecks.keys().next().value!);
+    if (prevChecks === 'pending' && (checks === 'success' || checks === 'failure')) this.sink.track('pr_checks_finished', { result: checks });
     this.prUrls.add(summary.pr.url);
     if (this.prUrls.size > 1000) this.prUrls.delete(this.prUrls.values().next().value!);
     const prev = this.prState.get(summary.id);

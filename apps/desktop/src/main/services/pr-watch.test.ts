@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { GhCli, PrInfo, PrLookup } from '@oide/git';
 import type { AgentPrInfo, AgentSummary } from '@oide/protocol';
 import { GitService } from './git.js';
-import { FOCUS_MIN_MS, MAX_BACKOFF_MS, PrWatcher, toAgentPr } from './pr-watch.js';
+import { CHECKS_EXPECT_MS, FOCUS_MIN_MS, MAX_BACKOFF_MS, PrWatcher, toAgentPr } from './pr-watch.js';
 
 /**
  * Pull request lifecycle with a fake `gh`: discovery of a PR opened elsewhere, polling of open PRs
@@ -156,6 +156,41 @@ describe('PrWatcher', () => {
     expect(await focus.w.poll('focus')).toEqual({ checked: 0, skipped: 'throttled' });
     focus.tick(FOCUS_MIN_MS);
     expect((await focus.w.poll('focus')).checked).toBe(1);
+  });
+
+  it('follows running CI checks with poll("checks"), only for those PRs, until they finish', async () => {
+    const running = { state: 'pending' as const, total: 9, completed: 7, failed: 0 };
+    const t = watcher([agent('a', { pr: { number: 12, url: URL1, state: 'open', checks: running } }), agent('b', { pr: { number: 13, url: 'https://github.com/o/r/pull/13', state: 'open' } })]);
+    expect(t.w.hasRunningChecks()).toBe(true);
+    t.gh.prs.set('oide/a', { state: 'open', number: 12, url: URL1, checks: { ...running, completed: 8 } });
+    expect(await t.w.poll('checks')).toEqual({ checked: 1 });
+    expect(t.gh.calls).toEqual(['oide/a']); // never b: its PR has no running checks
+    expect(t.agents.get('a')!.pr!.checks).toEqual({ ...running, completed: 8 });
+    t.gh.prs.set('oide/a', { state: 'open', number: 12, url: URL1, checks: { state: 'failure', total: 9, completed: 9, failed: 1 } });
+    await t.w.poll('checks');
+    expect(t.agents.get('a')!.pr!.checks).toMatchObject({ state: 'failure', failed: 1 });
+    expect(t.w.hasRunningChecks()).toBe(false);
+    t.gh.calls = [];
+    expect(await t.w.poll('checks')).toEqual({ checked: 0 });
+    expect(t.gh.calls).toEqual([]);
+  });
+
+  it('after a push, watches the PR for CI to start, for CHECKS_EXPECT_MS at most', async () => {
+    const t = watcher([agent('a', { pr: { number: 12, url: URL1, state: 'open' } })]);
+    expect(t.w.hasRunningChecks()).toBe(false);
+    t.w.expectChecks('a');
+    expect(t.w.hasRunningChecks()).toBe(true);
+    t.gh.prs.set('oide/a', { state: 'open', number: 12, url: URL1 });
+    expect((await t.w.poll('checks')).checked).toBe(1); // no checks yet: keep watching
+    expect(t.w.hasRunningChecks()).toBe(true);
+    t.tick(CHECKS_EXPECT_MS);
+    expect(t.w.hasRunningChecks()).toBe(false); // CI never started (a repo without CI)
+  });
+
+  it('toAgentPr keeps checks only on open or draft PRs', () => {
+    const checks = { state: 'success' as const, total: 2, completed: 2, failed: 0 };
+    expect(toAgentPr({ state: 'open', number: 3, url: URL1, checks }, 5)).toEqual({ number: 3, url: URL1, state: 'open', checks, checkedAt: 5 });
+    expect(toAgentPr({ state: 'merged', number: 3, url: URL1, checks }, 5)).toEqual({ number: 3, url: URL1, state: 'merged', checkedAt: 5 });
   });
 
   it('toAgentPr keeps only complete https PRs', () => {
