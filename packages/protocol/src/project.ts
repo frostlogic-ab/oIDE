@@ -112,6 +112,29 @@ export const FileDiff = z.object({
 });
 export type FileDiff = z.infer<typeof FileDiff>;
 
+/**
+ * A file the shown checkout changed, for the Files tree's git colours (VS Code explorer style):
+ * against HEAD in the main checkout (uncommitted work), against the merge-base with the base branch
+ * in an agent worktree (everything the branch changed, committed or not).
+ */
+export const FileChangeStatus = z.enum(['modified', 'added', 'untracked', 'deleted', 'renamed', 'conflicted']);
+export type FileChangeStatus = z.infer<typeof FileChangeStatus>;
+export const FileChange = z.object({
+  path: z.string(),
+  status: FileChangeStatus,
+  /** Rename source. */
+  oldPath: z.string().optional(),
+});
+export type FileChange = z.infer<typeof FileChange>;
+export const FileChanges = z.object({
+  /** `head`: uncommitted changes (main checkout); `branch`: changes since the branch left its base (agent worktree). */
+  against: z.enum(['head', 'branch']),
+  changes: z.array(FileChange),
+  /** More changes than the tree shows; the rest are left out. */
+  truncated: z.boolean().default(false),
+});
+export type FileChanges = z.infer<typeof FileChanges>;
+
 /** Why a changed path is security-sensitive, or undefined (SEC-12). */
 export function sensitivePathReason(path: string): string | undefined {
   const p = path.replace(/\\/g, '/').toLowerCase();

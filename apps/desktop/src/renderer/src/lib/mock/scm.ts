@@ -14,6 +14,7 @@ import {
   type ArtifactMeta,
   type ContentFileResult,
   type FileNameMatch,
+  type FileChange,
   CommitInfo,
   FileDiff,
   OverlapWarning,
@@ -437,8 +438,46 @@ const DOCS_FILES: Record<string, string> = {
 
 /** Root path → { relative path → content }. Worktrees start as copies of main plus the agent's files. */
 export const files = new Map<string, Map<string, string>>();
+/** Root path → what `files.changes` compares against (main's files; a worktree's base branch). */
+const baselines = new Map<string, Map<string, string>>();
 function addRoot(root: string, base: Record<string, string>, extra: Record<string, string> = {}) {
   files.set(root, new Map(Object.entries({ ...base, ...extra })));
+  baselines.set(root, new Map(Object.entries(base)));
+}
+
+function treeOf(root: string): Map<string, string> {
+  const tree = files.get(root);
+  if (!tree) throw new Error(`[forbidden_path] ${root}`);
+  return tree;
+}
+
+/** Mock `files.changes`: the in-memory tree against its baseline (worktrees count new files as added). */
+export function mockChanges(root: string): FileChange[] {
+  const tree = treeOf(root);
+  const base = baselines.get(root) ?? new Map<string, string>();
+  const wt = root.startsWith(WT_ROOT);
+  const out: FileChange[] = [];
+  for (const [path, content] of tree) {
+    const was = base.get(path);
+    if (was === undefined) out.push({ path, status: wt ? 'added' : 'untracked' });
+    else if (was !== content) out.push({ path, status: 'modified' });
+  }
+  for (const path of base.keys()) if (!tree.has(path)) out.push({ path, status: 'deleted' });
+  return out.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+/** Mock `files.discardChanges`: changed paths go back to the baseline. */
+export function mockDiscard(root: string, paths: string[]): number {
+  const tree = treeOf(root);
+  const base = baselines.get(root) ?? new Map<string, string>();
+  const picked = mockChanges(root).filter((c) => paths.includes(c.path));
+  if (!picked.length) throw new Error('[git_failed] There are no changes to discard here.');
+  for (const c of picked) {
+    const was = base.get(c.path);
+    if (was === undefined) tree.delete(c.path);
+    else tree.set(c.path, was);
+  }
+  return picked.length;
 }
 addRoot(PROJECT_PATHS.oide!, OIDE_FILES);
 addRoot(PROJECT_PATHS['billing-api']!, BILLING_FILES);
@@ -796,6 +835,13 @@ export function createScmHandlers({ agents, emit, fallbackDiffs = {}, artifacts 
       return { ok: true as const };
     },
     'files.history': ({ root, path }) => fileHistory(path, root),
+    'files.changes': ({ root }) => ({ against: root.startsWith(WT_ROOT) ? ('branch' as const) : ('head' as const), changes: mockChanges(root), truncated: false }),
+    'files.discardChanges': ({ root, paths }) => {
+      const reverted = mockDiscard(root, paths);
+      const p = Object.values(state.worktrees).flat().find((w) => w.path === root)?.projectId ?? Object.entries(PROJECT_PATHS).find(([, v]) => v === root)?.[0];
+      if (p) changed(p);
+      return { reverted, against: root.startsWith(WT_ROOT) ? ('branch' as const) : ('head' as const) };
+    },
     'files.findByName': ({ roots, query, limit = 50, recent = [] }) => {
       const rank = new Map(recent.map((r, i) => [`${r.root}
 ${r.path}`, i]));

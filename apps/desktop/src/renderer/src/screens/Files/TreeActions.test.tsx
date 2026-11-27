@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emptyDirs, files as mockFiles } from '../../lib/mock/scm';
 import { useScope } from '../../stores/scope';
 import { setupMockApp } from '../SourceControl/testing';
+import { useChanges } from './changesStore';
 import { useFiles } from './filesStore';
 import FilesScreen from './index';
 import { useSearch } from './searchStore';
@@ -24,6 +25,7 @@ beforeEach(() => {
   snapshot = new Map(mockFiles.get(ROOT));
   useFiles.setState({ openProjects: {}, checkout: {}, expanded: {}, nodes: {}, loading: {}, errors: {}, tabs: [], active: undefined, dirty: {}, revealed: {}, pending: undefined, revealTarget: undefined, edit: undefined, clipboard: undefined });
   useSearch.setState({ open: false });
+  useChanges.setState({ byRoot: {} });
 });
 afterEach(() => {
   cleanup();
@@ -42,7 +44,7 @@ async function setup() {
 
 /** Rows' names end with their agent markers ("README.mdReady for review: ..."): match the start. */
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const named = (name: string | RegExp) => (typeof name === 'string' ? new RegExp(`^${esc(name)}(?:$|[A-Z][a-z]+ [a-z])`) : name);
+const named = (name: string | RegExp) => (typeof name === 'string' ? new RegExp(`^${esc(name)}(?:$|, |[A-Z][a-z]+ [a-z])`) : name);
 const row = (tree: HTMLElement, name: string | RegExp) => within(tree).findByRole('treeitem', { name: named(name) });
 const menuFor = async (el: HTMLElement) => {
   fireEvent.contextMenu(el, { clientX: 40, clientY: 60 });
@@ -153,5 +155,64 @@ describe('Files tree context menu', () => {
     await waitFor(() => expect(mockFiles.get(ROOT)!.has('test/README copy.md')).toBe(true));
     expect(mockFiles.get(ROOT)!.has('README copy.md')).toBe(false);
     expect(useFiles.getState().clipboard).toBeUndefined();
+  });
+});
+
+describe('Files tree git colours', () => {
+  const change = () => {
+    const tree = mockFiles.get(ROOT)!;
+    tree.set('README.md', '# billing-api\n\nChanged.\n');
+    tree.delete('package.json');
+    tree.set('notes.txt', 'new\n');
+  };
+
+  it('shows changed files green with a letter, deleted ones red and struck through, and folders tinted', async () => {
+    change();
+    mockFiles.get(ROOT)!.set('test/handler.test.ts', 'changed\n');
+    const { tree } = await setup();
+    const readme = await row(tree, 'README.md, modified');
+    expect(readme.getAttribute('title')).toBe('README.md • Modified');
+    expect(within(readme).getByText('README.md').className).toMatch(/text-ok/);
+    expect(within(readme).getByText('M')).toBeTruthy();
+    expect(within(await row(tree, 'notes.txt, untracked')).getByText('U')).toBeTruthy();
+    const gone = await row(tree, 'package.json, deleted');
+    expect(within(gone).getByText('package.json').className).toMatch(/text-bad.*line-through/);
+    expect(within(await row(tree, 'test, contains changes')).getByText('test').className).toMatch(/text-ok/);
+    // An unchanged file: no colour, no Discard.
+    const menu = await menuFor(await row(tree, /^src$/));
+    expect(within(menu).queryByRole('menuitem', { name: /Discard/ })).toBeNull();
+  });
+
+  it('Discard changes puts a modified file back after confirming', async () => {
+    change();
+    const { tree, invoke } = await setup();
+    await pick(await row(tree, 'README.md, modified'), 'Discard changes');
+    const dialog = await screen.findByRole('dialog', { name: 'Discard changes in README.md?' });
+    expect(dialog.textContent).toMatch(/goes back to the last committed version/);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Discard changes' }));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('files.discardChanges', { root: ROOT, paths: ['README.md'] }));
+    expect(mockFiles.get(ROOT)!.get('README.md')).toBe(snapshot.get('README.md'));
+    await waitFor(() => expect(within(tree).queryByRole('treeitem', { name: /^README\.md, modified/ })).toBeNull());
+    expect(await row(tree, 'README.md')).toBeTruthy();
+  });
+
+  it('Discard changes deletes a new file and restores a deleted one', async () => {
+    change();
+    const { tree } = await setup();
+    await pick(await row(tree, 'notes.txt, untracked'), 'Discard changes');
+    let dialog = await screen.findByRole('dialog', { name: 'Delete notes.txt?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete file' }));
+    await waitFor(() => expect(within(tree).queryByRole('treeitem', { name: /^notes\.txt/ })).toBeNull());
+    expect(mockFiles.get(ROOT)!.has('notes.txt')).toBe(false);
+
+    const ghost = await row(tree, 'package.json, deleted');
+    const menu = await menuFor(ghost);
+    expect(within(menu).queryByRole('menuitem', { name: /^Rename/ })).toBeNull();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Discard changes (restore)' }));
+    dialog = await screen.findByRole('dialog', { name: 'Restore package.json?' });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(within(tree).queryByRole('treeitem', { name: /^package\.json, deleted/ })).toBeNull());
+    expect(await row(tree, 'package.json')).toBeTruthy();
+    expect(mockFiles.get(ROOT)!.get('package.json')).toBe(snapshot.get('package.json'));
   });
 });

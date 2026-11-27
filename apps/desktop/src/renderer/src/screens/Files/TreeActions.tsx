@@ -1,13 +1,15 @@
 /**
  * Files tree management: the right-click menu (New file / New folder, Cut / Copy / Paste, Copy path,
- * Reveal, Rename, Delete), the same actions from the keyboard, the inline name field and the delete
- * confirmation. State lives in `filesStore` (`edit`, `clipboard`); main does the work (`files.create`,
- * `files.rename`, `files.copy`, `files.delete`).
+ * Reveal, Rename, Delete, Discard changes), the same actions from the keyboard, the inline name field
+ * and the delete and discard confirmations. State lives in `filesStore` (`edit`, `clipboard`); main
+ * does the work (`files.create`, `files.rename`, `files.copy`, `files.delete`, `files.discardChanges`).
  */
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { Button, Dialog, type ContextMenuEntry } from '@oide/ui';
+import type { FileChange } from '@oide/protocol';
 import { ipcErrorMessage, isMac, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
+import { changesUnder, useChanges } from './changesStore';
 import { joinPath, useFiles, type TreeRow } from './filesStore';
 import { baseName, isUnder, parentDir, stemLength, validateName } from './treeOps';
 
@@ -38,11 +40,21 @@ export interface TreeActions {
   /** Row waiting for the delete confirmation. */
   confirming?: TreeRow;
   setConfirming(r?: TreeRow): void;
+  /** Row waiting for the Discard changes confirmation, with the changes it would throw away. */
+  discarding?: PendingDiscard;
+  setDiscarding(d?: PendingDiscard): void;
+}
+
+export interface PendingDiscard {
+  row: TreeRow;
+  changes: FileChange[];
 }
 
 export function useTreeActions(projectId: string, root: string): TreeActions {
   const s = useFiles();
   const [confirming, setConfirming] = useState<TreeRow>();
+  const [discarding, setDiscarding] = useState<PendingDiscard>();
+  const changes = useChanges((st) => st.byRoot[root]);
 
   const newEntry = (r: TreeRow | undefined, kind: 'file' | 'dir') => s.startCreate(projectId, root, targetDir(r), kind, r?.kind === 'dir' ? r.path : undefined);
   const rename = (r: TreeRow) => s.startRename(projectId, root, entryOf(r), r.kind);
@@ -58,6 +70,24 @@ export function useTreeActions(projectId: string, root: string): TreeActions {
   const menu = (r?: TreeRow): ContextMenuEntry[] => {
     const rel = r ? entryOf(r) : '';
     const canPaste = !!s.clipboard;
+    const changed = r ? changesUnder(changes, r.path) : [];
+    const discard: ContextMenuEntry = {
+      id: 'discard',
+      label: 'Discard changes',
+      icon: 'undo',
+      danger: true,
+      title: changes?.against === 'branch' ? 'Put back the version this branch started from' : 'Put back the last committed version',
+      onSelect: () => r && setDiscarding({ row: r, changes: changed }),
+    };
+    // A deleted file or folder is not on disk: it can only be brought back, or its path copied.
+    if (r?.ghost) {
+      return [
+        { ...discard, label: 'Discard changes (restore)', danger: false },
+        { id: 'sep-1', separator: true },
+        { id: 'copy-path', label: 'Copy path', icon: 'link', onSelect: () => void copyText(joinPath(root, rel), 'path') },
+        { id: 'copy-rel', label: 'Copy relative path', onSelect: () => void copyText(rel, 'relative path') },
+      ];
+    }
     const items: ContextMenuEntry[] = [
       { id: 'new-file', label: 'New file…', icon: 'file-plus', onSelect: () => newEntry(r, 'file') },
       { id: 'new-folder', label: 'New folder…', icon: 'folder-plus', onSelect: () => newEntry(r, 'dir') },
@@ -90,12 +120,13 @@ export function useTreeActions(projectId: string, root: string): TreeActions {
         { id: 'rename', label: 'Rename…', icon: 'pencil', hint: 'F2', onSelect: () => rename(r) },
         { id: 'delete', label: 'Delete', icon: 'trash', hint: isMac() ? '⌘⌫' : 'Del', danger: true, onSelect: () => setConfirming(r) },
       );
+      if (changed.length) items.push({ id: 'sep-4', separator: true }, discard);
     }
     return items;
   };
 
   const onKey = (e: ReactKeyboardEvent, r: TreeRow): boolean => {
-    if (r.draft) return false;
+    if (r.draft || r.ghost) return false;
     const cmd = isMac() ? e.metaKey : e.ctrlKey;
     const k = e.key.toLowerCase();
     if (e.key === 'F2' && !cmd) rename(r);
@@ -107,7 +138,76 @@ export function useTreeActions(projectId: string, root: string): TreeActions {
     return true;
   };
 
-  return { menu, onKey, confirming, setConfirming };
+  return { menu, onKey, confirming, setConfirming, discarding, setDiscarding };
+}
+
+const isNew = (c: FileChange) => c.status === 'added' || c.status === 'untracked';
+
+/** What Discard changes will do, in words: goes back, is deleted (new), or comes back (deleted). */
+export function discardSummary(row: TreeRow, changes: FileChange[], against: 'head' | 'branch'): string {
+  const version = against === 'branch' ? 'the version this branch started from' : 'the last committed version';
+  if (row.kind === 'file' && changes.length === 1) {
+    const c = changes[0]!;
+    const name = baseName(c.path);
+    if (isNew(c)) return `${name} is new, so it will be deleted. This can't be undone.`;
+    if (c.status === 'deleted') return `${name} will be restored from ${version}.`;
+    return `${name} goes back to ${version}. Your changes to it are lost; this can't be undone.`;
+  }
+  const n = (k: number, one: string) => `${k} ${one}${k === 1 ? '' : 's'}`;
+  const fresh = changes.filter(isNew).length;
+  const gone = changes.filter((c) => c.status === 'deleted').length;
+  const edited = changes.length - fresh - gone;
+  const parts = [
+    edited ? `${n(edited, 'changed file')} ${edited === 1 ? 'goes' : 'go'} back to ${version}` : '',
+    fresh ? `${n(fresh, 'new file')} ${fresh === 1 ? 'is' : 'are'} deleted` : '',
+    gone ? `${n(gone, 'deleted file')} ${gone === 1 ? 'is' : 'are'} restored` : '',
+  ].filter(Boolean);
+  return `In ${row.label}: ${parts.join(', ')}.${edited || fresh ? " This can't be undone." : ''}`;
+}
+
+/** Confirm before throwing changes away: git restore / clean, which do not go through the trash. */
+export function DiscardDialog({ root, pending, onClose }: { root: string; pending?: PendingDiscard; onClose: () => void }) {
+  const s = useFiles();
+  const against = useChanges((st) => st.byRoot[root]?.against ?? 'head');
+  const [busy, setBusy] = useState(false);
+  const row = pending?.row;
+  const changes = pending?.changes ?? [];
+  const paths = new Set(changes.map((c) => c.path));
+  const unsaved = s.tabs.filter((t) => t.root === root && paths.has(t.path) && s.dirty[t.id]).length;
+  const name = row ? baseName(row.contentPath) : '';
+  const deleteOne = changes.length === 1 && isNew(changes[0]!) && row?.kind === 'file';
+  const onlyDeleted = changes.length > 0 && changes.every((c) => c.status === 'deleted');
+  const title = deleteOne ? `Delete ${name}?` : onlyDeleted ? `Restore ${name}?` : `Discard changes in ${name}?`;
+  return (
+    <Dialog
+      open={!!row}
+      onClose={() => !busy && onClose()}
+      title={title}
+      description={row ? `${discardSummary(row, changes, against)}${unsaved ? ` Unsaved edits in ${unsaved} open ${unsaved === 1 ? 'file' : 'files'} will be lost.` : ''}` : ''}
+      footer={
+        <>
+          <Button size={32} disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            size={32}
+            variant={onlyDeleted ? 'primary' : 'danger'}
+            disabled={busy || !changes.length}
+            onClick={async () => {
+              if (!row) return;
+              setBusy(true);
+              const res = await s.discardChanges(root, changes);
+              setBusy(false);
+              if (res.error) toast(`Couldn't discard changes in ${name}: ${res.error}`, 'error');
+              onClose();
+            }}
+          >
+            {deleteOne ? 'Delete file' : onlyDeleted ? 'Restore' : 'Discard changes'}
+          </Button>
+        </>
+      }
+    />
+  );
 }
 
 /** Confirm before moving a file or folder to the trash (unsaved edits in its open tabs are lost). */

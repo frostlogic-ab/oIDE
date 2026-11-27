@@ -392,6 +392,17 @@ describe('archived agents and the PR lifecycle', () => {
     expect(JSON.stringify(events)).not.toMatch(/secret|plan|p1/);
   });
 
+  it('file_changes_discarded buckets the files and says main or worktree, never the paths or root', () => {
+    const { o, events } = make();
+    o.command('files.discardChanges', { root: 'C:/secret/repo', paths: ['secret/plan.md'] }, { reverted: 1, against: 'head' });
+    o.command('files.discardChanges', { root: 'C:/secret/wt', paths: ['a.ts', 'b.ts', 'c.ts'] }, { reverted: 3, against: 'branch' });
+    expect(events).toEqual([
+      { name: 'file_changes_discarded', props: { files: '1', checkout: 'main' } },
+      { name: 'file_changes_discarded', props: { files: '2-5', checkout: 'worktree' } },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/secret|plan|repo/);
+  });
+
   it('project_pulled says whether Pull was clicked in the Projects sidebar or Source control, never the project', () => {
     const { o, events } = make();
     o.command('git.pull', { projectId: 'p1', from: 'sidebar' }, {});

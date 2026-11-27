@@ -5,6 +5,7 @@ export * from './plain-fs.js';
 export * from './status.js';
 export * from './patch.js';
 export * from './diff.js';
+export * from './changes.js';
 export * from './log.js';
 export * from './merge.js';
 export * from './worktrees.js';
