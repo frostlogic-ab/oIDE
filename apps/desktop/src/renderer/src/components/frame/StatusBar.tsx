@@ -4,6 +4,7 @@ import { cliHealth, useCli } from '../../stores/cli';
 import { countAgents, useAgents } from '../../stores/agents';
 import { useProjects } from '../../stores/projects';
 import { toast } from '../../stores/ui';
+import { navigate } from '../../stores/router';
 import { ipcErrorMessage } from '../../lib/bridge';
 import { formatResetTime, formatTokens, plural } from '../../lib/format';
 import { PlanUsageMeter, latestPlanUsage } from './PlanUsage';
@@ -92,6 +93,19 @@ function CliStatus({ health, version }: { health: ReturnType<typeof cliHealth>; 
     checking: { color: 'var(--color-ink-4)', text: 'Checking Claude Code CLI…' },
     unknown: { color: 'var(--color-ink-4)', text: 'Claude Code CLI status unknown' },
   }[health];
+  if (health === 'missing' || health === 'untested') {
+    return (
+      <button
+        type="button"
+        onClick={() => navigate('settings', { section: 'cli' })}
+        title="Set the Claude Code CLI path in Settings"
+        className="flex items-center gap-1.5 shrink-0 border-0 bg-transparent p-0 text-ink-3 text-[11.5px] hover:underline"
+      >
+        <StatusDot color={meta.color} size={6} />
+        {meta.text}
+      </button>
+    );
+  }
   return (
     <span className="flex items-center gap-1.5 shrink-0" title={version ? `claude ${version}` : undefined}>
       <StatusDot color={meta.color} size={6} />
