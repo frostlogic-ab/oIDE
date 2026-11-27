@@ -130,6 +130,13 @@ const P = {
       <path d="M20 20v-4h-4" />
     </>
   ),
+  download: (
+    <>
+      <path d="M12 4v11" />
+      <path d="M7 10l5 5 5-5" />
+      <path d="M5 20h14" />
+    </>
+  ),
   'external-link': (
     <>
       <path d="M14 4h6v6" />

@@ -57,13 +57,27 @@ packaged build; e2e tests run against `out/` (unpackaged), and a packaged build 
 `apps/desktop/src/main/services/updater.ts` (`UpdaterService`) wraps electron-updater (lazy
 `import('electron-updater')`, externalized from the main bundle). Created in `services/index.ts` as
 `services.updates` (Electron only; plain-Node integration tests have none and `handlers/updates.ts`
-answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-settings.md)).
+answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-settings.md)) and the
+header Update button ([desktop-shell](desktop-shell.md)).
 
-- **Consent.** `autoDownload` and `autoInstallOnAppQuit` are off. A check only finds out whether a
-  newer version exists. Download is a click (`updates.download`); install is a second click plus an
-  inline confirm (`updates.install` with `consent: true`), which runs `quitAndInstall(false, true)`:
-  oIDE quits through the normal quit hooks (pending permissions deny, agents stop and resume after the
-  restart), the installer runs and oIDE starts again.
+- **Download and install** ([ADR 0018](../../adr/0018-updates-download-and-install-on-quit-by-default.md)).
+  - Download automatically (`settings.updates.downloadAutomatically`, default on): a check that finds
+    an update this build can install calls `download()` itself (electron-updater's `autoDownload`
+    stays off). Turning it on while an update waits starts the download. Off: Download in Settings
+    or the header Update button.
+  - Install when oIDE closes (`settings.updates.installOnQuit`, default on): electron-updater's
+    `autoInstallOnAppQuit`, which runs the installer silently on the app's `quit` event when the exit
+    code is 0. That event fires after every quit hook (pending permissions deny, agents stop) once
+    main calls `app.exit(0)`. The `updates` quit hook calls `prepareQuit()`, which settles the flag
+    and reports `update_install_started { trigger: 'quit' }`. Windows/Linux: electron-updater adds
+    its quit handler right after a download only if the flag is on, so the flag stays on until then
+    and follows the setting afterwards (the handler reads it again at quit). macOS: the flag decides
+    at download time whether Squirrel.Mac takes the update, so it follows the setting throughout and
+    turning it off after a download applies from the next update.
+  - Restart now is always a click plus a confirm: the header Update button or Restart to update in
+    Settings (`updates.install` with `consent: true` and `from: 'header' | 'settings'`), which runs
+    `quitAndInstall(false, true)`: oIDE quits through the normal quit hooks (agents resume after the
+    restart), the installer runs and oIDE starts again.
 - **Checks.** With Settings › Updates › Check automatically on (default), 15 s after startup and
   every 6 h; Check now at any time. `lastCheckedAt` is kept in `<userData>/updates.json`.
 - **Channels.** `settings.updates.channel`: `stable` → `channel = latest`, no prereleases; `beta` →
@@ -105,8 +119,9 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   The Windows zip does carry `app-update.yml` (electron-builder packs it and the NSIS installer from
   the same `win-unpacked` folder), so the service also requires `Uninstall oIDE.exe` next to the
   exe, which only the NSIS installer writes; otherwise an update would install a second copy.
-- **Telemetry.** Each finished check sends `update_checked` (`outcome`, `channel`) when usage
-  analytics are on ([telemetry](telemetry.md)).
+- **Telemetry.** Each finished check sends `update_checked` (`outcome`, `channel`), and each install
+  `update_install_started` (`trigger` header / settings / quit, `channel`), when usage analytics are
+  on ([telemetry](telemetry.md)).
 - **Unsigned builds.**
   - Windows: NSIS updates install. Without signing, electron-updater has no `publisherName` to verify,
     so the download is checked only by the sha512 in `latest.yml` (fetched over HTTPS from GitHub);

@@ -1,15 +1,19 @@
 import { execFile } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { publishTarget, type PublishTarget, type Settings, type UpdateChannel, type UpdateStatus } from '@oide/protocol';
+import { publishTarget, type PublishTarget, type Settings, type UpdateChannel, type UpdateInstallTrigger, type UpdateStatus } from '@oide/protocol';
 
 /**
  * Auto-update on GitHub Releases (M7), wrapping electron-updater. See docs/wiki/pages/packaging.md.
  *
- * Consent rules (never broken):
- * - `autoDownload` and `autoInstallOnAppQuit` are off. A check only finds out whether a newer
- *   version exists; downloading is a click (`updates.download`) and installing is another click
- *   (`updates.install` with `consent: true`), which quits oIDE and runs the installer.
+ * What happens without a click (Settings › Updates, both on by default, ADR 0018):
+ * - Download automatically: a check that finds an update this build can install downloads it in the
+ *   background (`download()` called by oIDE, never electron-updater's own `autoDownload`).
+ * - Install when oIDE closes: a downloaded update installs when the user quits, after the quit hooks
+ *   have stopped agents and denied pending prompts (electron-updater's `autoInstallOnAppQuit`: it
+ *   runs the installer silently on the app's `quit` event when the exit code is 0).
+ * - Restarting now is always a click: the header Update button or Settings (`updates.install` with
+ *   `consent: true`), each behind a confirm because it stops running agents.
  * - Off unless the build was given a release feed (`OIDE_PUBLISH_OWNER` / `OIDE_PUBLISH_REPO` at build
  *   time, see `buildPublishTarget`): the GitHub org is not claimed yet, so no default feed exists.
  * - Off in development builds, in builds without `app-update.yml`, for the Windows portable zip
@@ -97,6 +101,8 @@ export interface UpdaterOptions {
   background?: boolean;
   /** Called once per finished check (telemetry `update_checked`; main decides whether to send). */
   onChecked?: (e: { outcome: UpdateCheckOutcome; channel: UpdateChannel }) => void;
+  /** Called when an install starts (telemetry `update_install_started`). */
+  onInstall?: (e: { trigger: UpdateInstallTrigger; channel: UpdateChannel }) => void;
   /** The release feed; default `buildPublishTarget()`. null: this build has none, updates are off. */
   publish?: PublishTarget | null;
   now?: () => number;
@@ -195,6 +201,10 @@ export class UpdaterService {
   private offSettings: (() => void) | null = null;
   private checking: Promise<UpdateStatus> | null = null;
   private appliedChannel: UpdateChannel;
+  /** electron-updater registered its install-on-quit handler (it does so right after a download). */
+  private quitHandlerArmed = false;
+  /** Restart to update was clicked: the quit that follows is that install, not an install on quit. */
+  private installing = false;
   private readonly env: NodeJS.ProcessEnv;
   private readonly now: () => number;
   private readonly releasesUrl: string | undefined;
@@ -258,7 +268,10 @@ export class UpdaterService {
     this.offSettings = null;
   }
 
-  /** Ask GitHub Releases whether a newer version exists on the current channel. Never downloads. */
+  /**
+   * Ask GitHub Releases whether a newer version exists on the current channel. When one does and
+   * Settings › Updates › Download automatically is on, the download starts in the background.
+   */
   async check(): Promise<UpdateStatus> {
     if (!this.enabled) return this.getStatus();
     if (this.status.state === 'downloading' || this.status.state === 'downloaded') return this.getStatus();
@@ -285,6 +298,7 @@ export class UpdaterService {
       } catch (err) {
         this.opts.log.warn('update check observer failed', err);
       }
+      if (outcome === 'available') await this.autoDownload();
       return this.getStatus();
     })().finally(() => {
       this.checking = null;
@@ -292,7 +306,10 @@ export class UpdaterService {
     return this.checking;
   }
 
-  /** The user clicked Download. Only valid after a check found an update this build can install. */
+  /**
+   * Start downloading the found update (the user's Download click, or Download automatically).
+   * Only valid after a check found an update this build can install.
+   */
   async download(): Promise<UpdateStatus> {
     if (!this.enabled || this.status.state !== 'available' || !this.status.canInstall) return this.getStatus();
     const u = await this.ensure();
@@ -306,15 +323,63 @@ export class UpdaterService {
    * The user clicked Restart to update. Quits oIDE (quit hooks deny pending permission prompts and
    * stop agents as on any quit) and runs the downloaded installer.
    */
-  install(consent: boolean): void {
+  install(consent: boolean, from: Exclude<UpdateInstallTrigger, 'quit'> = 'settings'): void {
     if (consent !== true) throw new Error('Installing an update needs the user to confirm it.');
     if (!this.updater || this.status.state !== 'downloaded') throw new Error('No downloaded update to install.');
     this.opts.log.debug('quitAndInstall', this.status.available?.version);
+    this.installing = true;
+    this.reportInstall(from);
     // isSilent=false (show the installer UI on Windows), isForceRunAfter=true (start oIDE again).
     this.updater.quitAndInstall(false, true);
   }
 
+  /**
+   * Quit hook, run before oIDE exits: settle whether electron-updater installs the downloaded update
+   * on the `quit` event (Install when oIDE closes), and report it. Returns true when it will.
+   */
+  prepareQuit(): boolean {
+    this.syncInstallOnQuit();
+    if (this.installing) return false;
+    const will = Boolean(this.updater?.autoInstallOnAppQuit) && this.quitHandlerArmed && this.status.state === 'downloaded' && this.status.canInstall;
+    if (will) {
+      this.opts.log.debug('installing update on quit', this.status.available?.version);
+      this.reportInstall('quit');
+    }
+    return will;
+  }
+
   // ---------------------------------------------------------------- internals
+
+  private reportInstall(trigger: UpdateInstallTrigger): void {
+    try {
+      this.opts.onInstall?.({ trigger, channel: this.status.channel });
+    } catch (err) {
+      this.opts.log.warn('update install observer failed', err);
+    }
+  }
+
+  /** Download automatically: start downloading a found update when Settings allow it. */
+  private async autoDownload(): Promise<void> {
+    if (!this.opts.settings.get().updates.downloadAutomatically) return;
+    if (this.status.state !== 'available' || !this.status.canInstall) return;
+    this.opts.log.debug('downloading update automatically', this.status.available?.version);
+    await this.download();
+  }
+
+  /**
+   * Mirror Install when oIDE closes into electron-updater's `autoInstallOnAppQuit`. On Windows and
+   * Linux electron-updater registers its quit handler right after a download, and only if the flag is
+   * on at that moment; the handler reads the flag again at quit. So the flag stays on until that
+   * handler exists and follows the setting afterwards. On macOS the flag decides at download time
+   * whether Squirrel.Mac fetches the update (Squirrel then installs it on quit), so it follows the
+   * setting throughout: turning the setting off after a macOS download applies from the next update.
+   */
+  private syncInstallOnQuit(): void {
+    const u = this.updater;
+    if (!u) return;
+    const want = this.opts.settings.get().updates.installOnQuit;
+    u.autoInstallOnAppQuit = this.opts.platform === 'darwin' || this.quitHandlerArmed ? want : true;
+  }
 
   private async ensure(): Promise<AppUpdaterLike | null> {
     if (this.updater) return this.updater;
@@ -340,7 +405,7 @@ export class UpdaterService {
 
   private configure(u: AppUpdaterLike): void {
     u.autoDownload = false;
-    u.autoInstallOnAppQuit = false;
+    u.autoInstallOnAppQuit = this.opts.platform === 'darwin' ? this.opts.settings.get().updates.installOnQuit : true;
     const log = this.opts.log;
     u.logger = { info: (m) => log.debug('[updater]', m), warn: (m) => log.warn('[updater]', m), error: (m) => log.error('[updater]', m) };
     this.applyChannel(u, this.appliedChannel);
@@ -352,7 +417,14 @@ export class UpdaterService {
       const progress = Math.max(0, Math.min(1, (p.percent ?? 0) / 100));
       this.set({ state: 'downloading', progress });
     });
-    u.on('update-downloaded', (info: UpdateInfoLike) => this.set({ state: 'downloaded', progress: 1, available: this.infoOf(info) }));
+    u.on('update-downloaded', (info: UpdateInfoLike) => {
+      this.set({ state: 'downloaded', progress: 1, available: this.infoOf(info) });
+      // electron-updater adds its quit handler synchronously after this event; then follow the setting.
+      queueMicrotask(() => {
+        this.quitHandlerArmed = true;
+        this.syncInstallOnQuit();
+      });
+    });
     u.on('error', (err: unknown) => {
       // The same error also rejects checkForUpdates(); a check maps it there too.
       if (this.status.state === 'checking') this.set(this.failedCheck(err));
@@ -376,6 +448,8 @@ export class UpdaterService {
   }
 
   private onSettings(s: Settings): void {
+    this.syncInstallOnQuit();
+    if (s.updates.downloadAutomatically && this.status.state === 'available') void this.autoDownload();
     const channel = s.updates.channel;
     if (channel === this.appliedChannel) return;
     this.appliedChannel = channel;

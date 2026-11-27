@@ -6,7 +6,7 @@ import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUp
 import { CloneProgress, CloneUrl, FolderName, GithubRepo } from './newProject.js';
 import { CommitInfo, FileDiff, FileNode, MergePrediction, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
 import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settings.js';
-import { UpdateStatus } from './updates.js';
+import { UpdateInstallTrigger, UpdateStatus } from './updates.js';
 import { FindByNameInput, FindByNameOutput, ReplaceInput, ReplaceOutput, SearchContentInput, SearchResultsEvent } from './search.js';
 import { TelemetryConsentInput, TelemetryStatus, TelemetryTrackInput } from './telemetry.js';
 
@@ -484,12 +484,16 @@ export const Commands = {
     ArtifactMeta,
   ),
 
-  // Auto-update (Settings › Updates). Download and install are separate, explicit user actions.
+  // Auto-update (Settings › Updates, header Update button). Downloads in the background when
+  // Settings › Updates › Download automatically is on; restarting to install is always a click.
   'updates.status': cmd(Void, UpdateStatus),
   'updates.check': cmd(Void, UpdateStatus),
   'updates.download': cmd(Void, UpdateStatus),
-  /** Quit and install the downloaded update. `consent: true` is the user's click; anything else is refused. */
-  'updates.install': cmd(z.object({ consent: z.literal(true) }), Ok),
+  /**
+   * Quit and install the downloaded update. `consent: true` is the user's click; anything else is
+   * refused. `from` names the button (telemetry `update_install_started`).
+   */
+  'updates.install': cmd(z.object({ consent: z.literal(true), from: UpdateInstallTrigger.exclude(['quit']).optional() }), Ok),
 
   // Shell helpers
   'shell.openExternal': cmd(z.object({ url: z.string().url() }), Ok),

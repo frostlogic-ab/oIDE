@@ -18,9 +18,9 @@ export function registerUpdateHandlers(router: IpcRouter, services: Services, ct
   router.register('updates.status', () => services.updates?.getStatus() ?? off());
   router.register('updates.check', async () => (services.updates ? services.updates.check() : off()));
   router.register('updates.download', async () => (services.updates ? services.updates.download() : off()));
-  router.register('updates.install', ({ consent }) => {
+  router.register('updates.install', ({ consent, from }) => {
     if (!services.updates) throw new Error('Updates are not available in this build.');
-    services.updates.install(consent);
+    services.updates.install(consent, from);
     return { ok: true as const };
   });
 }

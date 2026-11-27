@@ -30,9 +30,15 @@ export async function createServices(ctx: MainContext, opts: { store?: Store } =
     log: ctx.log,
     stateFile: join(ctx.userDataDir, 'updates.json'),
     onChecked: (e) => void ctx.telemetry?.service.track('update_checked', e),
+    onInstall: (e) => void ctx.telemetry?.service.track('update_install_started', e),
   });
   services.updates.start();
-  ctx.onQuit(() => services.updates?.dispose(), 'updates');
+  // Install when oIDE closes: electron-updater installs on the app's `quit` event, which fires after
+  // every quit hook (agents stopped, prompts denied) once main calls app.exit(0).
+  ctx.onQuit(() => {
+    services.updates?.prepareQuit();
+    services.updates?.dispose();
+  }, 'updates');
   // In order: deny pending prompts and close the MCP server, stop agents (sessions resumable),
   // git watchers and in-flight git work, extension host, then the database (core.ts dispose()).
   ctx.onQuit(() => services.dispose(), 'services');

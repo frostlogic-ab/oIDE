@@ -362,7 +362,9 @@ Telemetry is opt-in ([ADR 0011](../../adr/0011-telemetry.md), [telemetry](teleme
 
 ## Updates and release pipeline
 
-- The updater (`services/updater.ts`) never downloads or installs without a click, offers
+- The updater (`services/updater.ts`) downloads a found update and installs it when oIDE quits only
+  while Settings › Updates › Download automatically / Install when oIDE closes are on (default on,
+  ADR 0018); restarting into an update is always a click plus a confirm. It offers
   prereleases only on the beta channel and never offers a downgrade. Windows installers are checked
   against the Authenticode publisher only for signed builds (electron-updater reads it from
   `app-update.yml`); unsigned betas rely on the sha512 in the same GitHub release (accepted,

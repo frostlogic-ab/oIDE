@@ -79,7 +79,7 @@ export function defaultSettings(): Settings {
     techniques: structuredClone(BUILTIN_TECHNIQUES),
     permissions: {},
     ui: {},
-    updates: { channel: 'stable', checkAutomatically: true },
+    updates: { channel: 'stable', checkAutomatically: true, downloadAutomatically: true, installOnQuit: true },
     keybindings: {},
   });
 }
