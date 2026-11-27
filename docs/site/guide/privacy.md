@@ -17,7 +17,8 @@ usage analytics** and **crash and error reports**, and only if you agree.
 Screens you open (as names like `/wall`), features you use (for example an agent was started with
 model family `opus` in a worktree, a permission was allowed for a `Bash` tool, a search ran, a
 setting changed, never its value), counts and timings in ranges, performance numbers, versions of
-oIDE, the CLI and Electron, your OS, language and screen size range, and a random install id.
+oIDE, the CLI and Electron, your OS, language, OS region (country) and screen size range, and a
+random install id.
 
 Crash and error reports hold the kind of error, its message with paths, names, links, quoted text and
 tokens removed, and locations in oIDE's own code only.
@@ -33,8 +34,10 @@ or screen recording.
 
 oIDE's main process sends to the maintainers' [Umami](https://umami.is) server through a network
 session that can reach that one host. The app window loads no analytics script and has no network
-access. The server sees your IP address, as with any request; Umami keeps only the country, region
-and city. Nothing is saved on your computer to send later.
+access. The server sees your IP address, as with any request. Usage statistics send a fixed
+placeholder address instead, so Umami stores no location for them, only the country from your
+operating system's region settings; for crash and error reports Umami keeps the country, region and
+city. Nothing is saved on your computer to send later.
 
 Building oIDE yourself? `OIDE_UMAMI_HOST` and `OIDE_UMAMI_WEBSITE_ID` point it at your own Umami;
 an empty value builds it without telemetry.

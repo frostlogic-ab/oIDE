@@ -65,7 +65,7 @@ function service(unavailable: TelemetryUnavailableReason | null = null, tgt = ta
     unavailable,
     dev: true,
     appVersion: '0.1.0',
-    session: { os: 'win32', osVersion: '10.0.26300', arch: 'x64', electron: '45.0.0' },
+    session: { os: 'win32', osVersion: '10.0.26300', arch: 'x64', electron: '45.0.0', country: 'se' },
     stateFile: join(dir, 'telemetry.json'),
     scrubber: createScrubber({ username: 'jdoe' }),
     uuid: () => `00000000-0000-4000-8000-${String(++uuidN).padStart(12, '0')}`,
@@ -327,6 +327,7 @@ describe('what is sent', () => {
       arch: 'x64',
       electron: '45.0.0',
       dev: true,
+      country: 'SE',
       cli_version: '2.1.325',
     });
   });

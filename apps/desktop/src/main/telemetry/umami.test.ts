@@ -7,6 +7,8 @@ import {
   identifyBody,
   pageviewBody,
   performanceBody,
+  SESSION_IP,
+  stableUserAgent,
   UmamiClient,
   type Transport,
   type UmamiContext,
@@ -42,6 +44,8 @@ const umamiPayload = z.strictObject({
     .refine((v) => !FORMULA.test(v))
     .optional(),
   tag: z.string().optional(),
+  ip: z.string().optional(),
+  userAgent: z.string().optional(),
   id: z.string().optional(),
   lcp: z.number().nonnegative().max(60000).optional(),
   inp: z.number().nonnegative().max(60000).optional(),
@@ -79,6 +83,7 @@ const ctx: UmamiContext = {
   screen: '1900x1000',
   release: '0.1.0',
   environment: 'development',
+  userAgent: stableUserAgent('win32'),
 };
 const ID = '0b6f3d36-6f41-4c35-9f53-2f3b6f8f0e11';
 
@@ -93,12 +98,33 @@ describe('Umami payloads (shapes of the official tracker, accepted by the v3.5.0
         language: 'en-US',
         screen: '1900x1000',
         id: ID,
+        ip: SESSION_IP,
+        userAgent: stableUserAgent('win32'),
         title: 'Settings',
         url: '/settings/privacy',
         referrer: '/wall',
       },
     });
     expect(umamiBody.safeParse(b).success).toBe(true);
+  });
+
+  it('pins the session to the install id: the same ip and a version-free user agent everywhere', () => {
+    const bodies = [
+      pageviewBody(ctx, ID, '/wall', 'Agents'),
+      eventBody(ctx, ID, '/wall', 'Agents', 'agent_spawned', {}),
+      identifyBody(ctx, ID, { app_version: '0.1.0' }),
+      performanceBody(ctx, ID, '/wall', 'Agents', { fcp: 1 })!,
+    ];
+    for (const b of bodies)
+      expect(b.payload).toMatchObject({ id: ID, ip: SESSION_IP, userAgent: ctx.userAgent });
+    // Nothing in the fingerprint changes with an oIDE, Electron or OS version.
+    for (const p of ['win32', 'darwin', 'linux']) {
+      const ua = stableUserAgent(p);
+      expect(ua).not.toMatch(/oIDE|Electron/);
+      expect(ua).toMatch(/^Mozilla\/5\.0 /);
+    }
+    expect(stableUserAgent('win32')).toContain('Windows NT 10.0');
+    expect(stableUserAgent('darwin')).toContain('Macintosh');
   });
 
   it('custom event: name and data', () => {

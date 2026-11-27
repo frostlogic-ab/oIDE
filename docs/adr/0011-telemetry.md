@@ -60,5 +60,9 @@ about that code.
   ([telemetry](../wiki/pages/telemetry.md)) in the same change.
 - Without the tracker script, browser-only extras (automatic link-click tracking, `data-umami-*`
   attributes) are not available; oIDE has no use for them.
-- Umami derives the session from IP, User-Agent and the install id. The IP is seen by the server (as
-  with any HTTP request); Umami stores only the derived country, region and city.
+- Umami derives the session from IP, User-Agent, a salt and the install id. Amended 2026-11-27: usage
+  payloads set `ip` to `127.0.0.1` and `userAgent` to a constant, version-free value, so each install
+  is one session across restarts, network changes and upgrades (the Retention report counts sessions;
+  before this one user counted as several). Umami then stores no location for usage; the OS region
+  setting is sent as session data `country`. The real IP is still seen by the server (as with any
+  HTTP request); for error reports Umami stores only the derived country, region and city.
