@@ -80,6 +80,11 @@ describe('artifact agent (main services, fake-claude)', () => {
     expect(await agentOf(h, a.id)).toMatchObject({ model: 'opus', effort: 'high' });
     expect(h.services.store.agents.get(a.id)?.spec.strategy.lead).toEqual({ model: 'opus', effort: 'high' });
     expect(readdirSync(root)).toHaveLength(1);
+
+    // Deleting the artifact archives its agent and deletes the agent's folder.
+    await h.call('artifacts.delete', { id: art.id });
+    await waitFor(async () => !(await agentOf(h, a.id)), 'agent archived');
+    await waitFor(() => !existsSync(idle.worktreePath!), 'folder deleted');
   }, 60_000);
 
   it('a personal artifact needs a project to run under', async () => {
