@@ -47,9 +47,9 @@ export function NewProjectDialog() {
           onChange={(t) => useNewProject.getState().setTab(t)}
           label="How to start the project"
           idPrefix={ID}
-          className="px-5 border-b border-line"
+          className="mt-2 px-5 gap-5 border-b border-line"
         />
-        <div {...tabPanelProps(ID, tab)} className="px-5 py-4 outline-none">
+        <div {...tabPanelProps(ID, tab)} className="px-5 pt-5 pb-5 outline-none">
           {tab === 'open' && <OpenFolder busy={busy} setBusy={setBusy} onDone={(p) => done(p, 'Opened')} onCancel={hide} />}
           {tab === 'clone' && <CloneRepo busy={busy} setBusy={setBusy} onDone={(p) => done(p, 'Cloned')} onCancel={hide} />}
           {tab === 'create' && <CreateRepo busy={busy} setBusy={setBusy} onDone={(p) => done(p, 'Created')} onCancel={hide} />}
@@ -181,22 +181,22 @@ function useLocation() {
 
 function LocationField({ parent, onChoose, disabled }: { parent: string; onChoose: () => void; disabled: boolean }) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2 min-w-0">
       <span id={`${ID}-location`} className="text-[12px] font-semibold text-ink-2">
         Location
       </span>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 min-w-0">
         <span
           aria-labelledby={`${ID}-location`}
           className={cn(
-            'flex-1 min-w-0 h-[34px] px-2.5 flex items-center rounded-md border border-line-3 bg-chrome font-mono text-[12.5px] truncate',
+            'flex-1 min-w-0 h-[34px] px-2.5 flex items-center rounded-md border border-line-3 bg-chrome font-mono text-[12.5px]',
             parent ? 'text-ink-2' : 'text-ink-3',
           )}
           title={parent || undefined}
         >
-          {parent || 'No folder chosen'}
+          <span className="min-w-0 truncate">{parent || 'No folder chosen'}</span>
         </span>
-        <Button size={32} icon="folder" onClick={onChoose} disabled={disabled}>
+        <Button size={32} icon="folder" onClick={onChoose} disabled={disabled} className="h-[34px] shrink-0">
           Choose…
         </Button>
       </div>
@@ -285,21 +285,22 @@ function CloneRepo({ busy, setBusy, onDone, onCancel }: PaneProps) {
           setSource('url');
         }}
         onBlur={() => setShowUrlError(!!input.trim())}
-        placeholder="https://github.com/owner/repo.git  ·  git@host:owner/repo.git  ·  owner/repo"
+        placeholder="https://github.com/owner/repo.git or owner/repo"
         error={showUrlError && input.trim() ? urlProblem : undefined}
         hint={
           url !== input.trim() && !urlProblem
             ? `Clones ${url}`
-            : 'Uses your own git sign-in (credential manager, SSH keys, gh). oIDE never asks for or stores passwords.'
+            : 'HTTPS or SSH URL, or owner/repo for GitHub. Uses your own git sign-in (credential manager, SSH keys, gh); oIDE never asks for or stores passwords.'
         }
         spellCheck={false}
         autoComplete="off"
       />
       <GithubRepos onPick={pickRepo} disabled={busy} selected={source === 'github' ? url : undefined} />
-      <div className="grid grid-cols-[1fr_200px] gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,180px)] items-start gap-3">
         <LocationField parent={parent} onChoose={() => void choose()} disabled={busy} />
         <TextField
           label="Folder name"
+          containerClassName="min-w-0"
           mono
           value={finalName}
           disabled={busy}
@@ -313,7 +314,7 @@ function CloneRepo({ busy, setBusy, onDone, onCancel }: PaneProps) {
         />
       </div>
       {parent && finalName && !nameProblem && (
-        <span className="text-[12px] text-ink-3 -mt-1.5">
+        <span className="text-[12px] text-ink-3 leading-[1.45] -mt-1">
           Clones into <span className="font-mono text-ink-2 break-all">{joinPath(parent, finalName)}</span>. You will be asked whether to trust it.
         </span>
       )}
@@ -393,11 +394,11 @@ function GithubRepos({ onPick, disabled, selected }: { onPick: (r: GithubRepo) =
     return <span className="text-[12px] text-ink-3 leading-[1.45]">{state.reason ?? 'Sign in to the GitHub CLI (gh auth login) to pick from your repositories.'}</span>;
   }
   return (
-    <fieldset className="m-0 p-0 border-0 flex flex-col gap-2 min-w-0">
-      <legend className="text-[12px] font-semibold text-ink-2 mb-2 p-0">Or pick one of your GitHub repositories</legend>
-      <TextField label="Filter your repositories" hideLabel size={28} placeholder={`Filter ${state.repos.length} repositories`} value={filter} onChange={(e) => setFilter(e.target.value)} disabled={disabled} />
-      <ul className="m-0 p-0 list-none flex flex-col gap-0.5 max-h-[180px] overflow-auto rounded-lg border border-line-2 bg-chrome p-1">
-        {shown.length === 0 && <li className="px-2 py-1.5 text-[12px] text-ink-3">{state.repos.length ? 'No repository matches.' : 'No repositories on this account.'}</li>}
+    <fieldset className="m-0 p-0 border-0 flex flex-col gap-2.5 min-w-0">
+      <legend className="text-[12px] font-semibold text-ink-2 mb-2.5 p-0">Or pick one of your GitHub repositories</legend>
+      <TextField label="Filter your repositories" hideLabel size={34} placeholder={`Filter ${state.repos.length} repositories`} value={filter} onChange={(e) => setFilter(e.target.value)} disabled={disabled} />
+      <ul className="m-0 list-none flex flex-col gap-px max-h-[188px] overflow-y-auto overflow-x-hidden rounded-lg border border-line-2 bg-chrome p-1.5">
+        {shown.length === 0 && <li className="px-2.5 py-2 text-[12px] text-ink-3">{state.repos.length ? 'No repository matches.' : 'No repositories on this account.'}</li>}
         {shown.map((r) => (
           <li key={r.nameWithOwner}>
             <button
@@ -406,13 +407,13 @@ function GithubRepos({ onPick, disabled, selected }: { onPick: (r: GithubRepo) =
               aria-pressed={selected === r.cloneUrl}
               onClick={() => onPick(r)}
               className={cn(
-                'w-full flex items-center gap-2 px-2 py-1.5 rounded-sm border-0 text-left text-[12.5px]',
+                'w-full min-w-0 flex items-center gap-2.5 px-2.5 py-[7px] rounded-md border-0 text-left text-[12.5px]',
                 selected === r.cloneUrl ? 'bg-selected text-ink' : 'bg-transparent text-ink-2 hover:bg-raised',
               )}
             >
-              <span className="font-mono shrink-0">{r.nameWithOwner}</span>
+              <span className="font-mono shrink-0 max-w-[60%] truncate">{r.nameWithOwner}</span>
               {r.isPrivate && <Badge>Private</Badge>}
-              {r.description && <span className="text-ink-3 truncate min-w-0">{r.description}</span>}
+              {r.description && <span className="text-ink-3 truncate min-w-0 flex-1">{r.description}</span>}
             </button>
           </li>
         ))}
@@ -473,7 +474,7 @@ function CreateRepo({ busy, setBusy, onDone, onCancel }: PaneProps) {
       <LocationField parent={parent} onChoose={() => void choose()} disabled={busy} />
       <Checkbox checked={readme} onChange={setReadme} label="Add a README.md" description="Unchecked: an empty first commit. Either way agents have a base to branch from." />
       {parent && name && !problem && (
-        <span className="text-[12px] text-ink-3">
+        <span className="text-[12px] text-ink-3 leading-[1.45]">
           Creates <span className="font-mono text-ink-2 break-all">{joinPath(parent, name)}</span> with git on <span className="font-mono">main</span> and a first commit.
         </span>
       )}
