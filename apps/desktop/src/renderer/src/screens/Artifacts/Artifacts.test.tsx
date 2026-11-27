@@ -672,12 +672,14 @@ describe('React designs', () => {
     });
     useRouter.setState({ route: { screen: 'artifacts', params: { artifactId: 'a-react' } }, back: [], forward: [] });
     render(<ArtifactsScreen />);
-    await waitFor(() => expect(document.querySelector('iframe')?.getAttribute('src')).toBe('oide-artifact://a-react/index.html'));
+    // The detail pane's preview (the grid card's thumbnail is a second, scaled frame on the same URL).
+    const pane = () => screen.getByRole('complementary', { name: 'Artifact details' });
+    await waitFor(() => expect(pane().querySelector('iframe')?.getAttribute('src')).toBe('oide-artifact://a-react/index.html'));
     fireEvent.click(screen.getByRole('button', { name: /^v1 ·/ }));
     expect(await screen.findByText('Only the saved version of a React design can be previewed. Save your changes, or use Compare to see older versions.')).toBeTruthy();
     // React source never goes into srcdoc.
     expect(document.querySelector('iframe[srcdoc]')).toBeNull();
-    expect(document.querySelector('iframe')).toBeNull();
+    expect(pane().querySelector('iframe')).toBeNull();
   });
 });
 
