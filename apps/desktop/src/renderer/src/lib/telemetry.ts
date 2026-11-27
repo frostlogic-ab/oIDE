@@ -109,6 +109,12 @@ export function trackMarkdownView(view: 'preview' | 'edit', via: 'button' | 'sho
   send({ type: 'event', name: 'files_markdown_view', props: { view, via } });
 }
 
+/** A changed file's tab in Files switched between its changes (unified, side by side) and the plain editor. Never the file. */
+export function trackDiffView(view: 'off' | 'unified' | 'split'): void {
+  if (!usageOn()) return;
+  send({ type: 'event', name: 'files_diff_view', props: { view } });
+}
+
 // ----------------------------------------------------------------------------- vitals
 
 interface Visit {

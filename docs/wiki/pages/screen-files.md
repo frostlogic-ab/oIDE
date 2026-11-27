@@ -17,10 +17,12 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   branch, and with All projects a "Folder actions for <project>" menu: Collapse all, Expand loaded
   folders, Expand to depth 1/2/3, Reveal active file, Open terminal here) and a `role="tree"`. With All projects the
   first project starts open; with one project in scope its tree is always open. Legend box at the
-  bottom. When Search is open the column is the 300px Search panel instead.
+  bottom; its × ("Close the legend") hides it for good (`settings.update({ ui: { filesLegendHidden: true } })`,
+  hidden at once, a toast if saving fails) and the tree takes the room. When Search is open the column is the 300px Search panel instead.
 - Middle: open-file tabs (`role="tablist"`, accent top border, close ×, ● when unsaved; right side
-  "Ln, Col · Language" and Save; for a Markdown file a "Markdown view" Preview / Edit toggle before
-  them), the agent banner, the editor, and under it the terminal panel when shown (`TerminalDock.tsx`).
+  "Ln, Col · Language" and Save; for a changed file a "Changes view" File / Unified / Split toggle and
+  "vs last commit" / "vs base branch"; for a Markdown file a "Markdown view" Preview / Edit toggle
+  before them), the agent banner, the editor, and under it the terminal panel when shown (`TerminalDock.tsx`).
 - Tab labels (`tabLabels.ts`): a tab shows only the file name; its tooltip is the full absolute path.
   When several open tabs share a name, each gets a dim hint after it, as in VS Code: the project
   (`·checkout` when not main) if they sit in different places, and the shortest trailing part of the
@@ -153,6 +155,10 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   works under `file://`).
 - Theme `oide-dark` from the tokens (ground background, `#5E6774` line numbers, `#1B2333`
   selection, keywords `#C4A7E7`, strings `#A8E0C6`, types `#9DBBFA`, comments `#7A8494`).
+- Minimap on the right of the Files editor (`FILE_MINIMAP` in `monaco/setup.ts`): the whole file in
+  miniature with the slider always shown over the lines in view; click to jump, drag the slider to
+  scroll. Themed from the tokens (editor ground, soft `#9AA3AE` slider, accent selection, amber find
+  matches). Diff editors and artifact source editors keep `BASE_OPTIONS`' minimap off.
 - At most one live editor; one model per tab with saved view state; models of closed tabs are disposed.
 - Ctrl/Cmd+S or Save → `files.write`. Files over 5 MB open read only; binary files show a notice.
 - Cut / Copy / Paste work from the keyboard and Monaco's context menu (Paste reads the system
@@ -175,6 +181,26 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   slug, a relative or `/`-rooted link opens that file of the same checkout in a tab (links that climb
   out of the checkout and other schemes do nothing). Relative images do not load (the page has no
   file URL).
+- Changes view (`diffView.ts`, `EditorPane.tsx`): a file the tree colours as modified, renamed or
+  conflicted (`useChanges` for the tab's checkout, kept loaded by the screen even when the tree shows
+  another checkout) opens on its changes in Monaco's diff editor, against the same version as the
+  colours: the last commit in the main checkout, the merge-base with the base branch in an agent
+  worktree. `files.original { root, path, oldPath? }` reads it (`originalContent` in `@oide/git`:
+  `git cat-file blob <HEAD or merge-base>:<path>`, no filters or textconv; `missing` for a new path,
+  `binary` for binary or over 5 MB, which falls back to the plain editor with a note). The right side
+  is the tab's own model, so it stays editable: unsaved edits, the ● dot, Ctrl/Cmd+S, Ln/Col and
+  "Ask an agent about this" (context menu) work as in the plain editor; the left side is read only.
+  The tab bar's "Changes view" buttons (`aria-pressed`): **File** (the plain editor), **Unified**
+  (one column, removed lines above added ones) and **Split** (side by side;
+  `useInlineViewWhenSpaceIsLimited` off, so a narrow pane keeps the pick). The choice is per tab in
+  `filesStore.diffView` (follows a rename, forgotten on close); picking a layout also makes it the
+  default for the next changed file (`filesStore.diffLayout`, saved in `localStorage`
+  `oide.files.diffLayout`, Unified at first). A changed Markdown file opens on its changes too; its
+  Preview / Edit buttons (or Ctrl/Cmd+Shift+V) leave them, so its Changes view has no File button.
+  The original is read again when the checkout's changes reload (`git.changed`, window focus), so a
+  commit moves the left side; a file that no longer differs shows the plain editor. New (added,
+  untracked) files open in the plain editor: every line would be an addition. Telemetry:
+  `files_diff_view { view }` on a switch.
 - Selection toolbar: "Ask an agent about this" (→ Spawn with a file context chip
   `{ kind: 'file', path, title: 'StatusBar.tsx:5-6' }`, also in the context menu) and "Send to <agent>"
   when an agent is editing the file (`agents.send` text with the path, lines and snippet).
@@ -265,7 +291,8 @@ click and ←/→, opening another project, switching to a worktree checkout; to
 Expand loaded / Expand to depth, the per-project menu (absent with one project in scope), `*` and `-`,
 Reveal active file, quick-open requests; the Markdown view toggle (preview by default, button and
 Ctrl+Shift+V, forgotten on close, Edit when jumping to a line, linked files open; no toggle for other
-files); search (sections, highlight, regex error, open at a match)
+files); the Changes view (changed files open unified, Split / File per tab, the last layout for the
+next changed file, none for unchanged files, Markdown leaves it through Preview); search (sections, highlight, regex error, open at a match)
 and replace (one match through the preview, stale refusal after an outside change); `visibleRows` /
 `ancestorDirs` model. `markdownLinks.test.ts` (Markdown extensions, link resolution, checkout
 escape, heading slugs) and `MarkdownPreview.test.tsx` (sanitising, task boxes, link routing).
@@ -274,11 +301,14 @@ escape, heading slugs) and `MarkdownPreview.test.tsx` (sanitising, task boxes, l
 safety, regex vs text, untracked / ignored / binary, cap, cancel, non-git scan, replace safety),
 `test/integration/files-search.test.ts` (IPC validation and path guard),
 `lib/quickOpen.test.ts` and `components/frame/CommandBar.test.tsx` (sections, `>`, `:line`), and
-`e2e/files-search.spec.ts` (Ctrl+K opens a file; Ctrl+Shift+F finds and replaces one match).
+`e2e/files-search.spec.ts` (Ctrl+K opens a file; Ctrl+Shift+F finds and replaces one match),
+`e2e/files-diff.spec.ts` (a changed file opens on its unified diff, Split shows both sides, the
+right side saves, File shows the plain editor; an unchanged file has no Changes view).
 Git colours: `changesStore.test.ts` (folder tints, deleted entries per folder, ghost rows in
 `visibleRows`), `TreeActions.test.tsx` (green M / U, red struck-through D, Discard changes on a
 modified, a new and a deleted file), `packages/git/test/changes.test.ts` (against HEAD and against a
-base branch with real repos, before the first commit, discard of each kind).
+base branch with real repos, before the first commit, discard of each kind; `originalContent`
+against HEAD and the merge-base, binary, missing, before the first commit).
 
 ## Deviations
 

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { checkoutChanges, discardCheckoutChanges, parseNameStatusZ } from '../src/changes.js';
+import { checkoutChanges, discardCheckoutChanges, originalContent, parseNameStatusZ } from '../src/changes.js';
 import { cleanup, commitAll, makeRepo, sh, write } from './helpers.js';
 
 afterAll(cleanup);
@@ -101,5 +101,30 @@ describe('checkoutChanges (agent worktree, against the base branch)', () => {
     await discardCheckoutChanges(fresh, ['a.txt', 'b.txt']);
     expect(existsSync(join(fresh, 'a.txt'))).toBe(false);
     expect(existsSync(join(fresh, 'b.txt'))).toBe(false);
+  });
+});
+
+describe('originalContent', () => {
+  it('reads the HEAD version in the main checkout, and the merge-base version in a branch', async () => {
+    const repo = makeRepo({ 'a.txt': 'one\n', 'bin.dat': 'x\0y' });
+    write(repo, 'a.txt', 'two\n');
+    expect(await originalContent(repo, 'a.txt')).toEqual({ kind: 'text', content: 'one\n' });
+    expect(await originalContent(repo, 'bin.dat')).toEqual({ kind: 'binary' });
+    expect(await originalContent(repo, 'new.txt')).toEqual({ kind: 'missing' });
+
+    sh(repo, 'checkout', '-q', '-b', 'feature');
+    commitAll(repo, 'branch work');
+    write(repo, 'a.txt', 'three\n');
+    // Against HEAD: the branch's commit; against main: what the branch started from.
+    expect(await originalContent(repo, 'a.txt')).toEqual({ kind: 'text', content: 'two\n' });
+    expect(await originalContent(repo, 'a.txt', 'main')).toEqual({ kind: 'text', content: 'one\n' });
+  });
+
+  it('has no original before the first commit', async () => {
+    const repo = makeRepo();
+    const fresh = join(repo, '..', 'fresh-original');
+    sh(join(repo, '..'), 'init', '-q', '-b', 'main', 'fresh-original');
+    write(fresh, 'a.txt', 'a\n');
+    expect(await originalContent(fresh, 'a.txt')).toEqual({ kind: 'missing' });
   });
 });

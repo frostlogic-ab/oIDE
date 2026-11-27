@@ -110,6 +110,36 @@ export async function discardCheckoutChanges(repo: Repo, paths: string[], base?:
   return picked.map((c) => c.path);
 }
 
+/** Larger originals are not diffed (the Files editor reads at most this much too). */
+export const MAX_ORIGINAL_BYTES = 5 * 1024 * 1024;
+
+export type OriginalContent =
+  /** The file as it was in the version `checkoutChanges` compares against. */
+  | { kind: 'text'; content: string }
+  /** Binary, or too large to diff. */
+  | { kind: 'binary' }
+  /** Not in that version (a new file), or nothing is committed yet. */
+  | { kind: 'missing' };
+
+/**
+ * The version of `path` that `checkoutChanges` compares against (HEAD, or the merge-base with
+ * `base`): the left side of the Files editor's diff. Read from the object store as stored (no
+ * smudge filters or textconv run); line endings may differ from the working copy.
+ */
+export async function originalContent(repo: Repo, path: string, base?: string): Promise<OriginalContent> {
+  const git = toGit(repo);
+  const from = await sourceOf(git, base).catch(() => undefined);
+  if (!from) return { kind: 'missing' };
+  const spec = `${from}:${path}`;
+  const size = await git.run(['cat-file', '-s', spec], { ...NO_LOCKS, okExitCodes: [0, 128] });
+  if (size.exitCode !== 0) return { kind: 'missing' };
+  if (Number(size.stdout.trim()) > MAX_ORIGINAL_BYTES) return { kind: 'binary' };
+  const blob = await git.run(['cat-file', 'blob', spec], { ...NO_LOCKS, okExitCodes: [0, 128] });
+  if (blob.exitCode !== 0) return { kind: 'missing' };
+  if (blob.stdout.slice(0, 8000).includes('\0')) return { kind: 'binary' };
+  return { kind: 'text', content: blob.stdout };
+}
+
 /** Keep command lines short (Windows caps them at 32k characters). */
 function chunks(list: string[], size = 200): string[][] {
   const out: string[][] = [];
