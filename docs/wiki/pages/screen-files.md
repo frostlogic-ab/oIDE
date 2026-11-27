@@ -326,7 +326,8 @@ safety, regex vs text, untracked / ignored / binary, cap, cancel, non-git scan, 
 Problems list, the status control's states and menu), the main-side LSP tests in
 `apps/desktop/src/main/services/lsp/*.test.ts` (framing, conversion and path mapping, the service
 against the fixture server `fixtures/fake-lsp.mjs`), `test/integration/lsp.test.ts` (IPC validation
-and path guard), and
+and path guard), `e2e/files-lsp.spec.ts` (the built app starts a `typescript-language-server` shim
+that runs the fixture: running status, problem counts, red tree row, Problems list, hover), and
 `e2e/files-search.spec.ts` (Ctrl+K opens a file; Ctrl+Shift+F finds and replaces one match).
 Git colours: `changesStore.test.ts` (folder tints, deleted entries per folder, ghost rows in
 `visibleRows`), `TreeActions.test.tsx` (green M / U, red struck-through D, Discard changes on a

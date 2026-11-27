@@ -81,11 +81,16 @@ const ENV_KEYS = [
   'VIRTUAL_ENV', 'CONDA_PREFIX', 'PYENV_ROOT', 'NVM_DIR', 'VOLTA_HOME', 'PNPM_HOME', 'DOTNET_ROOT',
 ];
 
-export function serverEnv(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function serverEnv(source: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): Record<string, string> {
   const env: Record<string, string> = {};
+  // Windows env names are case-insensitive (`PATH` and `Path` are one variable): pass each once.
+  const seen = new Set<string>();
   for (const k of ENV_KEYS) {
     const v = source[k];
-    if (v !== undefined) env[k] = v;
+    const id = platform === 'win32' ? k.toLowerCase() : k;
+    if (v === undefined || seen.has(id)) continue;
+    seen.add(id);
+    env[k] = v;
   }
   return env;
 }
@@ -132,10 +137,12 @@ export function whichCommand(command: string, root: string, env: NodeJS.ProcessE
   const exts = platform === 'win32' ? ['', ...(env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean).map((e) => e.toLowerCase())] : [''];
   const dirs = (env.PATH ?? env.Path ?? '').split(platform === 'win32' ? ';' : delimiter).filter(Boolean);
   dirs.push(join(root, 'node_modules', '.bin'));
+  // A name that already has a runnable extension (`clangd.exe`) is looked up as it is.
+  const hasExt = platform === 'win32' && exts.some((e) => e && command.toLowerCase().endsWith(e));
   for (const dir of dirs) {
-    for (const ext of exts) {
+    for (const ext of hasExt ? [''] : exts) {
       // On Windows a bare name without an extension is not runnable (it is the sh shim of npm).
-      if (platform === 'win32' && ext === '') continue;
+      if (platform === 'win32' && ext === '' && !hasExt) continue;
       const p = join(dir, command + ext);
       if (isFile(p)) return p;
     }
@@ -199,6 +206,12 @@ export class LanguageServerService {
   private readonly sessions = new Map<string, Session>();
   /** `root\0path` → session id of an open document. */
   private readonly docSession = new Map<string, string>();
+  /**
+   * Sessions already out of `sessions` whose process is still shutting down (an idle stop, a
+   * recheck). `stopUnder` and `dispose` wait for these too, so no server still holds a checkout
+   * (its cwd) when a worktree is deleted or the app quits.
+   */
+  private readonly stopping = new Map<Session, Promise<void>>();
   private disposed = false;
   private readonly platform: NodeJS.Platform;
 
@@ -364,7 +377,8 @@ export class LanguageServerService {
   /** Stop every server whose checkout is `dir` or inside it (a worktree or project going away). */
   async stopUnder(dir: string): Promise<void> {
     const hit = [...this.sessions.values()].filter((s) => isInside(dir, s.root));
-    await Promise.all(hit.map((s) => this.drop(s)));
+    const inFlight = [...this.stopping].filter(([s]) => isInside(dir, s.root)).map(([, p]) => p);
+    await Promise.all([...hit.map((s) => this.drop(s)), ...inFlight]);
   }
 
   /**
@@ -386,7 +400,7 @@ export class LanguageServerService {
 
   async dispose(): Promise<void> {
     this.disposed = true;
-    await Promise.all([...this.sessions.values()].map((s) => this.drop(s)));
+    await Promise.all([...[...this.sessions.values()].map((s) => this.drop(s)), ...this.stopping.values()]);
   }
 
   // ------------------------------------------------------------------ internals
@@ -439,7 +453,13 @@ export class LanguageServerService {
     this.sessions.delete(s.id);
     for (const path of s.docs.keys()) this.docSession.delete(this.docKey(s.root, path));
     if (s.idleTimer) clearTimeout(s.idleTimer);
-    await this.stopProcess(s);
+    const stopped = this.stopProcess(s);
+    this.stopping.set(s, stopped);
+    try {
+      await stopped;
+    } finally {
+      this.stopping.delete(s);
+    }
     if (state) this.setState(s, state, message);
   }
 

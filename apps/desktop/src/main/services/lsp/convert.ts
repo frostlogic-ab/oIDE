@@ -184,6 +184,8 @@ export function completionItems(v: unknown): { raw: unknown[]; incomplete: boole
 export function toSignatureHelp(v: unknown): LspSignatureHelp | null {
   if (!isObj(v) || !Array.isArray(v.signatures) || !v.signatures.length) return null;
   const signatures: LspSignatureHelp['signatures'] = [];
+  /** The raw signature behind each kept one (some may be dropped), for its own activeParameter. */
+  const raws: Obj[] = [];
   for (const s of v.signatures.slice(0, 50)) {
     if (!isObj(s)) continue;
     const label = str(s.label, 4000);
@@ -205,10 +207,11 @@ export function toSignatureHelp(v: unknown): LspSignatureHelp | null {
     }
     const doc = toMarkdown(s.documentation, 50_000);
     signatures.push(doc ? { label, documentation: doc, parameters } : { label, parameters });
+    raws.push(s);
   }
   if (!signatures.length) return null;
   const activeSignature = int(v.activeSignature, 0, signatures.length - 1) ?? 0;
-  const own = isObj(v.signatures[activeSignature]) ? (v.signatures[activeSignature] as Obj).activeParameter : undefined;
+  const own = raws[activeSignature]?.activeParameter;
   const activeParameter = int(own ?? v.activeParameter, 0, 100) ?? 0;
   return { signatures, activeSignature, activeParameter };
 }
