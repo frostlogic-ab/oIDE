@@ -18,7 +18,11 @@ export async function runSync(projectId: string, action: SyncAction, from: 'side
         : await oide.invoke(action === 'Push' ? 'git.push' : 'git.fetch', { projectId });
     useGit.getState().patch(projectId, { sync });
     if (action === 'Fetch') toast(sync.behind ? `Fetched: ${sync.behind} new on ${sync.upstream ?? 'origin'}` : 'Fetched: up to date', 'info');
-    if (action === 'Pull' && from === 'sidebar') toast(before > 0 ? `Pulled ${before} ${before === 1 ? 'commit' : 'commits'} on ${sync.branch}` : `Up to date on ${sync.branch}`, 'success');
+    if (action === 'Pull') {
+      // Same toast from the sidebar and Source control: one confirmation per successful pull.
+      toast(before > 0 ? `Pulled ${before} ${before === 1 ? 'commit' : 'commits'} on ${sync.branch}` : `Up to date on ${sync.branch}`, 'success');
+    }
+    if (action === 'Push') toast(`Pushed ${sync.branch}`, 'success');
     void useGit.getState().load(projectId);
   } catch (err) {
     toast(`${action} failed: ${ipcErrorMessage(err)}`, 'error');
