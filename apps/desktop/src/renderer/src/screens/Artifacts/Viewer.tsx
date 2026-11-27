@@ -255,11 +255,14 @@ export function Viewer({
     },
   });
 
+  // A ref, not state: two Ctrl/Cmd+S handlers (the editor's and the view's) can fire in one tick.
+  const savingNow = useRef(false);
   const save = async () => {
-    if (!dirty || saving) return;
+    if (!dirty || saving || savingNow.current) return;
     const content = draft;
     const invalid = validateContent(kind, content);
     if (invalid) return setError(invalid);
+    savingNow.current = true;
     setSaving(true);
     setError(null);
     // With a conflict open, saving keeps your version on top of theirs (theirs stays in History).
@@ -293,6 +296,7 @@ export function Viewer({
         }
       } else setError(ipcErrorMessage(err));
     } finally {
+      savingNow.current = false;
       setSaving(false);
     }
   };

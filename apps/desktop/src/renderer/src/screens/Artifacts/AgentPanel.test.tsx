@@ -163,9 +163,9 @@ describe('Preview | Code', () => {
   it('collapses the Agent panel to a strip and brings it back', async () => {
     await open(/Retry design/);
     fireEvent.click(within(panel()).getByRole('button', { name: 'Hide the agent panel' }));
-    expect(screen.queryByRole('complementary', { name: 'Agent' })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Show the agent panel' }));
-    expect(panel()).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Agent' })).toBeNull());
+    fireEvent.click(await screen.findByRole('button', { name: 'Show the agent panel' }));
+    expect(await screen.findByRole('complementary', { name: 'Agent' })).toBeTruthy();
   });
 });
 
