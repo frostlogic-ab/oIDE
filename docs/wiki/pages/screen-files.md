@@ -141,6 +141,13 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   view: each keeps its own xterm (`TerminalView.tsx` moves the xterm element into whichever host
   shows it), so a dev server keeps running across screens. Terminals of an agent that is archived or
   removed, and Files terminals inside its worktree, are closed so Windows can delete the folder.
+- Copy and paste in every terminal (Files and Focus › Terminal; keys in
+  `components/terminal/clipboardKeys.ts`). Windows and Linux, as in Windows Terminal: Ctrl+C copies
+  while text is selected (and clears the selection, so the next Ctrl+C interrupts again), else it
+  stays ^C; Ctrl+Shift+C always copies; Ctrl+V / Ctrl+Shift+V paste; Ctrl+Insert / Shift+Insert too.
+  macOS: Cmd+C / Cmd+V through the Edit menu to xterm's own handlers. Right-click (or the menu key)
+  opens Copy, Paste, Select all and Clear. Paste reads `navigator.clipboard` (allowed for the app
+  page only) and goes through `term.paste`, so bracketed paste and `\r` line endings follow xterm.
 
 ## Editor (`EditorPane.tsx`, `monaco/setup.ts`)
 
