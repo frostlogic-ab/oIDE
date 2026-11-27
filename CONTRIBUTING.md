@@ -8,7 +8,8 @@ must keep (no Claude credentials, no direct Anthropic API calls, the user's own 
 3. New behaviour comes with tests. Agent behaviour is tested against `tools/fake-claude`; add a
    fixture under `tools/fake-claude/fixtures/` when you need a new CLI scenario.
 4. Update the wiki page that describes what you changed (`docs/wiki/pages/`), add it to
-   `docs/wiki/index.md` if it is new, and append an entry to `docs/wiki/log.md`. Run `pnpm wiki:lint`.
+   `docs/wiki/index.md` if it is new, and add a log entry with `pnpm wiki:log new <op> "<title>"` (one file in `docs/wiki/log/`;
+   never append to `docs/wiki/log.md`). Run `pnpm wiki:lint`.
 5. A change that departs from the build brief needs a short ADR in `docs/adr/`.
 6. Consider analytics: does the change need a new or updated telemetry event, error report or
    performance measure? Events go only through `packages/protocol/src/telemetry.ts` and must follow
