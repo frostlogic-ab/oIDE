@@ -1,5 +1,5 @@
 import { basename, dirname, extname, join, relative } from 'node:path';
-import { fileHistory, isInside as gitIsInside, plainFs, samePath } from '@oide/git';
+import { checkoutChanges, discardCheckoutChanges, fileHistory, isInside as gitIsInside, plainFs, samePath } from '@oide/git';
 import { buildSearchRegExp, type ArtifactMeta, type FileNode } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
@@ -252,6 +252,53 @@ export function registerFileHandlers(router: IpcRouter, s: Services, ctx: MainCo
     }
     for (const id of projects) s.git.changed(id);
     return { results };
+  });
+
+  // ---------------------------------------------------------------- git colours, Discard changes
+  // An agent worktree compares against the merge-base with its base branch (everything the branch
+  // changed); the main checkout (or any other root) against HEAD (uncommitted work), like VS Code.
+  const changesBase = (r: string): string | undefined => {
+    for (const a of s.agents.list()) {
+      if (!a.worktreePath || !a.baseRef || !samePath(a.worktreePath, r)) continue;
+      const p = s.projects.get(a.projectId);
+      if (p && samePath(p.path, a.worktreePath)) continue;
+      return a.baseRef;
+    }
+    return undefined;
+  };
+  const gitFailed = (err: unknown) => new IpcError((err as Error).message, 'git_failed');
+
+  router.register('files.changes', async ({ root }) => {
+    const r = ctx.roots.assertAllowed(root, ['project', 'worktree']);
+    const base = changesBase(r);
+    try {
+      const { changes, truncated } = await checkoutChanges(r, base);
+      return { against: base ? ('branch' as const) : ('head' as const), changes, truncated };
+    } catch (err) {
+      // Not a git repo (or git missing): no colours, not an error in the tree.
+      ctx.log.warn('files.changes failed', err);
+      return { against: base ? ('branch' as const) : ('head' as const), changes: [], truncated: false };
+    }
+  });
+
+  router.register('files.discardChanges', async ({ root, paths }) => {
+    const r = ctx.roots.assertAllowed(root, ['project', 'worktree']);
+    const rels = paths.map((p) => {
+      const rel = toPosix(p).replace(/^\.\/+/, '');
+      const parts = rel.split('/');
+      if (!rel || rel.startsWith('/') || /^[A-Za-z]:/.test(rel) || parts.includes('..') || parts.includes('.git')) throw new IpcError(`Not a path in this checkout: ${p}`, 'forbidden_path');
+      return rel;
+    });
+    const base = changesBase(r);
+    let reverted: string[];
+    try {
+      reverted = await discardCheckoutChanges(r, rels, base);
+    } catch (err) {
+      throw gitFailed(err);
+    } finally {
+      touched(r, r);
+    }
+    return { reverted: reverted.length, against: base ? ('branch' as const) : ('head' as const) };
   });
 
   router.register('files.history', async ({ root, path }) => {

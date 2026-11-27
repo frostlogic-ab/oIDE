@@ -21,6 +21,10 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
 - Middle: open-file tabs (`role="tablist"`, accent top border, close ×, ● when unsaved; right side
   "Ln, Col · Language" and Save; for a Markdown file a "Markdown view" Preview / Edit toggle before
   them), the agent banner, the editor, and under it the terminal panel when shown (`TerminalDock.tsx`).
+- Tab menu: right-click a tab (or Menu key / Shift+F10 on it) for Close, Close all to the right
+  (disabled on the last tab) and Close all. Middle click closes a tab. Closing several tabs asks
+  once when any has unsaved changes; `useFiles.closeTabs` keeps the active tab if it stays, else
+  picks the kept tab nearest its place (Close all to the right makes the clicked tab active).
 - Right ("File activity"): This file's history, Mentioned in, the language-servers note.
 
 ## Tree (`filesStore.ts`)
@@ -47,6 +51,35 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   focused open folder) is brighter. Project headers are uppercase 11px bold section headers with the
   same chevron. Row tooltip is the relative path.
 - Rows are a fixed 22px pitch and windowed (only visible rows plus overscan are in the DOM).
+
+## Git colours (`changesStore.ts`)
+
+Like the VS Code explorer's git decorations, each shown checkout marks what it changed:
+
+- What counts as changed (`files.changes { root }` → `@oide/git` `checkoutChanges`): in the
+  project's main checkout, uncommitted work against HEAD (as VS Code); in an agent worktree,
+  everything the branch changed since its base (`git diff <merge-base>` plus untracked files, the
+  same set Review shows), committed or not. Untracked files are listed one by one; at most 5000.
+- Changed files (modified, added, untracked) are green (`text-ok`) with VS Code's letter at the
+  row's end (M, A, U; `!` amber for a conflict). Folders holding changes are tinted with the
+  strongest status under them (no letter). Deleted files, and folders that only held deleted
+  files, show as rows that are not on disk: red (`text-bad`) and struck through, letter D. They come
+  from `visibleRows(root, state, ghosts)`, sorted in with the listing; a deleted folder opens from
+  the changes, never from the disk. Tooltip "path • Modified"; screen readers hear ", modified" /
+  ", contains changes". The legend under the tree explains M and D.
+- Refreshed on `git.changed` for the project (debounced 250 ms; the checkout watchers and every tree
+  action emit it) and when the window gets focus.
+- Right-click a changed file or a folder holding changes: **Discard changes** (VS Code's undo
+  arrow). A deleted row's menu is only Discard changes (restore) and Copy path. A confirm says what
+  happens: "goes back to the last committed version" (main) / "the version this branch started
+  from" (worktree), "is new, so it will be deleted" (title "Delete X?"), or "will be restored"
+  (title "Restore X?"), plus unsaved edits that would be lost. Then `files.discardChanges { root,
+  paths }` (`discardCheckoutChanges`: `git restore --source=<HEAD or merge-base> --staged --worktree`
+  for tracked paths, which also removes files missing from the source; `git clean -f` for untracked
+  ones; only paths it reports as changed are touched; literal pathspecs; `..`, absolute paths and
+  `.git` refused). Open tabs of the files reload from disk (`onTabsReloaded`), tabs of deleted new
+  files close, the folders and colours refresh. It does not go through the trash. Telemetry:
+  `file_changes_discarded { files, checkout }`.
 
 ## Managing files (`TreeActions.tsx`, `treeOps.ts`)
 
@@ -238,6 +271,10 @@ safety, regex vs text, untracked / ignored / binary, cap, cancel, non-git scan, 
 `test/integration/files-search.test.ts` (IPC validation and path guard),
 `lib/quickOpen.test.ts` and `components/frame/CommandBar.test.tsx` (sections, `>`, `:line`), and
 `e2e/files-search.spec.ts` (Ctrl+K opens a file; Ctrl+Shift+F finds and replaces one match).
+Git colours: `changesStore.test.ts` (folder tints, deleted entries per folder, ghost rows in
+`visibleRows`), `TreeActions.test.tsx` (green M / U, red struck-through D, Discard changes on a
+modified, a new and a deleted file), `packages/git/test/changes.test.ts` (against HEAD and against a
+base branch with real repos, before the first commit, discard of each kind).
 
 ## Deviations
 

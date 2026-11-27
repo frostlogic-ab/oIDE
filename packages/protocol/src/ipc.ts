@@ -4,7 +4,7 @@ import { ArtifactFile, ArtifactFileContent, ArtifactKind, ArtifactMeta, Artifact
 import { AgentEvent } from './events.js';
 import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
 import { CloneProgress, CloneUrl, FolderName, GithubRepo } from './newProject.js';
-import { CommitInfo, FileDiff, FileNode, MergePrediction, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
+import { CommitInfo, FileChanges, FileDiff, FileNode, MergePrediction, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
 import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settings.js';
 import { UpdateInstallTrigger, UpdateStatus } from './updates.js';
 import { FindByNameInput, FindByNameOutput, ReplaceInput, ReplaceOutput, SearchContentInput, SearchResultsEvent } from './search.js';
@@ -272,6 +272,19 @@ export const Commands = {
   ),
   /** Files tree › Delete: moves the file or folder to the system trash (Recycle Bin). */
   'files.delete': cmd(z.object({ root: z.string(), path: z.string().min(1) }), Ok),
+  /**
+   * Files tree git colours: what the checkout changed (main checkout: uncommitted, against HEAD; agent
+   * worktree: against the merge-base with its base branch, committed or not), untracked files included.
+   */
+  'files.changes': cmd(z.object({ root: z.string() }), FileChanges),
+  /**
+   * Files tree › Discard changes: each path goes back to the version `files.changes` compares against
+   * (a new file is deleted, a deleted one comes back). Only paths reported as changed are touched.
+   */
+  'files.discardChanges': cmd(
+    z.object({ root: z.string(), paths: z.array(z.string().min(1).max(4096)).min(1).max(5000) }),
+    z.object({ reverted: z.number().int(), against: z.enum(['head', 'branch']) }),
+  ),
   'files.history': cmd(z.object({ root: z.string(), path: z.string() }), z.array(CommitInfo)),
   'files.editingAgents': cmd(z.object({ path: z.string() }), z.array(Id)),
   /** Artifacts that mention this file (Files › Mentioned in). Path is relative to root. */

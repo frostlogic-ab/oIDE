@@ -1,6 +1,7 @@
 import { create } from 'zustand';
-import type { FileNode } from '@oide/protocol';
+import type { FileChange, FileNode } from '@oide/protocol';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
+import { useChanges } from './changesStore';
 import type { MarkdownView } from './markdownLinks';
 import { isUnder, joinRel, parentDir, remapPath } from './treeOps';
 
@@ -54,6 +55,14 @@ const tabMoveListeners = new Set<TabMoveListener>();
 export function onTabsMoved(fn: TabMoveListener): () => void {
   tabMoveListeners.add(fn);
   return () => tabMoveListeners.delete(fn);
+}
+
+/** Tabs whose file changed on disk under them (Discard changes): the editor reads them again. */
+type TabReloadListener = (ids: readonly string[]) => void;
+const tabReloadListeners = new Set<TabReloadListener>();
+export function onTabsReloaded(fn: TabReloadListener): () => void {
+  tabReloadListeners.add(fn);
+  return () => tabReloadListeners.delete(fn);
 }
 
 const RECENT_KEY = 'oide.files.recent';
@@ -112,10 +121,13 @@ interface FilesState {
   setProjectOpen(projectId: string, open: boolean): void;
   setCheckout(projectId: string, root: string): void;
   loadDir(root: string, dir: string, force?: boolean): Promise<FileNode[] | undefined>;
-  setExpanded(root: string, dir: string, open: boolean): Promise<void>;
+  /** `load: false` for a deleted folder (git colours): its rows come from the changes, not the disk. */
+  setExpanded(root: string, dir: string, open: boolean, load?: boolean): Promise<void>;
   expandMany(root: string, dirs: string[]): void;
   openFile(projectId: string, root: string, path: string): void;
   closeTab(id: string): void;
+  /** Close several tabs at once. The active tab stays if it is kept, else the kept tab nearest its place. */
+  closeTabs(ids: string[]): void;
   setDirty(id: string, dirty: boolean): void;
   setMdView(id: string, view: MarkdownView): void;
   setActive(id: string): void;
@@ -143,6 +155,12 @@ interface FilesState {
   paste(projectId: string, root: string, dir: string): Promise<{ path?: string; error?: string }>;
   /** Move to the trash, close its tabs (their unsaved edits are dropped) and refresh the tree. */
   deleteEntry(root: string, path: string): Promise<{ error?: string }>;
+  /**
+   * Git colours › Discard changes: the files go back to the version they are compared against (new
+   * ones are deleted, deleted ones come back). Open tabs reload (new files' tabs close), the tree
+   * and the colours refresh.
+   */
+  discardChanges(root: string, changes: FileChange[]): Promise<{ error?: string }>;
 }
 
 export const tabId = (root: string, path: string) => `${root}::${path}`;
@@ -203,9 +221,9 @@ export const useFiles = create<FilesState>()((set, get) => ({
     return p;
   },
 
-  setExpanded: async (root, dir, open) => {
+  setExpanded: async (root, dir, open, load = true) => {
     set({ expanded: put(get().expanded, root, dir, open ? true : undefined) });
-    if (open) await get().loadDir(root, dir);
+    if (open && load) await get().loadDir(root, dir);
   },
 
   expandMany: (root, dirs) => {
@@ -222,13 +240,20 @@ export const useFiles = create<FilesState>()((set, get) => ({
     saveRecent(recent);
     set({ tabs, active: id, recent });
   },
-  closeTab: (id) => {
+  closeTab: (id) => get().closeTabs([id]),
+  closeTabs: (ids) => {
+    const gone = new Set(ids);
     const tabs = get().tabs;
-    const i = tabs.findIndex((t) => t.id === id);
-    const next = tabs.filter((t) => t.id !== id);
-    const active = get().active === id ? (next[Math.min(i, next.length - 1)]?.id ?? undefined) : get().active;
-    const { [id]: _closed, ...dirty } = get().dirty;
-    const { [id]: _view, ...mdView } = get().mdView;
+    const next = tabs.filter((t) => !gone.has(t.id));
+    let active = get().active;
+    if (active !== undefined && gone.has(active)) {
+      const i = tabs.findIndex((t) => t.id === active);
+      const kept = tabs.slice(0, i).filter((t) => !gone.has(t.id)).length;
+      active = next[Math.min(kept, next.length - 1)]?.id;
+    }
+    // Per-tab state goes with the tab: the unsaved flag and the Markdown view choice.
+    const dirty = Object.fromEntries(Object.entries(get().dirty).filter(([id]) => !gone.has(id)));
+    const mdView = Object.fromEntries(Object.entries(get().mdView).filter(([id]) => !gone.has(id)));
     set({ tabs: next, active, dirty, mdView });
   },
   setDirty: (id, d) => {
@@ -347,6 +372,31 @@ export const useFiles = create<FilesState>()((set, get) => ({
     await refreshChain(root, parentDir(path), parentDir(path));
     return {};
   },
+  discardChanges: async (root, changes) => {
+    if (!changes.length) return {};
+    try {
+      await oide.invoke('files.discardChanges', { root, paths: changes.map((c) => c.path) });
+    } catch (err) {
+      void useChanges.getState().load(root);
+      return { error: ipcErrorMessage(err) };
+    }
+    const all = new Set(changes.map((c) => c.path));
+    const gone = new Set(changes.filter((c) => c.status === 'added' || c.status === 'untracked').map((c) => c.path));
+    for (const t of get().tabs.filter((x) => x.root === root && gone.has(x.path))) get().closeTab(t.id);
+    const reload = get()
+      .tabs.filter((x) => x.root === root && all.has(x.path))
+      .map((t) => t.id);
+    if (reload.length) for (const fn of tabReloadListeners) fn(reload);
+    // Folders that gained (restored) or lost (deleted) entries list again: the loaded ones, and
+    // deleted folders that were open and are real again.
+    const st = get();
+    const dirs = new Set(['', ...ancestorDirs([...all])]);
+    await Promise.all([
+      ...[...dirs].filter((d) => d === '' || st.nodes[root]?.[d] || st.expanded[root]?.[d]).map((d) => st.loadDir(root, d, true)),
+      useChanges.getState().load(root),
+    ]);
+    return {};
+  },
 }));
 
 /** Reload `from` and the loaded folders between it and `to` (a folder under `from`), so new entries show. */
@@ -413,6 +463,8 @@ export interface TreeRow {
   parent?: string;
   /** The inline name field: a new entry's row, or the row being renamed. */
   draft?: 'create' | 'rename';
+  /** Deleted (git colours): not on disk, shown struck through; only Discard changes brings it back. */
+  ghost?: boolean;
 }
 
 /** Key of the new-entry row (no real path holds a NUL). */
@@ -422,25 +474,44 @@ export const DRAFT_KEY = '\u0000new';
  * Visible rows of one checkout, depth-first, with single-child folder chains compacted. A New file /
  * New folder field is a row at the top of its folder; the row being renamed is marked.
  */
-export function visibleRows(root: string, s: Pick<FilesState, 'nodes' | 'expanded' | 'loading' | 'errors'> & { edit?: TreeEdit }): TreeRow[] {
+export function visibleRows(
+  root: string,
+  s: Pick<FilesState, 'nodes' | 'expanded' | 'loading' | 'errors'> & { edit?: TreeEdit },
+  /** Deleted entries per folder (git colours): shown struck through where the listing lacks them. */
+  ghosts?: ReadonlyMap<string, FileNode[]>,
+): TreeRow[] {
   const out: TreeRow[] = [];
   const nodes = s.nodes[root] ?? {};
   const edit = s.edit?.root === root ? s.edit : undefined;
+  // A folder's entries: its listing plus the deleted ones it lacks (a deleted folder has no listing).
+  const ghostPaths = new Set<string>();
+  const childrenOf = (dir: string): FileNode[] | undefined => {
+    const listed = nodes[dir];
+    const extra = ghosts?.get(dir);
+    if (!extra?.length || (!listed && !ghostPaths.has(dir))) return listed;
+    const names = new Set((listed ?? []).map((n) => n.name));
+    const add = extra.filter((g) => !names.has(g.name));
+    if (!add.length) return listed;
+    for (const g of add) ghostPaths.add(g.path);
+    return [...(listed ?? []), ...add].sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === 'dir' ? -1 : 1));
+  };
   const walk = (dir: string, depth: number, parent?: string) => {
     if (edit?.mode === 'create' && edit.dir === dir) {
       out.push({ key: DRAFT_KEY, path: dir, contentPath: dir, label: '', kind: edit.kind, depth, expanded: false, loading: false, parent, draft: 'create' });
     }
-    for (const n of nodes[dir] ?? []) {
+    for (const n of childrenOf(dir) ?? []) {
+      const ghost = ghostPaths.has(n.path) ? { ghost: true as const } : {};
       if (n.kind === 'file') {
         const draft = edit?.mode === 'rename' && edit.path === n.path ? { draft: 'rename' as const } : {};
-        out.push({ key: n.path, path: n.path, contentPath: n.path, label: n.name, kind: 'file', depth, expanded: false, loading: false, parent, ...draft });
+        out.push({ key: n.path, path: n.path, contentPath: n.path, label: n.name, kind: 'file', depth, expanded: false, loading: false, parent, ...draft, ...ghost });
         continue;
       }
       let label = n.name;
       let cur = n.path;
       for (;;) {
-        const kids = nodes[cur];
-        if (kids && kids.length === 1 && kids[0]!.kind === 'dir') {
+        const kids = childrenOf(cur);
+        // A deleted folder is never merged into a chain with a real one (its rows act differently).
+        if (kids && kids.length === 1 && kids[0]!.kind === 'dir' && ghostPaths.has(kids[0]!.path) === ghostPaths.has(n.path)) {
           label += `/${kids[0]!.name}`;
           cur = kids[0]!.path;
         } else break;
@@ -454,10 +525,12 @@ export function visibleRows(root: string, s: Pick<FilesState, 'nodes' | 'expande
         kind: 'dir',
         depth,
         expanded,
-        loading: Boolean(s.loading[root]?.[cur]),
-        error: s.errors[root]?.[cur],
+        // A deleted folder is never listed from disk: no spinner, no "failed to load".
+        loading: ghost.ghost ? false : Boolean(s.loading[root]?.[cur]),
+        error: ghost.ghost ? undefined : s.errors[root]?.[cur],
         parent,
         ...(edit?.mode === 'rename' && edit.path === cur ? { draft: 'rename' as const } : {}),
+        ...ghost,
       });
       if (expanded) walk(cur, depth + 1, n.path);
     }
