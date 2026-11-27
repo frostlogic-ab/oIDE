@@ -9,6 +9,27 @@ Conventional Commit titles of merged pull requests, in the release pull request 
 `main`. Do not add entries by hand; give your pull request a good title instead. The pipeline is
 described in [docs/wiki/pages/release-pipeline.md](docs/wiki/pages/release-pipeline.md).
 
+## [0.6.0](https://github.com/frostlogic-ab/oIDE/compare/v0.5.1...v0.6.0) (2026-11-27)
+
+
+### Added
+
+* **desktop:** fetch projects automatically and offer Pull in the Projects sidebar ([#38](https://github.com/frostlogic-ab/oIDE/issues/38)) ([f379f42](https://github.com/frostlogic-ab/oIDE/commit/f379f42c967abfdb08b5d020638d2efdc4b89831))
+* **files:** close tabs from a tab context menu and with middle click ([#41](https://github.com/frostlogic-ab/oIDE/issues/41)) ([0790c4e](https://github.com/frostlogic-ab/oIDE/commit/0790c4e516f73335f241aafd93bc274e828193fc))
+* **files:** git colours in the Files tree and Discard changes ([#43](https://github.com/frostlogic-ab/oIDE/issues/43)) ([c4da2f6](https://github.com/frostlogic-ab/oIDE/commit/c4da2f6502f4bcea8a46841d58691c1a6d83984f))
+* **files:** manage files from the tree context menu (new, rename, copy, move, delete) ([#34](https://github.com/frostlogic-ab/oIDE/issues/34)) ([759211e](https://github.com/frostlogic-ab/oIDE/commit/759211eeb37d31a258bf4004ba636616b5d69102))
+* **files:** preview Markdown files, edit them beside a live preview ([#39](https://github.com/frostlogic-ab/oIDE/issues/39)) ([ff751b3](https://github.com/frostlogic-ab/oIDE/commit/ff751b36c829209c7afd03745ca8ecdac2d2d3e4))
+* **files:** run project scripts from the tree and use several terminals ([#40](https://github.com/frostlogic-ab/oIDE/issues/40)) ([8d620bf](https://github.com/frostlogic-ab/oIDE/commit/8d620bf745f83c70168e586fef637585ee592305))
+* **site:** show "by Frostlogic" under oIDE in the website headers ([#45](https://github.com/frostlogic-ab/oIDE/issues/45)) ([a2c2f1f](https://github.com/frostlogic-ab/oIDE/commit/a2c2f1fd7e83e1433d2941132fb224ac7eeed039))
+* **telemetry:** send the oIDE version on app_started ([#35](https://github.com/frostlogic-ab/oIDE/issues/35)) ([4ac2aae](https://github.com/frostlogic-ab/oIDE/commit/4ac2aaef4878bdebeaf666b7bb7ad8e697f55592))
+* **updates:** download updates automatically, install on quit, header Update button ([#36](https://github.com/frostlogic-ab/oIDE/issues/36)) ([4705df7](https://github.com/frostlogic-ab/oIDE/commit/4705df75310b013ff4c452d058a3b5d4965c07db))
+
+
+### Fixed
+
+* **desktop:** tidy New project dialog spacing and stop horizontal scroll ([#42](https://github.com/frostlogic-ab/oIDE/issues/42)) ([d208035](https://github.com/frostlogic-ab/oIDE/commit/d208035ad7e906bd7db749589b0031216947f368))
+* **wall:** wrap tile footer buttons by group on narrow tiles ([#44](https://github.com/frostlogic-ab/oIDE/issues/44)) ([9ce3587](https://github.com/frostlogic-ab/oIDE/commit/9ce35876e0d362b2155618315342156a84fc9335))
+
 ## [0.5.1](https://github.com/frostlogic-ab/oIDE/compare/v0.5.0...v0.5.1) (2026-11-27)
 
 
