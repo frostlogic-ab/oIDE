@@ -140,7 +140,7 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   close × per tab that kills its process (Delete on a focused tab), ←/→/Home/End between tabs,
   "New terminal" (in the active file's checkout, else the first project's), and Hide (terminals keep
   running). Top edge drags (and ↑/↓ on the focused separator) between 120px and 70% of the window;
-  closing the last tab hides the panel; showing it with none open starts a shell.
+  closing the last tab hides the panel; showing it with none open starts a shell. Closing a tab (× or Delete) moves focus to the neighbouring tab, or to New terminal when none remain.
 - Sessions (`stores/terminals.ts`) are grouped (`files`, `agent:<id>` for Focus) and outlive their
   view: each keeps its own xterm (`TerminalView.tsx` moves the xterm element into whichever host
   shows it), so a dev server keeps running across screens. Terminals of an agent that is archived or
@@ -235,7 +235,7 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   `bad-line` and the new text on `ok-line`; per-match "Replace" and per-file "Replace all in <file>"
   buttons appear on hover or focus. Every replace (one match, one file or Replace all) opens a confirm:
   per file a checkbox, "<agent> is changing this file" when `files.editingAgents` says so, and the old
-  and new text of each matched line (`data-kind` del/add rows in the Review colours). Confirm sends only
+  and new text of each matched line (`data-kind` del/add rows in the Review colours). While replacing, Cancel is disabled and Esc / scrim clicks are ignored, so the dialog stays until the operation finishes. Confirm sends only
   the checked files' listed matches to `files.replace`; files changed since the search come back
   `stale` and are left alone (warning toast), then the search runs again. Regex replacements expand
   `$1`, `$<name>`, `$&` and `$$`.

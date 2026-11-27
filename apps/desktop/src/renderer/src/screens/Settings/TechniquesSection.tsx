@@ -20,6 +20,7 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
   const [fromExtensions, setFromExtensions] = useState<Technique[]>([]);
   const [open, setOpen] = useState<string>('');
   const [confirmDelete, setConfirmDelete] = useState<Technique | null>(null);
+  const [confirmReset, setConfirmReset] = useState<Technique | null>(null);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const pending = useRef(new Map<string, Technique>());
 
@@ -115,6 +116,7 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
   };
 
   const reset = (t: Technique) => {
+    setConfirmReset(null);
     const b = builtIns?.find((x) => x.id === t.id);
     if (b) update(t.id, { name: b.name, description: b.description, text: b.text, placement: b.placement, enabledByDefault: b.enabledByDefault }, true);
   };
@@ -234,7 +236,7 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
                   </span>
                   <div className="flex gap-2 flex-wrap">
                     {t.builtIn && edited && (
-                      <button type="button" onClick={() => reset(t)} className="h-[30px] px-3 rounded-[7px] border border-line-3 bg-transparent text-ink text-[12.5px] hover:bg-raised">
+                      <button type="button" onClick={() => setConfirmReset(t)} className="h-[30px] px-3 rounded-[7px] border border-line-3 bg-transparent text-ink text-[12.5px] hover:bg-raised">
                         Reset to default
                       </button>
                     )}
@@ -275,6 +277,23 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
         )}
       </div>
       <Rd className="mt-2.5">The agent's transcript shows which techniques were added, so nothing is hidden from you after spawning.</Rd>
+
+      <Dialog
+        open={Boolean(confirmReset)}
+        onClose={() => setConfirmReset(null)}
+        title={`Reset ${builtIns?.find((x) => x.id === confirmReset?.id)?.name ?? confirmReset?.name ?? ''} to its default?`}
+        description="Your edits to its name, description and text are lost."
+        footer={
+          <>
+            <Button size={32} onClick={() => setConfirmReset(null)}>
+              Cancel
+            </Button>
+            <Button size={32} variant="danger" onClick={() => confirmReset && reset(confirmReset)}>
+              Reset
+            </Button>
+          </>
+        }
+      />
 
       <Dialog
         open={Boolean(confirmDelete)}

@@ -169,7 +169,7 @@ export async function archiveAgent(agentId: string, title: string): Promise<bool
   try {
     const s = await oide.invoke('agents.archive', { agentId });
     useArchive.getState().upsert(s);
-    toast(`Archived "${title}"`, 'info');
+    toast(`Archived "${title}"`, 'info', { action: { label: 'Undo', run: () => void unarchiveAgent(agentId, title) } });
     return true;
   } catch (err) {
     toast(`Could not archive: ${ipcErrorMessage(err)}`, 'error');
