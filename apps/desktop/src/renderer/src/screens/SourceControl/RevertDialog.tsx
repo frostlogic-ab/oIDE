@@ -54,17 +54,23 @@ export function RevertDialog({
     }
   };
 
+  // The revert can't be undone or interrupted, so the dialog stays until it finishes.
+  const close = () => {
+    if (!busy) onClose();
+  };
+
   return (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={close}
+      dismissOnScrim={!busy}
       width={480}
       title={`Revert changes on ${branch}?`}
       description={`In ${projectName}. Changed files go back to the last commit and new files are deleted. This can't be undone.`}
       initialFocus={cancelRef}
       footer={
         <>
-          <Button ref={cancelRef} variant="secondary" size={32} onClick={onClose}>
+          <Button ref={cancelRef} variant="secondary" size={32} disabled={busy} onClick={close}>
             Cancel
           </Button>
           <Button variant="danger" size={32} disabled={busy || !picked.size} onClick={() => void submit()}>

@@ -71,11 +71,17 @@ export function ReplaceDialog({
     }
   };
 
+  // The replace can't be interrupted, so the dialog stays until it finishes.
+  const close = () => {
+    if (!busy) onClose();
+  };
+
   const title = `Replace ${allMatches} ${allMatches === 1 ? 'match' : 'matches'}${items.length > 1 ? ` in ${items.length} files` : ''}?`;
   return (
     <Dialog
       open
-      onClose={onClose}
+      onClose={close}
+      dismissOnScrim={!busy}
       title={title}
       description={
         <>
@@ -88,7 +94,7 @@ export function ReplaceDialog({
       footer={
         <>
           {error && <span className="mr-auto text-[12px] text-bad">{error}</span>}
-          <Button variant="secondary" size={28} onClick={onClose}>
+          <Button variant="secondary" size={28} disabled={busy} onClick={close}>
             Cancel
           </Button>
           <Button variant="primary" size={28} disabled={busy || total === 0} onClick={() => void confirm()}>
