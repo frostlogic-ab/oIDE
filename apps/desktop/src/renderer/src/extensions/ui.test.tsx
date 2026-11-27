@@ -225,7 +225,17 @@ describe('extension UI', () => {
     await screen.findByText('Stored in keychain');
     expect((screen.getByLabelText('uiSample.token') as HTMLInputElement).value).toBe('');
     expect(document.body.textContent).not.toContain('s3cret');
-    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    // Cancelling the confirmation keeps the stored value.
+    fireEvent.click(screen.getByRole('button', { name: 'Clear uiSample.token' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+    expect(invoke).not.toHaveBeenCalledWith('extensions.setSetting', {
+      id: '@oide-test/ui',
+      key: 'uiSample.token',
+      value: null,
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Clear uiSample.token' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Clear' }));
     await waitFor(() =>
       expect(invoke).toHaveBeenCalledWith('extensions.setSetting', {
         id: '@oide-test/ui',

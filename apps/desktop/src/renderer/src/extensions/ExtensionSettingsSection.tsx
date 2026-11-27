@@ -5,7 +5,7 @@
  */
 import { useEffect, useState } from 'react';
 import type { ExtensionSettingField, InstalledExtension } from '@oide/protocol';
-import { Badge, cn } from '@oide/ui';
+import { Badge, Button, Dialog, cn } from '@oide/ui';
 import { invokeOr, ipcErrorMessage, oide } from '../lib/bridge';
 import { navigate } from '../stores/router';
 import { useSettings } from '../stores/settings';
@@ -155,6 +155,7 @@ function FieldControl({
   const current = field.value ?? field.default;
   const currentText = current === undefined ? '' : String(current);
   const [draft, setDraft] = useState(currentText);
+  const [confirmClear, setConfirmClear] = useState(false);
   // Follow the saved value only when it changes, and only if the user has not edited the field: a
   // mount-time or late-arriving sync effect would otherwise overwrite what they just typed (and
   // blur would then see "no change" and never save it).
@@ -185,6 +186,10 @@ function FieldControl({
       if (!draft) return;
       if (await onSave(field.type === 'number' ? Number(draft) : draft)) setDraft('');
     };
+    const clear = async () => {
+      setConfirmClear(false);
+      if (await onSave(null)) toast(`Cleared ${field.key}`, 'info');
+    };
     return (
       <div className="flex items-center gap-2 flex-wrap">
         {field.hasValue && <Badge tone="ok">Stored in keychain</Badge>}
@@ -206,10 +211,31 @@ function FieldControl({
           Save
         </button>
         {field.hasValue && (
-          <button type="button" className={outlineBtn} onClick={() => void onSave(null)}>
+          <button
+            type="button"
+            className={outlineBtn}
+            aria-label={`Clear ${field.key}`}
+            onClick={() => setConfirmClear(true)}
+          >
             Clear
           </button>
         )}
+        <Dialog
+          open={confirmClear}
+          onClose={() => setConfirmClear(false)}
+          title={`Clear ${field.key}?`}
+          description="The stored value is deleted. You'll need to enter it again."
+          footer={
+            <>
+              <Button size={32} onClick={() => setConfirmClear(false)}>
+                Cancel
+              </Button>
+              <Button size={32} variant="danger" onClick={() => void clear()}>
+                Clear
+              </Button>
+            </>
+          }
+        />
       </div>
     );
   }
