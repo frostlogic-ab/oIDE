@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Menu } from '@oide/ui';
+import { ContextMenu, Menu } from '@oide/ui';
 
 afterEach(cleanup);
 
@@ -71,5 +71,40 @@ describe('Menu (portal, pick-one)', () => {
     expect(screen.queryByRole('menu')).toBeNull();
     expect(document.activeElement).toBe(trigger);
     window.removeEventListener('keydown', onWindowKey);
+  });
+});
+
+describe('menu hover highlight', () => {
+  // `cn` is clsx (no tailwind-merge): an always-on bg-transparent would beat bg-selected in the CSS.
+  const highlighted = (el: Element) => el.classList.contains('bg-selected') && !el.classList.contains('bg-transparent');
+
+  it('Menu highlights the item under the pointer, and only that one', () => {
+    const { trigger } = setup();
+    fireEvent.click(trigger);
+    const [auto, manual] = screen.getAllByRole('menuitemradio');
+    fireEvent.mouseEnter(auto!);
+    expect(highlighted(auto!)).toBe(true);
+    expect(highlighted(manual!)).toBe(false);
+    expect(manual!.classList.contains('bg-transparent')).toBe(true);
+  });
+
+  it('ContextMenu highlights the item under the pointer, and only that one', () => {
+    render(
+      <ContextMenu
+        at={{ x: 10, y: 10 }}
+        label="Actions"
+        onClose={() => {}}
+        items={[
+          { id: 'cut', label: 'Cut', onSelect: () => {} },
+          { id: 's', separator: true },
+          { id: 'copy', label: 'Copy', onSelect: () => {} },
+        ]}
+      />,
+    );
+    const [cut, copy] = screen.getAllByRole('menuitem');
+    expect(highlighted(cut!)).toBe(true);
+    fireEvent.mouseEnter(copy!);
+    expect(highlighted(copy!)).toBe(true);
+    expect(highlighted(cut!)).toBe(false);
   });
 });
