@@ -9,6 +9,7 @@ import { IpcError, type IpcRouter } from '../ipc/router.js';
 import { confirmNative, dialogOrigin, safeDialogText } from '../security/confirm.js';
 import { boundModelKey, deleteModelKey, hasBoundKey, modelBinding, storeModelKey } from '../security/model-keys.js';
 import type { Services } from '../services/index.js';
+import { usageStats } from '../services/usage-stats.js';
 
 const OK = { ok: true as const };
 
@@ -170,6 +171,7 @@ export function registerSettingsHandlers(router: IpcRouter, s: Services, ctx: Ma
       ...(resets.length ? { rateLimitResetAt: Math.min(...resets) } : {}),
     };
   });
+  router.register('usage.stats', ({ range }) => usageStats(s.store, range));
 }
 
 /**

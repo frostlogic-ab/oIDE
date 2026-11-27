@@ -12,7 +12,8 @@ import { PlanUsageMeter, latestPlanUsage } from './PlanUsage';
 /**
  * 26px status bar. The plan meter (Session / Week) shows only when an agent's `planUsage` (the
  * CLI's `rate_limit_event`) carries a utilization; otherwise only its reset time (PlanUsage.tsx).
- * Also shows what oIDE measures: tokens today and the reset time of the last rate-limit event.
+ * Also shows what oIDE measures: tokens today (opens the Usage screen) and the reset time of the last
+ * rate-limit event.
  */
 export function StatusBar() {
   const info = useCli((s) => s.info);
@@ -52,8 +53,8 @@ export function StatusBar() {
         {/* Plan meter only from the CLI's own rate_limit_event utilization (never a guessed %). */}
         {derived.planUsage && <PlanUsageMeter usage={derived.planUsage} />}
         {usage && (
-          <Tooltip content="Tokens used by oIDE agents today (input + output)" placement="top-end">
-            <button type="button" className="h-[22px] flex items-center gap-1.5 px-2 border-0 rounded-[5px] bg-transparent text-ink-3 text-[11.5px] hover:bg-selected hover:text-ink focus-visible:bg-selected">
+          <Tooltip content="Tokens used by oIDE agents today (cache included). Open Usage for charts and stats." placement="top-end">
+            <button type="button" onClick={() => navigate('usage', {})} className="h-[22px] flex items-center gap-1.5 px-2 border-0 rounded-[5px] bg-transparent text-ink-3 text-[11.5px] hover:bg-selected hover:text-ink focus-visible:bg-selected">
               Tokens today <span className="text-ink font-mono text-[11px]">{formatTokens(usage.tokensToday)}</span>
             </button>
           </Tooltip>

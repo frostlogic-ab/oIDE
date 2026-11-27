@@ -49,6 +49,71 @@ export class UsageRepo {
   deleteOlderThan(ts: number): number {
     return Number(this.d.db.prepare('DELETE FROM usage_samples WHERE ts < ?').run(ts).changes);
   }
+
+  /**
+   * Retention without losing history: samples older than `ts` are summed into `usage_daily` (one
+   * row per local day, project and model; `offsetMs` is the local UTC offset) and then deleted, in
+   * one transaction. Returns the number of samples removed.
+   */
+  compactOlderThan(ts: number, offsetMs = localOffsetMs()): number {
+    return this.d.transaction(() => {
+      this.d.db
+        .prepare(
+          `INSERT INTO usage_daily (day, project_id, model, input, output, cache_read, cache_creation)
+           SELECT CAST((u.ts + ?) / ${DAY_MS} AS INTEGER) AS d, COALESCE(a.project_id, ''), COALESCE(u.model, ''),
+                  SUM(u.input), SUM(u.output), SUM(u.cache_read), SUM(u.cache_creation)
+           FROM usage_samples u LEFT JOIN agents a ON a.id = u.agent_id
+           WHERE u.ts < ?
+           GROUP BY d, COALESCE(a.project_id, ''), COALESCE(u.model, '')
+           ON CONFLICT (day, project_id, model) DO UPDATE SET
+             input = input + excluded.input, output = output + excluded.output,
+             cache_read = cache_read + excluded.cache_read, cache_creation = cache_creation + excluded.cache_creation`,
+        )
+        .run(offsetMs, ts);
+      return this.deleteOlderThan(ts);
+    });
+  }
+
+  /**
+   * Token use per local day (days since 1970-01-01 at `offsetMs`), project and model from `sinceDay`
+   * on: live samples plus the `usage_daily` rollup of older ones (each sample is in exactly one).
+   */
+  daily(opts: { sinceDay: number; offsetMs?: number }): UsageDay[] {
+    const off = opts.offsetMs ?? localOffsetMs();
+    const sinceTs = opts.sinceDay * DAY_MS - off;
+    const rows = this.d.db
+      .prepare(
+        `SELECT d, p, m, SUM(i) AS i, SUM(o) AS o, SUM(cr) AS cr, SUM(cc) AS cc FROM (
+           SELECT CAST((u.ts + ?) / ${DAY_MS} AS INTEGER) AS d, COALESCE(a.project_id, '') AS p, COALESCE(u.model, '') AS m,
+                  u.input AS i, u.output AS o, u.cache_read AS cr, u.cache_creation AS cc
+           FROM usage_samples u LEFT JOIN agents a ON a.id = u.agent_id WHERE u.ts >= ?
+           UNION ALL
+           SELECT day, project_id, model, input, output, cache_read, cache_creation FROM usage_daily WHERE day >= ?
+         ) GROUP BY d, p, m ORDER BY d, p, m`,
+      )
+      .all(off, sinceTs, opts.sinceDay) as Row[];
+    return rows.map((r) => ({
+      day: num(r.d) ?? 0,
+      ...(r.p ? { projectId: String(r.p) } : {}),
+      ...(r.m ? { model: String(r.m) } : {}),
+      usage: { input: num(r.i) ?? 0, output: num(r.o) ?? 0, cacheRead: num(r.cr) ?? 0, cacheCreation: num(r.cc) ?? 0 },
+    }));
+  }
+}
+
+const DAY_MS = 86_400_000;
+
+/** The local UTC offset in ms (east positive), as `daily` and `compactOlderThan` bucket days. */
+export function localOffsetMs(at = Date.now()): number {
+  return -new Date(at).getTimezoneOffset() * 60_000;
+}
+
+/** Tokens of one local day, project and model (`UsageRepo.daily`). */
+export interface UsageDay {
+  day: number;
+  projectId?: string;
+  model?: string;
+  usage: TokenUsage;
 }
 
 /* ----------------------------------------------------------------- review */

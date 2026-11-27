@@ -152,6 +152,7 @@ export const BUILTIN_COMMAND_IDS = [
   'oide.go.sourceControl',
   'oide.go.marketplace',
   'oide.go.settings',
+  'oide.go.usage',
   'oide.scope.all',
   'oide.openProject',
   'oide.cloneProject',
@@ -277,6 +278,7 @@ export const TELEMETRY_SCREENS = [
   'artifacts',
   'marketplace',
   'settings',
+  'usage',
   'extension',
 ] as const;
 export const TelemetryScreen = z.enum(TELEMETRY_SCREENS);

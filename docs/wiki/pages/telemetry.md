@@ -89,7 +89,7 @@ test `apps/desktop/src/main/telemetry/umami.test.ts` holds a copy of those schem
 ## Screen views
 
 Synthetic URLs only: `/wall`, `/focus`, `/spawn`, `/source-control`, `/review`, `/files`, `/artifacts`,
-`/marketplace`, `/extension`, and `/settings/<section>` (`cli`, `models`, `agents`, `tech`, `perms`,
+`/marketplace`, `/usage`, `/extension`, and `/settings/<section>` (`cli`, `models`, `agents`, `tech`, `perms`,
 `projects`, `artifacts`, `ext`, `keys`, `look`, `privacy`, `updates`, `diag`). No agent ids, paths or
 extension names. Events carry the current screen as their `url`.
 

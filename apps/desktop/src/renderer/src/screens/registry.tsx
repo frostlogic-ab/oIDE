@@ -9,7 +9,7 @@ import WallScreen from './Wall';
  * add an entry here. Screens other than the Wall load lazily.
  */
 /** xtension: a full-screen extension panel; the rail marks its own button (see Rail.tsx). */
-export type RailItemId = 'agents' | 'artifacts' | 'files' | 'source-control' | 'marketplace' | 'settings' | 'extension';
+export type RailItemId = 'agents' | 'artifacts' | 'files' | 'source-control' | 'marketplace' | 'settings' | 'usage' | 'extension';
 
 export interface ScreenDef {
   id: ScreenId;
@@ -48,6 +48,7 @@ export const SCREENS: Record<ScreenId, ScreenDef> = {
   artifacts: { id: 'artifacts', title: 'Artifacts', rail: 'artifacts', header: 'title', component: lazy(() => import('./Artifacts')) },
   marketplace: { id: 'marketplace', title: 'Marketplace', rail: 'marketplace', header: 'title', component: lazy(() => import('./Marketplace')) },
   settings: { id: 'settings', title: 'Settings', rail: 'settings', header: 'title', component: lazy(() => import('./Settings')) },
+  usage: { id: 'usage', title: 'Usage', rail: 'usage', header: 'title', component: lazy(() => import('./Usage')) },
   extension: { id: 'extension', title: 'Extension', rail: 'extension', header: 'title', customTitle: true, component: lazy(() => import('./Extension')) },
 };
 

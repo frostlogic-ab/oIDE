@@ -53,6 +53,7 @@ one file per entry (entries up to 2026-11-27 are in the frozen [log.md](log.md))
 - [pages/screen-files.md](pages/screen-files.md): Files: lazy per-project trees with checkout menus and agent markers, one Monaco editor (local, lazy) with language servers (hover, completions, definitions, references, diagnostics), agent banner, history, Mentioned in.
 - [pages/screen-artifacts.md](pages/screen-artifacts.md): Artifacts: grid by kind / scope / search, sandboxed previews, Open with editor, Give to an agent, history with view and restore, Import from claude.ai, New artifact.
 - [pages/screen-marketplace.md](pages/screen-marketplace.md): Extension marketplace: categories, list and detail, install consent, updates, Add custom (URL, import, command/JSON, folder/git).
+- [pages/screen-usage.md](pages/screen-usage.md): Usage (status bar › Tokens today): tokens and agent sessions per day/week over 7 days, 30 days or a year, by project and model, when sessions start, and facts about how you work; all measured locally.
 - [pages/screen-settings.md](pages/screen-settings.md): Settings: Claude Code, Models (presets, versions, your models), Agents, Techniques, Permissions, Projects, shortcuts, accent, privacy; save-on-change rules and `.oide/` load errors.
 
 ## Reviews

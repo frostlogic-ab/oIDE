@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { OideBridge } from '@oide/protocol';
 import { installFallbackBridge } from '../../lib/bridge';
 import { agents, projects } from '../../lib/mock/fixtures';
 import { countAgents, useAgents } from '../../stores/agents';
 import { useCli } from '../../stores/cli';
 import { useProjects } from '../../stores/projects';
+import { useRouter } from '../../stores/router';
 import { StatusBar } from './StatusBar';
 
 installFallbackBridge({ invoke: async () => null, on: () => () => {}, platform: 'win32' } as unknown as OideBridge);
@@ -28,5 +29,20 @@ describe('StatusBar', () => {
     expect(screen.getByTestId('status-counts').textContent).toBe(`2 sessions · 2 worktrees · ${subs} ${subs === 1 ? 'subagent' : 'subagents'} active`);
     expect(screen.getByText('1 project open')).toBeTruthy();
     expect(screen.getByText('1.3M')).toBeTruthy();
+  });
+
+  it('opens the Usage screen when "Tokens today" is clicked', () => {
+    useRouter.setState({ route: { screen: 'wall', params: {} }, back: [], forward: [] });
+    render(<StatusBar />);
+    fireEvent.click(screen.getByRole('button', { name: /Tokens today/ }));
+    expect(useRouter.getState().route.screen).toBe('usage');
+    // Back returns to where the user was.
+    expect(useRouter.getState().back.at(-1)?.screen).toBe('wall');
+  });
+
+  it('has no "Tokens today" button before the usage summary arrives', () => {
+    useCli.setState({ usage: null });
+    render(<StatusBar />);
+    expect(screen.queryByRole('button', { name: /Tokens today/ })).toBeNull();
   });
 });

@@ -27,6 +27,7 @@ import {
   LspTextEdit,
 } from './lsp.js';
 import { TelemetryConsentInput, TelemetryStatus, TelemetryTrackInput } from './telemetry.js';
+import { UsageRange, UsageStats } from './usage.js';
 import { WindowOpenTrigger } from './windows.js';
 
 /**
@@ -401,6 +402,8 @@ export const Commands = {
     tokensToday: z.number().int(),
     rateLimitResetAt: z.number().optional(),
   })),
+  /** The Usage screen (status bar › Tokens today): tokens, sessions and habits over the last 7 days, 30 days or year. */
+  'usage.stats': cmd(z.object({ range: UsageRange }), UsageStats),
 
   // Extensions & marketplace
   'extensions.installed': cmd(Void, z.array(InstalledExtension)),

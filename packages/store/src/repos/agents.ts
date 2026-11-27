@@ -269,6 +269,32 @@ export class AgentsRepo {
   remove(id: string): boolean {
     return this.d.db.prepare('DELETE FROM agents WHERE id = ?').run(id).changes > 0;
   }
+
+  /** Light rows of the agents started since `ts` (Usage screen); no spec or summary parsing. */
+  sessionsSince(ts: number): AgentSessionRow[] {
+    return (this.d.db
+      .prepare('SELECT project_id, status, created_at, ended_at, archive_reason, worktree_path, attempt_group FROM agents WHERE created_at >= ? ORDER BY created_at')
+      .all(ts) as Row[]).map((r) => ({
+      projectId: String(r.project_id),
+      status: AgentStatus.catch('stopped').parse(r.status),
+      createdAt: num(r.created_at) ?? 0,
+      ...(num(r.ended_at) !== undefined ? { endedAt: num(r.ended_at) } : {}),
+      ...(r.archive_reason ? { archiveReason: ArchiveReason.catch('archived-by-user').parse(r.archive_reason) } : {}),
+      worktree: Boolean(r.worktree_path),
+      ...(r.attempt_group ? { attemptGroup: String(r.attempt_group) } : {}),
+    }));
+  }
+}
+
+/** One agent session as the Usage screen counts it (`AgentsRepo.sessionsSince`). */
+export interface AgentSessionRow {
+  projectId: string;
+  status: AgentStatus;
+  createdAt: number;
+  endedAt?: number;
+  archiveReason?: ArchiveReason;
+  worktree: boolean;
+  attemptGroup?: string;
 }
 
 export class SubagentsRepo {
@@ -293,6 +319,12 @@ export class SubagentsRepo {
   get(agentId: string, id: string): SubagentInfo | undefined {
     const r = this.d.db.prepare('SELECT data FROM subagents WHERE agent_id = ? AND id = ?').get(agentId, id) as Row | undefined;
     return r ? SubagentInfo.parse(fromJson(r.data)) : undefined;
+  }
+
+  /** Subagents started since `ts` across all agents (Usage screen). */
+  countSince(ts: number): number {
+    const r = this.d.db.prepare('SELECT COUNT(*) AS n FROM subagents WHERE started_at >= ?').get(ts) as Row;
+    return num(r.n) ?? 0;
   }
 
   /** Subagents currently running across all agents (status bar). */

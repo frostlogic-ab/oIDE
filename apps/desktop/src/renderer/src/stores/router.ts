@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ContextChip } from '@oide/protocol';
+import type { ContextChip, UsageRange } from '@oide/protocol';
 
 /**
  * Typed in-app router. No URLs: a screen id plus typed params, with a back/forward history
@@ -18,6 +18,8 @@ export interface ScreenParams {
   artifacts: { artifactId?: string };
   marketplace: { extension?: string };
   settings: { section?: string };
+  /** Usage stats (status bar › Tokens today); `range` defaults to 7 days. */
+  usage: { range?: UsageRange };
   /** A full-screen extension panel (`contributes.panels` with `location: "screen"`). */
   extension: { extension: string; panelId: string };
 }
@@ -26,7 +28,7 @@ export type ScreenId = keyof ScreenParams;
 
 export type Route = { [K in ScreenId]: { screen: K; params: ScreenParams[K] } }[ScreenId];
 
-export const SCREEN_IDS: ScreenId[] = ['wall', 'focus', 'spawn', 'source-control', 'review', 'files', 'artifacts', 'marketplace', 'settings', 'extension'];
+export const SCREEN_IDS: ScreenId[] = ['wall', 'focus', 'spawn', 'source-control', 'review', 'files', 'artifacts', 'marketplace', 'settings', 'usage', 'extension'];
 
 interface RouterState {
   route: Route;

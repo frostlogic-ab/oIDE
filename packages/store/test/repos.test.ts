@@ -138,6 +138,50 @@ describe('usage, review, ui state', () => {
     ]);
   });
 
+  it('rolls old samples up per day, project and model, and reads days across both (Usage screen)', () => {
+    const { s, p } = setup();
+    s.agents.insert({ id: 'a1', projectId: p.id, spec: spec(p.id), status: 'done' });
+    const off = 2 * 3600_000; // UTC+2
+    const day = (n: number, h = 12) => n * DAY - off + h * 3600_000; // local noon of day n
+    s.usage.add({ agentId: 'a1', ts: day(100), model: 'opus', usage: { input: 10, output: 1 } });
+    s.usage.add({ agentId: 'a1', ts: day(100, 1), model: 'opus', usage: { input: 5, cacheRead: 100 } });
+    s.usage.add({ ts: day(100), usage: { input: 7 } }); // no agent, no model
+    s.usage.add({ agentId: 'a1', ts: day(101), model: 'opus', usage: { output: 3 } });
+    s.usage.add({ agentId: 'a1', ts: day(200), model: 'haiku', usage: { input: 2 } });
+    const before = s.usage.daily({ sinceDay: 0, offsetMs: off });
+
+    // Compact everything before day 150: two days of samples become rollup rows.
+    expect(s.usage.compactOlderThan(150 * DAY, off)).toBe(4);
+    expect(s.usage.totals().total).toBe(2);
+    expect(s.usage.daily({ sinceDay: 0, offsetMs: off })).toEqual(before);
+    expect(before).toEqual([
+      { day: 100, usage: { input: 7, output: 0, cacheRead: 0, cacheCreation: 0 } },
+      { day: 100, projectId: p.id, model: 'opus', usage: { input: 15, output: 1, cacheRead: 100, cacheCreation: 0 } },
+      { day: 101, projectId: p.id, model: 'opus', usage: { input: 0, output: 3, cacheRead: 0, cacheCreation: 0 } },
+      { day: 200, projectId: p.id, model: 'haiku', usage: { input: 2, output: 0, cacheRead: 0, cacheCreation: 0 } },
+    ]);
+    // A later compaction of the same day adds to its row instead of replacing it.
+    s.usage.add({ agentId: 'a1', ts: day(101, 2), model: 'opus', usage: { output: 4 } });
+    s.usage.compactOlderThan(150 * DAY, off);
+    expect(s.usage.daily({ sinceDay: 101, offsetMs: off })[0]).toMatchObject({ day: 101, usage: { output: 7 } });
+    // Removing the agent keeps the rolled-up tokens with their project.
+    s.agents.remove('a1');
+    expect(s.usage.daily({ sinceDay: 101, offsetMs: off })[0]).toMatchObject({ projectId: p.id });
+  });
+
+  it('lists sessions and counts subagents since a time', () => {
+    const { s, p } = setup();
+    s.agents.insert({ id: 'old', projectId: p.id, spec: spec(p.id), status: 'done', createdAt: 5 });
+    s.agents.insert({ id: 'a1', projectId: p.id, spec: spec(p.id), status: 'error', createdAt: 20, worktreePath: '/wt/a1', attemptGroup: 'g' });
+    s.agents.update('a1', { archivedAt: 30, archiveReason: 'merged' });
+    expect(s.agents.sessionsSince(10)).toEqual([
+      expect.objectContaining({ projectId: p.id, status: 'error', createdAt: 20, archiveReason: 'merged', worktree: true, attemptGroup: 'g' }),
+    ]);
+    s.subagents.upsert({ id: 't1', agentId: 'a1', name: 'x', task: 'y', status: 'done', startedAt: 25 });
+    s.subagents.upsert({ id: 't0', agentId: 'old', name: 'x', task: 'y', status: 'done', startedAt: 6 });
+    expect(s.subagents.countSince(10)).toBe(1);
+  });
+
   it('keeps review comments and viewed files', () => {
     const { s, p } = setup();
     s.agents.insert({ id: 'a1', projectId: p.id, spec: spec(p.id), status: 'ready-for-review' });
