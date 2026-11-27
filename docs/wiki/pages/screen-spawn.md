@@ -59,6 +59,8 @@ section without `mcp-config`.
 
 ## Keeping what the user typed
 - The Spawn dialog does not close on a scrim click (`dismissOnScrim={false}`); Esc and Cancel still close it.
+- Closing it (Esc, ×, Cancel) or following its Edit presets, Find more in Marketplace or Settings links asks "Discard this agent?" (Keep editing / Discard) when the user typed a goal, added context beyond what the route pre-filled, or attached files; with nothing to lose it closes at once. Ctrl/Cmd+Enter is ignored while that confirm is open.
+- The "Edit techniques in Settings" link opens Settings › Techniques (section id `tech`; a wrong id used to open Claude Code).
 - Esc inside the inline "Add context" panel closes only that panel and returns focus to its
   "+ Artifact, file or URL" trigger.
 - While an attachment is still being read (`atts.busy`), submit is blocked and the button reads
