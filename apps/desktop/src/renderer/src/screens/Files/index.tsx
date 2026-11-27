@@ -29,6 +29,7 @@ import { ResizableAside } from '../../components/ResizableAside';
 import { PANELS } from '../../lib/panels';
 import { useTerminals } from '../../stores/terminals';
 import { FILES_TERMINALS, TerminalDock, toggleFilesTerminal } from './TerminalDock';
+import { tabLabels } from './tabLabels';
 
 const EditorPane = lazy(() => import('./EditorPane'));
 const SECTION_LABEL = 'text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3';
@@ -205,6 +206,15 @@ export default function FilesScreen() {
   };
   const closeTab = (t: FileTab) => closeTabs([t]);
 
+  // Tabs show the file name only; a dim hint (project·checkout, folder) only when names clash.
+  const labels = tabLabels(
+    files.tabs.map((t) => {
+      const co = checkoutLabel(t);
+      const pName = allProjects.find((p) => p.id === t.projectId)?.name ?? t.projectId;
+      return { id: t.id, path: t.path, context: `${pName}${co !== 'main' ? `·${co}` : ''}` };
+    }),
+  );
+
   // Right-click (or the Menu key / Shift+F10) on a tab: Close, Close all to the right, Close all.
   const [tabMenu, setTabMenu] = useState<{ at: { x: number; y: number }; tab: FileTab }>();
   const tabMenuItems = (t: FileTab) => {
@@ -237,9 +247,9 @@ export default function FilesScreen() {
           <div role="tablist" aria-label="Open files" className="flex min-w-0 overflow-x-auto">
             {files.tabs.map((t) => {
               const selected = t.id === files.active;
-              const pName = allProjects.find((p) => p.id === t.projectId)?.name ?? t.projectId;
-              const co = checkoutLabel(t);
-              const base = t.path.split('/').pop();
+              const { name: base, hint } = labels.get(t.id) ?? { name: t.path.split('/').pop() ?? t.path };
+              const sep = t.root.includes('\\') ? '\\' : '/';
+              const fullPath = `${t.root.replace(/[\\/]+$/, '')}${sep}${t.path.split('/').join(sep)}`;
               return (
                 <div
                   key={t.id}
@@ -264,7 +274,7 @@ export default function FilesScreen() {
                     id={`tab-${t.id}`}
                     aria-selected={selected}
                     aria-controls="files-editor"
-                    title={`${pName}${co !== 'main' ? ` (${co})` : ''} › ${t.path}`}
+                    title={fullPath}
                     onClick={() => files.setActive(t.id)}
                     onKeyDown={(e) => {
                       if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
@@ -275,11 +285,8 @@ export default function FilesScreen() {
                     }}
                     className={`h-[34px] pl-3.5 pr-1.5 border-0 bg-transparent font-mono text-[12px] whitespace-nowrap cursor-pointer ${selected ? 'text-ink' : 'text-ink-3 hover:text-ink-2'}`}
                   >
-                    <span className={selected ? 'text-ink-3' : undefined}>
-                      {pName}
-                      {co !== 'main' ? `·${co}` : ''} ›
-                    </span>{' '}
                     {base}
+                    {hint && <span className="ml-1.5 font-sans text-[11px] text-ink-3">{hint}</span>}
                     {dirty[t.id] && (
                       <span className="ml-1.5 text-warn" aria-label="unsaved changes">
                         ●
