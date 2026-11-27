@@ -1,0 +1,59 @@
+/*
+ * Markdown preview of the Files editor (MarkdownPreview.tsx). Its own class, not `.oide-md`: that one
+ * is styled differently by Focus (chat) and Artifacts (docs), both global once loaded.
+ */
+.oide-md-file {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 22px 28px 40px;
+  color: var(--color-ink-prose);
+  font-size: 13.5px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.oide-md-file > :first-child { margin-top: 0; }
+.oide-md-file h1, .oide-md-file h2, .oide-md-file h3, .oide-md-file h4, .oide-md-file h5, .oide-md-file h6 {
+  color: var(--color-ink);
+  font-weight: 600;
+  line-height: 1.3;
+  scroll-margin-top: 12px;
+}
+.oide-md-file h1 { font-size: 22px; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--color-line-2); }
+.oide-md-file h2 { font-size: 17px; margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--color-line); }
+.oide-md-file h3 { font-size: 14.5px; margin: 18px 0 6px; }
+.oide-md-file h4, .oide-md-file h5, .oide-md-file h6 { font-size: 13.5px; margin: 16px 0 6px; }
+.oide-md-file p, .oide-md-file ul, .oide-md-file ol, .oide-md-file table, .oide-md-file pre, .oide-md-file blockquote { margin: 0 0 12px; }
+.oide-md-file ul, .oide-md-file ol { padding-left: 22px; }
+.oide-md-file ul { list-style: disc; }
+.oide-md-file ol { list-style: decimal; }
+.oide-md-file li { margin: 2px 0; }
+.oide-md-file li > ul, .oide-md-file li > ol { margin: 2px 0 0; }
+.oide-md-file a { color: var(--color-link); text-underline-offset: 2px; }
+.oide-md-file code { font-family: var(--font-mono); font-size: 12px; background: var(--color-chrome); border: 1px solid var(--color-line-2); border-radius: 4px; padding: 0 4px; }
+.oide-md-file pre { background: var(--color-chrome); border: 1px solid var(--color-line-2); border-radius: 8px; padding: 10px 12px; overflow: auto; }
+.oide-md-file pre code { border: 0; padding: 0; background: none; line-height: 1.55; }
+.oide-md-file table { border-collapse: collapse; display: block; max-width: 100%; overflow: auto; }
+.oide-md-file th, .oide-md-file td { border: 1px solid var(--color-line-2); padding: 5px 10px; text-align: left; }
+.oide-md-file th { color: var(--color-ink); font-weight: 600; background: var(--color-card); }
+.oide-md-file blockquote { border-left: 3px solid var(--color-line-3); padding-left: 12px; color: var(--color-ink-3); }
+.oide-md-file hr { border: 0; border-top: 1px solid var(--color-line-2); margin: 18px 0; }
+.oide-md-file img { max-width: 100%; }
+
+/* GFM task list items: lib/markdown renders a box instead of an <input>. */
+.oide-md-file li:has(> .oide-md-task) { list-style: none; margin-left: -20px; }
+.oide-md-task {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 7px;
+  vertical-align: -1px;
+  border: 1.5px solid var(--color-ink-3);
+  border-radius: 3px;
+  box-sizing: border-box;
+}
+.oide-md-task-done {
+  border-color: var(--color-accent);
+  background: var(--color-accent)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-5' fill='none' stroke='%230E1013' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / 10px no-repeat;
+}

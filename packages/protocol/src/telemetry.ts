@@ -534,6 +534,11 @@ export const TELEMETRY_EVENTS = {
       engine: z.enum(['git-grep', 'scan', 'mixed']).optional(),
     }),
   }),
+  files_markdown_view: def({
+    from: 'renderer',
+    question: 'Do people read Markdown files in the Files preview or switch to editing them beside it, and with the button or the shortcut?',
+    props: z.object({ view: z.enum(['preview', 'edit']), via: z.enum(['button', 'shortcut']) }),
+  }),
   file_managed: def({
     from: 'main',
     question: 'Do people manage files from the Files tree (new, rename, copy, move, delete), and which actions?',

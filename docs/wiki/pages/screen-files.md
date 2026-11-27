@@ -19,8 +19,8 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   first project starts open; with one project in scope its tree is always open. Legend box at the
   bottom. When Search is open the column is the 300px Search panel instead.
 - Middle: open-file tabs (`role="tablist"`, accent top border, close ×, ● when unsaved; right side
-  "Ln, Col · Language" and Save), the agent banner, the editor, and under it the terminal panel
-  when shown (`TerminalDock.tsx`).
+  "Ln, Col · Language" and Save; for a Markdown file a "Markdown view" Preview / Edit toggle before
+  them), the agent banner, the editor, and under it the terminal panel when shown (`TerminalDock.tsx`).
 - Right ("File activity"): This file's history, Mentioned in, the language-servers note.
 
 ## Tree (`filesStore.ts`)
@@ -120,6 +120,24 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
 - Ctrl/Cmd+S or Save → `files.write`. Files over 5 MB open read only; binary files show a notice.
 - Cut / Copy / Paste work from the keyboard and Monaco's context menu (Paste reads the system
   clipboard, which main allows for the app page only; see [security](security.md)).
+- Markdown preview (`MarkdownPreview.tsx`, `markdownLinks.ts`, `lib/markdown.ts`): `.md`,
+  `.markdown`, `.mdown`, `.mkd` and `.mkdn` files (not `.mdx`, whose JSX the sanitiser would drop) open
+  on their rendered page. **Edit** shows the Monaco source on the left half and the live page on the
+  right (re-rendered 150 ms after the last keystroke; the page scrolls with the source,
+  proportionally); **Preview** hides the source again. Toggle with the tab bar's "Markdown view"
+  buttons (`aria-pressed`) or Ctrl/Cmd+Shift+V (`files.togglePreview` in the Files scope, rebindable;
+  ignored inside a terminal, where it pastes). The choice is per tab in `filesStore.mdView`, follows a
+  rename, and is forgotten when the tab closes, so a file always reopens in the preview. Jumping to a
+  line (search result, quick open `file.md:12`, Review "Open in editor") switches the tab to Edit. In
+  the preview the tab bar hides Ln/Col; Save still works for unsaved edits.
+  Rendering: `renderMarkdown` (shared with doc artifacts): GFM through its own `Marked` instance,
+  front matter stripped, DOMPurify (no `<style>`, `<form>`, `<input>`, `<iframe>`, `style`
+  attributes); GFM task items draw a box (`oide-md-task`) as `<input>` is dropped. Styles are scoped
+  to `.oide-md-file` (`MarkdownPreview.css`), not the shared `.oide-md`. Links never navigate the
+  window: https opens the system browser, `#heading` scrolls to the heading with that GitHub-style
+  slug, a relative or `/`-rooted link opens that file of the same checkout in a tab (links that climb
+  out of the checkout and other schemes do nothing). Relative images do not load (the page has no
+  file URL).
 - Selection toolbar: "Ask an agent about this" (→ Spawn with a file context chip
   `{ kind: 'file', path, title: 'StatusBar.tsx:5-6' }`, also in the context menu) and "Send to <agent>"
   when an agent is editing the file (`agents.send` text with the path, lines and snippet).
@@ -208,9 +226,13 @@ so it never holds the index lock an agent's git needs.
 `Files.test.tsx`: trees per project, revealed compacted folders, markers, lazy expansion via
 click and ←/→, opening another project, switching to a worktree checkout; toolbar Collapse all /
 Expand loaded / Expand to depth, the per-project menu (absent with one project in scope), `*` and `-`,
-Reveal active file, quick-open requests; search (sections, highlight, regex error, open at a match)
+Reveal active file, quick-open requests; the Markdown view toggle (preview by default, button and
+Ctrl+Shift+V, forgotten on close, Edit when jumping to a line, linked files open; no toggle for other
+files); search (sections, highlight, regex error, open at a match)
 and replace (one match through the preview, stale refusal after an outside change); `visibleRows` /
-`ancestorDirs` model. `packages/protocol/src/search.test.ts` (ranking, regex, replace, globs),
+`ancestorDirs` model. `markdownLinks.test.ts` (Markdown extensions, link resolution, checkout
+escape, heading slugs) and `MarkdownPreview.test.tsx` (sanitising, task boxes, link routing).
+`packages/protocol/src/search.test.ts` (ranking, regex, replace, globs),
 `apps/desktop/src/main/services/file-search.test.ts` (index, 100k-path query, git grep argument
 safety, regex vs text, untracked / ignored / binary, cap, cancel, non-git scan, replace safety),
 `test/integration/files-search.test.ts` (IPC validation and path guard),

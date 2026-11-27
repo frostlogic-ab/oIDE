@@ -9,18 +9,11 @@
  * - whiteboard: read-only SVG render of the Excalidraw JSON (v1; no embedded Excalidraw editor).
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
 import { looksLikeReact, type ArtifactKind } from '@oide/protocol';
 import { cn } from '@oide/ui';
 import { invokeOr, oide } from '../../lib/bridge';
-import { stripFrontMatter } from './model';
+import { renderMarkdown } from '../../lib/markdown';
 import { WhiteboardSvg } from './Whiteboard';
-
-export function renderMarkdown(md: string): string {
-  const html = marked.parse(stripFrontMatter(md), { async: false, gfm: true }) as string;
-  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, FORBID_TAGS: ['style', 'form', 'input', 'iframe'], FORBID_ATTR: ['style'] });
-}
 
 export function MarkdownView({ source, className, viewRef, onClickCapture }: { source: string; className?: string; viewRef?: Ref<HTMLDivElement>; onClickCapture?: (e: React.MouseEvent<HTMLDivElement>) => void }) {
   // Sanitised by DOMPurify in renderMarkdown.
