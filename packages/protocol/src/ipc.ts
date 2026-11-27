@@ -10,6 +10,7 @@ import { UpdateInstallTrigger, UpdateStatus } from './updates.js';
 import { FindByNameInput, FindByNameOutput, ReplaceInput, ReplaceOutput, SearchContentInput, SearchResultsEvent } from './search.js';
 import { ProjectScript } from './scripts.js';
 import { TelemetryConsentInput, TelemetryStatus, TelemetryTrackInput } from './telemetry.js';
+import { WindowOpenTrigger } from './windows.js';
 
 /**
  * The IPC contract. Every renderer → main command is a request/response pair, validated with Zod
@@ -73,6 +74,11 @@ export type Scope = z.infer<typeof Scope>;
 export const Commands = {
   // App / CLI
   'app.info': cmd(Void, z.object({ version: z.string(), platform: z.string(), userData: z.string() })),
+  /**
+   * Opens another oIDE window on the same profile (docs/wiki/pages/windows.md). `from` says which
+   * control opened it (telemetry `window_opened`); main only accepts the in-window ones here.
+   */
+  'app.newWindow': cmd(z.object({ from: WindowOpenTrigger.extract(['shortcut', 'command']).optional() }), Ok),
   /** Settings › Diagnostics: CLI, git ≥ 2.38, gh, node, keychain, database, MCP port, logs; `report` is the copyable text. */
   'app.diagnostics': cmd(Void, Diagnostics),
   /** Settings › Diagnostics › Open logs folder (`<userData>/logs`). */
@@ -565,7 +571,6 @@ export const Events = {
   'projects.changed': z.array(Project),
   /** Progress of the running `projects.clone`. */
   'projects.cloneProgress': CloneProgress,
-  'scope.changed': Scope,
   'git.changed': z.object({ projectId: Id }),
   'settings.changed': Settings,
   'cli.changed': CliInfo,

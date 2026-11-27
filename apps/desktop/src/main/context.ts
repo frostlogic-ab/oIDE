@@ -1,5 +1,5 @@
 import type { BrowserWindow } from 'electron';
-import type { AgentEvent } from '@oide/protocol';
+import type { AgentEvent, WindowOpenTrigger } from '@oide/protocol';
 import type { Emit, FrameBatcher } from './ipc/emit.js';
 import type { Logger } from './ipc/router.js';
 import type { ReliabilityContext } from './reliability/index.js';
@@ -17,13 +17,21 @@ export interface MainContext {
   appVersion: string;
   /** Electron userData folder (or OIDE_USER_DATA when set, used by e2e tests). */
   userDataDir: string;
-  /** Validated main → renderer event. */
+  /** Validated main → renderer event, sent to every open window (they all show the same profile). */
   emit: Emit;
+  /**
+   * The same, sent only to the window the user used last: for events that open something in one
+   * window (an extension panel), not state every window mirrors. Absent in plain-Node tests.
+   */
+  emitActive?: Emit;
   /** Push normalized agent events here; they leave as one `agents.batch` per ~16 ms. */
   agentEvents: FrameBatcher<AgentEvent>;
   /** Folders renderer paths may point into. Register projects/worktrees/artifact stores here. */
   roots: AllowedRoots;
+  /** The window the user used last (dialogs, notification clicks), or null when none is open. */
   getWindow(): BrowserWindow | null;
+  /** Opens another window on the same profile (main/windows.ts). Absent in plain-Node tests. */
+  openWindow?(trigger: WindowOpenTrigger): void;
   log: Logger;
   /**
    * Register cleanup that runs before quit (kill ptys, deny pending permissions, close db). Hooks

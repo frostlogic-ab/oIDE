@@ -12,6 +12,11 @@ import type { Services } from '../services/index.js';
 export const REPORTS_PER_MINUTE = 20;
 
 export function registerAppHandlers(router: IpcRouter, services: Services, ctx: MainContext): void {
+  router.register('app.newWindow', ({ from }) => {
+    if (!ctx.openWindow) throw new IpcError('New windows are not available here.', 'not_implemented');
+    ctx.openWindow(from ?? 'command');
+    return { ok: true as const };
+  });
   router.register('app.info', () => ({
     version: ctx.appVersion,
     platform: ctx.platform,

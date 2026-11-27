@@ -82,7 +82,6 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
     'scope.get': () => scope,
     'scope.set': ({ scope: s }) => {
       scope = s;
-      emit('scope.changed', s);
       return s;
     },
     'agents.list': () => [...agents.values()],
