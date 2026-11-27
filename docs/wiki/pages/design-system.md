@@ -138,8 +138,8 @@ colours come from `agentStatusMeta(status)` / `subagentStatusMeta(status)` (`lab
 | `DiffStat` | "7 files · +214 −37" | U+2212 minus |
 | `Kbd` | Ctrl K, J, K, N, Esc | tones `default`, `on-fill`, `warn` |
 | `Dialog` | Compact this session?, Spawn | `role="dialog"` + `aria-modal`, focus trap, Esc, focus restore; `position` `center` / `top`; `icon`, `footer` |
-| `Menu` | dropdowns | menu button, `role="menu"`, arrow keys, Esc; `checked` makes pick-one items `menuitemradio` with a tick; `portal` renders the list in `document.body` for triggers inside clipping boxes (closes on window resize or when a box holding the trigger scrolls); pick-one menus open on the checked item; `triggerTitle` is a native hover hint |
-| `ContextMenu` | right-click menus (Files tree) | `role="menu"` at a viewport point in `document.body`, kept inside the window; entries are `MenuItem`s or `{ id, separator: true }`; first item focused, arrow keys / Home / End, Enter picks, Esc / Tab close and refocus the opener; closes on a click outside, scroll, resize or window blur |
+| `Menu` | dropdowns | menu button, `role="menu"`, arrow keys, Esc; `checked` makes pick-one items `menuitemradio` with a tick; `portal` renders the list in `document.body` for triggers inside clipping boxes (closes on window resize or when a box holding the trigger scrolls); pick-one menus open on the checked item; `triggerTitle` is a native hover hint; the item under the pointer or keyboard focus gets `bg-selected` |
+| `ContextMenu` | right-click menus (Files tree) | `role="menu"` at a viewport point in `document.body`, kept inside the window; entries are `MenuItem`s or `{ id, separator: true }`; first item focused, arrow keys / Home / End, Enter picks, Esc / Tab close and refocus the opener; closes on a click outside, scroll, resize or window blur; the item under the pointer or keyboard focus gets `bg-selected` |
 | `Tooltip` | `.tip` bubbles | light bubble, hover and keyboard focus, sets `aria-describedby` |
 | `EmptyState`, `Spinner` | empty lists, loading | |
 
