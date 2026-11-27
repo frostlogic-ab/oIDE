@@ -107,6 +107,30 @@ confirmation first; nothing goes to the trash, so the dialog says it can't be un
   the user confirmed in the preview are replaced; the confirm warns when `files.editingAgents` reports
   an agent changing the file.
 
+### Language servers (Files)
+
+`lsp.*` ([screen-files](screen-files.md#language-servers), ADR
+[0019](../../adr/0019-language-servers-in-main-with-a-monaco-bridge.md),
+`apps/desktop/src/main/services/lsp/`):
+
+- Servers run repository code (tsserver plugins, `build.rs`, proc macros), so they start only for
+  **trusted** projects, and only from extensions that are on for the project. Revoking trust,
+  turning the extension off or removing the project stops them; deleting a worktree waits for them.
+- Every `lsp.*` root must be a `project` or `worktree` root (never an artifact folder); the document
+  path goes through `assertInside` and `.git` is refused. Each feature is its own Zod-validated
+  command (hover, completion, resolve, signature help, definition, type definition, implementation,
+  references, highlights, symbols, format): the renderer never sends LSP JSON, and completion resolve
+  only takes the index of an item main kept from its own last result.
+- Every URI a server reports goes through the path guard (`toCheckoutPath`: `file:` only, realpath
+  inside the checkout, UNC paths refused before any realpath); others are dropped. Strings, lists
+  and numbers are cut to the contract's limits; messages over 32 MB close the connection.
+- Servers cannot change files or open things: `workspace/applyEdit` answers `applied: false`,
+  `window/showDocument` answers `success: false`, other server requests get MethodNotFound.
+- Spawned with `shell: false`, `cwd` = the checkout and an allow-listed env (PATH, home and temp
+  folders, locale, toolchain roots such as `GOPATH`, `CARGO_HOME`, `VIRTUAL_ENV`); never API keys,
+  tokens or `ANTHROPIC_*`. On Windows a `.cmd` shim runs through `cmd.exe /d /s /c` only when its
+  path has no `"` or `%` and every argument is a plain word.
+
 ## Artifact preview protocol
 
 `oide-artifact://<artifact-id>/<file>` is a privileged standard scheme (`services/electron-platform.ts`).
@@ -202,7 +226,8 @@ in the app's document and never reach IPC directly.
 - Untrusted projects: `.oide/setup` never runs (checked in the WorktreeProvider's `runSetup`), allow
   rules in `.oide/permissions.json` are dropped (ask/deny still apply), `.oide/config.json` cannot set
   the default mode, project MCP servers (`.mcp.json` custom servers) are skipped, `.oide/extensions.json`
-  cannot enable extensions, project techniques start off and stay in the first message. In every
+  cannot enable extensions, no language server starts for the Files editor, project techniques start
+  off and stay in the first message. In every
   project, a project technique that reuses a global technique's id or an `ext:` id is dropped, so
   it cannot ride along with a technique that is on by default (SEC-36).
 - Untrusted projects, Claude Code itself: agents start with `--setting-sources user
