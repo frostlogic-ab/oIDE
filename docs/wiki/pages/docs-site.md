@@ -4,8 +4,13 @@ The public site at `getoide.com` (GitHub Pages custom domain, `docs/site/public/
 extension author guide, the security model and the FAQ. VitePress 2 in `docs/site/`, built and
 deployed by `.github/workflows/docs.yml` ([packaging](packaging.md)). Commands: `pnpm docs:dev`,
 `pnpm docs:build`, `pnpm docs:preview`.
-Source design: the "oIDE Website" artifact, copied to [raw/design/website/](../raw/design/website/)
-(Main, Features and More are the home page top to bottom; Phone is Main at 390 px).
+Source design: the "oIDE Website" artifact (`.oide/artifacts/oide-website/`), copied to
+[raw/design/website-2026-11-27/](../raw/design/website-2026-11-27/) (Main, Direct, Features and More
+are the home page top to bottom; Phone is Main at 390 px). The first version of the design, before
+the "Developer Cowork" copy, is in [raw/design/website/](../raw/design/website/).
+
+The page is positioned as a **Developer Cowork**: one workspace for you and your coding agents,
+told as the loop Plan, Direct, Review. Keep new copy in that frame.
 
 ## How it is put together
 
@@ -14,14 +19,23 @@ Source design: the "oIDE Website" artifact, copied to [raw/design/website/](../r
 | `docs/site/index.md` | Only frontmatter: `layout: landing`, title and description. The copy lives in `Landing.vue`. |
 | `.vitepress/theme/index.ts` | Extends the default theme, swaps in `Layout.vue`, imports the self-hosted fonts and `custom.css`. |
 | `.vitepress/theme/Layout.vue` | `layout: landing` gets `Landing.vue`; every other page gets `DefaultTheme.Layout`, with the brand lockup in its `nav-bar-title-after` slot (`siteTitle: false` in `config.ts`). |
-| `.vitepress/theme/FrostlogicLogo.vue` | The Frostlogic wordmark for the site, the same paths as `@oide/ui`'s `FrostlogicLogo` (roof `#2491EB`, word in `currentColor`). |
-| `.vitepress/theme/Landing.vue` | The home page from the design: nav, hero with the four numbered claims pinned on the wall screenshot, Direct, Review, Extend, How it works, Compare, Download, Open source, FAQ, close, footer. |
+| `.vitepress/theme/Landing.vue` | The home page from the design: nav, hero with the four numbered claims pinned on the wall screenshot and the Product Hunt badge, the Developer Cowork loop (Plan, Direct, Review doors), Plan (artifacts and the backlog concept), Direct, Review, Extend, How it works, Compare, Download, Open source, FAQ, close, footer. |
 | `.vitepress/theme/site.css` | The design's `site.css`, loaded as `<style scoped>` by `Landing.vue` so its generic class names (`.link`, `.btn`, `.wrap`) cannot reach VitePress's own components. |
 | `.vitepress/theme/custom.css` | Global: VitePress variables restyled to the design's tokens for doc pages, Archivo headings, the home page's light tokens and the `on-dark` / `on-light` switch. |
 | `docs/site/public/shots/` | The design's screenshots (wall, tiles, spawn, focus, source control, review, marketplace, add custom, artifacts, models, status bar). |
 
 ## Decisions
 
+- **Backlog is a concept, not a feature.** The Plan section shows the shared backlog and PM agents
+  as "coming next", with a hollow amber `label soon` marker and a CSS drawing (the `backlog` array
+  in `Landing.vue`), captioned as a drawing, not a screenshot. The FAQ says it is not available yet.
+  When the backlog ships, replace the drawing with a screenshot and drop the "coming next" wording
+  here, in the loop doors and in the FAQ.
+- **Product Hunt badge is self-hosted** (`public/product-hunt-dark.svg`, `product-hunt-light.svg`).
+  The design embeds Product Hunt's live badge image from `api.producthunt.com`, which would be the
+  site's only third-party request and leaks each visitor's IP to Product Hunt. The local copies are
+  Product Hunt's own "Find us on" badge with the live vote count removed, so it cannot go stale.
+  The link to the Product Hunt page stays.
 - **Logo.** The app's own mark (`public/logo-mark.svg`, `logo-mark-light.svg`, from
   [design-system](design-system.md) and `tools/brand/`) replaces the design's outlined square in the nav and footer. Both headers (home page nav and docs nav) use
   the app header lockup: the 28px mark beside "oIDE", linking to the site root (https://getoide.com/);

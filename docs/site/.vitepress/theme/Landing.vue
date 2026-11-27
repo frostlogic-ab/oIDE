@@ -1,12 +1,13 @@
 <script setup lang="ts">
-// The oIDE home page, built from the "oIDE Website" design artifact (Main, Features and More
-// artboards). Used by index.md through `layout: landing` (see ./index.ts). Every other page keeps the
+// The oIDE home page, built from the "oIDE Website" design artifact (Main, Direct, Features and
+// More artboards). Used by index.md through `layout: landing` (see ./index.ts). Every other page keeps the
 // default VitePress theme, restyled in ./custom.css.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useData, withBase } from 'vitepress';
 
 const repo = 'https://github.com/frostlogic-ab/oIDE';
 const releases = `${repo}/releases/latest`;
+const productHunt = 'https://www.producthunt.com/products/oide';
 // Direct links to the newest installer. release.yml uploads a copy of every installer without the
 // version in its name (oIDE-mac-arm64.dmg, oIDE-linux-x64.deb, ...) next to the versioned file, so
 // GitHub's /releases/latest/download/<name> redirect always serves the latest stable release.
@@ -148,6 +149,14 @@ const compare: { row: string; cells: [Cell, Cell, Cell, Cell] }[] = [
 
 const faq = [
   {
+    q: 'What is a Developer Cowork?',
+    a: 'It is our name for a workspace that you share with coding agents. An AI code editor helps you write code. oIDE also holds the work around the code: the designs and docs your agents work from, the sessions that do the work, and the review before anything merges.',
+  },
+  {
+    q: 'Is the backlog available yet?',
+    a: 'Not yet. The shared backlog and PM agents are in development. Today you plan with artifacts: write a doc or a design, then give it to an agent as its spec. The release notes will say when the backlog lands.',
+  },
+  {
     q: 'Do I need an Anthropic API key?',
     a: 'No. oIDE runs the Claude Code CLI you already use, so it works with whatever that CLI is signed in to: a Claude Pro or Max plan, or an API key if you prefer one. Usage counts against that account the same way it does in your terminal.',
   },
@@ -173,6 +182,15 @@ const faq = [
   },
 ];
 
+// The backlog concept drawing in Plan (not a screenshot: the backlog is in development).
+const backlog = [
+  { id: 142, title: 'Add proration to plan changes', from: 'Doc: Proration rules · added by you', st: 'go', status: 'Ready', act: 'Start agent', next: true },
+  { id: 147, title: 'Export invoices as CSV', from: 'Design: Invoice page · written up by PM agent', st: 'go', status: 'Ready', act: 'Start agent' },
+  { id: 143, title: 'Fix the flaky invoice test', from: 'Agent working · asked a question 2 min ago', st: 'hold', status: 'Has a question', act: 'Answer' },
+  { id: 139, title: 'Retry failed Stripe webhooks', from: 'Agent finished · 8 files changed', st: 'review', status: 'Ready for review', act: 'Review diff' },
+  { id: 150, title: 'Refunds fail for zero-amount invoices', from: 'From issue #212 · PM agent is writing it up', st: '', status: 'Needs a spec' },
+];
+
 const img = (name: string) => withBase(`/shots/${name}`);
 </script>
 
@@ -184,7 +202,7 @@ const img = (name: string) => withBase(`/shots/${name}`);
       <div class="wrap">
         <a class="brand" :href="withBase('/')"><img class="on-dark" :src="withBase('/logo-mark.svg')" width="28" height="28" alt="" /><img class="on-light" :src="withBase('/logo-mark-light.svg')" width="28" height="28" alt="" />oIDE</a>
         <nav class="nav-links" aria-label="Main">
-          <a href="#direct">Features</a>
+          <a href="#plan">Features</a>
           <a href="#extend">Extensions</a>
           <a href="#how">How it works</a>
           <a href="#compare">Compare</a>
@@ -214,15 +232,16 @@ const img = (name: string) => withBase(`/shots/${name}`);
     </header>
 
     <main id="top">
-      <!-- HERO: the moat, then proof -->
+      <!-- HERO: the position, the moat, then proof -->
       <section class="hero">
         <div class="wrap">
-          <span class="label go"><i></i>Open source · agent-first IDE · preview</span>
-          <h1><span>Six agents.</span> <span>Three projects.</span> <span class="punch">One window.</span></h1>
+          <span class="label go"><i></i>Developer Cowork · open source · preview</span>
+          <h1><span>Your agents</span> <span>work here.</span> <span class="punch">So do you.</span></h1>
           <div class="hero-row">
             <p class="lede">
-              oIDE is a desktop app for directing coding agents instead of typing code. Run many Claude Code sessions side by side
-              across all your repos, <b>on the Claude plan you already have</b>.
+              oIDE is a Developer Cowork: one desktop workspace for you and a team of coding agents. Plan in shared designs and
+              docs, run many Claude Code sessions side by side across all your repos, and review every change,
+              <b>on the Claude plan you already have</b>.
             </p>
             <div class="cta">
               <div class="cta-btns">
@@ -241,14 +260,17 @@ const img = (name: string) => withBase(`/shots/${name}`);
                 <a class="btn btn-ghost btn-lg" :href="repo">Star on GitHub</a>
               </div>
               <small>Free, MIT licensed. {{ alsoFor }}</small>
+              <div class="ph-badge">
+                <a :href="productHunt" target="_blank" rel="noopener noreferrer"><img class="on-dark" :src="withBase('/product-hunt-dark.svg')" width="250" height="54" alt="oIDE on Product Hunt" /><img class="on-light" :src="withBase('/product-hunt-light.svg')" width="250" height="54" alt="oIDE on Product Hunt" /></a>
+              </div>
             </div>
           </div>
 
           <ol class="moat">
-            <li><i class="pin" aria-hidden="true">1</i><b>Runs on your Claude plan</b><span>oIDE drives your own signed-in <span class="mono">claude</span> CLI. No API key, and it never sees your credentials.</span></li>
-            <li><i class="pin" aria-hidden="true">2</i><b>Every project in one window</b><span>Agents from all your repos on one wall, each working in its own git worktree.</span></li>
+            <li><i class="pin" aria-hidden="true">1</i><b>Many sessions, one window</b><span>Agents from all your repos on one wall, each working in its own git worktree.</span></li>
+            <li><i class="pin" aria-hidden="true">2</i><b>Artifacts you both work in</b><span>Designs, docs and whiteboards that you and your agents read and write.</span></li>
             <li><i class="pin" aria-hidden="true">3</i><b>A marketplace of agent tools</b><span>Extensions give agents new abilities. Any MCP server works too, listed or not.</span></li>
-            <li><i class="pin" aria-hidden="true">4</i><b>claude.ai artifacts built in</b><span>Designs, docs and whiteboards that your agents can read and write.</span></li>
+            <li><i class="pin" aria-hidden="true">4</i><b>Runs on your Claude plan</b><span>oIDE drives your own signed-in <span class="mono">claude</span> CLI. No API key, and it never sees your credentials.</span></li>
           </ol>
         </div>
 
@@ -256,11 +278,82 @@ const img = (name: string) => withBase(`/shots/${name}`);
           <div class="window">
             <img :src="img('wall.jpg')" width="2880" height="1928" fetchpriority="high" alt="The oIDE agent wall. Six agent tiles from three projects show live activity, subagents and context use. One tile asks permission to run npm install, one has a question, one is ready for review. A projects list is on the left, artifacts and the marketplace on the right, and plan usage in the status bar." />
             <span class="needs-you" aria-hidden="true"></span>
-            <i class="pin" style="left: 64.2%; top: 98.6%" aria-hidden="true">1</i>
-            <i class="pin" style="left: 11.2%; top: 7.6%" aria-hidden="true">2</i>
+            <i class="pin" style="left: 11.2%; top: 7.6%" aria-hidden="true">1</i>
+            <i class="pin" style="left: 87.6%; top: 8%" aria-hidden="true">2</i>
             <i class="pin" style="left: 97.1%; top: 82.7%" aria-hidden="true">3</i>
-            <i class="pin" style="left: 87.6%; top: 8%" aria-hidden="true">4</i>
+            <i class="pin" style="left: 64.2%; top: 98.6%" aria-hidden="true">4</i>
           </div>
+        </div>
+      </section>
+
+      <!-- THE LOOP: what "Developer Cowork" means -->
+      <section class="sec alt" id="cowork">
+        <div class="wrap">
+          <div class="sec-head">
+            <span class="label go"><i></i>Developer Cowork</span>
+            <h2><span class="s">One workspace for the plan,</span> <span class="s">the agents and the review.</span></h2>
+            <p>Writing the code is one part of shipping it. Someone has to decide what gets built, and someone has to check the result. oIDE keeps all three in one window, and your agents take part in each.</p>
+          </div>
+          <div class="doors">
+            <a href="#plan"><em class="step">01 · Plan</em><b>Decide what gets built</b><span>Write the spec as a design, a doc or a whiteboard that your agents read and write. A shared backlog, kept by you and PM agents, is coming next.</span><code>Plan in oIDE →</code></a>
+            <a href="#direct"><em class="step">02 · Direct</em><b>Hand it to an agent</b><span>Start a session for each task, across all your repos. The wall shows who is working and who needs you.</span><code>The agent wall →</code></a>
+            <a href="#review"><em class="step">03 · Review</em><b>Check it, then merge</b><span>Each agent works in its own worktree. Comment on the diff, the agent fixes it, and nothing reaches main until you say so.</span><code>Review and merge →</code></a>
+          </div>
+        </div>
+      </section>
+
+      <!-- PLAN -->
+      <section class="sec" id="plan">
+        <div class="wrap">
+          <div class="sec-head">
+            <span class="label"><i></i>Plan</span>
+            <h2>Give every agent a plan to work from.</h2>
+            <p>An agent does its best work from a clear brief. In oIDE the brief sits next to the code, as designs, docs and whiteboards that you and your agents both edit. A shared backlog is next.</p>
+          </div>
+
+          <article class="feat">
+            <div class="feat-head">
+              <span class="label"><i></i>Artifacts</span>
+              <h3>Designs, docs and whiteboards next to the code</h3>
+              <div class="feat-body">
+                <p>Import artifacts from claude.ai or let an agent write one. Hand a design to an agent as its spec, and see which agents are reading or writing each artifact.</p>
+                <ul class="ticks">
+                  <li>Open an artifact and tell its agent what to change, or pin a comment on the preview.</li>
+                  <li>Every change is a version you can compare or restore.</li>
+                </ul>
+              </div>
+            </div>
+            <figure class="fig">
+              <div class="shot"><img :src="img('artifacts.jpg')" width="2766" height="972" loading="lazy" alt="Artifacts library with design, doc and whiteboard cards from three projects. The selected design, Main window v2, is synced from claude.ai and read by two agents, with buttons Open, Give to an agent and Open in claude.ai." /></div>
+              <figcaption><b>Artifacts.</b> "Give to an agent" starts a new agent with the artifact attached.</figcaption>
+            </figure>
+          </article>
+
+          <article class="feat split">
+            <div class="feat-copy">
+              <span class="label soon"><i></i>Backlog · coming next</span>
+              <h3><span class="s">One backlog,</span> <span class="s">kept by you and your agents</span></h3>
+              <p>The project backlog is moving into oIDE. You and your agents both add items and keep them in order, and PM agents do the upkeep. When an item is ready, you start an agent on it from the list.</p>
+              <ul class="ticks">
+                <li>PM agents write up new items and link the design or doc that describes them.</li>
+                <li>You decide what goes in and what comes first.</li>
+                <li>Start an agent session from any item, with the item and its spec as the goal.</li>
+              </ul>
+            </div>
+            <figure class="fig">
+              <div class="shot mock" role="img" aria-label="Concept drawing of the oIDE backlog for the project billing-api. Five items, each with a number, a title, where it came from and a status. Two are ready and have a Start agent button. One has an agent working on it that asked a question, one is ready for review, and one is being written up by a PM agent.">
+                <div class="mock-bar"><b>Backlog</b><span class="proj">billing-api</span><span class="mock-pm"><i></i>PM agent sorted 3 items · 12 min ago</span></div>
+                <ul class="mock-rows">
+                  <li v-for="b in backlog" :key="b.id" :class="{ next: b.next }">
+                    <span class="id">#{{ b.id }}</span>
+                    <div class="what"><b>{{ b.title }}</b><small>{{ b.from }}</small></div>
+                    <div class="do"><span class="st" :class="b.st"><i></i>{{ b.status }}</span><span v-if="b.act" class="act" :class="{ primary: b.next }">{{ b.act }}</span></div>
+                  </li>
+                </ul>
+              </div>
+              <figcaption><b>Concept.</b> A drawing, not a screenshot. The backlog and PM agents are in development.</figcaption>
+            </figure>
+          </article>
         </div>
       </section>
 
@@ -382,8 +475,8 @@ const img = (name: string) => withBase(`/shots/${name}`);
         <div class="wrap">
           <div class="sec-head">
             <span class="label hold"><i></i>Extend</span>
-            <h2>Give agents better tools and better context.</h2>
-            <p>An agent is only as good as what it can reach. oIDE has a marketplace of tools made for agents, and it brings your designs and docs into the project.</p>
+            <h2>Give each agent the right tools and the right model.</h2>
+            <p>An agent is only as good as what it can reach. oIDE has a marketplace of tools made for agents, connects any MCP server, and lets you choose which model does which job.</p>
           </div>
 
           <article class="feat">
@@ -413,20 +506,6 @@ const img = (name: string) => withBase(`/shots/${name}`);
             </div>
             <figure class="fig">
               <div class="shot fade"><img :src="img('add-custom.jpg')" width="1440" height="1280" loading="lazy" alt="Add a custom tool dialog. After pasting an MCP server URL, oIDE reports the server it reached, that it uses OAuth sign-in, and six tools found, each labelled read only or asks first." /></div>
-            </figure>
-          </article>
-
-          <article class="feat">
-            <div class="feat-head">
-              <span class="label hold"><i></i>Artifacts</span>
-              <h3>Designs, docs and whiteboards next to the code</h3>
-              <div class="feat-body">
-                <p>Import artifacts from claude.ai or let an agent write one. Hand a design to an agent as its spec, and see which agents are reading or writing each artifact.</p>
-              </div>
-            </div>
-            <figure class="fig">
-              <div class="shot"><img :src="img('artifacts.jpg')" width="2766" height="972" loading="lazy" alt="Artifacts library with design, doc and whiteboard cards from three projects. The selected design, Main window v2, is synced from claude.ai and read by two agents, with buttons Open, Give to an agent and Open in claude.ai." /></div>
-              <figcaption><b>Artifacts.</b> "Give to an agent" starts a new agent with the artifact attached.</figcaption>
             </figure>
           </article>
 
@@ -481,7 +560,7 @@ const img = (name: string) => withBase(`/shots/${name}`);
           <div class="sec-head">
             <span class="label"><i></i>Compare</span>
             <h2>Where oIDE fits</h2>
-            <p>Plenty of tools run one coding agent well, and several run a few in parallel. oIDE is for running many across all your projects, and for giving them better tools.</p>
+            <p>Plenty of tools run one coding agent well, and several run a few in parallel. oIDE is the workspace around them: shared specs, many sessions across all your projects, better tools, and a review before anything merges.</p>
           </div>
           <div class="table-scroll">
             <table>
@@ -564,7 +643,7 @@ const img = (name: string) => withBase(`/shots/${name}`);
       <!-- CLOSE -->
       <section class="sec alt">
         <div class="wrap close">
-          <h2><span class="s">Stop babysitting terminals.</span> <span class="s">Run your agents from one window.</span></h2>
+          <h2><span class="s">Stop babysitting terminals.</span> <span class="s">Give your agents a place to work.</span></h2>
           <div class="dl">
             <a class="btn btn-primary btn-lg dl-main" :href="dlHref">
               <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></svg><span>{{ dlLong }}</span>
@@ -585,12 +664,13 @@ const img = (name: string) => withBase(`/shots/${name}`);
         <div class="foot">
           <div>
             <a class="brand" :href="withBase('/')"><img class="on-dark" :src="withBase('/logo-mark.svg')" width="24" height="24" alt="" /><img class="on-light" :src="withBase('/logo-mark-light.svg')" width="24" height="24" alt="" />oIDE</a>
-            <p>The open desktop app for running teams of coding agents.</p>
+            <p>The open-source Developer Cowork: one desktop workspace for you and your coding agents.</p>
           </div>
           <div>
             <h4>Product</h4>
             <ul>
-              <li><a href="#direct">Features</a></li>
+              <li><a href="#plan">Features</a></li>
+              <li><a href="#direct">The agent wall</a></li>
               <li><a href="#extend">Extensions</a></li>
               <li><a href="#download">Download</a></li>
               <li><a :href="`${repo}/releases`">Release notes</a></li>

@@ -6,7 +6,7 @@ const repo = 'https://github.com/frostlogic-ab/oIDE';
 
 export default defineConfig({
   title: 'oIDE',
-  description: 'Mission Control for coding agents: run many Claude Code CLI agents in parallel, across many projects, in one window.',
+  description: 'The open-source Developer Cowork: plan, run many Claude Code CLI agents in parallel across all your projects, and review every change, in one window.',
   lang: 'en-US',
   base: '/',
   cleanUrls: true,
@@ -20,7 +20,7 @@ export default defineConfig({
     ['meta', { property: 'og:image', content: 'https://getoide.com/social-preview.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { property: 'og:title', content: 'oIDE' }],
-    ['meta', { property: 'og:description', content: 'Run many Claude Code CLI agents in parallel, in one window. Open source, MIT.' }],
+    ['meta', { property: 'og:description', content: 'The open-source Developer Cowork: plan, run and review many Claude Code CLI agents in one window. MIT.' }],
   ],
   themeConfig: {
     // The title text is drawn by Layout.vue (the mark and "oIDE"), like the app header.
