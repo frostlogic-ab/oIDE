@@ -50,7 +50,7 @@ export function registerLspHandlers(router: IpcRouter, s: Services, ctx: MainCon
     const d = doc(root, path);
     const install = lsp.installCommand(d.root, d.path);
     if (!install) throw new IpcError('This language server has no install command, or is installed already.', 'not_found');
-    const { terminalId } = await s.terminals.create({ cwd: d.root, cols, rows, input: `${install.command}` });
+    const { terminalId } = await s.terminals.create({ cwd: d.root, cols, rows, input: `${install.command}\r` });
     lsp.watchInstall(d.root, d.path);
     return { terminalId, ...install };
   });
