@@ -3,6 +3,7 @@ export * from './bin.js';
 export * from './paths.js';
 export * from './plain-fs.js';
 export * from './status.js';
+export * from './ignored.js';
 export * from './patch.js';
 export * from './diff.js';
 export * from './changes.js';

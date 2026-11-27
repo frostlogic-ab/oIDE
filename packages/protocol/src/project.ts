@@ -165,5 +165,7 @@ export const FileNode = z.object({
   name: z.string(),
   path: z.string(),
   kind: z.enum(['file', 'dir']),
+  /** Excluded by the checkout's ignore rules (`.gitignore` and friends): the tree greys it out. */
+  ignored: z.boolean().optional(),
 });
 export type FileNode = z.infer<typeof FileNode>;
