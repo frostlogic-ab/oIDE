@@ -1056,7 +1056,16 @@ effect, so a late load or a `settingChanged` reload overwrote what the user had 
 saved nothing. The draft now follows the saved value only while the field is unedited (regression
 test added). See [extensions](pages/extensions.md).
 
+## [2026-11-27] build | Windows: installed oIDE showed a blank taskbar icon
+Dev runs set the same AppUserModelID as the installed app (`dev.oide.app`), so Electron's
+notification shortcut `Electron.lnk` carried it too, pointing at a worktree's `electron.exe` and
+`build/icon.ico`. After the worktree was deleted, Windows drew the installed oIDE's taskbar button
+through that orphaned shortcut: a blank page. Unpackaged runs now use `dev.oide.app.dev`, and packaged
+Windows runs delete shortcuts with the installed AUMID whose target is gone (or retag live dev ones).
+See [packaging](pages/packaging.md).
+
 ## [2026-11-27] build | Windows notifications come from oIDE, not Electron
-Dev and e2e runs now use their own AppUserModelID (`dev.oide.app.dev`); sharing the installed app's
-(`dev.oide.app`) let Electron's dev `Electron.lnk` name the installed app's toasts "Electron". Installed
-runs move such leftover shortcuts to the dev id at start. See [packaging](pages/packaging.md).
+Same root cause as the blank taskbar icon above: Windows names a toast's sender after the Start Menu
+shortcut with its AUMID, so a dev `Electron.lnk` holding `dev.oide.app` made the installed app's
+notifications come from "Electron". The AUMID split and `releaseForeignShortcuts` fix it; added a test
+that the installed AUMID stays equal to electron-builder `appId`. See [packaging](pages/packaging.md).

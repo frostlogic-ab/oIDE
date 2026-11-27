@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, win32 } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { APP_USER_MODEL_ID, DEV_APP_USER_MODEL_ID, appUserModelId, brandAppShortcuts, releaseInstalledAppId, resolveAppIcon, type ShortcutInfo } from './app-icon.js';
+import { APP_USER_MODEL_ID, appUserModelId, brandAppShortcuts, DEV_APP_USER_MODEL_ID, releaseForeignShortcuts, resolveAppIcon, type ShortcutInfo } from './app-icon.js';
 
 const appPath = join('/repo', 'apps', 'desktop');
 const resourcesPath = join('/opt', 'oIDE', 'resources');
@@ -105,29 +105,30 @@ describe('brandAppShortcuts', () => {
 });
 
 describe('appUserModelId', () => {
-  it("gives unpackaged runs their own id so their Electron.lnk can't name the installed app's toasts", () => {
-    expect(appUserModelId(true)).toBe(APP_USER_MODEL_ID);
+  it('gives unpackaged runs their own taskbar identity, apart from the installed app', () => {
     expect(appUserModelId(true)).toBe('dev.oide.app');
     expect(appUserModelId(false)).toBe(DEV_APP_USER_MODEL_ID);
     expect(DEV_APP_USER_MODEL_ID).not.toBe(APP_USER_MODEL_ID);
   });
 
-  it('keeps the installed id equal to electron-builder appId', () => {
+  it('keeps the installed id equal to electron-builder appId (the installer shortcut names the toasts)', () => {
     const yml = readFileSync(join(import.meta.dirname, '..', '..', 'electron-builder.yml'), 'utf8');
     expect(yml.split(/\r?\n/)).toContain(`appId: ${APP_USER_MODEL_ID}`);
   });
 });
 
-describe('releaseInstalledAppId', () => {
+describe('releaseForeignShortcuts', () => {
   const programs = win32.join('C:/', 'Users', 'u', 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs');
-  const devExe = win32.join('C:/', 'Users', 'u', 'AppData', 'Roaming', 'oIDE', 'worktrees', 'p', 'w', 'node_modules', 'electron', 'dist', 'electron.exe');
   const installed = win32.join('C:/', 'Users', 'u', 'AppData', 'Local', 'Programs', 'oide', 'oide.exe');
+  const liveDev = win32.join('C:/', 'repo', 'node_modules', 'electron', 'dist', 'electron.exe');
+  const goneDev = win32.join('C:/', 'deleted-worktree', 'node_modules', 'electron', 'dist', 'electron.exe');
   const lnk = (name: string): string => win32.join(programs, name);
-  const o = { appId: APP_USER_MODEL_ID, devAppId: DEV_APP_USER_MODEL_ID };
+  const o = { execPath: installed, appId: APP_USER_MODEL_ID, devAppId: DEV_APP_USER_MODEL_ID };
 
-  function run(shortcuts: Record<string, ShortcutInfo | Error>, setAppId: (p: string) => boolean = () => true) {
-    const set: string[] = [];
-    const updated = releaseInstalledAppId(
+  function run(shortcuts: Record<string, ShortcutInfo | Error>, opts: { retag?: () => boolean; remove?: () => void } = {}) {
+    const removedFiles: string[] = [];
+    const retagCalls: Array<{ path: string; appId: string; target: string }> = [];
+    const result = releaseForeignShortcuts(
       {
         list: () => Object.keys(shortcuts).map(lnk),
         read: (p) => {
@@ -135,51 +136,57 @@ describe('releaseInstalledAppId', () => {
           if (s instanceof Error) throw s;
           return s;
         },
-        setAppId: (p, id, target) => {
-          expect(id).toBe(DEV_APP_USER_MODEL_ID);
-          expect(target).toBe((shortcuts[p.slice(programs.length + 1)] as ShortcutInfo).target);
-          set.push(p);
-          return setAppId(p);
+        exists: (p) => p !== goneDev,
+        remove: (p) => {
+          opts.remove?.();
+          removedFiles.push(p);
+        },
+        setAppUserModelId: (path, appId, target) => {
+          retagCalls.push({ path, appId, target });
+          return opts.retag ? opts.retag() : true;
         },
       },
       o,
     );
-    return { updated, set };
+    return { ...result, removedFiles, retagCalls };
   }
 
-  it("moves a dev run's Electron.lnk off the installed id, leaving the installer's oIDE.lnk alone", () => {
-    const { updated } = run({
-      'Electron.lnk': { target: devExe, appUserModelId: APP_USER_MODEL_ID },
-      'oIDE.lnk': { target: installed, appUserModelId: APP_USER_MODEL_ID },
+  it("removes a deleted worktree's Electron.lnk that carried the installed app's AUMID (the blank taskbar icon)", () => {
+    const r = run({ 'Electron.lnk': { target: goneDev, appUserModelId: APP_USER_MODEL_ID, icon: win32.join('C:/', 'deleted-worktree', 'icon.ico') } });
+    expect(r.removed).toEqual([lnk('Electron.lnk')]);
+    expect(r.retagCalls).toEqual([]);
+  });
+
+  it('moves a live dev shortcut to the dev AUMID instead of deleting it', () => {
+    const r = run({ 'Electron.lnk': { target: liveDev, appUserModelId: APP_USER_MODEL_ID } });
+    expect(r.removedFiles).toEqual([]);
+    expect(r.retagged).toEqual([lnk('Electron.lnk')]);
+    expect(r.retagCalls).toEqual([{ path: lnk('Electron.lnk'), appId: DEV_APP_USER_MODEL_ID, target: liveDev }]);
+  });
+
+  it("keeps the installer's shortcuts, other apps' and unreadable shortcuts", () => {
+    const r = run({
+      'oIDE.lnk': { target: installed.toUpperCase(), appUserModelId: APP_USER_MODEL_ID },
+      'Other.lnk': { target: goneDev, appUserModelId: 'electron.app.Other' },
+      'NoId.lnk': { target: goneDev },
+      'Dev.lnk': { target: goneDev, appUserModelId: DEV_APP_USER_MODEL_ID },
+      'Broken.lnk': new Error('not a shortcut'),
     });
-    expect(updated).toEqual([lnk('Electron.lnk')]);
+    expect(r.removedFiles).toEqual([]);
+    expect(r.retagCalls).toEqual([]);
   });
 
-  it('matches electron.exe case-insensitively', () => {
-    const { updated } = run({ 'Electron.lnk': { target: devExe.toUpperCase(), appUserModelId: APP_USER_MODEL_ID } });
-    expect(updated).toEqual([lnk('Electron.lnk')]);
-  });
-
-  it('leaves other apps, dev-id shortcuts, unreadable and refused shortcuts alone', () => {
-    const { updated, set } = run(
+  it('survives a refused or throwing writer', () => {
+    expect(run({ 'a.lnk': { target: liveDev, appUserModelId: APP_USER_MODEL_ID } }, { retag: () => false }).retagged).toEqual([]);
+    const r = run(
+      { 'a.lnk': { target: goneDev, appUserModelId: APP_USER_MODEL_ID }, 'b.lnk': { target: liveDev, appUserModelId: APP_USER_MODEL_ID } },
       {
-        'Other.lnk': { target: devExe, appUserModelId: 'electron.app.Other' },
-        'Dev.lnk': { target: devExe, appUserModelId: DEV_APP_USER_MODEL_ID },
-        'NoId.lnk': { target: devExe },
-        'NoTarget.lnk': { target: '', appUserModelId: APP_USER_MODEL_ID },
-        'Broken.lnk': new Error('not a shortcut'),
-        'Locked.lnk': { target: devExe, appUserModelId: APP_USER_MODEL_ID },
+        remove: () => {
+          throw new Error('access denied');
+        },
       },
-      () => false,
     );
-    expect(set).toEqual([lnk('Locked.lnk')]);
-    expect(updated).toEqual([]);
-  });
-
-  it('survives a writer that throws', () => {
-    const { updated } = run({ 'Electron.lnk': { target: devExe, appUserModelId: APP_USER_MODEL_ID } }, () => {
-      throw new Error('access denied');
-    });
-    expect(updated).toEqual([]);
+    expect(r.removed).toEqual([]);
+    expect(r.retagged).toEqual([lnk('b.lnk')]);
   });
 });

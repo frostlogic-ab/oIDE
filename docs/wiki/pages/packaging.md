@@ -198,19 +198,29 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   `BrowserWindow({ icon })` to `build/icon.ico` (Windows) or `build/icons/512x512.png` (Linux) and
   `app.dock.setIcon(build/icon.png)` on macOS, so the taskbar/dock no longer shows Electron's icon.
   Packaged Windows/macOS use the exe/bundle icon; packaged Linux reads `<resources>/icon.png`
-  (`linux.extraResources`). On Windows `app.setAppUserModelId` runs before ready: `dev.oide.app` (= `appId`)
-  for installed builds, `dev.oide.app.dev` for unpackaged runs (`appUserModelId()` in `main/app-icon.ts`).
-  They must differ: Windows names a toast's sender after the Start Menu shortcut that carries its AUMID,
-  and a dev or e2e run that shared the installed AUMID left an `Electron.lnk` (target a worktree's
-  `electron.exe`), so the installed app's notifications came from "Electron". Installed runs therefore
-  move any such leftover (installed AUMID, target `electron.exe`) to the dev AUMID once at start
-  (`releaseInstalledAppId`); the installer's `oIDE.lnk` is never touched. Windows draws a window with an explicit
+  (`linux.extraResources`). On Windows the installed app sets `app.setAppUserModelId('dev.oide.app')`
+  (= `appId`, the AUMID the NSIS shortcuts carry) before ready; unpackaged runs use their own
+  `dev.oide.app.dev` (`appUserModelId(packaged)`). Windows draws a window with an explicit
   AUMID with the icon of the Start Menu shortcut that carries that AUMID, not the window icon. Electron
   writes such a shortcut itself for toast notifications (`<exe ProductName>.lnk`, so `Electron.lnk` →
   `electron.exe` in dev, with no icon), which made the dev taskbar show Electron's logo. Unpackaged Windows
   runs therefore set `build/icon.ico` on every Start Menu shortcut that targets the running exe with our
   AUMID (`brandAppShortcuts`, at ready and again after 1, 3, 10 and 30 s, since Electron writes it off-thread). Electron's rewrite check ignores the icon, so
   it sticks. Packaged builds skip this: that shortcut targets `oide.exe`, which carries the oIDE icon.
+- Blank taskbar icon in the installed app (fixed in 0.4.x): dev runs used to share `dev.oide.app`, so
+  their `Electron.lnk` carried the installed app's AUMID with a worktree's `electron.exe` and
+  `build/icon.ico`. Once that worktree was deleted, Windows could resolve the installed oIDE's taskbar
+  button through the orphaned shortcut and drew a blank page. Dev runs now have their own AUMID, and
+  packaged Windows runs release such shortcuts at ready (`releaseForeignShortcuts`): a shortcut with
+  `dev.oide.app` whose target is not the running `oide.exe` is deleted when its target no longer exists,
+  otherwise moved to `dev.oide.app.dev`. The installer's own shortcuts and other apps' are never touched.
+  A taskbar pin made while the icon was blank may keep Windows' cached image until it is unpinned and
+  pinned again.
+- Notifications from "Electron" (same cause): Windows names a toast's sender after the Start Menu
+  shortcut that carries its AUMID. With a dev `Electron.lnk` holding `dev.oide.app` next to the
+  installer's `oIDE.lnk`, the installed app's notifications showed "Electron". The AUMID split and
+  `releaseForeignShortcuts` above fix this too; unpackaged runs still show "Electron" on their own
+  toasts, since Electron names that shortcut after `electron.exe`'s ProductName.
 - Licences: `pnpm licenses:notices` (`tools/licenses/notices.mjs`) writes `THIRD_PARTY_NOTICES.md` for
   everything a packaged build ships (desktop `dependencies`, libraries bundled into `out/`, Electron);
   `pnpm licenses:check` fails on a licence outside the MIT-compatible allow-list or a stale file.
