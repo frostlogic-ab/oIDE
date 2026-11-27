@@ -142,6 +142,7 @@ export class TelemetryObservers {
           techniques: Math.min(spec.techniques.length, 10_000),
           extensions: Math.min(spec.extensions.length, 10_000),
           auto_title: spec.autoTitle === true,
+          other_account: !!spec.accountId,
         });
         if (a.images + a.files > 0) this.sink.track('attachments_sent', { where: 'spawn', ...a });
         return;

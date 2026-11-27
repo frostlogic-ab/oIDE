@@ -40,7 +40,12 @@ export interface LaunchContext {
   customModel?: CustomModel;
   /** The custom model's key from oIDE's keychain store. Never Claude credentials. */
   customModelSecret?: string;
-  /** Extra env (custom MCP server secrets for `${VAR}` placeholders). Cannot override OIDE_AGENT_ID. */
+  /**
+   * CLAUDE_CONFIG_DIR of the agent's Claude Code account (ADR 0021), made by main from the account
+   * id. Unset = the default account (whatever the user's own env says). Nothing else may set it.
+   */
+  claudeConfigDir?: string;
+  /** Extra env (custom MCP server secrets for `${VAR}` placeholders). Cannot override OIDE_AGENT_ID or CLAUDE_CONFIG_DIR. */
   extraEnv?: Record<string, string>;
   /** Source for the env allow-list. Defaults to process.env. Never copied wholesale. */
   baseEnv?: Record<string, string | undefined>;
@@ -819,8 +824,13 @@ export function buildLaunch(spec: AgentSpec, ctx: LaunchContext): LaunchPlan {
 
   // Env
   const env = allowListEnv(ctx.baseEnv ?? process.env);
+  const ownConfigDir = env.CLAUDE_CONFIG_DIR;
   for (const [k, v] of Object.entries(ctx.extraEnv ?? {})) if (ENV_KEY.test(k)) env[k] = v;
   env.OIDE_AGENT_ID = ctx.agentId;
+  // The account is oIDE's choice (ADR 0021): extension env never picks another sign-in.
+  const configDir = ctx.claudeConfigDir ?? ownConfigDir;
+  if (configDir) env.CLAUDE_CONFIG_DIR = configDir;
+  else delete env.CLAUDE_CONFIG_DIR;
   // SEC-01: the CLI's own spawns (git, gh, node, shells) never pick a program from the worktree.
   if ((ctx.platform ?? process.platform) === 'win32') env.NoDefaultCurrentDirectoryInExePath = '1';
   if (ctx.customModel) Object.assign(env, customModelEnv(ctx.customModel, ctx.customModelSecret, warnings));

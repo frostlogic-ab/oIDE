@@ -1,6 +1,9 @@
 import type { AgentSummary } from '@oide/protocol';
 import { Tooltip } from '@oide/ui';
 import { formatResetTime } from '../../lib/format';
+import { windowLabel } from '../../lib/planWindows';
+
+export { windowLabel };
 
 export type PlanUsage = NonNullable<AgentSummary['planUsage']>;
 
@@ -9,14 +12,6 @@ export function latestPlanUsage(agents: readonly AgentSummary[]): PlanUsage | un
   let best: AgentSummary | undefined;
   for (const a of agents) if (a.planUsage && (!best || a.updatedAt > best.updatedAt)) best = a;
   return best?.planUsage;
-}
-
-/** "five_hour" → "Session", "seven_day" → "Week". */
-export function windowLabel(window: string | undefined): { short: string; long: string } {
-  if (!window) return { short: 'Plan', long: 'Plan limit' };
-  if (/five_hour|session/i.test(window)) return { short: 'Session', long: 'Session limit' };
-  if (/seven_day|week/i.test(window)) return { short: /opus/i.test(window) ? 'Week (Opus)' : 'Week', long: 'Weekly limit' };
-  return { short: window.replace(/_/g, ' '), long: `${window.replace(/_/g, ' ')} limit` };
 }
 
 /**

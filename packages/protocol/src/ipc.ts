@@ -6,6 +6,7 @@ import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUp
 import { CloneProgress, CloneUrl, FolderName, GithubRepo } from './newProject.js';
 import { CommitInfo, FileChanges, FileDiff, FileNode, MergePrediction, OverlapWarning, Project, ReviewComment, SyncState, WorktreeInfo } from './project.js';
 import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settings.js';
+import { AccountId, AccountKey, AccountLabel, AccountUsage, ClaudeAccount } from './accounts.js';
 import { UpdateInstallTrigger, UpdateStatus } from './updates.js';
 import { FindByNameInput, FindByNameOutput, ReplaceInput, ReplaceOutput, SearchContentInput, SearchResultsEvent } from './search.js';
 import { ProjectScript } from './scripts.js';
@@ -120,6 +121,16 @@ export const Commands = {
   'telemetry.consent': cmd(TelemetryConsentInput, TelemetryStatus),
   'cli.detect': cmd(Void, CliInfo),
   'cli.openSignIn': cmd(Void, z.object({ terminalId: Id })),
+
+  // Claude Code accounts (ADR 0021). Main makes the id and the config folder; no path crosses IPC.
+  'accounts.add': cmd(z.object({ label: AccountLabel }), ClaudeAccount),
+  'accounts.rename': cmd(z.object({ id: AccountKey, label: AccountLabel }), Ok),
+  /** Removes it from oIDE only: its folder (and the CLI's sign-in inside it) stays on disk. Refused while agents use it. */
+  'accounts.remove': cmd(z.object({ id: AccountId }), Ok),
+  /** A terminal running `claude` with this account's CLAUDE_CONFIG_DIR, for Anthropic's own sign-in. */
+  'accounts.openSignIn': cmd(z.object({ id: AccountKey }), z.object({ terminalId: Id })),
+  /** Plan usage, sign-in state and tokens today per account (status bar). */
+  'accounts.usage': cmd(Void, z.array(AccountUsage)),
 
   // Projects
   'projects.list': cmd(Void, z.array(Project)),
@@ -628,6 +639,7 @@ export const Events = {
   'git.changed': z.object({ projectId: Id }),
   'settings.changed': Settings,
   'cli.changed': CliInfo,
+  'accounts.usage': z.array(AccountUsage),
   'terminal.data': z.object({ terminalId: Id, data: z.string() }),
   'terminal.exit': z.object({ terminalId: Id, code: z.number().nullable() }),
   'extensions.changed': z.array(InstalledExtension),

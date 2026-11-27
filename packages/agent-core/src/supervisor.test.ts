@@ -23,7 +23,7 @@ afterEach(async () => {
   while (cleanups.length) await cleanups.pop()!();
 });
 
-async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup?: WorktreeProvider['runSetup']; attachments?: AttachmentProvider; ask?: string[]; customModels?: CustomModel[] }): Promise<Harness> {
+async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup?: WorktreeProvider['runSetup']; attachments?: AttachmentProvider; ask?: string[]; customModels?: CustomModel[]; accounts?: Record<string, string> }): Promise<Harness> {
   const settings = testSettings({ extraFlags: opts.extraFlags, maxRunning: opts.maxRunning ?? 3 });
   const mcp = new OideMcpServer({ appDataDir: tempDir('oide-app-') });
   await mcp.start();
@@ -52,6 +52,7 @@ async function harness(opts: { extraFlags: string; maxRunning?: number; runSetup
     project: () => ({ path: '/repo', trusted: true, rules: { allow: [], deny: [], ...(opts.ask ? { ask: opts.ask } : {}) } }),
     addAllowRule: (p, r) => void rules.push([p, r]),
     ...(opts.customModels ? { customModel: (id: string) => opts.customModels!.find((m) => m.id === id) } : {}),
+    ...(opts.accounts ? { accountConfigDir: (id: string) => opts.accounts![id] } : {}),
   };
   const sup = new Supervisor({ worktrees, sink, settings: provider, broker: mcp, ...(opts.attachments ? { attachments: opts.attachments } : {}) });
   cleanups.push(async () => {
@@ -118,6 +119,20 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     await h.sup.resume(a!.id).catch(() => {});
     await status(h, a!.id, 'error');
     expect(h.events.some((e) => e.agentId === a!.id && e.type === 'error' && /custom model was removed/.test(e.message))).toBe(true);
+  });
+
+  it('refuses to launch an agent whose Claude Code account was removed, instead of falling back to the default sign-in', async () => {
+    const accounts: Record<string, string> = { 'acc-work01': tempDir('oide-acc-') };
+    const h = await harness({ extraFlags: '', accounts });
+    await expect(h.sup.spawn(spec({ accountId: 'acc-gone01' }))).rejects.toThrow(/account was removed/);
+    const [a] = await h.sup.spawn(spec({ accountId: 'acc-work01' }));
+    await status(h, a!.id, 'has-question');
+    await h.sup.stop(a!.id);
+    await status(h, a!.id, 'stopped');
+    delete accounts['acc-work01'];
+    await h.sup.resume(a!.id).catch(() => {});
+    await status(h, a!.id, 'error');
+    expect(h.events.some((e) => e.agentId === a!.id && e.type === 'error' && /account was removed/.test(e.message))).toBe(true);
   });
 
   it('"Always" covers the rest of the session: the next matching request runs without a prompt', async () => {

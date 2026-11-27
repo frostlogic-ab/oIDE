@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AccountId } from './accounts.js';
 
 /**
  * Agent-level schemas shared by main, renderer and extensions.
@@ -136,6 +137,11 @@ export const AgentSpec = z.object({
   mode: PermissionMode.default('auto'),
   strategy: ModelStrategy,
   customModel: CustomModelRef.optional(),
+  /**
+   * Claude Code account the agent runs on (its own CLAUDE_CONFIG_DIR, ADR 0021). Unset = the CLI's
+   * default config. Fixed for the agent's life: its sessions live in that account's folder.
+   */
+  accountId: AccountId.optional(),
   /** Technique ids, applied in Settings order. */
   techniques: z.array(Id).default([]),
   /** Extension ids whose tools this agent gets. */

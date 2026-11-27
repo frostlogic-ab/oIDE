@@ -1,3 +1,4 @@
+import type { CliInfo } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
 import type { Services } from '../services/index.js';
@@ -37,11 +38,31 @@ export function registerProjectHandlers(router: IpcRouter, s: Services, _ctx: Ma
 export function registerCliHandlers(router: IpcRouter, s: Services, ctx: MainContext): void {
   router.register('cli.detect', () => s.cli.detect());
   // Sign-in only through Anthropic's own flow: a terminal running the user's `claude`.
-  router.register('cli.openSignIn', async () => {
-    const info = await s.cli.ensure();
-    // Quoted for the user's shell (PowerShell on Windows, a POSIX shell elsewhere); no other input.
-    const p = info.found && info.path && !/\.(mjs|cjs|js)$/i.test(info.path) ? info.path : undefined;
-    const command = !p ? 'claude' : ctx.platform === 'win32' ? `& '${p.replace(/'/g, "''")}'` : `'${p.replace(/'/g, `'\\''`)}'`;
-    return s.platform.terminals.create({ cwd: ctx.userDataDir, command });
+  router.register('cli.openSignIn', async () => s.platform.terminals.create({ cwd: ctx.userDataDir, command: signInCommand(await s.cli.ensure(), ctx.platform) }));
+}
+
+/** The user's `claude`, quoted for their shell (PowerShell on Windows, a POSIX shell elsewhere); no other input. */
+function signInCommand(info: CliInfo, platform: NodeJS.Platform): string {
+  const p = info.found && info.path && !/\.(mjs|cjs|js)$/i.test(info.path) ? info.path : undefined;
+  return !p ? 'claude' : platform === 'win32' ? `& '${p.replace(/'/g, "''")}'` : `'${p.replace(/'/g, `'\\''`)}'`;
+}
+
+/** accounts.* (ADR 0021): Claude Code accounts, each its own CLAUDE_CONFIG_DIR. */
+export function registerAccountHandlers(router: IpcRouter, s: Services, ctx: MainContext): void {
+  router.register('accounts.add', ({ label }) => s.accounts.add(label));
+  router.register('accounts.rename', ({ id, label }) => {
+    s.accounts.rename(id, label);
+    return OK;
   });
+  router.register('accounts.remove', ({ id }) => {
+    s.accounts.remove(id);
+    return OK;
+  });
+  // Same flow as cli.openSignIn, with the account's CLAUDE_CONFIG_DIR. oIDE never reads what the
+  // CLI writes in that folder.
+  router.register('accounts.openSignIn', async ({ id }) => {
+    const env = s.accounts.signInEnv(id);
+    return s.platform.terminals.create({ cwd: ctx.userDataDir, command: signInCommand(await s.cli.ensure(), ctx.platform), env });
+  });
+  router.register('accounts.usage', () => s.accounts.snapshot());
 }

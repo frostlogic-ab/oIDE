@@ -76,6 +76,11 @@ export interface SettingsProvider {
    */
   extraEnv?(spec: AgentSpec, agentId: string): Record<string, string> | Promise<Record<string, string>>;
   customModel?(id: string): CustomModel | undefined | Promise<CustomModel | undefined>;
+  /**
+   * CLAUDE_CONFIG_DIR of a Claude Code account (ADR 0021), created if missing; undefined when the
+   * account was removed. Main derives it from the id; oIDE never reads what the CLI writes there.
+   */
+  accountConfigDir?(accountId: string): string | undefined | Promise<string | undefined>;
   /** "Always in <project>": save an allow rule (e.g. `Bash(npm test)`) to `.oide/permissions.json`. */
   addAllowRule?(projectId: string, rule: string): void | Promise<void>;
   resolveArtifact?: ArtifactResolver;

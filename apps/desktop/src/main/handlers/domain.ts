@@ -9,7 +9,7 @@ import { registerExtensionHandlers } from './extensions.js';
 import { registerFileHandlers } from './files.js';
 import { registerLspHandlers } from './lsp.js';
 import { registerGitHandlers, registerReviewHandlers } from './git.js';
-import { registerCliHandlers, registerProjectHandlers } from './projects.js';
+import { registerAccountHandlers, registerCliHandlers, registerProjectHandlers } from './projects.js';
 import { registerSettingsHandlers } from './settings.js';
 import { registerTelemetryHandlers } from './telemetry.js';
 import { registerTerminalHandlers } from './terminal.js';
@@ -21,6 +21,7 @@ export function registerDomainHandlers(router: IpcRouter, services: Services, ct
   registerDialogHandlers(router, services, ctx);
   registerTerminalHandlers(router, services, ctx);
   registerCliHandlers(router, services, ctx);
+  registerAccountHandlers(router, services, ctx);
   registerProjectHandlers(router, services, ctx);
   registerAgentHandlers(router, services, ctx);
   registerGitHandlers(router, services, ctx);

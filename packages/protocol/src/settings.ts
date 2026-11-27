@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Effort, Id, ModelStrategy, PermissionMode } from './agent.js';
 import { UpdateChannel } from './updates.js';
+import { AccountsSettings } from './accounts.js';
 
 export const Technique = z.object({
   id: Id,
@@ -92,6 +93,8 @@ export const Settings = z.object({
     fetchIntervalMinutes: z.number().int().min(0).default(10),
   }),
   techniques: z.array(Technique).default([]),
+  /** Settings › Claude Code › Accounts: extra Claude Code sign-ins, each its own CLAUDE_CONFIG_DIR (ADR 0021). */
+  accounts: AccountsSettings,
   /** Spawn's remembered choices. Defaulted as a whole so older settings files parse. */
   spawn: z
     .object({

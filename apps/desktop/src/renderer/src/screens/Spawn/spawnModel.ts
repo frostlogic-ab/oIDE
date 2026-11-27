@@ -5,6 +5,14 @@
  */
 import {
   AgentSpec,
+  DEFAULT_ACCOUNT,
+  accountKeys,
+  accountLabel,
+  spawnDefaultAccount,
+  tightestWindow,
+  type AccountKey,
+  type AccountUsage,
+  type AccountsSettings,
   KNOWN_MODEL_VERSIONS,
   MODEL_FAMILIES,
   type CliInfo,
@@ -24,6 +32,7 @@ import {
   type ToolRisk,
   type WorkIn,
 } from '@oide/protocol';
+import { windowLabel } from '../../lib/planWindows';
 
 export type StrategyKind = ModelStrategy['kind'];
 export type SlotKey = 'lead' | 'subagents' | 'simple' | 'standard' | 'complex';
@@ -43,6 +52,8 @@ export interface SpawnForm {
   techniques: Record<string, boolean>;
   extensions: Record<string, boolean>;
   attempts: number;
+  /** Claude Code account (ADR 0021). The picker shows only with two or more accounts. */
+  account: AccountKey;
 }
 
 export const MAX_ATTEMPTS = 6;
@@ -329,17 +340,35 @@ export function initialForm({ settings, projects, scope, params, cli, projectDef
     techniques: defaultTechniques(settings?.techniques ?? []),
     extensions: {},
     attempts: 1,
+    account: settings ? spawnDefaultAccount(settings.accounts) : DEFAULT_ACCOUNT,
   };
+}
+
+/**
+ * Spawn's account options: each with its sign-in state and how close it is to a plan limit, as the
+ * CLI last reported it. The user picks; oIDE never picks by usage (CLAUDE.md rule 6).
+ */
+export function accountOptions(accounts: AccountsSettings, usage: readonly AccountUsage[], now = Date.now()): Array<{ value: AccountKey; label: string; disabled?: boolean }> {
+  return accountKeys(accounts).map((key) => {
+    const label = accountLabel(accounts, key) ?? key;
+    const u = usage.find((x) => x.accountId === key);
+    if (u?.signedIn === 'no') return { value: key, label: `${label} (not signed in)`, disabled: true };
+    if (u?.rateLimitedUntil && u.rateLimitedUntil > now) return { value: key, label: `${label} · rate limited` };
+    const w = u ? tightestWindow(u.windows, now) : undefined;
+    return { value: key, label: w ? `${label} · ${windowLabel(w.window).short} ${Math.round(Math.min(1, w.utilization ?? 0) * 100)}%` : label };
+  });
 }
 
 // ---------- build ----------
 
-export type SpawnField = 'goal' | 'projectId' | 'mode' | 'workIn' | 'strategy' | 'attempts' | 'context' | 'form';
+export type SpawnField = 'goal' | 'projectId' | 'mode' | 'workIn' | 'strategy' | 'attempts' | 'context' | 'account' | 'form';
 export type BuildResult = { ok: true; spec: AgentSpec } | { ok: false; errors: Partial<Record<SpawnField, string>> };
 
 export interface BuildContext {
   allowBypass: boolean;
   customModels?: CustomModel[];
+  /** Configured Claude Code accounts; a picked account that is gone is an error, never a silent fallback. */
+  accounts?: AccountsSettings;
   /** Technique order from Settings (ids). Selected ids are emitted in this order. */
   techniqueOrder?: string[];
   newId?: () => string;
@@ -367,6 +396,8 @@ export function buildSpec(form: SpawnForm, ctx: BuildContext): BuildResult {
     else if (form.workIn === 'project-folder') errors.mode = 'Bypass agents always run in their own worktree, never in the project folder.';
   }
   if (form.attempts > 1 && form.workIn === 'project-folder') errors.workIn = 'Parallel attempts need their own worktrees. Pick a new worktree, or run one attempt.';
+  const account = form.account === DEFAULT_ACCOUNT || !ctx.accounts ? undefined : ctx.accounts.list.find((a) => a.id === form.account)?.id;
+  if (form.account !== DEFAULT_ACCOUNT && ctx.accounts && !account) errors.account = 'That account was removed in Settings. Pick another one.';
   if (Object.keys(errors).length) return { ok: false, errors };
 
   // Custom models ("Your models") only apply to the lead; the supervisor sets their env per agent.
@@ -397,6 +428,8 @@ export function buildSpec(form: SpawnForm, ctx: BuildContext): BuildResult {
     mode: form.mode,
     strategy: toStrategy(form.kind, slots),
     ...(customModel ? { customModel } : {}),
+    // A custom model does not run on a Claude plan, so it has no account.
+    ...(account && !customModel ? { accountId: account } : {}),
     techniques,
     extensions,
     attempts,

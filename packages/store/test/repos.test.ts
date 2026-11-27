@@ -138,6 +138,17 @@ describe('usage, review, ui state', () => {
     ]);
   });
 
+  it('sums usage per Claude Code account (spec.accountId, default otherwise)', () => {
+    const { s, p } = setup();
+    s.agents.insert({ id: 'a1', projectId: p.id, spec: spec(p.id), status: 'running' });
+    s.agents.insert({ id: 'a2', projectId: p.id, spec: { ...spec(p.id), accountId: 'acc-work01' }, status: 'running' });
+    s.usage.add({ agentId: 'a1', ts: 10, usage: { input: 100 } });
+    s.usage.add({ agentId: 'a2', ts: 10, usage: { input: 30, output: 3 } });
+    s.usage.add({ agentId: 'a2', ts: 1, usage: { input: 999 } });
+    s.usage.add({ ts: 10, usage: { input: 1 } });
+    expect(Object.fromEntries(s.usage.totalsByAccount(5))).toEqual({ default: 101, 'acc-work01': 33 });
+  });
+
   it('rolls old samples up per day, project and model, and reads days across both (Usage screen)', () => {
     const { s, p } = setup();
     s.agents.insert({ id: 'a1', projectId: p.id, spec: spec(p.id), status: 'done' });

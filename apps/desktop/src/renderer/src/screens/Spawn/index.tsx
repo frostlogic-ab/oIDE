@@ -10,6 +10,7 @@ import { MODEL_FAMILIES, KNOWN_MODEL_VERSIONS, type InstalledExtension, type Mod
 import { Badge, Button, Checkbox, Dialog, Icon, Kbd, SegmentedControl, Select, TextArea, cn } from '@oide/ui';
 import { invokeOr, ipcErrorMessage, isMac, oide } from '../../lib/bridge';
 import { useKeymapScope } from '../../lib/useKeymap';
+import { useAccounts } from '../../stores/accounts';
 import { useAgents } from '../../stores/agents';
 import { useCli } from '../../stores/cli';
 import { useProjects } from '../../stores/projects';
@@ -27,6 +28,7 @@ import {
   MAX_ATTEMPTS,
   MODE_OPTIONS,
   PRESET_HINTS,
+  accountOptions,
   STRATEGY_OPTIONS,
   WORK_IN_OPTIONS,
   applyVersions,
@@ -75,6 +77,7 @@ export default function SpawnScreen() {
   const projects = useProjects((s) => s.list);
   const scope = useScope((s) => s.scope);
   const cli = useCli((s) => s.info);
+  const accountUsage = useAccounts((s) => s.usage);
 
   const allowBypass = settings?.claude.allowBypass ?? false;
   const versions = settings?.models.versions ?? {};
@@ -210,7 +213,7 @@ export default function SpawnScreen() {
 
   const submit = async () => {
     if (busy || atts.busy || pendingLeave) return;
-    const res = buildSpec(form, { allowBypass, customModels, techniqueOrder: techniques.map((t) => t.id) });
+    const res = buildSpec(form, { allowBypass, customModels, ...(settings ? { accounts: settings.accounts } : {}), techniqueOrder: techniques.map((t) => t.id) });
     if (!res.ok) {
       setErrors(res.errors);
       if (res.errors.goal) goalRef.current?.focus();
@@ -249,6 +252,7 @@ export default function SpawnScreen() {
 
   const spawnLabel = form.attempts === 1 ? 'Spawn agent' : `Spawn ${form.attempts} agents`;
   const projectFolder = form.workIn === 'project-folder';
+  const showAccount = (settings?.accounts.list.length ?? 0) > 0 && !form.slots.lead.model.startsWith(CUSTOM_PREFIX);
   const noProjects = projects.length === 0;
 
   return (
@@ -341,6 +345,22 @@ export default function SpawnScreen() {
               hint={projectFolder ? 'Only one agent at a time can work in the project folder.' : undefined}
             />
           </div>
+
+          {/* Account: only with two or more Claude Code accounts, and not for a custom model (no Claude plan). */}
+          {showAccount && settings && (
+            <div className="grid grid-cols-2 gap-3.5">
+              <Select
+                label="Account"
+                size={36}
+                surface="chrome"
+                value={form.account}
+                onChange={(e) => update({ account: e.target.value as SpawnForm['account'] })}
+                options={accountOptions(settings.accounts, accountUsage)}
+                error={errors.account}
+                hint="The agent keeps this Claude Code account for its whole life."
+              />
+            </div>
+          )}
 
           {/* Mode */}
           <div className="flex flex-col gap-2">

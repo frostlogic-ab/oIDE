@@ -32,7 +32,7 @@ export interface LoadError {
 
 /** Sections in design order, with the words their rows contain (for Search settings). */
 export const SECTIONS: Array<{ id: SectionId; label: string; keywords: string }> = [
-  { id: 'cli', label: 'Claude Code', keywords: 'cli path version account sign in plan default mode bypass permissions extra flags' },
+  { id: 'cli', label: 'Claude Code', keywords: 'cli path version account accounts subscription sign in plan default mode bypass permissions extra flags' },
   { id: 'models', label: 'Models', keywords: 'default focus presets cheap balanced quality effort opus sonnet haiku fable versions latest pinned your models custom local bedrock vertex api key endpoint test connection' },
   { id: 'agents', label: 'Agents', keywords: 'max running queue worktree location clean up context amber compact notifications fetch remotes' },
   { id: 'tech', label: 'Techniques', keywords: 'techniques prompt adversarial review docs tests quality gates system prompt first message' },

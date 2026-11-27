@@ -5,7 +5,7 @@ import { LaunchError, Supervisor, WORKTREE_GONE, type AgentDriver, type EventSin
 import { Git, isInside, pathKey, samePath, type WorktreeManager } from '@oide/git';
 import type { OideMcpServer } from '@oide/mcp-server';
 import { ENTRY_FILES, entryFileOf, readOideFile, type SecretStore, type SettingsService, type Store } from '@oide/store';
-import { isEmptyOideBoard, isImportStubContent, modelFamilyOf, isSafeArtifactPath, LEGACY_IMPORT_STUB_MAX_BYTES, repairAgentSummary, type AgentEvent, type AgentSpecInput, type AgentStatus, type AgentSummary, type ArchiveReason, type ArtifactKind, type Effort, type PermissionAnswer, type PermissionMode, type UserMessage } from '@oide/protocol';
+import { DEFAULT_ACCOUNT, isEmptyOideBoard, isImportStubContent, modelFamilyOf, isSafeArtifactPath, LEGACY_IMPORT_STUB_MAX_BYTES, repairAgentSummary, type AgentEvent, type AgentSpecInput, type AgentStatus, type AgentSummary, type ArchiveReason, type ArtifactKind, type Effort, type PermissionAnswer, type PermissionMode, type UserMessage } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
 import { boundModelKey } from '../security/model-keys.js';
@@ -14,6 +14,7 @@ import { describeHolders, primaryCategory, type FindHoldersOptions, type HolderR
 import type { Redactor } from '../reliability/redact.js';
 import { BufferedWriter, StorageErrorReporter } from '../reliability/storage-errors.js';
 import { copyAttachments, validateAttachments } from './attachments.js';
+import type { AccountsService } from './accounts.js';
 import type { CliService } from './cli.js';
 import type { ExtensionsService } from './extensions.js';
 import type { GitService } from './git.js';
@@ -99,6 +100,8 @@ export interface AgentsServiceOptions {
   mcp: OideMcpServer;
   projects: ProjectsService;
   cli: CliService;
+  /** Claude Code accounts (ADR 0021): config folder per account, plan usage and sign-in per account. */
+  accounts?: AccountsService;
   platform: Platform;
   /** Worktree folders to delete later when a program holds them open (retried in the background and at start). */
   cleanup?: CleanupQueue;
@@ -345,8 +348,16 @@ export class AgentsService {
     };
   }
 
+  /** The agent's extra Claude Code account, or undefined for the default one. */
+  private accountOf(agentId: string): string | undefined {
+    return this.supervisor.spec(agentId)?.accountId;
+  }
+
   private onEvent(e: AgentEvent): void {
     const { o } = this;
+    if (o.accounts && (e.type === 'init' || e.type === 'error' || e.type === 'plan-usage' || e.type === 'rate-limit' || e.type === 'usage')) {
+      o.accounts.observe(this.accountOf(e.agentId) ?? DEFAULT_ACCOUNT, e);
+    }
     switch (e.type) {
       case 'usage':
         o.store.usage.add({ agentId: e.agentId, ...(e.parentToolUseId ? { subagentId: e.parentToolUseId } : {}), ts: e.ts, ...(e.model ? { model: e.model } : {}), usage: e.usage });
@@ -355,10 +366,10 @@ export class AgentsService {
         o.store.subagents.upsert(e.subagent);
         break;
       case 'init':
-        o.cli.noteSignedIn('yes');
+        if (!this.accountOf(e.agentId)) o.cli.noteSignedIn('yes');
         break;
       case 'error':
-        if (e.code === 'auth') o.cli.noteSignedIn('no');
+        if (e.code === 'auth' && !this.accountOf(e.agentId)) o.cli.noteSignedIn('no');
         break;
       case 'tool-use': {
         if (!EDIT_TOOLS.has(e.name)) break;
@@ -406,6 +417,7 @@ export class AgentsService {
       extraMcpServers: async (spec, agentId) => (this.extensions ? (await this.extensions.agentConfig(spec, agentId)).servers : {}),
       extraEnv: async (spec, agentId) => (this.extensions ? (await this.extensions.agentConfig(spec, agentId)).env : {}),
       customModel: (id) => o.settings.get().models.custom.find((m) => m.id === id),
+      accountConfigDir: (id) => o.accounts?.configDir(id),
       addAllowRule: async (projectId, rule) => {
         const p = o.projects.get(projectId);
         if (!p) return;
