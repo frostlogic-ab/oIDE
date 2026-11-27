@@ -9,6 +9,8 @@ export function useReview(agentId: string | undefined) {
   const [viewed, setViewed] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>();
+  /** The agent whose diff `files` currently holds (files from a previous agent linger until the load lands). */
+  const [loadedFor, setLoadedFor] = useState<string>();
 
   const reload = useCallback(async () => {
     if (!agentId) return;
@@ -22,6 +24,7 @@ export function useReview(agentId: string | undefined) {
       setFiles(d);
       setComments(c);
       setViewed(new Set(v));
+      setLoadedFor(agentId);
       setError(undefined);
     } catch (err) {
       setError(ipcErrorMessage(err));
@@ -73,5 +76,5 @@ export function useReview(agentId: string | undefined) {
     setComments((prev) => prev.map((c) => ({ ...c, sent: true })));
   }, [agentId]);
 
-  return { files, comments, viewed, loading, error, reload, addComment, deleteComment, toggleViewed, sendFeedback };
+  return { files, comments, viewed, loading, loadedFor, error, reload, addComment, deleteComment, toggleViewed, sendFeedback };
 }

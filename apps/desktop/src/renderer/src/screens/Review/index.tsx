@@ -133,6 +133,23 @@ export default function ReviewScreen() {
     setDraftKeys(new Set());
   }, [agentId]);
 
+  // Open on the file the route names (Focus > Inspector rows), once per navigation: once this
+  // route has been applied, the user's own picks and reloads never snap back to it, and a later
+  // navigation without a path keeps whatever is selected. A path not in the diff is ignored.
+  const routePath = route.screen === 'review' ? route.params.path : undefined;
+  const appliedRoute = useRef<unknown>(null);
+  useEffect(() => {
+    if (!routePath || appliedRoute.current === route) return;
+    if (review.loading || review.loadedFor !== agentId) return;
+    appliedRoute.current = route;
+    const i = files.findIndex((f) => f.path === routePath);
+    if (i >= 0) {
+      setSelected(i);
+      setHunk(0);
+      setComposer(null);
+    }
+  }, [route, routePath, agentId, files, review.loading, review.loadedFor]);
+
   const selectFile = useCallback(
     (i: number) => {
       if (!files.length) return;
