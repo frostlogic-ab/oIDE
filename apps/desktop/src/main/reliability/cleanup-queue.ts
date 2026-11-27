@@ -1,9 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { isLockError } from '@oide/git';
+import { isLockError, plainFsPromises } from '@oide/git';
 import { removeSync } from './fs-safe.js';
-import { rm } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
 import { describeHolders, type FolderHolder } from './folder-holders.js';
+
+// Not node:fs: in Electron it treats `*.asar` files as folders and keeps them open (@oide/git plain-fs).
+const { rm } = plainFsPromises;
 
 /**
  * Worktree folders that could not be deleted (docs/wiki/pages/git-worktrees.md, "Why a worktree

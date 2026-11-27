@@ -1,6 +1,7 @@
 export * from './git.js';
 export * from './bin.js';
 export * from './paths.js';
+export * from './plain-fs.js';
 export * from './status.js';
 export * from './patch.js';
 export * from './diff.js';

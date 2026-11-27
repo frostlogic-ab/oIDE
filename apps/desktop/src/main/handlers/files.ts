@@ -1,13 +1,15 @@
-import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, relative } from 'node:path';
-import { fileHistory, isInside as gitIsInside, samePath } from '@oide/git';
+import { fileHistory, isInside as gitIsInside, plainFs, samePath } from '@oide/git';
 import { buildSearchRegExp, type ArtifactMeta, type FileNode } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
 import { assertInside, isInside } from '../security/paths.js';
 import { ContentSearch, FileIndex, replaceInFiles, type ReplaceTarget } from '../services/file-search.js';
 import type { Services } from '../services/index.js';
+
+// Not node:fs: in Electron it treats `*.asar` files as folders and keeps them open (@oide/git plain-fs).
+const { existsSync } = plainFs;
+const { mkdir, readdir, readFile, stat, writeFile } = plainFs.promises;
 
 const MAX_READ = 5 * 1024 * 1024;
 const toPosix = (p: string) => p.split('\\').join('/');

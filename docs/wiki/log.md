@@ -1056,6 +1056,22 @@ effect, so a late load or a `settingChanged` reload overwrote what the user had 
 saved nothing. The draft now follows the saved value only while the field is unedited (regression
 test added). See [extensions](pages/extensions.md).
 
+## [2026-11-27] build | Worktree folders no longer held open by oIDE itself
+User report: when an agent finished, deleting its worktree failed; with oIDE open (no agents)
+Explorer could not delete the folder either, and after quitting oIDE it could. oIDE's log showed
+almost every failure as `EBUSY: rmdir '…\node_modules\electron\dist\resources\default_app.asar'`.
+Cause: Electron's asar support in the main process's `node:fs` treats any `*.asar` file as a folder
+and keeps every archive it opens in a never-closed cache, so `fs.rm` of a worktree with
+`node_modules` failed on that file and then oIDE kept it open until it quit. Reproduced with the
+dev Electron binary (`node:fs` rm → `EBUSY`, and an outside `rmdir` fails while the process lives;
+`original-fs` rm succeeds). The holder scan never named oIDE because it excludes its own pid.
+- `@oide/git` `plain-fs.ts`: `plainFs` / `plainFsPromises` = Electron's `original-fs` (plain
+  `node:fs` outside Electron). Used by `removeTree`, the cleanup queue's retries, `diff.ts`
+  (untracked files), Files (tree, read, write) and Files › Search.
+- `packages/git/test/plain-fs.test.ts` runs the real Electron binary (skipped when it was not
+  downloaded). Folders already waiting in the cleanup queue are removed at the next start.
+- Telemetry: no new event; `worktree_delete_failed` / `worktree_delete_retried_ok` already measure it.
+Page: [git-worktrees](pages/git-worktrees.md#why-a-worktree-cant-be-deleted-on-windows).
 ## [2026-11-27] build | Windows: installed oIDE showed a blank taskbar icon
 Dev runs set the same AppUserModelID as the installed app (`dev.oide.app`), so Electron's
 notification shortcut `Electron.lnk` carried it too, pointing at a worktree's `electron.exe` and

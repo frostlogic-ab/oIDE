@@ -1,8 +1,11 @@
-import { open, stat } from 'node:fs/promises';
+import { plainFsPromises } from './plain-fs.js';
 import { join } from 'node:path';
 import type { DiffStat, FileDiff } from '@oide/protocol';
 import { toGit, type Git, type Repo } from './git.js';
 import { parseUnifiedDiff, synthesizeAddedPatch } from './patch.js';
+
+// Not node:fs: in Electron it treats `*.asar` files as folders and keeps them open (plain-fs.ts).
+const { open, stat } = plainFsPromises;
 
 /**
  * Diffs for an agent worktree, the way Review and the tiles count them:
