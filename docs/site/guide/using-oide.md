@@ -41,7 +41,7 @@ scopes the others too.
 | Shift+Tab | Switch the agent's permission mode (as in the CLI) |
 | Ctrl/Cmd+Enter | Send a message, or spawn from the Spawn dialog |
 | Esc | Back or close |
-| Alt+Left / Alt+Right | Go back / forward |
+| Alt+Left / Alt+Right, or the mouse's back / forward buttons | Go back / forward |
 
 The full list is in **Settings > Keyboard shortcuts**.
 
