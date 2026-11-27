@@ -10,7 +10,7 @@ import { toast } from '../../stores/ui';
 import { onTabsMoved, onTabsReloaded, useFiles, type FileTab } from './filesStore';
 import { MarkdownPreview } from './MarkdownPreview';
 import type { MarkdownView } from './markdownLinks';
-import { BASE_OPTIONS, languageFor, languageLabel, monaco } from './monaco/setup';
+import { BASE_OPTIONS, FILE_MINIMAP, languageFor, languageLabel, monaco } from './monaco/setup';
 
 export interface SelectionInfo {
   path: string;
@@ -165,7 +165,7 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
   // Create the editor once.
   useEffect(() => {
     if (!host.current) return;
-    const ed = monaco.editor.create(host.current, { ...BASE_OPTIONS, model: null });
+    const ed = monaco.editor.create(host.current, { ...BASE_OPTIONS, minimap: FILE_MINIMAP, model: null });
     editorRef.current = ed;
     ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => void save());
     ed.addAction({
