@@ -71,11 +71,15 @@ interface DesignFrameProps {
    * scripts, no picker), `react` (a notice), `loading` (asking main for the URL).
    */
   onSource?: (source: DesignSource) => void;
+  /** Shown instead of the inline (srcdoc) preview when main serves no URL (thumbnails have no HTML at hand). */
+  fallback?: React.ReactNode;
+  /** No scrollbar in the frame (thumbnails: the page is cut at the box, nothing to scroll to). */
+  noScroll?: boolean;
 }
 
 export type DesignSource = 'url' | 'inline' | 'react' | 'loading';
 
-export function DesignFrame({ artifactId, title, html, forceInline, scaled, version, className, frameRef, onSource }: DesignFrameProps) {
+export function DesignFrame({ artifactId, title, html, forceInline, scaled, version, className, frameRef, onSource, fallback, noScroll }: DesignFrameProps) {
   const [url, setUrl] = useState<string | null | undefined>(undefined);
   const [ref, width] = useWidth<HTMLDivElement>();
 
@@ -100,6 +104,7 @@ export function DesignFrame({ artifactId, title, html, forceInline, scaled, vers
     style: frameStyle,
     referrerPolicy: 'no-referrer' as const,
     tabIndex: scaled ? -1 : 0,
+    ...(noScroll ? { scrolling: 'no' } : {}),
   };
 
   // React needs the runtime that main serves with the saved version: it never goes into srcdoc.
@@ -110,7 +115,9 @@ export function DesignFrame({ artifactId, title, html, forceInline, scaled, vers
 
   return (
     <div ref={ref} className={cn('relative overflow-hidden', className)}>
-      {react ? (
+      {inline && fallback !== undefined ? (
+        fallback
+      ) : react ? (
         <ReactNotice text={forceInline ? 'Only the saved version of a React design can be previewed. Save your changes, or use Compare to see older versions.' : 'React designs preview in the desktop app.'} scaled={scaled} />
       ) : inline ? (
         <iframe ref={frameRef} {...common} sandbox="" srcDoc={html} />

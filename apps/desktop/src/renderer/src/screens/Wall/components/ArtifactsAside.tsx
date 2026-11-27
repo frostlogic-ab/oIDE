@@ -7,6 +7,7 @@ import { navigate } from '../../../stores/router';
 import { useScope } from '../../../stores/scope';
 import { ResizableAside } from '../../../components/ResizableAside';
 import { PANELS } from '../../../lib/panels';
+import { ArtifactThumbnail } from '../../Artifacts/Thumbnail';
 
 const KIND_LABEL: Record<ArtifactKind, string> = { design: 'Design', doc: 'Doc', whiteboard: 'Whiteboard' };
 
@@ -89,7 +90,7 @@ export function ArtifactsAside() {
               }}
               className="block border border-line-2 rounded-lg overflow-hidden bg-card no-underline text-ink hover:border-line-hover hover:text-ink"
             >
-              <Thumb kind={a.kind} />
+              <ArtifactThumbnail meta={a} placeholder={<Thumb kind={a.kind} />} className="h-[72px] bg-raised" />
               <span className="px-2.5 py-2 flex flex-col gap-0.5">
                 <span className="font-semibold truncate">{a.title}</span>
                 <span className="text-[12px] text-ink-3 truncate">
@@ -125,11 +126,11 @@ export function ArtifactsAside() {
   );
 }
 
-/** Abstract previews drawn on the canvas for each artifact kind. */
+/** Abstract previews drawn on the canvas for each artifact kind: shown until the live thumbnail loads, or when there is nothing to show. */
 function Thumb({ kind }: { kind: ArtifactKind }) {
   if (kind === 'design')
     return (
-      <span aria-hidden="true" className="h-[72px] bg-raised p-2.5 box-border flex gap-1.5">
+      <span aria-hidden="true" className="h-full bg-raised p-2.5 box-border flex gap-1.5">
         <span className="w-[30%] bg-line-2 rounded-[4px]" />
         <span className="flex-1 grid grid-cols-3 gap-1">
           {Array.from({ length: 6 }, (_, i) => (
@@ -140,7 +141,7 @@ function Thumb({ kind }: { kind: ArtifactKind }) {
     );
   if (kind === 'doc')
     return (
-      <span aria-hidden="true" className="h-[72px] bg-raised p-3 box-border flex flex-col gap-1.5">
+      <span aria-hidden="true" className="h-full bg-raised p-3 box-border flex flex-col gap-1.5">
         <span className="w-[60%] h-2 bg-line-3 rounded-xs" />
         <span className="w-[90%] h-[5px] bg-line-5 rounded-xs" />
         <span className="w-[85%] h-[5px] bg-line-5 rounded-xs" />
@@ -148,7 +149,7 @@ function Thumb({ kind }: { kind: ArtifactKind }) {
       </span>
     );
   return (
-    <span aria-hidden="true" className="h-[72px] bg-raised relative block">
+    <span aria-hidden="true" className="h-full bg-raised relative block">
       <span className="absolute left-3.5 top-3.5 w-[46px] h-[26px] border-[1.5px] border-review rounded-sm" />
       <span className="absolute left-[60px] top-[27px] w-10 h-[1.5px] bg-ink-4" />
       <span className="absolute left-[100px] top-3.5 w-[46px] h-[26px] border-[1.5px] border-ok rounded-[13px]" />
