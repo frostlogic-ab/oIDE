@@ -19,7 +19,7 @@
  * "Open on this page". With no files yet (version 0, a link being retrieved or a failed retrieval)
  * the retrieval status stands in for the editors.
  */
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { ArtifactFile, ArtifactMeta, CommandOutput } from '@oide/protocol';
 import { Badge, Button, Dialog, DiffStat, Icon, Menu, SegmentedControl, Select, Spinner } from '@oide/ui';
 import { formatSize } from '../../lib/attachments';
@@ -183,8 +183,10 @@ export function Viewer({
     };
   }, [meta.id, meta.version, multi]);
 
-  // A broken import puts the cursor in its paste box instead.
-  useEffect(() => {
+  // A broken import puts the cursor in its paste box instead. A layout effect, so focus moves in
+  // the commit that opens the view: a passive effect could run after the first keypress and take
+  // focus back from what that key moved it to (seen as a flaky test on a slow CI runner).
+  useLayoutEffect(() => {
     if (!meta.brokenImport) headingRef.current?.focus();
     // On open only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
