@@ -66,10 +66,18 @@ function createEntry(op, title) {
   }
   const date = new Date().toISOString().slice(0, 10);
   const slug = slugify(title) || op;
-  let file = join(logDir, `${date}-${slug}.md`);
-  for (let n = 2; existsSync(file); n++) file = join(logDir, `${date}-${slug}-${n}.md`);
-  writeFileSync(file, `## [${date}] ${op} | ${title}\n\nTODO: what changed and why. Link the pages it touched as ../pages/<page>.md.\n`, { flag: 'wx' });
-  console.log(relative(process.cwd(), file));
+  const body = `## [${date}] ${op} | ${title}\n\nTODO: what changed and why. Link the pages it touched as ../pages/<page>.md.\n`;
+  // Create exclusively ('wx') and pick the next suffix on EEXIST: no separate exists-check to race.
+  for (let n = 1; ; n++) {
+    const file = join(logDir, `${date}-${slug}${n === 1 ? '' : `-${n}`}.md`);
+    try {
+      writeFileSync(file, body, { flag: 'wx' });
+      console.log(relative(process.cwd(), file));
+      return;
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+    }
+  }
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
