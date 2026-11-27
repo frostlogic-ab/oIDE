@@ -13,6 +13,7 @@ import { AgentsService } from './agents.js';
 import { ArtifactAgentService } from './artifact-agent.js';
 import { agentFileBytes, ArtifactRetrievalService } from './artifact-retrieval.js';
 import { CliService } from './cli.js';
+import { AccountsService } from './accounts.js';
 import { ExtensionsService } from './extensions.js';
 import { LanguageServerService, lspLanguageBucket, type LanguageServerDef } from './lsp/language-servers.js';
 import { GitService, parcelWatch, type WatchFn } from './git.js';
@@ -31,6 +32,8 @@ export interface Services {
   artifacts: ArtifactStore;
   mcp: OideMcpServer;
   cli: CliService;
+  /** Claude Code accounts: one CLAUDE_CONFIG_DIR each, plan usage per account (ADR 0021). */
+  accounts: AccountsService;
   projects: ProjectsService;
   agents: AgentsService;
   git: GitService;
@@ -235,9 +238,17 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   // gh: GitService (below) owns the GitHub CLI; read lazily.
   const projects = new ProjectsService({ ctx, store, platform, picked, gh: (): GhCli | undefined => git.gh });
   const cleanup = new CleanupQueue(ctx.userDataDir);
+  const accounts = new AccountsService({
+    settings,
+    kv: store.ui.kv,
+    usage: store.usage,
+    emit: ctx.emit,
+    userDataDir: ctx.userDataDir,
+    agentsOn: (id): number => late.agents?.list().filter((a) => late.agents?.supervisor.spec(a.id)?.accountId === id).length ?? 0,
+  });
   // The holder scan spawns PowerShell / lsof: only in the app (not in plain-Node tests), unless injected.
   const findHolders = opts.findHolders ?? (platform.background ? findFolderHolders : undefined);
-  const agents = new AgentsService({ ctx, store, settings, secrets, worktrees, mcp, projects, cli, platform, cleanup, ...(findHolders ? { findHolders } : {}), picked, mcpReady: () => mcpPort !== undefined, ...(opts.driver ? { driver: opts.driver } : {}) });
+  const agents = new AgentsService({ ctx, store, settings, secrets, worktrees, mcp, projects, cli, accounts, platform, cleanup, ...(findHolders ? { findHolders } : {}), picked, mcpReady: () => mcpPort !== undefined, ...(opts.driver ? { driver: opts.driver } : {}) });
   const cleanupScheduler = new CleanupScheduler({
     queue: cleanup,
     afterRemove: async (e) => {
@@ -476,6 +487,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     artifacts,
     mcp,
     cli,
+    accounts,
     projects,
     agents,
     git,

@@ -233,6 +233,9 @@ export class Supervisor {
     if (spec.customModel && this.deps.settings.customModel && !(await this.deps.settings.customModel(spec.customModel.id))) {
       throw new LaunchError('That custom model was removed in Settings > Models. Pick another model.');
     }
+    if (spec.accountId && !(await this.deps.settings.accountConfigDir?.(spec.accountId))) {
+      throw new LaunchError('That Claude Code account was removed in Settings > Claude Code. Pick another account.');
+    }
     for (let i = 0; i < n; i++) {
       const id = this.newId();
       const s: AgentSpec = { ...spec, ...(attemptGroup ? { attemptGroup } : {}), attempts: 1, title: n > 1 ? `${spec.title} #${i + 1}` : spec.title };
@@ -369,6 +372,11 @@ export class Supervisor {
       if (rec.spec.customModel && this.deps.settings.customModel && !customModel) {
         throw new LaunchError('Its custom model was removed in Settings > Models. Spawn a new agent with another model.');
       }
+      const claudeConfigDir = rec.spec.accountId ? await this.deps.settings.accountConfigDir?.(rec.spec.accountId) : undefined;
+      // A removed account must not fall through to the default sign-in (another plan, other sessions).
+      if (rec.spec.accountId && !claudeConfigDir) {
+        throw new LaunchError('Its Claude Code account was removed in Settings > Claude Code. Spawn a new agent on another account.');
+      }
       const customModelSecret = customModel?.hasKey ? await this.deps.secrets?.customModelKey(customModel.id) : undefined;
       let firstAttachments: MessageAttachment[] | undefined;
       if (!(resume || rec.started) && rec.firstAttachments?.length) {
@@ -393,6 +401,7 @@ export class Supervisor {
         mcpConfigPath: rec.mcpConfigPath,
         ...(customModel ? { customModel } : {}),
         ...(customModelSecret ? { customModelSecret } : {}),
+        ...(claudeConfigDir ? { claudeConfigDir } : {}),
         ...(this.deps.baseEnv ? { baseEnv: this.deps.baseEnv } : {}),
         ...(this.deps.settings.resolveArtifact ? { resolveArtifact: this.deps.settings.resolveArtifact } : {}),
         ...(firstAttachments ? { firstAttachments } : {}),

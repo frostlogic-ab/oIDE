@@ -39,6 +39,20 @@ export class UsageRepo {
     return { ...u, total: u.input + u.output + u.cacheRead + u.cacheCreation };
   }
 
+  /**
+   * Token totals since `ts` per Claude Code account (ADR 0021): the agent's `spec.accountId`, or
+   * `default` for agents without one and samples without an agent.
+   */
+  totalsByAccount(since: number): Map<string, number> {
+    const rows = this.d.db
+      .prepare(
+        `SELECT COALESCE(json_extract(a.spec, '$.accountId'), 'default') AS acc, COALESCE(SUM(u.input + u.output + u.cache_read + u.cache_creation), 0) AS t
+         FROM usage_samples u LEFT JOIN agents a ON a.id = u.agent_id WHERE u.ts >= ? GROUP BY acc`,
+      )
+      .all(since) as Row[];
+    return new Map(rows.map((r) => [String(r.acc), num(r.t) ?? 0]));
+  }
+
   /** Per-subagent token share of one agent (Subagents tab). */
   bySubagent(agentId: string): Array<{ subagentId: string | undefined; total: number }> {
     return (this.d.db

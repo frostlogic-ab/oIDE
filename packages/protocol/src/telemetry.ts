@@ -372,6 +372,8 @@ export const TELEMETRY_EVENTS = {
       extensions: SmallCount,
       /** The title is a stand-in from the goal; the agent is asked to name the task (set_title). */
       auto_title: z.boolean().optional(),
+      /** Runs on an extra Claude Code account, not the CLI's default config (ADR 0021). */
+      other_account: z.boolean().optional(),
     }),
   }),
   agent_titled: def({

@@ -153,6 +153,15 @@ describe('buildLaunch', () => {
     expect(v.env.CLAUDE_CODE_USE_VERTEX).toBe('1');
   });
 
+  it("sets CLAUDE_CONFIG_DIR to the agent's account, and extension env cannot change it", () => {
+    const own = buildLaunch(spec(), ctx({ baseEnv: { PATH: '/usr/bin', CLAUDE_CONFIG_DIR: '/home/u/.claude-work' }, extraEnv: { CLAUDE_CONFIG_DIR: '/tmp/evil' } }));
+    expect(own.env.CLAUDE_CONFIG_DIR).toBe('/home/u/.claude-work');
+    const none = buildLaunch(spec(), ctx({ baseEnv: { PATH: '/usr/bin' }, extraEnv: { CLAUDE_CONFIG_DIR: '/tmp/evil' } }));
+    expect(none.env.CLAUDE_CONFIG_DIR).toBeUndefined();
+    const acc = buildLaunch(spec({ accountId: 'acc-abc123' }), ctx({ claudeConfigDir: '/data/claude-accounts/acc-abc123', extraEnv: { CLAUDE_CONFIG_DIR: '/tmp/evil' } }));
+    expect(acc.env.CLAUDE_CONFIG_DIR).toBe('/data/claude-accounts/acc-abc123');
+  });
+
   it('allowed / disallowed tools from project rules, settings and extension risk labels', () => {
     const settings = testSettings();
     settings.permissions.alwaysAllowed = ['Bash(npm test)'];
