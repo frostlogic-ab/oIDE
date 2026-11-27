@@ -11,6 +11,7 @@ import { extensionUiCommands } from '../extensions/commands';
 import { useSearch } from '../screens/Files/searchStore';
 import { isOnSomewhere } from '../extensions/model';
 import { openNewProject } from '../stores/newProject';
+import { openNewWindow } from './windows';
 
 /** Core commands. Registered once at boot; returns an unregister. */
 export function registerCoreCommands(): () => void {
@@ -66,6 +67,14 @@ export function registerCoreCommands(): () => void {
         useWall.getState().setView('archived');
         navigate('wall');
       },
+    },
+    {
+      id: 'oide.newWindow',
+      title: 'New window',
+      group: 'Window',
+      keywords: ['window', 'open', 'another', 'second', 'monitor'],
+      hint: keymap.label('app.newWindow'),
+      run: () => void openNewWindow('command'),
     },
     { id: 'oide.go.artifacts', title: 'Go to Artifacts', group: 'Go to', keywords: ['designs', 'docs', 'whiteboards'], run: () => navigate('artifacts', {}) },
     { id: 'oide.go.files', title: 'Go to Files', group: 'Go to', keywords: ['editor', 'tree'], run: () => navigate('files', {}) },
