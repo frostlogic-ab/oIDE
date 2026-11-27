@@ -6,6 +6,7 @@ import {
   type AgentEvent,
   type AgentStatus,
   type AgentSummary,
+  type Effort,
   type SubagentInfo,
   type TokenUsage,
   type WorkIn,
@@ -136,6 +137,8 @@ export interface NewSummaryInput {
   attemptGroup?: string;
   sessionId?: string;
   workIn?: WorkIn;
+  artifactId?: string;
+  effort?: Effort;
   now?: number;
 }
 
@@ -151,6 +154,8 @@ export function createSummary(input: NewSummaryInput): AgentSummary {
     ...(input.sessionId ? { sessionId: input.sessionId } : {}),
     ...(input.attemptGroup ? { attemptGroup: input.attemptGroup } : {}),
     ...(input.workIn ? { workIn: input.workIn } : {}),
+    ...(input.artifactId ? { artifactId: input.artifactId } : {}),
+    ...(input.effort ? { effort: input.effort } : {}),
     activity: [],
     contextUsed: 0,
     contextWindow: contextWindowFor(input.model),
@@ -274,6 +279,12 @@ export class AgentReducer {
         if (m) s.mode = m;
         break;
       }
+      case 'model-changed':
+        s.model = e.model;
+        s.contextWindow = this.windows.get(e.model);
+        if (e.effort) s.effort = e.effort;
+        else delete s.effort;
+        break;
       case 'partial':
         if (lead && e.kind === 'thinking') pushActivity('Thinking…', true);
         else if (lead && e.kind === 'text') pushActivity('Writing…', true);

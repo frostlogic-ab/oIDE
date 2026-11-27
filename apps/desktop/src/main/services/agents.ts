@@ -1,10 +1,11 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { isAbsolute, relative, resolve } from 'node:path';
+import { mkdir, rm } from 'node:fs/promises';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { LaunchError, Supervisor, WORKTREE_GONE, type AgentDriver, type EventSink, type PermissionBroker, type SecretProvider, type SettingsProvider, type WorktreeProvider } from '@oide/agent-core';
 import { Git, isInside, pathKey, samePath, type WorktreeManager } from '@oide/git';
 import type { OideMcpServer } from '@oide/mcp-server';
 import { ENTRY_FILES, entryFileOf, readOideFile, type SecretStore, type SettingsService, type Store } from '@oide/store';
-import { isEmptyOideBoard, isImportStubContent, isSafeArtifactPath, LEGACY_IMPORT_STUB_MAX_BYTES, repairAgentSummary, type AgentEvent, type AgentSpecInput, type AgentStatus, type AgentSummary, type ArchiveReason, type ArtifactKind, type PermissionAnswer, type PermissionMode, type UserMessage } from '@oide/protocol';
+import { isEmptyOideBoard, isImportStubContent, modelFamilyOf, isSafeArtifactPath, LEGACY_IMPORT_STUB_MAX_BYTES, repairAgentSummary, type AgentEvent, type AgentSpecInput, type AgentStatus, type AgentSummary, type ArchiveReason, type ArtifactKind, type Effort, type PermissionAnswer, type PermissionMode, type UserMessage } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
 import { boundModelKey } from '../security/model-keys.js';
@@ -170,11 +171,27 @@ export class AgentsService {
 
   // ---------------------------------------------------------------- ports
 
+  /** `<userData>/artifact-agents`: the scratch folders of artifact agents (never inside a repo). */
+  get artifactAgentsRoot(): string {
+    return join(this.o.ctx.userDataDir, 'artifact-agents');
+  }
+
+  private artifactAgentFolder(agentId: string): string {
+    const safe = agentId.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 100) || 'agent';
+    return join(this.artifactAgentsRoot, safe);
+  }
+
   private worktreeProvider(): WorktreeProvider {
     const { o } = this;
     return {
-      create: async ({ slug, spec }) => {
+      create: async ({ agentId, slug, spec }) => {
         const p = o.projects.require(spec.projectId);
+        if (spec.workIn === 'artifact-folder') {
+          // An artifact agent edits its artifact over MCP: it gets an empty folder of its own, never a repo.
+          const path = this.artifactAgentFolder(agentId);
+          await mkdir(path, { recursive: true });
+          return { path };
+        }
         if (spec.workIn === 'project-folder') {
           if (spec.mode === 'bypassPermissions') throw new LaunchError('Bypass agents must run in a worktree, never in the project folder');
           const sha = await new Git({ cwd: p.path }).revParse('HEAD');
@@ -193,7 +210,7 @@ export class AgentsService {
       runSetup: async ({ path, spec, onStart, onOutput }) => {
         const p = o.projects.get(spec.projectId);
         // Workspace trust: an untrusted repo's .oide/setup never runs. Nor in the user's own checkout.
-        if (!p?.trusted || spec.workIn === 'project-folder' || samePath(path, p.path)) return { ok: true };
+        if (!p?.trusted || spec.workIn === 'project-folder' || spec.workIn === 'artifact-folder' || samePath(path, p.path)) return { ok: true };
         const eff = await o.settings.forProject(p.path, { trusted: true });
         if (!eff.setup) return { ok: true };
         onStart?.();
@@ -213,6 +230,11 @@ export class AgentsService {
         return { ok: r.exitCode === 0, output: tail };
       },
       remove: async ({ path, projectId }) => {
+        if (isInside(this.artifactAgentsRoot, path) && !samePath(path, this.artifactAgentsRoot)) {
+          await rm(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 });
+          o.ctx.roots.remove(path);
+          return true;
+        }
         const p = o.projects.get(projectId);
         if (!p || samePath(path, p.path)) return false;
         await this.git?.unwatch(path);
@@ -451,7 +473,7 @@ export class AgentsService {
     const { o } = this;
     const safe = this.contractSafe(s);
     if (safe) o.ctx.emit('agents.summary', safe);
-    if (s.worktreePath && !o.ctx.roots.list('worktree').some((r) => samePath(r, s.worktreePath!))) {
+    if (s.worktreePath && s.workIn !== 'artifact-folder' && !o.ctx.roots.list('worktree').some((r) => samePath(r, s.worktreePath!))) {
       const p = o.projects.get(s.projectId);
       if (p && !samePath(p.path, s.worktreePath)) o.ctx.roots.add(s.worktreePath, 'worktree');
       if (p?.trusted) this.git?.watch(s.worktreePath, s.projectId);
@@ -514,8 +536,15 @@ export class AgentsService {
     return this.supervisor.list().flatMap((s) => this.contractSafe(s) ?? []);
   }
 
-  async spawn(input: AgentSpecInput): Promise<AgentSummary[]> {
+  /**
+   * Spawn. `artifactAgent` is set only by `artifacts.startAgent` (main): an artifact agent cannot be
+   * spawned from the renderer's Spawn, so its narrower contract and folder are always main's choice.
+   */
+  async spawn(input: AgentSpecInput, opts: { artifactAgent?: boolean } = {}): Promise<AgentSummary[]> {
     const p = this.o.projects.require(input.projectId);
+    const isArtifact = input.workIn === 'artifact-folder' || input.artifactId !== undefined;
+    if (isArtifact && !opts.artifactAgent) throw new IpcError('Artifact agents start from the artifact (Artifacts › open view).', 'forbidden');
+    if (opts.artifactAgent && (input.workIn !== 'artifact-folder' || !input.artifactId || (input.attempts ?? 1) > 1)) throw new IpcError('An artifact agent needs its artifact and its own folder.', 'invalid_input');
     if (this.o.mcpReady && !this.o.mcpReady()) throw new IpcError(MCP_DOWN, 'unavailable');
     let spec = input;
     // Presets store a "Your models" slot as `custom:<id>`: that is AgentSpec.customModel.
@@ -582,6 +611,20 @@ export class AgentsService {
     this.require(agentId);
     const ok = await this.supervisor.answerPermission(agentId, answer);
     if (!ok) throw new IpcError('No pending permission request with that id for this agent.', 'not_found');
+  }
+
+  /** Another model or effort, from the next turn (supervisor.setModel). The spec is stored, so a restart keeps it. */
+  async setModel(agentId: string, model: string, effort?: Effort): Promise<void> {
+    const a = this.require(agentId);
+    try {
+      await this.supervisor.setModel(agentId, model, effort);
+    } catch (err) {
+      if (err instanceof LaunchError) throw new IpcError(err.message, 'conflict');
+      throw err;
+    }
+    const spec = this.supervisor.spec(agentId);
+    if (spec && this.ensureRow(agentId)) this.o.store.agents.saveSpec(agentId, spec);
+    this.o.ctx.telemetry?.service.track('agent_model_changed', { model: modelFamilyOf(model), effort: effort ?? 'default', artifact_agent: a.workIn === 'artifact-folder' });
   }
 
   async setMode(agentId: string, mode: PermissionMode): Promise<void> {

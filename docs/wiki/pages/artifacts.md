@@ -210,6 +210,10 @@ retrieval first), `import` (pasted content or one picked file), `uses`, `readVer
   `update`). The agent runs in the artifact's own project, else `projectId`, else error code
   `needs_project`; `busy` while retrieving; `invalid_input` (`needs_link`) without a claude.ai
   link. Also fixes old `brokenImport` artifacts.
+- `startAgent { id, projectId?, text, attachments?, mode?, model? } → AgentSummary` (ADR 0017,
+  `services/artifact-agent.ts`): the artifact's agent, with `text` as its first message. It runs under
+  the artifact's own project, else `projectId`, else `needs_project`; `busy` while the artifact has a
+  live agent or is being retrieved. Mode and strategy default to what Spawn uses for the project.
 - `cancelRetrieval { id }` (`conflict` when none runs), `files { id, version? }`, `readFile { id, path,
   version? }`, `writeFiles { id, files, deletes, entry?, note?, baseVersion? }`.
 - `importFiles { filePaths | folderPath, entry?, url?, title?, kind?, projectId?, location }`: every path
@@ -242,6 +246,15 @@ all (`ARTIFACT_CSP`); it allows `'unsafe-inline'` and `'unsafe-eval'` scripts so
 (`*.dc.html` pages whose `_runtime/support.js` compiles the component with `new Function`) render
 ([ADR 0015](../../adr/0015-artifact-previews-allow-eval.md)).
 
+**Point-and-comment picker** ([ADR 0017](../../adr/0017-artifact-agents.md)): every HTML page served
+(files with an HTML type, and the React page) gets `<script src="/__oide/picker.js"></script>` before its
+last `</body>` (`withPicker`); `__oide/picker.js` is the second `__oide/` path served (`PICKER_SOURCE`,
+for any artifact that exists). The script does nothing until the parent posts `{ type: 'oide-pick-mode',
+on }`; then it outlines the hovered element, swallows pointer and click events, and posts `oide-picked`
+(selector, tag, text, page, rect, viewport), `oide-pick-cancel` (Esc) and, on each load,
+`oide-picker-ready`. `{ type: 'oide-pins', pins: [{ n, selector }] }` draws numbered markers. It listens
+only to `window.parent` and posts only to it; the renderer parses everything with `PreviewPickerMessage`.
+
 ## MCP tools and agents
 
 Tool contract: [mcp-server.md](mcp-server.md). Main's backend (`mcpArtifacts` in `services/core.ts`)
@@ -251,11 +264,18 @@ retrieval tools to the retrieval service. When an artifact is a Spawn context ch
 entry file's path (and, for a multi-file artifact, that its other files sit next to it); a version-0
 artifact is described as not retrieved yet.
 
+**Artifact agents** (ADR 0017): `extras.artifactOf(agentId)` (the spec's `artifactId`) lets an artifact
+agent write only its own artifact and create none, and always shows it its own artifact (also a repo
+artifact of an untrusted project). Its folder is `<userData>/artifact-agents/<agentId>` (empty, no
+git); its contract is agent-core's `artifactContract`. `artifacts_write` `edits` (search and replace)
+keep its changes small.
+
 Tests: `packages/store/test/artifacts-multifile.test.ts`, `packages/store/test/artifacts-editing.test.ts`,
 `packages/store/test/secrets-artifacts.test.ts`, `packages/protocol/src/artifacts.test.ts`,
 `apps/desktop/src/main/services/artifact-retrieval.test.ts`,
 `apps/desktop/src/main/services/artifact-preview.test.ts`, `packages/mcp-server/src/server.test.ts`,
-`test/integration/artifact-retrieval.test.ts`, `test/integration/artifact-handlers.test.ts`.
+`test/integration/artifact-retrieval.test.ts`, `test/integration/artifact-handlers.test.ts`,
+`test/integration/artifact-agent.test.ts`.
 
 ## UI
 

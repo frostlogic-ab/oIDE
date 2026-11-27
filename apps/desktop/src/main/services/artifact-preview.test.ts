@@ -5,7 +5,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import type { ArtifactMeta } from '@oide/protocol';
 import type { ArtifactStore } from '@oide/store';
 import { ARTIFACT_CSP } from './core.js';
-import { previewUrlOf, reactPreviewPage, resolveArtifactRequest, REACT_RUNTIME_PATH } from './artifact-preview.js';
+import { PICKER_PATH, PICKER_SOURCE, previewUrlOf, reactPreviewPage, resolveArtifactRequest, REACT_RUNTIME_PATH, withPicker } from './artifact-preview.js';
 
 const root = mkdtempSync(join(tmpdir(), 'oide-preview-'));
 const reactDir = join(root, 'react');
@@ -45,9 +45,41 @@ describe('React design preview page', () => {
     expect(block).not.toBeNull();
     expect(block[1]).not.toMatch(/[<\u2028]/);
     expect(JSON.parse(block[1]!)).toBe(SOURCE);
-    // Exactly the two script tags main writes: the data block and the runtime.
-    expect(page.match(/<script/g)).toHaveLength(2);
+    // Exactly the three script tags main writes: the data block, the runtime and the picker.
+    expect(page.match(/<script/g)).toHaveLength(3);
     expect(page).toContain(`<script src="/${REACT_RUNTIME_PATH}"></script>`);
+    expect(page).toContain(`<script src="/${PICKER_PATH}"></script>`);
+  });
+});
+
+describe('point-and-comment picker', () => {
+  it('adds the picker before the last </body>, or at the end of a page without one', () => {
+    expect(withPicker('<html><body><p>x</p></BODY></html>')).toBe(`<html><body><p>x</p><script src="/${PICKER_PATH}"></script>
+</BODY></html>`);
+    expect(withPicker('<p>x</p>')).toBe(`<p>x</p>
+<script src="/${PICKER_PATH}"></script>
+`);
+  });
+
+  it('serves the picker for an artifact that exists, and adds it to every HTML page served', async () => {
+    const js = await resolveArtifactRequest(store, `oide-artifact://h1/${PICKER_PATH}`, runtime);
+    expect(js && 'body' in js && js.body).toBe(PICKER_SOURCE);
+    expect(js?.mime).toMatch(/javascript/);
+    expect(await resolveArtifactRequest(store, `oide-artifact://nope/${PICKER_PATH}`, runtime)).toBeNull();
+    const page = await resolveArtifactRequest(store, 'oide-artifact://h1/index.html', runtime);
+    expect(page && 'body' in page && page.body).toBe(`<p>x</p>
+<script src="/${PICKER_PATH}"></script>
+`);
+    // Not a page: served as the file, untouched.
+    expect(await resolveArtifactRequest(store, 'oide-artifact://r1/logo.svg', runtime)).toMatchObject({ file: expect.stringContaining('logo.svg') });
+  });
+
+  it('only listens to its parent and only posts to it, with no network calls', () => {
+    expect(PICKER_SOURCE).toContain('e.source !== host');
+    expect(PICKER_SOURCE).toContain("host.postMessage(m, '*')");
+    expect(PICKER_SOURCE).not.toMatch(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon|import\(|eval\(/);
+    // Valid JavaScript.
+    expect(() => new Function(PICKER_SOURCE)).not.toThrow();
   });
 });
 

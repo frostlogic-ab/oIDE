@@ -5,7 +5,7 @@ import { OideMcpServer } from '@oide/mcp-server';
 import type { AgentEvent, AgentSpecInput, AgentSummary, CustomModel, Settings } from '@oide/protocol';
 import { fakeCli, tempDir, testSettings, waitFor } from '../test/helpers.js';
 import type { AttachmentProvider, EventSink, SettingsProvider, WorktreeProvider } from './ports.js';
-import { Supervisor } from './supervisor.js';
+import { ownArtifactWrite, Supervisor } from './supervisor.js';
 
 interface Harness {
   sup: Supervisor;
@@ -481,4 +481,53 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     expect(last).toMatchObject({ text: 'and this one', attachments: [{ kind: 'image' }, { kind: 'image' }] });
     expect(h.raw.some((l) => l.includes('"type":"image"'))).toBe(false); // stdout never echoes the image back
   }, 30_000);
+});
+
+describe('model and effort changes, artifact agents', () => {
+  it('setModel: the summary follows at once; an idle process restarts and the next message resumes on the new model', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic' });
+    const [a] = await h.sup.spawn(spec());
+    await status(h, a!.id, 'has-question');
+    expect(h.get(a!.id).model).toBe('claude-sonnet-5-5');
+    const exits = () => h.events.filter((e) => e.agentId === a!.id && e.type === 'exit').length;
+    await h.sup.setModel(a!.id, 'opus', 'high');
+    expect(h.get(a!.id)).toMatchObject({ model: 'opus', effort: 'high' });
+    expect(h.sup.spec(a!.id)!.strategy.lead).toEqual({ model: 'opus', effort: 'high' });
+    await waitFor(() => exits() === 1, 10_000, 'idle process ended');
+    expect(h.get(a!.id).status).toBe('has-question');
+    h.sup.send(a!.id, { kind: 'text', text: 'continue' });
+    await waitFor(() => h.get(a!.id).lastMessage?.startsWith('Resumed session'), 10_000, 'resumed');
+    expect(h.get(a!.id).model).toBe('claude-opus-5-5');
+    await h.sup.setModel(a!.id, 'sonnet');
+    expect(h.get(a!.id).effort).toBeUndefined();
+  }, 30_000);
+
+  it('setModel on a custom model is refused', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic', customModels: [{ id: 'm1', name: 'Local', model: 'qwen', baseUrl: 'http://localhost:1234', hasKey: false } as never] });
+    const [a] = await h.sup.spawn(spec({ customModel: { id: 'm1' } }));
+    await expect(h.sup.setModel(a!.id, 'opus')).rejects.toThrow(/custom model/);
+  });
+
+  it('summaries carry the artifact and the effort from the spec', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic', maxRunning: 1 });
+    const [a] = await h.sup.spawn(spec({ artifactId: 'art-1', workIn: 'artifact-folder', strategy: { kind: 'single', lead: { model: 'sonnet', effort: 'low' } } }));
+    expect(h.get(a!.id)).toMatchObject({ artifactId: 'art-1', workIn: 'artifact-folder', effort: 'low' });
+  });
+});
+
+describe('ownArtifactWrite', () => {
+  const rec = (mode: 'default' | 'acceptEdits' | 'auto' | 'plan' | 'bypassPermissions', artifactId: string | undefined = 'a1') => ({ spec: { artifactId }, reducer: { summary: { mode } } });
+  const write = (id: string) => ({ toolName: 'mcp__oide__artifacts_write', input: { id, content: 'x' } });
+  it('allows an artifact agent to write its own artifact without a prompt, in the modes that edit without asking', () => {
+    expect(ownArtifactWrite(rec('acceptEdits'), write('a1'))).toBe(true);
+    expect(ownArtifactWrite(rec('auto'), write('a1'))).toBe(true);
+    expect(ownArtifactWrite(rec('bypassPermissions'), write('a1'))).toBe(true);
+  });
+  it('still asks in Manual and Plan, for another artifact, another tool, or an ordinary agent', () => {
+    expect(ownArtifactWrite(rec('default'), write('a1'))).toBe(false);
+    expect(ownArtifactWrite(rec('plan'), write('a1'))).toBe(false);
+    expect(ownArtifactWrite(rec('acceptEdits'), write('a2'))).toBe(false);
+    expect(ownArtifactWrite(rec('acceptEdits'), { toolName: 'mcp__oide__artifacts_create', input: { id: 'a1' } })).toBe(false);
+    expect(ownArtifactWrite({ spec: {}, reducer: { summary: { mode: 'acceptEdits' } } }, write('a1'))).toBe(false);
+  });
 });

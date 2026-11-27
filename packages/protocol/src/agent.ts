@@ -26,8 +26,12 @@ export const PERMISSION_MODE_LABELS: Record<PermissionMode, string> = {
 export const Effort = z.enum(['low', 'medium', 'high', 'xhigh', 'max']);
 export type Effort = z.infer<typeof Effort>;
 
-/** Where an agent works. */
-export const WorkIn = z.enum(['worktree-from-main', 'worktree-from-current', 'project-folder']);
+/**
+ * Where an agent works. `artifact-folder`: an artifact agent (Artifacts › open view) works in an
+ * empty scratch folder of its own under oIDE's app data, never in a repo; it edits its artifact
+ * through oIDE's MCP artifact tools.
+ */
+export const WorkIn = z.enum(['worktree-from-main', 'worktree-from-current', 'project-folder', 'artifact-folder']);
 export type WorkIn = z.infer<typeof WorkIn>;
 
 export const ModelSlot = z.object({
@@ -139,6 +143,12 @@ export const AgentSpec = z.object({
   attempts: z.number().int().min(1).max(6).default(1),
   /** Shared by parallel attempts. */
   attemptGroup: Id.optional(),
+  /**
+   * An artifact agent: it lives in the artifact's open view and edits this artifact's files (only
+   * this one) through oIDE's MCP artifact tools. Set by main (`artifacts.startAgent`), with
+   * `workIn: 'artifact-folder'`; refused from Spawn.
+   */
+  artifactId: Id.optional(),
 });
 export type AgentSpec = z.infer<typeof AgentSpec>;
 export type AgentSpecInput = z.input<typeof AgentSpec>;
@@ -366,6 +376,10 @@ export const AgentSummary = z.object({
   baseRef: z.string().optional(),
   /** Where it works (from its spec), so the UI offers Bypass only where main accepts it. */
   workIn: WorkIn.optional(),
+  /** The artifact an artifact agent edits (from its spec). */
+  artifactId: Id.optional(),
+  /** The lead's effort (from its spec), when one was picked; else the CLI's default applies. */
+  effort: Effort.optional(),
   attemptGroup: Id.optional(),
   /** Last few activity lines ("Read src/x.ts", "Thinking…"). */
   activity: z.array(z.string()).default([]),

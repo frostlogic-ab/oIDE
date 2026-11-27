@@ -55,3 +55,8 @@ Fields added after the first cut (all optional or defaulted):
   `notify.kind` / `notify.requestId`. The `init.slashCommands` field is now filled by the parser.
 - Integration (2026-11-25): IPC `settings.forProject { projectId } → { defaultMode, presetId, techniques }`, the
   project's effective Spawn defaults (`.oide/config.json` under trust, as launches use them).
+- Artifact agents (2026-11-27, [ADR 0017](../../adr/0017-artifact-agents.md)): `AgentSpec.artifactId`, `WorkIn`
+  `artifact-folder`, `AgentSummary.artifactId` and `.effort`, event `model-changed { model, effort? }`, IPC
+  `agents.setModel { agentId, model, effort? }` and `artifacts.startAgent { id, projectId?, text, attachments?, mode?,
+  model? } → AgentSummary`, `PreviewPicked` / `PreviewPickerMessage` (the preview picker's postMessage protocol),
+  telemetry `artifact_agent_started`, `artifact_agent_message`, `agent_model_changed`.

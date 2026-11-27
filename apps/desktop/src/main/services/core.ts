@@ -3,13 +3,14 @@ import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { AgentDriver } from '@oide/agent-core';
 import { WorktreeManager, isInside, resolveTool, setRepoTrustResolver, type GhCli } from '@oide/git';
 import { OideMcpServer, type ArtifactsBackend as McpArtifactsBackend } from '@oide/mcp-server';
-import { countBucket, resolveModel, type AgentArtifactFileInput, type ArtifactMeta, type ModelStrategy } from '@oide/protocol';
+import { countBucket, resolveModel, type AgentArtifactFileInput, type ArtifactMeta, type ModelStrategy, type PermissionMode } from '@oide/protocol';
 import { ArtifactStore, SqliteSecretStore, openStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { CleanupQueue, CleanupScheduler, folderName } from '../reliability/cleanup-queue.js';
 import { findFolderHolders, type FindHoldersOptions, type HolderResult } from '../reliability/folder-holders.js';
 import { redactSecretReads } from '../reliability/redact.js';
 import { AgentsService } from './agents.js';
+import { ArtifactAgentService } from './artifact-agent.js';
 import { agentFileBytes, ArtifactRetrievalService } from './artifact-retrieval.js';
 import { CliService } from './cli.js';
 import { ExtensionsService } from './extensions.js';
@@ -34,6 +35,8 @@ export interface Services {
   extensions: ExtensionsService;
   /** Agent retrieval of linked claude.ai artifacts (ADR 0014). */
   retrieval: ArtifactRetrievalService;
+  /** Artifact agents: an agent that edits one artifact from its open view. */
+  artifactAgents: ArtifactAgentService;
   /** Worktree folders waiting to be removed, retried in the background (reliability/cleanup-queue.ts). */
   cleanup: CleanupScheduler;
   /** Which programs hold a folder open; unset in plain-Node runs. */
@@ -83,16 +86,25 @@ export interface McpArtifactsExtras {
   worktreeOf?: (agentId: string) => string | undefined;
   /** The retrieval service (created after the MCP server, hence a getter). */
   retrieval?: () => ArtifactRetrievalService | undefined;
+  /** The artifact an artifact agent edits (its spec's `artifactId`): it may write only that one, and create none. */
+  artifactOf?: (agentId: string) => string | undefined;
 }
 
 export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) => boolean, extras: McpArtifactsExtras = {}): McpArtifactsBackend {
   const hidden = (id: string) => `Artifact ${id} is not available to this agent (another project, or a repo artifact of an untrusted project).`;
-  const visible = (ctx: { projectId?: string }, m: ArtifactMeta) =>
-    (!m.projectId || !ctx.projectId || m.projectId === ctx.projectId) && !(m.location === 'repo' && m.projectId && !trusted(m.projectId));
-  const requireVisible = (ctx: { projectId?: string }, id: string): ArtifactMeta => {
+  // An artifact agent always sees its own artifact: the user opened it and asked for the change.
+  const visible = (ctx: { agentId?: string; projectId?: string }, m: ArtifactMeta) =>
+    (!!ctx.agentId && extras.artifactOf?.(ctx.agentId) === m.id) ||
+    ((!m.projectId || !ctx.projectId || m.projectId === ctx.projectId) && !(m.location === 'repo' && m.projectId && !trusted(m.projectId)));
+  const requireVisible = (ctx: { agentId?: string; projectId?: string }, id: string): ArtifactMeta => {
     const m = store.metaOf(id);
     if (!visible(ctx, m)) throw new Error(hidden(id));
     return m;
+  };
+  /** An artifact agent writes only its own artifact. */
+  const requireWritable = (agentId: string, id: string) => {
+    const own = extras.artifactOf?.(agentId);
+    if (own !== undefined && own !== id) throw new Error(`You are the artifact agent of ${own}: you can change only that artifact, not ${id}.`);
   };
   /** Agent file inputs as bytes (base64 for the store); `fromFile` only inside the caller's own folder. */
   const decode = async (agentId: string, files: AgentArtifactFileInput[] = []) => {
@@ -115,6 +127,7 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
       return store.readFile(id, path);
     },
     writeFiles: async (ctx, id, change) => {
+      requireWritable(ctx.agentId, id);
       const m = requireVisible(ctx, id);
       const files = await decode(ctx.agentId, change.files);
       if (change.content !== undefined) files.push({ path: change.entry ?? m.entry, encoding: 'base64', data: Buffer.from(change.content, 'utf8').toString('base64') });
@@ -135,11 +148,14 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
       return r;
     },
     write: async (ctx, id, content) => {
+      requireWritable(ctx.agentId, id);
       if (!visible(ctx, (await store.read(id)).meta)) throw new Error(hidden(id));
       return store.write(id, content, ctx.agentId);
     },
-    create: async (ctx, input) =>
-      store.createForAgent(
+    create: async (ctx, input) => {
+      const own = extras.artifactOf?.(ctx.agentId);
+      if (own !== undefined) throw new Error(`You are the artifact agent of ${own}: you change only that artifact and cannot create others. Add files to it with artifacts_write instead.`);
+      return store.createForAgent(
         {
           title: input.title,
           kind: input.kind,
@@ -149,7 +165,8 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
           ...(ctx.projectId ? { projectId: ctx.projectId } : {}),
         },
         ctx.agentId,
-      ),
+      );
+    },
   };
 }
 
@@ -188,6 +205,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     artifacts: mcpArtifacts(artifacts, (id) => store.projects.get(id)?.trusted === true, {
       worktreeOf: (agentId) => late.agents?.supervisor.get(agentId)?.worktreePath,
       retrieval: () => late.retrieval,
+      artifactOf: (agentId) => late.agents?.supervisor.spec(agentId)?.artifactId,
     }),
     onArtifactUse: (u) => ctx.emit('artifacts.changed', u.artifactId && u.artifactId !== '*' ? { id: u.artifactId, change: 'used' } : {}),
     log: (m, d) => ctx.log.debug('[mcp]', m, d ?? ''),
@@ -273,6 +291,27 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   });
   agents.extensions = extensions;
   late.agents = agents;
+  // What Spawn starts with for this project: its default mode (no bypass unless allowed) and preset.
+  const agentDefaults = async (projectId: string): Promise<{ mode: PermissionMode; strategy: ModelStrategy }> => {
+    const p = projects.require(projectId);
+    const eff = await settings.forProject(p.path, { trusted: p.trusted });
+    const mode = eff.settings.claude.defaultMode === 'bypassPermissions' && !eff.settings.claude.allowBypass ? 'auto' : eff.settings.claude.defaultMode;
+    // Bare family aliases follow Settings › Models › Model versions, as Spawn's applyVersions does.
+    const versions = eff.settings.models.versions;
+    const strategy = settings.strategyFor(eff.settings.models.defaultPresetId);
+    const pinned = Object.fromEntries(
+      Object.entries(strategy).map(([k, v]) => [k, typeof v === 'object' && v && 'model' in v ? { ...v, model: resolveModel(v.model, versions) } : v]),
+    ) as ModelStrategy;
+    return { mode, strategy: pinned };
+  };
+  const artifactAgents = new ArtifactAgentService({
+    metaOf: (id) => artifacts.metaOf(id),
+    agents: () => agents.list(),
+    spawn: (spec) => agents.spawn(spec, { artifactAgent: true }),
+    hasProject: (id) => !!projects.get(id),
+    defaults: agentDefaults,
+    track: (name, props) => void ctx.telemetry?.service.track(name, props),
+  });
   const retrieval = new ArtifactRetrievalService({
     artifacts,
     stagingRoot: join(ctx.userDataDir, 'artifact-staging'),
@@ -293,19 +332,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
           offRemoved();
         };
       },
-      // What Spawn starts with for this project: its default mode (no bypass unless allowed) and preset.
-      defaults: async (projectId) => {
-        const p = projects.require(projectId);
-        const eff = await settings.forProject(p.path, { trusted: p.trusted });
-        const mode = eff.settings.claude.defaultMode === 'bypassPermissions' && !eff.settings.claude.allowBypass ? 'auto' : eff.settings.claude.defaultMode;
-        // Bare family aliases follow Settings › Models › Model versions, as Spawn's applyVersions does.
-        const versions = eff.settings.models.versions;
-        const strategy = settings.strategyFor(eff.settings.models.defaultPresetId);
-        const pinned = Object.fromEntries(
-          Object.entries(strategy).map(([k, v]) => [k, typeof v === 'object' && v && 'model' in v ? { ...v, model: resolveModel(v.model, versions) } : v]),
-        ) as ModelStrategy;
-        return { mode, strategy: pinned };
-      },
+      defaults: agentDefaults,
     },
     track: (name, props) => void ctx.telemetry?.service.track(name, props),
     log: ctx.log,
@@ -398,6 +425,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     git,
     extensions,
     retrieval,
+    artifactAgents,
     cleanup: cleanupScheduler,
     ...(findHolders ? { findHolders } : {}),
     mcpPort: () => mcpPort,

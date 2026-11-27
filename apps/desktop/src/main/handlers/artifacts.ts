@@ -116,6 +116,10 @@ export function registerArtifactHandlers(router: IpcRouter, s: Services, ctx: Ma
     return wrap(s.retrieval.start(id, trigger, where));
   });
   router.register('artifacts.cancelRetrieval', ({ id }) => wrap(s.retrieval.cancel(id)));
+  // The artifact agent: edits this artifact only, in an empty folder of its own (services/artifact-agent.ts).
+  router.register('artifacts.startAgent', ({ id, projectId, text, attachments, mode, model }) =>
+    s.artifactAgents.start({ id, text, ...(projectId ? { projectId } : {}), ...(attachments?.length ? { attachments } : {}), ...(mode ? { mode } : {}), ...(model ? { model } : {}) }),
+  );
   router.register('artifacts.files', ({ id, version }) => wrap(a.files(id, version)));
   router.register('artifacts.readFile', ({ id, path, version }) => wrap(a.readFile(id, path, version)));
   router.register('artifacts.writeFiles', ({ id, files, deletes, entry, note, baseVersion }) =>

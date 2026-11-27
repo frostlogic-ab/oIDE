@@ -70,16 +70,41 @@ const TitleInput = z.object({ title: z.string().min(1).max(1000) });
 const ListInput = z.object({ kind: ArtifactKind.optional(), query: z.string().optional() });
 const ReadInput = z.object({ id: z.string().min(1), path: ArtifactPath.optional() });
 const FileInputs = z.array(AgentArtifactFileInput).max(ARTIFACT_LIMITS.files);
+/** One exact search-and-replace inside a text file of the artifact (the entry file when `path` is left out). */
+const TextEdit = z.object({
+  path: ArtifactPath.optional(),
+  oldString: z.string().min(1).max(ARTIFACT_LIMITS.fileBytes),
+  newString: z.string().max(ARTIFACT_LIMITS.fileBytes),
+  replaceAll: z.boolean().optional(),
+});
+export type TextEdit = z.infer<typeof TextEdit>;
 const WriteInput = z
   .object({
     id: z.string().min(1),
     content: z.string().optional(),
     files: FileInputs.optional(),
+    edits: z.array(TextEdit).max(200).optional(),
     deletes: z.array(ArtifactPath).max(ARTIFACT_LIMITS.files).optional(),
     entry: ArtifactPath.optional(),
     note: z.string().max(500).optional(),
   })
-  .refine((w) => w.content !== undefined || !!w.files?.length || !!w.deletes?.length || w.entry !== undefined, 'Give content, files, deletes or entry');
+  .refine((w) => w.content !== undefined || !!w.files?.length || !!w.edits?.length || !!w.deletes?.length || w.entry !== undefined, 'Give content, files, edits, deletes or entry');
+
+/**
+ * Apply exact search-and-replace edits to a file's text, in order. Each `oldString` must occur
+ * exactly once (or `replaceAll`); otherwise the whole write is refused with a reason the agent can act on.
+ */
+export function applyTextEdits(path: string, text: string, edits: ReadonlyArray<Pick<TextEdit, 'oldString' | 'newString' | 'replaceAll'>>): string {
+  let out = text;
+  for (const e of edits) {
+    let count = 0;
+    for (let i = out.indexOf(e.oldString); i !== -1; i = out.indexOf(e.oldString, i + e.oldString.length)) count++;
+    if (count === 0) throw new Error(`oldString was not found in ${path}. Read the file again (the user may have changed it) and retry with its exact text.`);
+    if (count > 1 && !e.replaceAll) throw new Error(`oldString occurs ${count} times in ${path}. Give more surrounding text so it is unique, or set replaceAll.`);
+    out = e.replaceAll ? out.split(e.oldString).join(e.newString) : out.replace(e.oldString, () => e.newString);
+  }
+  return out;
+}
 const CreateInput = z
   .object({ title: z.string().min(1), kind: ArtifactKind, content: z.string().optional(), files: FileInputs.optional(), entry: ArtifactPath.optional(), shared: z.boolean().optional() })
   .refine((c) => c.content !== undefined || !!c.files?.length, 'Give content or files');
@@ -177,13 +202,26 @@ const TOOLS = {
   artifacts_write: {
     name: 'artifacts_write',
     description:
-      'Write a new version of an oIDE artifact. `content` replaces the entry file; `files` add or replace files (text as content, binary as base64, or fromFile for a file in your working folder); `deletes` removes files; `entry` moves the entry. A design opens on HTML or React component source (JSX, export default).',
+      'Write a new version of an oIDE artifact. `content` replaces the entry file; `files` add or replace files (text as content, binary as base64, or fromFile for a file in your working folder); `edits` changes text files in place with exact search and replace ({ path (default: the entry file), oldString, newString, replaceAll }; each oldString must be unique in the file unless replaceAll); `deletes` removes files; `entry` moves the entry. Everything in one call becomes one version. A design opens on HTML or React component source (JSX, export default).',
     inputSchema: {
       type: 'object',
       properties: {
         id: { type: 'string' },
         content: { type: 'string' },
         files: { type: 'array', items: FILE_SCHEMA },
+        edits: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              path: { type: 'string', description: 'The text file to change (relative path); the entry file when left out.' },
+              oldString: { type: 'string', description: 'Exact text to find; must occur once unless replaceAll.' },
+              newString: { type: 'string' },
+              replaceAll: { type: 'boolean' },
+            },
+            required: ['oldString', 'newString'],
+          },
+        },
         deletes: { type: 'array', items: { type: 'string' } },
         entry: { type: 'string' },
         note: { type: 'string' },
@@ -656,7 +694,27 @@ export class OideMcpServer {
       case 'artifacts_write': {
         const r = WriteInput.safeParse(args);
         if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
-        const { id, content, files, deletes, entry, note } = r.data;
+        const { id, content, deletes, entry, note, edits } = r.data;
+        let files = r.data.files;
+        if (edits?.length) {
+          if (!backend.readFile || !backend.writeFiles) return text('Editing files is not available', true);
+          const current = await backend.read(ctx, id);
+          const byPath = new Map<string, TextEdit[]>();
+          for (const e of edits) {
+            const p = e.path ?? current.meta.entry;
+            byPath.set(p, [...(byPath.get(p) ?? []), e]);
+          }
+          const changed: AgentArtifactFileInput[] = [];
+          for (const [p, list] of byPath) {
+            if (files?.some((f) => f.path === p)) return text(`${p} is both in files and in edits. Use one of them for a file.`, true);
+            if (content !== undefined && p === current.meta.entry) return text('content and edits both change the entry file. Use one of them.', true);
+            if (deletes?.includes(p)) return text(`${p} is both edited and deleted.`, true);
+            const f = await backend.readFile(ctx, id, p);
+            if (f.encoding !== 'utf8') return text(`${p} is a binary file; replace it with files instead.`, true);
+            changed.push({ path: p, content: applyTextEdits(p, f.data, list) });
+          }
+          files = [...(files ?? []), ...changed];
+        }
         let meta: ArtifactMeta;
         if (files?.length || deletes?.length || entry !== undefined) {
           if (!backend.writeFiles) return text('Writing files is not available', true);
