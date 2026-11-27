@@ -17,7 +17,8 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.e2e.json",
     "e2e": "electron-vite build && pnpm run build:runtime && playwright test",
-    "dist": "electron-vite build && pnpm run build:runtime && electron-builder --config electron-builder.yml --publish never"
+    "dist": "electron-vite build && pnpm run build:runtime && pnpm run stage:language-servers && electron-builder --config electron-builder.yml --publish never",
+    "stage:language-servers": "node ../../packages/language-servers/stage.mjs release/language-servers"
   },
   "dependencies": {
     "@lydell/node-pty": "1.2.0-beta.18",
@@ -33,6 +34,7 @@
     "@oide/extension-api": "workspace:^",
     "@oide/extension-host": "workspace:^",
     "@oide/git": "workspace:^",
+    "@oide/language-servers": "workspace:^",
     "@oide/mcp-server": "workspace:^",
     "@oide/protocol": "workspace:^",
     "@oide/store": "workspace:^",

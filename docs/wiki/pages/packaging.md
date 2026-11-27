@@ -236,8 +236,19 @@ header Update button ([desktop-shell](desktop-shell.md)).
   installer's `oIDE.lnk`, the installed app's notifications showed "Electron". The AUMID split and
   `releaseForeignShortcuts` above fix this too; unpackaged runs still show "Electron" on their own
   toasts, since Electron names that shortcut after `electron.exe`'s ProductName.
+- Language servers ([ADR 0020](../../adr/0020-bundle-common-language-servers.md)): `pnpm dist` (and the
+  release workflow's "Stage the bundled language servers" step) runs
+  `packages/language-servers/stage.mjs`, which copies `@oide/language-servers`' dependencies and
+  everything they need from the installed `node_modules` (pinned by the lockfile, no network) to
+  `apps/desktop/release/language-servers`, pruning what never loads (other TypeScript entry points
+  and translations, prettier plugins other than estree/yaml, source maps, `.d.ts` outside
+  TypeScript's `lib.*.d.ts`): about 49 MB on disk. `extraResources` ships it as
+  `resources/language-servers`, outside the asar so the user's Node.js can run it (the `runAsNode`
+  fuse is off, so Electron itself cannot). `packages/language-servers/smoke.mjs` starts each staged
+  server and checks it answers (TypeScript reports a type error, HTML completes inside `<script>`).
 - Licences: `pnpm licenses:notices` (`tools/licenses/notices.mjs`) writes `THIRD_PARTY_NOTICES.md` for
-  everything a packaged build ships (desktop `dependencies`, libraries bundled into `out/`, Electron);
+  everything a packaged build ships (desktop `dependencies`, the bundled language servers, libraries
+  bundled into `out/`, Electron);
   `pnpm licenses:check` fails on a licence outside the MIT-compatible allow-list or a stale file.
   `LICENSE` and `THIRD_PARTY_NOTICES.md` are copied to `resources/` (`extraResources`). As of
   2026-11-25: 368 shipped packages, all MIT-compatible (dompurify is dual MPL-2.0 OR Apache-2.0, used

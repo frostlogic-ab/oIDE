@@ -195,6 +195,14 @@ jobs:
         # (electron.vite.config.ts), so the installed app checks this repository's releases.
         run: pnpm --filter @oide/desktop build
 
+      - name: Stage the bundled language servers
+        # Copied from the installed node_modules into apps/desktop/release/language-servers
+        # (electron-builder ships it as <resources>/language-servers, ADR 0020), then each server is
+        # started once to prove nothing it needs was pruned.
+        run: |
+          pnpm --filter @oide/desktop stage:language-servers
+          node packages/language-servers/smoke.mjs apps/desktop/release/language-servers
+
       - name: Every shipped font has a recorded licence
         # With out/renderer present, the check also matches each built font file to a record.
         run: pnpm licenses:check

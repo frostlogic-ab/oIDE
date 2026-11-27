@@ -1,11 +1,10 @@
 /**
- * Tab bar: the open file's language server (state dot + name, a menu with Restart / Copy install
- * command) and its problem counts (click: next problem, like VS Code's status bar and F8).
+ * Tab bar: the open file's language server (state dot + name, a menu with Restart / Install, which
+ * opens a terminal that runs the server's install command) and its problem counts (click: next problem, like VS Code's status bar and F8).
  */
 import { useState } from 'react';
 import { ContextMenu, Icon, type ContextMenuEntry } from '@oide/ui';
 import type { LspStatus as Status } from '@oide/protocol';
-import { toast } from '../../stores/ui';
 import { C } from '../SourceControl/model';
 import { problemSummary, type FileProblems } from './lspStore';
 
@@ -22,11 +21,11 @@ export function statusText(s: Status): { label: string; title: string } {
   const name = s.server ?? s.language ?? 'Language server';
   switch (s.state) {
     case 'running':
-      return { label: name, title: `${name} is running${s.extension ? ` (from ${s.extension})` : ''}. Hover, completions, go to definition (F12), references (Shift+F12), symbols (Ctrl+Shift+O) and Format Document come from it.` };
+      return { label: name, title: `${name} is running${s.bundled ? ' (comes with oIDE, run with your Node.js)' : s.extension ? ` (from ${s.extension})` : ''}. Hover, completions, go to definition (F12), references (Shift+F12), symbols (Ctrl+Shift+O) and Format Document come from it.` };
     case 'starting':
       return { label: `${name}…`, title: s.message ? `Starting ${name}. ${s.message}` : `Starting ${name}` };
     case 'not-installed':
-      return { label: `${name} not installed`, title: `${s.message ?? `${name} was not found.`}${s.install ? ` Install it with: ${s.install}` : ''} Then choose Try again.` };
+      return { label: `${name} not installed`, title: `${s.message ?? `${name} was not found.`}${s.install ? ` Install runs: ${s.install}` : ''}` };
     case 'failed':
       return { label: `${name} failed`, title: s.message ?? `${name} failed` };
     case 'untrusted':
@@ -36,25 +35,26 @@ export function statusText(s: Status): { label: string; title: string } {
   }
 }
 
-export function LspStatusControl({ status, problems, onNextProblem, onRestart }: { status?: Status | undefined; problems?: FileProblems | undefined; onNextProblem(): void; onRestart(): void }) {
+export function LspStatusControl({
+  status,
+  problems,
+  onNextProblem,
+  onRestart,
+  onInstall,
+}: {
+  status?: Status | undefined;
+  problems?: FileProblems | undefined;
+  onNextProblem(): void;
+  onRestart(): void;
+  onInstall(): void;
+}) {
   const [menu, setMenu] = useState<{ x: number; y: number }>();
   const counts = problems && (problems.errors || problems.warnings) ? problems : undefined;
   if (!status && !counts) return null;
   const text = status ? statusText(status) : undefined;
   const items: ContextMenuEntry[] = [];
   if (status?.state === 'not-installed' && status.install) {
-    const install = status.install;
-    items.push({
-      id: 'copy-install',
-      label: 'Copy install command',
-      icon: 'copy',
-      title: install,
-      onSelect: () =>
-        void navigator.clipboard.writeText(install).then(
-          () => toast('Copied the install command', 'success', { duration: 2000 }),
-          () => toast("Couldn't copy the install command", 'error'),
-        ),
-    });
+    items.push({ id: 'install', label: 'Install', icon: 'download', title: `Opens a terminal that runs: ${status.install}`, onSelect: onInstall });
   }
   if (status && status.state !== 'untrusted') items.push({ id: 'restart', label: status.state === 'not-installed' ? 'Try again' : 'Restart language server', icon: 'refresh', onSelect: onRestart });
   return (

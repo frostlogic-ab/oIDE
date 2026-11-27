@@ -109,6 +109,12 @@ export function trackMarkdownView(view: 'preview' | 'edit', via: 'button' | 'sho
   send({ type: 'event', name: 'files_markdown_view', props: { view, via } });
 }
 
+/** Install or No for a language server that is not installed (the Files toast, or the tab bar's server menu). Never the server or its command. */
+export function trackLanguageServerInstall(choice: 'install' | 'declined', via: 'prompt' | 'menu'): void {
+  if (!usageOn()) return;
+  send({ type: 'event', name: 'language_server_install', props: { choice, via } });
+}
+
 /** A changed file's tab in Files switched between its changes (unified, side by side) and the plain editor. Never the file. */
 export function trackDiffView(view: 'off' | 'unified' | 'split'): void {
   if (!usageOn()) return;

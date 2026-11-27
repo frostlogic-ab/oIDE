@@ -30,6 +30,13 @@ extraResources:
       - "!**/node_modules/**"
       - "!**/*.test.*"
       - "!**/tsconfig*.json"
+  # Language servers that ship with oIDE (TypeScript/JavaScript, CSS, HTML, JSON, YAML; ADR 0020),
+  # staged by `pnpm dist` (packages/language-servers/stage.mjs). Plain files, outside the asar, so
+  # the user's Node.js can run them.
+  - from: release/language-servers
+    to: language-servers
+    filter:
+      - "**/*"
   - from: ../../tools/marketplace-index/bundled/index.json
     to: marketplace/index.json
   # Offline preview runtime for React designs (ADR 0013), served at oide-artifact://<id>/__oide/react-runtime.js.

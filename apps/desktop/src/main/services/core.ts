@@ -16,6 +16,7 @@ import { CliService } from './cli.js';
 import { ExtensionsService } from './extensions.js';
 import { LanguageServerService, lspLanguageBucket, type LanguageServerDef } from './lsp/language-servers.js';
 import { GitService, parcelWatch, type WatchFn } from './git.js';
+import { bundledServerScript } from '@oide/language-servers';
 import type { Platform } from './platform.js';
 import { ProjectsService } from './projects.js';
 import type { TerminalService } from './terminals.js';
@@ -332,6 +333,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
         );
       });
     },
+    bundled: (command) => bundledServerScript(command, platform.languageServerDirs ?? []),
     emitDiagnostics: (e) => void ctx.emit('lsp.diagnostics', e),
     emitState: (e) => void ctx.emit('lsp.state', e),
     log: ctx.log,
