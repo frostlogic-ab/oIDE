@@ -94,11 +94,13 @@ Full token list: [docs/wiki/pages/design-system.md](docs/wiki/pages/design-syste
 - `raw/`: immutable sources (build brief, design screens, CLI help output). Never edit; add new sources.
 - `pages/`: one markdown page per topic (a package, a screen, a concept, a decision). Agents own these.
 - `index.md`: catalog of every page with a one-line summary. Update it when you add a page.
-- `log.md`: append-only, chronological. One entry per ingest, decision, milestone or lint pass, headed
-  `## [YYYY-MM-DD] <op> | <title>` where op is `ingest`, `build`, `decision`, `review`, `lint` or `query`.
-  Append with `cat >> docs/wiki/log.md` so parallel writers don't clobber each other.
+- `log/`: the chronological log, **one file per entry** so parallel PRs never conflict. One entry per
+  ingest, decision, milestone or lint pass: `pnpm wiki:log new <op> "<title>"` creates
+  `log/YYYY-MM-DD-<slug>.md` headed `## [YYYY-MM-DD] <op> | <title>` (op is `ingest`, `build`,
+  `decision`, `review`, `lint` or `query`); fill in the body. Never edit or append to `log.md`: it is
+  the frozen archive up to 2026-11-27. `pnpm wiki:log` prints the whole log in order.
 
 Workflow: **ingest** (read a source, write or update the pages it touches, add cross-links
 `[[page-name]]`-style as relative markdown links, log it), **query** (answer from the wiki; file
 useful answers back as pages), **lint** (`pnpm wiki:lint`: broken links, orphan pages, pages missing
-from the index). When you change code, update the page that describes it in the same change.
+from the index, malformed log entries, anything appended to `log.md`). When you change code, update the page that describes it in the same change.

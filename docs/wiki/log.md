@@ -1,6 +1,8 @@
 # oIDE wiki: log
 
-Append-only. Newest at the bottom. Each entry: `## [YYYY-MM-DD] <op> | <title>`.
+Frozen archive of entries up to 2026-11-27. **Do not append here.** New entries go in
+[log/](log/), one file per entry, so parallel pull requests never conflict (see
+[log/README.md](log/README.md)). `pnpm wiki:log` prints this archive and every entry file in order.
 
 ## [2026-11-24] ingest | Build brief and Mission Control design
 Ingested the oIDE architecture and build brief (raw/build-brief.md) and the nine Mission Control

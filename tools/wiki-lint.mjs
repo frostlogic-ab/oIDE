@@ -1,11 +1,13 @@
 #!/usr/bin/env node
-// Wiki lint: broken relative links, pages missing from index.md, orphan pages.
+// Wiki lint: broken relative links, pages missing from index.md, orphan pages, and log entries
+// (one file per entry in log/, nothing appended to the frozen log.md).
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
+import { wikiRoot as root, logDir, entryFiles, checkEntry } from './wiki-log.mjs';
 
-const root = resolve(dirname(new URL(import.meta.url).pathname.replace(/^\/(\w:)/, '$1')), '..', 'docs', 'wiki');
 const pagesDir = join(root, 'pages');
-const files = [join(root, 'index.md'), join(root, 'log.md'), ...readdirSync(pagesDir).filter((f) => f.endsWith('.md')).map((f) => join(pagesDir, f))];
+const logFiles = existsSync(logDir) ? readdirSync(logDir).filter((f) => f.endsWith('.md')).map((f) => join(logDir, f)) : [];
+const files = [join(root, 'index.md'), join(root, 'log.md'), ...logFiles, ...readdirSync(pagesDir).filter((f) => f.endsWith('.md')).map((f) => join(pagesDir, f))];
 const problems = [];
 const linkedPages = new Set();
 for (const file of files) {
@@ -25,5 +27,20 @@ for (const f of readdirSync(pagesDir).filter((f) => f.endsWith('.md'))) {
 }
 const missing = [...index.matchAll(/\]\((pages\/[^)]+)\)/g)].map((m) => m[1]).filter((p) => !existsSync(join(root, p)));
 for (const p of missing) problems.push(`index.md: lists ${p} but the page does not exist yet`);
+
+// log.md is a frozen archive. Its last entry is fixed here rather than marked in the file, so a
+// branch that predates log/ and appended to log.md still merges main cleanly; this check then asks
+// it to move the entry to its own file (pnpm wiki:log new <op> "<title>").
+const LAST_ARCHIVED = '## [2026-11-26] build | Windows CI: three timing-dependent tests made deterministic';
+const archive = readFileSync(join(root, 'log.md'), 'utf8').split(/\r?\n/);
+const last = archive.lastIndexOf(LAST_ARCHIVED);
+if (last < 0) problems.push(`log.md: the archive's last entry is missing (${LAST_ARCHIVED})`);
+for (const line of archive.slice(last + 1).filter((l) => l.startsWith('## ['))) {
+  problems.push(`log.md: "${line}" was appended to the frozen archive; move it to its own file in log/ (pnpm wiki:log new <op> "<title>")`);
+}
+for (const f of entryFiles()) {
+  for (const p of checkEntry(f, readFileSync(join(logDir, f), 'utf8'))) problems.push(`log/${f}: ${p}`);
+}
+
 if (problems.length) { console.log(problems.join('\n')); console.log(`\n${problems.length} wiki problem(s).`); process.exit(1); }
 console.log('wiki: ok');
