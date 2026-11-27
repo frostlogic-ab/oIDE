@@ -22,16 +22,17 @@ and the Security and Settings screen pages once written.
   store-only shapes). Events that no longer validate read back as `{ type: 'unknown', rawType }`
   so a timeline never breaks.
 
-## Tables (migration 1, plus 2: `review_comments.side`, 3: archived agents)
+## Tables (migration 1, plus 2: `review_comments.side`, 3: archived agents, 4: daily usage rollup)
 
 | Table | Contents | Repository |
 | --- | --- | --- |
 | `projects` | id, name, path, `path_key` (case-folded, unique), trusted, created/last opened | `ProjectsRepo`: `open(path)` (idempotent per folder), `get`, `byPath`, `list`, `setTrusted`, `rename`, `remove` (cascades) |
-| `agents` | spec JSON (`AgentSpec`), status, branch, worktree path, base ref, CLI session id, attempt group, latest `AgentSummary` JSON, timestamps | `AgentsRepo`: `insert`, `get`, `list({ projectId, statuses, attemptGroup })`, `update`, `saveSummary`, `summaries`, `remove`; record type `AgentRecord` |
-| `subagents` | per agent + Task id: status, tier, model, times, `SubagentInfo` JSON | `SubagentsRepo`: `upsert`, `list`, `get`, `activeCount` |
+| `agents` | spec JSON (`AgentSpec`), status, branch, worktree path, base ref, CLI session id, attempt group, latest `AgentSummary` JSON, timestamps | `AgentsRepo`: `insert`, `get`, `list({ projectId, statuses, attemptGroup })`, `update`, `saveSummary`, `summaries`, `remove`, `sessionsSince(ts)` (light rows for Usage; index `agents_created`, migration 4); record type `AgentRecord` |
+| `subagents` | per agent + Task id: status, tier, model, times, `SubagentInfo` JSON | `SubagentsRepo`: `upsert`, `list`, `get`, `activeCount`, `countSince(ts)` |
 | `events` | agent_id, seq (PK with agent_id), type, ts, normalized `AgentEvent` JSON, raw CLI JSON | `EventsRepo` (below) |
 | `event_summaries` | compacted ranges: seq/ts range, counts by type, tools used, tokens, last text/result | `EventsRepo.summaries` |
-| `usage_samples` | agent, subagent, ts, model, input/output/cache tokens | `UsageRepo`: `add`, `totals({ since, agentId })`, `bySubagent`, `deleteOlderThan` |
+| `usage_samples` | agent, subagent, ts, model, input/output/cache tokens (kept 90 days) | `UsageRepo`: `add`, `totals({ since, agentId })`, `bySubagent`, `deleteOlderThan`, `compactOlderThan(ts)` (rolls up into `usage_daily`, then deletes), `daily({ sinceDay })` (samples + rollup per local day, project, model) |
+| `usage_daily` | per local day number, project id and model (`''` = unknown): summed tokens of samples past retention (migration 4) | `UsageRepo.compactOlderThan`, `UsageRepo.daily`; feeds [screen-usage](screen-usage.md) |
 | `review_comments`, `review_viewed` | Review threads and Viewed checkboxes; `side` (`old` for a removed line, `new` default; migration 2) | `ReviewRepo`: `comments`, `addComment({ …, side? })`, `deleteComment`, `takeUnsent` (marks sent atomically), `viewed`, `setViewed` |
 | `settings` | the global `Settings` document (key `global`), including `keybindings` (action → combos; only changed actions) | `SettingsService` |
 | `ui_state` | small JSON docs; `scope:<window>` holds the project scope | `UiStateRepo`: `scope(window='main')`, `setScope` |

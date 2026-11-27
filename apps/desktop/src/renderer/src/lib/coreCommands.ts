@@ -91,6 +91,7 @@ export function registerCoreCommands(): () => void {
     },
     { id: 'oide.go.sourceControl', title: 'Go to Source control', group: 'Go to', keywords: ['git', 'worktrees', 'commit'], run: () => navigate('source-control') },
     { id: 'oide.go.marketplace', title: 'Go to Marketplace', group: 'Go to', keywords: ['extensions', 'tools', 'mcp'], run: () => navigate('marketplace', {}) },
+    { id: 'oide.go.usage', title: 'Go to Usage', group: 'Go to', keywords: ['tokens', 'stats', 'sessions', 'statistics'], run: () => navigate('usage', {}) },
     { id: 'oide.go.settings', title: 'Go to Settings', group: 'Go to', keywords: ['preferences', 'options', 'models'], run: () => navigate('settings', {}) },
     {
       id: 'oide.scope.all',

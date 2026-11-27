@@ -451,7 +451,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   }
   try {
     store.events.compactOlderThan(30);
-    store.usage.deleteOlderThan(Date.now() - 90 * 24 * 60 * 60 * 1000);
+    // Older samples are summed per day into usage_daily first (the Usage screen's year view).
+    store.usage.compactOlderThan(Date.now() - 90 * 24 * 60 * 60 * 1000);
   } catch (err) {
     ctx.log.warn('event compaction failed', err);
   }

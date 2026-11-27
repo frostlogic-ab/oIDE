@@ -109,6 +109,7 @@ const SCREEN_TITLES: Record<TelemetryScreen, string> = {
   artifacts: 'Artifacts',
   marketplace: 'Marketplace',
   settings: 'Settings',
+  usage: 'Usage',
   extension: 'Extension',
 };
 

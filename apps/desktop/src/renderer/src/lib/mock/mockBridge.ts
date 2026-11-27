@@ -22,6 +22,7 @@ import * as fx from './fixtures';
 import { focusDiffs, focusEvents, focusHandlers, patchFocusAgent, startFocusDemo } from './focus';
 import { libraryHandlers, seedLibrarySettings } from './library';
 import { createScmHandlers } from './scm';
+import { mockUsageStats } from './usage';
 import { seedAgents, seedArchived, seedProjects, wallHandlers, wallMockMode } from './wall';
 
 type Listener = (payload: unknown) => void;
@@ -181,6 +182,7 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
       return settings;
     },
     'usage.summary': () => fx.usage,
+    'usage.stats': ({ range }) => mockUsageStats(range),
     'updates.status': () => ({ state: 'disabled', currentVersion: '0.1.0-mock', channel: settings.updates.channel, disabledReason: 'Updates are off in development builds.', canInstall: false }),
     'extensions.installed': () => [],
     'shell.openExternal': ({ url }) => {

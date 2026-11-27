@@ -187,4 +187,24 @@ ALTER TABLE agents ADD COLUMN merge_commit TEXT;
 CREATE INDEX agents_archived ON agents(archived_at DESC, id DESC) WHERE archived_at IS NOT NULL;
 `,
   },
+  {
+    version: 4,
+    name: 'daily usage rollup',
+    // Token samples older than the retention window are summed into one row per local day,
+    // project and model before they are deleted, so the Usage screen can show a year.
+    // `day`: days since 1970-01-01 in local time at rollup; '' project / model = unknown.
+    up: `
+CREATE TABLE usage_daily (
+  day INTEGER NOT NULL,
+  project_id TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  input INTEGER NOT NULL DEFAULT 0,
+  output INTEGER NOT NULL DEFAULT 0,
+  cache_read INTEGER NOT NULL DEFAULT 0,
+  cache_creation INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, project_id, model)
+);
+CREATE INDEX agents_created ON agents(created_at);
+`,
+  },
 ];
