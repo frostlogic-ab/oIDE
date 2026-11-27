@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import type { LspDiagnosticsEvent, LspStateEvent } from '@oide/protocol';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { toHover, toLocations, toSignatureHelp, toSymbols, toTextEdits } from './convert.js';
-import { LanguageServerService, languageIdFor, lspLanguageBucket, matchServer, serverEnv, whichCommand, type LanguageServerDef, type LanguageServiceOptions, type SpawnFn } from './language-servers.js';
+import { LanguageServerService, languageIdFor, lspLanguageBucket, matchServer, serverEnv, whichCommand, windowsCmd, type LanguageServerDef, type LanguageServiceOptions, type SpawnFn } from './language-servers.js';
 
 const FIXTURE = fileURLToPath(new URL('./fixtures/fake-lsp.mjs', import.meta.url));
 const DOC = 'src/a.fk';
@@ -403,6 +403,13 @@ describe('whichCommand', () => {
     expect(whichCommand(join(root, 'nope'), root, {}, process.platform)).toBeUndefined();
     expect(whichCommand('./node_modules/.bin/local-ls', root, { PATH: '' }, process.platform)).toBeUndefined();
     expect(whichCommand('node_modules/.bin/local-ls', root, { PATH: '' }, process.platform)).toBeUndefined();
+  });
+});
+
+describe('windowsCmd', () => {
+  it('is System32 cmd.exe under SystemRoot, whatever ComSpec says (SEC-01)', () => {
+    expect(windowsCmd({ SystemRoot: 'D:/Win', ComSpec: 'C:/evil/cmd.exe' })).toBe(['D:', 'Win', 'System32', 'cmd.exe'].join(String.fromCharCode(92)));
+    expect(windowsCmd({ ComSpec: 'C:/evil/cmd.exe' })).toMatch(/^C:.Windows.System32.cmd\.exe$/);
   });
 });
 

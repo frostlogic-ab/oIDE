@@ -14,7 +14,8 @@
  */
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
 import { statSync } from 'node:fs';
-import { basename, delimiter, extname, isAbsolute, join } from 'node:path';
+import { basename, delimiter, extname, isAbsolute, join, win32 } from 'node:path';
+import { windowsTaskkill } from '@oide/git';
 import type { LspCompletionItem, LspCompletionList, LspDiagnosticsEvent, LspState, LspStateEvent, LspStatus } from '@oide/protocol';
 import { isInside } from '../../security/paths.js';
 import { completionItems, fileUri, toCheckoutPath, toCompletionItem, toDiagnostics } from './convert.js';
@@ -118,6 +119,15 @@ export function matchServer(defs: LanguageServerDef[], path: string): LanguageSe
     const x = e.toLowerCase();
     return x.startsWith('.') ? x === ext || name.endsWith(x) : x === name;
   }));
+}
+
+/**
+ * `%SystemRoot%\System32\cmd.exe` as an absolute path (SEC-01): never `%ComSpec%`, which any
+ * process environment can point at another program, and never a bare name.
+ */
+export function windowsCmd(env: Record<string, string | undefined> = process.env): string {
+  const root = env.SystemRoot ?? env.SYSTEMROOT ?? env.windir ?? 'C:\\Windows';
+  return win32.join(root, 'System32', 'cmd.exe');
 }
 
 /** Arguments cmd.exe would not reinterpret (Windows `.cmd` shims run through `cmd /c`). */
@@ -497,7 +507,7 @@ export class LanguageServerService {
     if (this.platform === 'win32' && child.pid) {
       // cmd.exe shims start the server as a grandchild: kill the whole tree.
       try {
-        nodeSpawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).on('error', () => child.kill());
+        nodeSpawn(windowsTaskkill(), ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).on('error', () => child.kill());
         return;
       } catch {
         /* fall through */
@@ -528,7 +538,7 @@ export class LanguageServerService {
         this.o.onOutcome?.(s.def, 'failed');
         return;
       }
-      command = process.env.ComSpec ?? 'cmd.exe';
+      command = windowsCmd();
       args = ['/d', '/s', '/c', `"${[`"${exe}"`, ...s.def.args].join(' ')}"`];
       verbatim = true;
     }

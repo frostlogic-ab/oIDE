@@ -12,7 +12,7 @@
  *   --crash-once <file>  on the first didOpen, create <file> and exit 3 (later starts behave)
  *   --crash-on-open      exit 3 on every didOpen
  */
-import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -109,9 +109,16 @@ const handlers = {
 const notifications = {
   'textDocument/didOpen': (p) => {
     if (flag('--crash-on-open')) crash();
-    if (crashOnce && !existsSync(crashOnce)) {
-      writeFileSync(crashOnce, 'crashed');
-      crash();
+    if (crashOnce) {
+      // Create the marker atomically (`wx` fails when it exists): only the first process crashes.
+      let first = false;
+      try {
+        writeFileSync(crashOnce, 'crashed', { flag: 'wx' });
+        first = true;
+      } catch {
+        /* a previous run crashed already */
+      }
+      if (first) crash();
     }
     docs.set(p.textDocument.uri, { text: p.textDocument.text, version: p.textDocument.version });
     publish(p.textDocument.uri);

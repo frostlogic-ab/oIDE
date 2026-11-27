@@ -41,7 +41,8 @@ rules in [constraints](constraints.md). Where things live: [desktop-shell](deskt
   covering the CLI's own git and shell spawns in the worktree.
 - `git`, `gh` and `node` are resolved to absolute paths from PATH (`@oide/git` `resolveTool`,
   agent-core `findOnPath`/`nodeBinary`); relative and empty PATH entries are skipped. The terminal
-  shell (`powershell.exe`) and `taskkill.exe` use absolute `%SystemRoot%` paths.
+  shell (`powershell.exe`), `taskkill.exe` and the `cmd.exe` that runs a language server's `.cmd`
+  shim use absolute `%SystemRoot%` paths (never `%ComSpec%`).
 
 ## IPC
 
@@ -130,7 +131,7 @@ confirmation first; nothing goes to the trash, so the dialog says it can't be un
   `window/showDocument` answers `success: false`, other server requests get MethodNotFound.
 - Spawned with `shell: false`, `cwd` = the checkout and an allow-listed env (PATH, home and temp
   folders, locale, toolchain roots such as `GOPATH`, `CARGO_HOME`, `VIRTUAL_ENV`); never API keys,
-  tokens or `ANTHROPIC_*`. On Windows a `.cmd` shim runs through `cmd.exe /d /s /c` only when its
+  tokens or `ANTHROPIC_*`. On Windows a `.cmd` shim runs through `%SystemRoot%\System32\cmd.exe /d /s /c` only when its
   path has no `"` or `%` and every argument is a plain word.
 
 ## Artifact preview protocol
