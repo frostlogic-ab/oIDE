@@ -23,7 +23,7 @@ export default defineConfig({
     ['meta', { property: 'og:description', content: 'Run many Claude Code CLI agents in parallel, in one window. Open source, MIT.' }],
   ],
   themeConfig: {
-    // The title text is drawn by Layout.vue ("oIDE" over "by Frostlogic"), like the app header.
+    // The title text is drawn by Layout.vue (the mark and "oIDE"), like the app header.
     siteTitle: false,
     logo: { light: '/logo-mark-light.svg', dark: '/logo-mark.svg', alt: '' },
     nav: [

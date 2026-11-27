@@ -4,7 +4,6 @@
 // default VitePress theme, restyled in ./custom.css.
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useData, withBase } from 'vitepress';
-import FrostlogicLogo from './FrostlogicLogo.vue';
 
 const repo = 'https://github.com/frostlogic-ab/oIDE';
 const releases = `${repo}/releases/latest`;
@@ -183,7 +182,7 @@ const img = (name: string) => withBase(`/shots/${name}`);
 
     <header class="nav">
       <div class="wrap">
-        <a class="brand" :href="withBase('/')"><img class="on-dark" :src="withBase('/logo-mark.svg')" width="28" height="28" alt="" /><img class="on-light" :src="withBase('/logo-mark-light.svg')" width="28" height="28" alt="" /><span class="brand-text"><span>oIDE</span><span class="brand-by">by <FrostlogicLogo :height="11" /></span></span></a>
+        <a class="brand" :href="withBase('/')"><img class="on-dark" :src="withBase('/logo-mark.svg')" width="28" height="28" alt="" /><img class="on-light" :src="withBase('/logo-mark-light.svg')" width="28" height="28" alt="" />oIDE</a>
         <nav class="nav-links" aria-label="Main">
           <a href="#direct">Features</a>
           <a href="#extend">Extensions</a>

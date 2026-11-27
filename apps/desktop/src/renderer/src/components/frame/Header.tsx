@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { FrostlogicLogo, Icon, Kbd, Logo, SegmentedControl, StatusDot } from '@oide/ui';
+import { Icon, Kbd, Logo, SegmentedControl, StatusDot } from '@oide/ui';
 import type { Scope } from '@oide/protocol';
 import { useAgentCounts } from '../../stores/agents';
 import { useProjects } from '../../stores/projects';
@@ -8,8 +8,11 @@ import { useUi } from '../../stores/ui';
 import { useShortcutLabel } from '../../lib/useKeymap';
 import type { ScreenDef } from '../../screens/registry';
 import { UpdateButton } from './UpdateButton';
+import { oide } from '../../lib/bridge';
 
-/** 44px title bar: logo (with the "by Frostlogic" subtitle), the Update button when an update is ready, title/breadcrumb slot or command-bar trigger, scope switcher, counts, actions slot. */
+const SITE_URL = 'https://getoide.com';
+
+/** 44px title bar: logo (opens getoide.com in the system browser), the Update button when an update is ready, title/breadcrumb slot or command-bar trigger, scope switcher, counts, actions slot. */
 export function Header({ def }: { def: ScreenDef }) {
   const setSlot = useUi((s) => s.setHeaderSlot);
   const titleRef = useCallback((el: HTMLDivElement | null) => setSlot('title', el), [setSlot]);
@@ -17,15 +20,16 @@ export function Header({ def }: { def: ScreenDef }) {
 
   return (
     <header className="h-header shrink-0 flex items-center gap-4 px-4 border-b border-line bg-chrome">
-      <div className="flex items-center gap-2 shrink-0 whitespace-nowrap">
+      <button
+        type="button"
+        onClick={() => void oide.invoke('shell.openExternal', { url: SITE_URL }).catch(() => undefined)}
+        title="Open getoide.com in your browser"
+        aria-label="oIDE, open getoide.com in your browser"
+        className="flex items-center gap-2 shrink-0 whitespace-nowrap rounded-md -mx-1 px-1 hover:bg-card"
+      >
         <Logo size={26} />
-        <div className="flex flex-col gap-[3px] leading-none">
-          <span className="font-bold tracking-[-0.01em] text-[14px] text-ink">oIDE</span>
-          <span className="flex items-center gap-[3px] text-[9.5px] text-ink-3">
-            by <FrostlogicLogo height={10} className="text-ink-2" />
-          </span>
-        </div>
-      </div>
+        <span className="font-bold tracking-[-0.01em] text-[14px] text-ink leading-none">oIDE</span>
+      </button>
 
       <UpdateButton />
 

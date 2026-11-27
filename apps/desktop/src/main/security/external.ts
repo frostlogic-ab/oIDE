@@ -15,6 +15,7 @@ const DEFAULT_HOSTS = [
   'npmjs.com',
   'modelcontextprotocol.io',
   'oide.dev',
+  'getoide.com',
 ];
 
 const extraHosts = new Set<string>();

@@ -94,6 +94,7 @@ describe('isAllowedExternalUrl', () => {
     expect(isAllowedExternalUrl('https://github.com/oide-dev/oide/pull/1')).toBe(true);
     expect(isAllowedExternalUrl('https://docs.anthropic.com/x')).toBe(true);
     expect(isAllowedExternalUrl('https://claude.ai/artifact/abc')).toBe(true);
+    expect(isAllowedExternalUrl('https://getoide.com')).toBe(true);
     expect(isAllowedExternalUrl('http://github.com')).toBe(false);
     expect(isAllowedExternalUrl('https://evilgithub.com')).toBe(false);
     expect(isAllowedExternalUrl('https://github.com.evil.io')).toBe(false);
