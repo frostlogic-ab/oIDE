@@ -10,6 +10,9 @@ security (trust and bypass rules; `security.md` once written), [architecture.md]
 
 - `new Git({ cwd, gitBinary?, timeoutMs?, env? })`; `run(args, { okExitCodes, input, env, timeoutMs })`,
   `out()`, `test()`, `revParse()`, `currentBranch()`, `branchExists()`, `at(cwd)`.
+- `input` is written to git's stdin with an error listener attached: git may exit before reading it
+  (`check-ignore --stdin` outside a checkout), and the resulting `EPIPE` is ignored, since the exit
+  code already reports the outcome. Without the listener it was an uncaught exception.
 - Always `execFile` with an argument array, never a shell. Every call gets `-c core.quotepath=false
   -c color.ui=false`, plus `-c core.longpaths=true` on Windows.
 - Env: the user's environment unchanged (their credential helper, SSH agent, config) plus
