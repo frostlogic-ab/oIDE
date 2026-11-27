@@ -31,7 +31,7 @@ for (const p of missing) problems.push(`index.md: lists ${p} but the page does n
 // log.md is a frozen archive. Its last entry is fixed here rather than marked in the file, so a
 // branch that predates log/ and appended to log.md still merges main cleanly; this check then asks
 // it to move the entry to its own file (pnpm wiki:log new <op> "<title>").
-const LAST_ARCHIVED = '## [2026-11-26] build | Windows CI: three timing-dependent tests made deterministic';
+const LAST_ARCHIVED = '## [2026-11-27] build | Windows: installed oIDE showed a blank taskbar icon';
 const archive = readFileSync(join(root, 'log.md'), 'utf8').split(/\r?\n/);
 const last = archive.lastIndexOf(LAST_ARCHIVED);
 if (last < 0) problems.push(`log.md: the archive's last entry is missing (${LAST_ARCHIVED})`);
