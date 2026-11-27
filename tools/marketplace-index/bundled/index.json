@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-25T16:48:17.034Z",
+  "generatedAt": "2026-11-26T08:34:56.457Z",
   "extensions": [
     {
       "name": "@oide/ext-browser-preview",
@@ -18,7 +18,7 @@
         {
           "version": "1.0.0",
           "tarball": "oide-builtin:@oide/ext-browser-preview@1.0.0",
-          "integrity": "sha512-DwiakZvYfMgrdgnU03WVgwFCOuMGHLv+cQjdgZX08dJRNDX0ifNwHDuX9M2yYaGJ4jjuOWifoxeazbcoVi+uMg==",
+          "integrity": "sha512-a4lLWxotSuPFubt7UcXYzj6OVGFcZSDfH9+ocHDWlUHNkLQykPNdMYvEIWlsOS5iHS+CDMxJgI+JW081lOBkJA==",
           "engine": "^1.0.0",
           "tools": [
             {
@@ -52,7 +52,7 @@
         {
           "version": "1.0.0",
           "tarball": "oide-builtin:@oide/ext-git@1.0.0",
-          "integrity": "sha512-ZVPPL+JsQJmERuf/dWvN6cS82O8j+90B740MSvMOacA1mr0sapZR28K7V207QH9hqja7VX8szymyefabzpgRHg==",
+          "integrity": "sha512-IF2R1ASQQJdCIAUy64X2WtUU48fyR4z/QFQ4Uq4zrRdUh/SSyRzHjnV1S0ixN3MC1JQ0qolkdj0YQIxdWyaWsw==",
           "engine": "^1.0.0",
           "tools": [],
           "capabilities": {
@@ -80,7 +80,7 @@
         {
           "version": "1.0.0",
           "tarball": "oide-builtin:@oide/ext-themes@1.0.0",
-          "integrity": "sha512-Ae+noDFShVU4VyyWV7r1YuFrCixa7zcmRltAbtM+wSnjPSxDSAm7GUPrbtT6S0k8wJ40eY35w1XoJEnR0ILTHg==",
+          "integrity": "sha512-pDYlbKhLvk1YE4Hbab+9BSmzOm3db/O+PtfuLL0CbbSZZdrVNnZbn2IKt7+LpP1vMmAkOieD3ZNEru193lkSMQ==",
           "engine": "^1.0.0",
           "tools": [],
           "capabilities": {
