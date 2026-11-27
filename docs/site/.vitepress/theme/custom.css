@@ -78,7 +78,29 @@
   letter-spacing: -0.02em;
 }
 .VPNavBarTitle .logo {
-  height: 24px;
+  height: 28px;
+}
+/* The app header lockup: "oIDE" over "by <Frostlogic wordmark>" (Layout.vue, apps/desktop Header.tsx). */
+.oide-brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  line-height: 1;
+}
+.oide-brand-by {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--vp-font-family-base);
+  font-stretch: 100%;
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0;
+  color: var(--vp-c-text-3);
+}
+.oide-brand-by svg {
+  display: block;
+  color: var(--vp-c-text-2);
 }
 
 /* Headings */
