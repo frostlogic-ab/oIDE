@@ -83,6 +83,13 @@ export function screenBucket(width: number, height: number): string {
 
 /** An app version such as `0.1.0` or `0.2.0-beta.3`. */
 export const AppVersion = z.string().regex(/^\d{1,4}\.\d{1,4}\.\d{1,6}(?:-[0-9A-Za-z.]{1,20})?$/);
+/** An app version, or `unknown` when the running build's version string is not one. */
+export const AppVersionValue = z.union([AppVersion, z.literal('unknown')]);
+/** The running app version as sent on events: `0.5.1` stays `0.5.1`; anything else → `unknown`. */
+export function appVersionValue(v: string | undefined | null): string {
+  const t = (v ?? '').trim();
+  return AppVersion.safeParse(t).success ? t : 'unknown';
+}
 
 // ------------------------------------------------------------------------------- enum helpers
 
@@ -302,8 +309,10 @@ const def = <S extends z.ZodObject>(d: EventDef<S>): EventDef<S> => d;
 export const TELEMETRY_EVENTS = {
   app_started: def({
     from: 'main',
-    question: 'How fast does oIDE start, on which CLI versions, and how big are real workspaces?',
+    question:
+      'Which oIDE versions are people running, how fast does it start, on which CLI versions, and how big are real workspaces?',
     props: z.object({
+      app_version: AppVersionValue,
       cold_start_ms: Ms,
       cli_found: z.boolean(),
       cli_version: CliVersionBucket,

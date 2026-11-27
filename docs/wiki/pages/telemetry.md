@@ -85,7 +85,7 @@ The source of truth is `TELEMETRY_EVENTS` in `packages/protocol/src/telemetry.ts
 
 | Event | From | Properties | Product question |
 | --- | --- | --- | --- |
-| `app_started` | main | `cold_start_ms`, `cli_found`, `cli_version` (major.minor / unknown / none), `projects`, `agents` (count buckets) | How fast does oIDE start, on which CLI versions, how big are workspaces? |
+| `app_started` | main | `app_version` (e.g. `0.5.1`, or `unknown`), `cold_start_ms`, `cli_found`, `cli_version` (major.minor / unknown / none), `projects`, `agents` (count buckets) | Which oIDE versions are people running, how fast does oIDE start, on which CLI versions, how big are workspaces? |
 | `update_installed` | main | `from_version`, `to_version` | Do people move to new versions? |
 | `update_install_started` | main | `trigger` [header (the header Update button), settings (Restart to update in Settings), quit (Install when oIDE closes)], `channel` [stable, beta]; once per install | How do people apply updates: header button, Settings, or by quitting? |
 | `update_checked` | main | `outcome` [available, not_available, no_release (nothing published on GitHub yet), feed_missing (the newest release has no `latest*.yml` for this platform, e.g. still publishing), error], `channel` [stable, beta]; once per finished update check, background or manual | Does auto-update work in the field, and why do checks fail? |
@@ -134,6 +134,22 @@ The source of truth is `TELEMETRY_EVENTS` in `packages/protocol/src/telemetry.ts
 
 Session data (`identify`, once per run): `app_version`, `channel`, `os`, `os_version`, `arch`,
 `electron`, `dev`, `cli_version`.
+
+### Which version each user runs
+
+The app version reaches Umami three ways, so it can be read from whichever view fits the question:
+
+- **Per user (install):** session data `app_version`, set once per run. In Umami: the website's
+  **Sessions** tab, open a session for its properties, or the session **Properties** view to break
+  sessions down by `app_version`. Each install is one session (the install id is Umami's distinct id),
+  so this answers "how many installs run which version".
+- **Per launch:** the `app_started` event's `app_version` property. In Umami: **Events › Properties**,
+  event `app_started`, property `app_version`. Counts launches, so heavy users weigh more; use it for
+  adoption over time and to filter start-up time by version.
+- **Errors:** every error report carries the version as `release`.
+
+Release builds send on hostname `oide`, unpackaged runs on `oide-dev` (session data `dev: true`), so
+filter on hostname `oide` to leave out development builds.
 
 ## Errors
 

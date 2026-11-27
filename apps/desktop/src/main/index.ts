@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, Notification, screen, shell } from 'electron';
 import { openStore, type Store } from '@oide/store';
-import { AppVersion, cliVersionBucket, countBucket, screenBucket, telemetryTarget, type AgentEvent } from '@oide/protocol';
+import { AppVersion, appVersionValue, cliVersionBucket, countBucket, screenBucket, telemetryTarget, type AgentEvent } from '@oide/protocol';
 import type { MainContext } from './context.js';
 import { createAgentEventBatcher, createEmitter } from './ipc/emit.js';
 import { attachRouter, IpcRouter, type Logger } from './ipc/router.js';
@@ -300,6 +300,7 @@ async function start(): Promise<void> {
     telemetry.setCliVersion(cli?.version);
     telemetry.identify();
     telemetry.track('app_started', {
+      app_version: appVersionValue(app.getVersion()),
       cold_start_ms: Math.min(coldStartMs, 86_400_000),
       cli_found: !!cli?.found,
       cli_version: cli?.found ? cliVersionBucket(cli.version) : 'none',
