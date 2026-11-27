@@ -42,7 +42,7 @@ interleave with CLI events in one monotonic sequence.
 const sup = new Supervisor({ worktrees, sink, settings, secrets?, broker, driver?, log? });
 sup.on('event' | 'summary' | 'removed', fn) → unsubscribe
 await sup.spawn(spec)            // N attempts (spec.attempts) sharing attemptGroup; each starts 'queued'
-sup.send(agentId, userMessage)   // held while paused/queued; respawns a dead process with --resume
+sup.send(agentId, userMessage)   // held while paused/queued; an idle live process waits for a free slot; respawns a dead process with --resume
 await sup.answerPermission(agentId, answer)  // exact pending id only; "Always" → settings.addAllowRule + session rule
 await sup.setMode(agentId, mode) // control request, fallback interrupt + --resume; calls run in order per agent; the spec follows the CLI's own mode changes
 await sup.setModel(agentId, model, effort?) // spec + `model-changed` event at once; an idle process ends now, a working one after its turn (`relaunch`), and the next message resumes with the new --model / --effort; refused for a custom model
@@ -67,8 +67,12 @@ Injected interfaces (`ports.ts`):
 
 - `spawn` creates `queued` agents. `pump()` starts agents while `runningCount() < settings.agents.maxRunning`.
   A slot is held by an agent that is launching or whose live process is `starting`, `running` or
-  `needs-permission`. Idle agents (`has-question`, `ready-for-review`) do not hold a slot, so a
-  user reply to an idle agent is delivered at once even when the cap is reached.
+  `needs-permission`. Idle agents (`has-question`, `ready-for-review`) do not hold a slot, but a
+  reply to one (or held messages flushed on Resume) would start it working again, so it goes through
+  `wake()`: delivered at once only if a slot is free and nobody is queued ahead; otherwise the agent
+  turns `queued` (detail `resume`) with its process still alive and its messages held, and `pump()`
+  hands them over (no relaunch) when a slot frees. Replies to an agent that is already working
+  (`running`, `needs-permission`) go straight in, since it already holds a slot.
 - Launch: worktree (`WorktreeProvider.create`, then `runSetup` as a "Setup" step), register with the
   broker (writes `mcp.json`), `buildLaunch`, `driver.start` (sends the first message), status `running`.
 - The first launch uses `--session-id <uuid>` (generated at spawn, shown on the tile at once). Every later
