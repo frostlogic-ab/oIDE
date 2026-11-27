@@ -24,6 +24,7 @@ import { useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useUi } from '../../stores/ui';
 import { useArtifactDrafts } from './draftStore';
+import { useArtifactFeedback } from './feedbackStore';
 import ArtifactsScreen from './index';
 
 vi.mock('./SourceEditor', () => ({
@@ -301,6 +302,9 @@ beforeEach(() => {
   });
   useUi.setState({ toasts: [] });
   useArtifactDrafts.getState().reset();
+  // These tests edit the source: the content pane remembers Code (a fresh session opens on Preview).
+  useArtifactFeedback.getState().reset();
+  useArtifactFeedback.setState({ view: 'code' });
   const slot = document.createElement('div');
   document.body.appendChild(slot);
   useUi.getState().setHeaderSlot('actions', slot);
@@ -331,13 +335,18 @@ describe('Doc editor', () => {
 
     fireEvent.change(editor, { target: { value: '# Retry\n\nBackoff with **jitter**' } });
     expect(within(viewer).getByText('Unsaved changes')).toBeTruthy();
-    // Live preview (sanitised Markdown) beside the editor.
+    // Preview renders the unsaved draft live (sanitised Markdown), in the same pane.
+    fireEvent.click(within(viewer).getByRole('radio', { name: 'Preview' }));
+    expect(within(viewer).queryByLabelText('Source of Webhook retry design')).toBeNull();
     expect(
       within(viewer).getByRole('region', { name: 'Preview of Webhook retry design' }).querySelector('strong')
         ?.textContent,
     ).toBe('jitter');
+    fireEvent.click(within(viewer).getByRole('radio', { name: 'Code' }));
+    const again = (await within(viewer).findByLabelText('Source of Webhook retry design')) as HTMLTextAreaElement;
+    expect(again.value).toBe('# Retry\n\nBackoff with **jitter**');
 
-    fireEvent.keyDown(editor, { key: 's', ctrlKey: true });
+    fireEvent.keyDown(again, { key: 's', ctrlKey: true });
     await waitFor(() => expect(within(viewer).getByText(/Doc · oide · v2/)).toBeTruthy());
     expect(calls('artifacts.save')).toEqual([
       { id: 'a-doc', content: '# Retry\n\nBackoff with **jitter**', note: 'Edited by you', baseVersion: 1 },
@@ -434,7 +443,8 @@ describe('Whiteboard editor', () => {
   it('counts only real scene changes as edits and saves Excalidraw JSON', async () => {
     const viewer = await openArtifact(/Session lifecycle/);
     await within(viewer).findByTestId('whiteboard');
-    expect(within(viewer).getByRole('tab', { name: 'Board' })).toBeTruthy();
+    expect(within(viewer).getByRole('radio', { name: 'Board' }).getAttribute('aria-checked')).toBe('true');
+    expect(within(viewer).queryByRole('radio', { name: 'Code' })).toBeNull();
     fireEvent.click(within(viewer).getByRole('button', { name: 'stub: loaded' }));
     expect(within(viewer).queryByText('Unsaved changes')).toBeNull();
 
@@ -766,8 +776,8 @@ describe('Artifacts of several files', () => {
     const editor = (await within(viewer).findByLabelText('Source of site.css')) as HTMLTextAreaElement;
     expect(editor.value).toBe('h1{color:red}');
     expect(fileButton('site.css').getAttribute('aria-current')).toBe('true');
-    // The entry's tabs give way to the file; the design preview stays beside it.
-    expect(within(viewer).queryByRole('tab', { name: 'Edit' })).toBeNull();
+    // The entry's Preview / Code switch gives way to the file; the design preview stays beside it.
+    expect(within(viewer).queryByRole('radio', { name: 'Code' })).toBeNull();
     expect(within(viewer).getByTitle('Preview of Docs site')).toBeTruthy();
 
     fireEvent.change(editor, { target: { value: 'h1{color:blue}' } });
@@ -850,7 +860,7 @@ describe('Artifacts of several files', () => {
     // The entry editor now holds the new entry, marked in the panel.
     await waitFor(() => expect((within(viewer).getByLabelText('Source of Docs site') as HTMLTextAreaElement).value).toBe('<h1>About</h1>'));
     await waitFor(() => expect(fileButton('about.html').textContent).toBe('about.htmlOpens on'));
-    expect(within(viewer).getByRole('tab', { name: 'Edit' })).toBeTruthy();
+    expect(within(viewer).getByRole('radio', { name: 'Code' }).getAttribute('aria-checked')).toBe('true');
   });
 });
 

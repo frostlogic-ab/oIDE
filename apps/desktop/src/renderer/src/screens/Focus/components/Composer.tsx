@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
-import type { ArtifactMeta } from '@oide/protocol';
+import type { ArtifactMeta, UserMessage } from '@oide/protocol';
 import { Chip, Icon } from '@oide/ui';
 import { AttachFileButton, AttachmentTray, useAttachments } from '../../../components/Attachments';
 import { SlashMenu, useSlashMenu } from '../../../components/SlashMenu';
@@ -22,6 +22,10 @@ export interface ComposerProps {
   onCompact(): void;
   /** Shift+Tab in the composer switches the permission mode, as in the CLI. */
   onCycleMode?(): void;
+  /** Called after a message went out (the Artifacts agent panel counts them for telemetry). */
+  onSent?(message: UserMessage): void;
+  /** A narrow host (the Artifacts agent panel): Attach artifact shows its icon only. */
+  compact?: boolean;
 }
 
 /**
@@ -38,7 +42,7 @@ export function afterSent(current: string, sent: string): string {
   return current;
 }
 
-export function Composer({ agentId, projectId, placeholder, commands, subagentName, disabledReason, onCompact, onCycleMode }: ComposerProps) {
+export function Composer({ agentId, projectId, placeholder, commands, subagentName, disabledReason, onCompact, onCycleMode, onSent, compact }: ComposerProps) {
   // The text belongs to one agent. Switching agents swaps in that agent's saved draft during render
   // (no flash of the previous agent's text); every edit is mirrored into the draft store.
   const [draft, setDraftState] = useState(() => ({ agentId, text: getDraft(agentId) }));
@@ -115,6 +119,7 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
     setSending(true);
     try {
       await oide.invoke('agents.send', { agentId, message: intent.message });
+      onSent?.(intent.message);
       // The sent text goes; anything typed after it while the send was in flight stays (without the
       // sent part, so Enter does not send it again). If the user has switched agents meanwhile, the
       // visible composer belongs to someone else: only that agent's stored draft changes.
@@ -199,10 +204,12 @@ export function Composer({ agentId, projectId, placeholder, commands, subagentNa
             aria-controls={pickerOpen ? pickerId : undefined}
             disabled={disabled}
             onClick={() => setPickerOpen((o) => !o)}
-            className="h-[30px] px-2.5 shrink-0 rounded-[7px] border border-line-3 bg-transparent text-ink-2 text-[12px] flex items-center gap-[5px] hover:bg-raised disabled:opacity-50"
+            aria-label={compact ? 'Attach artifact' : undefined}
+            title={compact ? 'Attach artifact' : undefined}
+            className={`h-[30px] shrink-0 rounded-[7px] border border-line-3 bg-transparent text-ink-2 text-[12px] flex items-center gap-[5px] hover:bg-raised disabled:opacity-50 ${compact ? 'w-[30px] justify-center' : 'px-2.5'}`}
           >
             <Icon name="artifacts" size={14} />
-            Attach artifact
+            {!compact && 'Attach artifact'}
           </button>
           <button
             type="button"

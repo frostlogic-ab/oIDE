@@ -8,7 +8,7 @@
  * - doc: Markdown rendered with `marked`, sanitised with DOMPurify.
  * - whiteboard: read-only SVG render of the Excalidraw JSON (v1; no embedded Excalidraw editor).
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type Ref } from 'react';
 import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { looksLikeReact, type ArtifactKind } from '@oide/protocol';
@@ -22,12 +22,14 @@ export function renderMarkdown(md: string): string {
   return DOMPurify.sanitize(html, { USE_PROFILES: { html: true }, FORBID_TAGS: ['style', 'form', 'input', 'iframe'], FORBID_ATTR: ['style'] });
 }
 
-export function MarkdownView({ source, className }: { source: string; className?: string }) {
+export function MarkdownView({ source, className, viewRef, onClickCapture }: { source: string; className?: string; viewRef?: Ref<HTMLDivElement>; onClickCapture?: (e: React.MouseEvent<HTMLDivElement>) => void }) {
   // Sanitised by DOMPurify in renderMarkdown.
   const html = useMemo(() => renderMarkdown(source), [source]);
   return (
     <div
+      ref={viewRef}
       className={cn('oide-md', className)}
+      onClickCapture={onClickCapture}
       onClick={(e) => {
         // Links never navigate the app window: https links open in the system browser.
         const a = (e.target as HTMLElement).closest('a');
@@ -69,9 +71,18 @@ interface DesignFrameProps {
   /** Bumped after a save so the iframe reloads. */
   version?: number;
   className?: string;
+  /** The frame element (point and comment talks to its window). */
+  frameRef?: Ref<HTMLIFrameElement>;
+  /**
+   * How the preview is shown: `url` (main serves it, with the picker script), `inline` (srcdoc, no
+   * scripts, no picker), `react` (a notice), `loading` (asking main for the URL).
+   */
+  onSource?: (source: DesignSource) => void;
 }
 
-export function DesignFrame({ artifactId, title, html, forceInline, scaled, version, className }: DesignFrameProps) {
+export type DesignSource = 'url' | 'inline' | 'react' | 'loading';
+
+export function DesignFrame({ artifactId, title, html, forceInline, scaled, version, className, frameRef, onSource }: DesignFrameProps) {
   const [url, setUrl] = useState<string | null | undefined>(undefined);
   const [ref, width] = useWidth<HTMLDivElement>();
 
@@ -101,15 +112,17 @@ export function DesignFrame({ artifactId, title, html, forceInline, scaled, vers
   // React needs the runtime that main serves with the saved version: it never goes into srcdoc.
   const inline = forceInline || url === null;
   const react = useMemo(() => inline && looksLikeReact(html), [inline, html]);
+  const source: DesignSource = react ? 'react' : inline ? 'inline' : url ? 'url' : 'loading';
+  useEffect(() => onSource?.(source), [source, onSource]);
 
   return (
     <div ref={ref} className={cn('relative overflow-hidden', className)}>
       {react ? (
         <ReactNotice text={forceInline ? 'Only the saved version of a React design can be previewed. Save your changes, or use Compare to see older versions.' : 'React designs preview in the desktop app.'} scaled={scaled} />
       ) : inline ? (
-        <iframe {...common} sandbox="" srcDoc={html} />
+        <iframe ref={frameRef} {...common} sandbox="" srcDoc={html} />
       ) : url ? (
-        <iframe key={`${url}#${version ?? 0}`} {...common} sandbox="allow-scripts" src={url} />
+        <iframe ref={frameRef} key={`${url}#${version ?? 0}`} {...common} sandbox="allow-scripts" src={url} />
       ) : null}
     </div>
   );
