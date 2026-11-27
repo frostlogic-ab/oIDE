@@ -1,12 +1,15 @@
 /**
  * The single live Monaco editor of the Files screen (lazy chunk: Monaco loads only when a file is
  * opened). One model per open tab, view state kept per tab, Ctrl/Cmd+S saves through files.write.
+ * Markdown tabs show the rendered page alone (`mdView` preview) or the source beside it (edit).
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Spinner } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
 import { onTabsMoved, useFiles, type FileTab } from './filesStore';
+import { MarkdownPreview } from './MarkdownPreview';
+import type { MarkdownView } from './markdownLinks';
 import { BASE_OPTIONS, languageFor, languageLabel, monaco } from './monaco/setup';
 
 export interface SelectionInfo {
@@ -75,9 +78,16 @@ export interface EditorPaneProps {
   sendTo?: { label: string; run(sel: SelectionInfo): void };
   /** Imperative save hook for the tab bar's Save button. */
   saveRef?: { current: (() => Promise<void>) | null };
+  /** Set for a Markdown tab: the rendered page alone, or the source and the page side by side. */
+  mdView?: MarkdownView;
+  /** A relative link in the Markdown preview: open this path of the active tab's checkout. */
+  onOpenFile?(path: string): void;
 }
 
-export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, onAsk, sendTo, saveRef }: EditorPaneProps) {
+/** Re-render the preview this long after the last keystroke. */
+const PREVIEW_DEBOUNCE_MS = 150;
+
+export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, onAsk, sendTo, saveRef, mdView, onOpenFile }: EditorPaneProps) {
   const host = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const activeRef = useRef(active);
@@ -87,6 +97,13 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
   const [saving, setSaving] = useState(false);
   const cb = useRef({ onStatus, onDirty, onAsk });
   cb.current = { onStatus, onDirty, onAsk };
+  const mdRef = useRef(mdView);
+  mdRef.current = mdView;
+  const previewRef = useRef<HTMLDivElement>(null);
+  // Bumped (debounced) when the active model changes, so the preview re-reads it.
+  const [rev, setRev] = useState(0);
+  const revTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const showEditor = mdView !== 'preview';
 
   const status = (overrides: Partial<EditorStatus> = {}) => {
     const ed = editorRef.current;
@@ -150,14 +167,26 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
         if (!pos) return setSelection(null);
         setSelection({ ...sel, top: Math.max(4, pos.top - 40), left: Math.max(8, pos.left) });
       }),
-      ed.onDidScrollChange(() => setSelection(null)),
+      ed.onDidScrollChange((ev) => {
+        setSelection(null);
+        // Side by side: the page follows the source, proportionally.
+        const pv = previewRef.current;
+        if (mdRef.current !== 'edit' || !pv || !ev.scrollTopChanged) return;
+        const range = ed.getScrollHeight() - ed.getLayoutInfo().height;
+        pv.scrollTop = range > 0 ? (ev.scrollTop / range) * (pv.scrollHeight - pv.clientHeight) : 0;
+      }),
       ed.onDidChangeModelContent(() => {
         const e = entries.get(activeRef.current.id);
         if (e) cb.current.onDirty(activeRef.current.id, isDirty(e));
         status();
+        if (mdRef.current) {
+          clearTimeout(revTimer.current);
+          revTimer.current = setTimeout(() => setRev((n) => n + 1), PREVIEW_DEBOUNCE_MS);
+        }
       }),
     ];
     return () => {
+      clearTimeout(revTimer.current);
       subs.forEach((d) => d.dispose());
       ed.dispose();
       editorRef.current = null;
@@ -184,6 +213,7 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
       ed.updateOptions({ readOnly: e.readOnly });
       if (e.view) ed.restoreViewState(e.view);
       setLoad({ state: 'ready' });
+      setRev((n) => n + 1);
       cb.current.onDirty(active.id, isDirty(e));
       status();
     };
@@ -223,15 +253,27 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
   const revealed = useRef<number>(undefined);
   useEffect(() => {
     const ed = editorRef.current;
-    if (!ed || !reveal || reveal.tabId !== active.id || revealed.current === reveal.nonce || load.state !== 'ready') return;
+    if (!ed || !reveal || reveal.tabId !== active.id || revealed.current === reveal.nonce || load.state !== 'ready' || !showEditor) return;
     revealed.current = reveal.nonce;
+    ed.layout(); // it may have just been shown (preview → edit): measure before centring the line
     const lineNumber = Math.max(1, Math.min(reveal.line, ed.getModel()?.getLineCount() ?? reveal.line));
     const startColumn = (reveal.column ?? 0) + 1;
     ed.revealLineInCenter(lineNumber);
     if (reveal.length) ed.setSelection({ startLineNumber: lineNumber, startColumn, endLineNumber: lineNumber, endColumn: startColumn + reveal.length });
     else ed.setPosition({ lineNumber, column: startColumn });
     if (reveal.focus) ed.focus();
-  }, [reveal, load.state, active.id]);
+  }, [reveal, load.state, active.id, showEditor]);
+
+  // Leaving the preview: lay the editor out at once (its ResizeObserver fires a frame later).
+  useEffect(() => {
+    if (showEditor) editorRef.current?.layout();
+  }, [showEditor, mdView]);
+
+  const previewSource = useMemo(
+    () => (mdView && load.state === 'ready' ? (entries.get(active.id)?.model.getValue() ?? '') : ''),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rev, active.id, load.state, Boolean(mdView)],
+  );
 
   // Dispose models of closed tabs, and (on mount too) report every open tab's dirty state from its
   // model, so the tab dots and close warnings match the editor after coming back to Files.
@@ -246,8 +288,22 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
   }, [openIds]);
 
   return (
-    <div className="relative flex-1 min-h-0 flex flex-col">
-      <div ref={host} className="flex-1 min-h-0" data-testid="monaco-host" style={{ visibility: load.state === 'ready' ? 'visible' : 'hidden' }} />
+    <div className="relative flex-1 min-h-0 flex">
+      <div
+        ref={host}
+        className={showEditor ? 'flex-1 min-w-0 min-h-0' : 'hidden'}
+        data-testid="monaco-host"
+        style={{ visibility: load.state === 'ready' ? 'visible' : 'hidden' }}
+      />
+      {mdView && load.state === 'ready' && (
+        <MarkdownPreview
+          source={previewSource}
+          path={active.path}
+          onOpenFile={(p: string) => onOpenFile?.(p)}
+          scrollRef={previewRef}
+          className={`flex-1 min-w-0 ${mdView === 'edit' ? 'border-l border-line' : ''}`}
+        />
+      )}
       {load.state === 'loading' && (
         <div className="absolute inset-0 flex items-center justify-center">
           <Spinner label={`Opening ${active.path}`} />
@@ -259,7 +315,7 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
           Couldn't open {active.path}: {load.message}
         </div>
       )}
-      {selection && load.state === 'ready' && (
+      {selection && load.state === 'ready' && showEditor && (
         <div
           className="absolute z-10 flex gap-1 p-1 rounded-[9px] bg-card border border-line-3 shadow-[0_8px_24px_rgba(0,0,0,0.45)] font-sans"
           style={{ top: selection.top, left: selection.left }}

@@ -137,11 +137,8 @@ export function importLinkError(raw: string): string | undefined {
   return r.ok ? undefined : r.reason;
 }
 
-/** Removes a leading `---` front-matter block from Markdown. */
-export function stripFrontMatter(md: string): string {
-  const BOM = String.fromCharCode(0xfeff);
-  return (md.startsWith(BOM) ? md.slice(1) : md).replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '');
-}
+/** Removes a leading `---` front-matter block from Markdown (shared with the Files preview). */
+export { stripFrontMatter } from '../../lib/markdown';
 
 /** Whiteboards must be a JSON object; returns an error message or null. */
 export function validateContent(kind: ArtifactKind, content: string): string | null {
