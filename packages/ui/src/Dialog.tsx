@@ -155,7 +155,7 @@ export function Dialog({
                 {description}
               </p>
             )}
-            <div className="flex-1 min-h-0 overflow-auto">{children}</div>
+            <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-hidden">{children}</div>
             {footer && <div className="flex flex-wrap justify-end gap-2 px-5 py-4 border-t border-line">{footer}</div>}
           </>
         )}
