@@ -1055,3 +1055,8 @@ exposed a product bug: Settings › Extensions re-synced a field's draft from th
 effect, so a late load or a `settingChanged` reload overwrote what the user had just typed and blur
 saved nothing. The draft now follows the saved value only while the field is unedited (regression
 test added). See [extensions](pages/extensions.md).
+
+## [2026-11-27] build | Windows notifications come from oIDE, not Electron
+Dev and e2e runs now use their own AppUserModelID (`dev.oide.app.dev`); sharing the installed app's
+(`dev.oide.app`) let Electron's dev `Electron.lnk` name the installed app's toasts "Electron". Installed
+runs move such leftover shortcuts to the dev id at start. See [packaging](pages/packaging.md).

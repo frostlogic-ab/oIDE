@@ -1,7 +1,7 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, win32 } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { brandAppShortcuts, resolveAppIcon, type ShortcutInfo } from './app-icon.js';
+import { APP_USER_MODEL_ID, DEV_APP_USER_MODEL_ID, appUserModelId, brandAppShortcuts, releaseInstalledAppId, resolveAppIcon, type ShortcutInfo } from './app-icon.js';
 
 const appPath = join('/repo', 'apps', 'desktop');
 const resourcesPath = join('/opt', 'oIDE', 'resources');
@@ -98,6 +98,86 @@ describe('brandAppShortcuts', () => {
 
   it('survives a writer that throws', () => {
     const { updated } = run({ 'Electron.lnk': { target: exe, appUserModelId: 'dev.oide.app' } }, () => {
+      throw new Error('access denied');
+    });
+    expect(updated).toEqual([]);
+  });
+});
+
+describe('appUserModelId', () => {
+  it("gives unpackaged runs their own id so their Electron.lnk can't name the installed app's toasts", () => {
+    expect(appUserModelId(true)).toBe(APP_USER_MODEL_ID);
+    expect(appUserModelId(true)).toBe('dev.oide.app');
+    expect(appUserModelId(false)).toBe(DEV_APP_USER_MODEL_ID);
+    expect(DEV_APP_USER_MODEL_ID).not.toBe(APP_USER_MODEL_ID);
+  });
+
+  it('keeps the installed id equal to electron-builder appId', () => {
+    const yml = readFileSync(join(import.meta.dirname, '..', '..', 'electron-builder.yml'), 'utf8');
+    expect(yml.split(/\r?\n/)).toContain(`appId: ${APP_USER_MODEL_ID}`);
+  });
+});
+
+describe('releaseInstalledAppId', () => {
+  const programs = win32.join('C:/', 'Users', 'u', 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+  const devExe = win32.join('C:/', 'Users', 'u', 'AppData', 'Roaming', 'oIDE', 'worktrees', 'p', 'w', 'node_modules', 'electron', 'dist', 'electron.exe');
+  const installed = win32.join('C:/', 'Users', 'u', 'AppData', 'Local', 'Programs', 'oide', 'oide.exe');
+  const lnk = (name: string): string => win32.join(programs, name);
+  const o = { appId: APP_USER_MODEL_ID, devAppId: DEV_APP_USER_MODEL_ID };
+
+  function run(shortcuts: Record<string, ShortcutInfo | Error>, setAppId: (p: string) => boolean = () => true) {
+    const set: string[] = [];
+    const updated = releaseInstalledAppId(
+      {
+        list: () => Object.keys(shortcuts).map(lnk),
+        read: (p) => {
+          const s = shortcuts[p.slice(programs.length + 1)]!;
+          if (s instanceof Error) throw s;
+          return s;
+        },
+        setAppId: (p, id, target) => {
+          expect(id).toBe(DEV_APP_USER_MODEL_ID);
+          expect(target).toBe((shortcuts[p.slice(programs.length + 1)] as ShortcutInfo).target);
+          set.push(p);
+          return setAppId(p);
+        },
+      },
+      o,
+    );
+    return { updated, set };
+  }
+
+  it("moves a dev run's Electron.lnk off the installed id, leaving the installer's oIDE.lnk alone", () => {
+    const { updated } = run({
+      'Electron.lnk': { target: devExe, appUserModelId: APP_USER_MODEL_ID },
+      'oIDE.lnk': { target: installed, appUserModelId: APP_USER_MODEL_ID },
+    });
+    expect(updated).toEqual([lnk('Electron.lnk')]);
+  });
+
+  it('matches electron.exe case-insensitively', () => {
+    const { updated } = run({ 'Electron.lnk': { target: devExe.toUpperCase(), appUserModelId: APP_USER_MODEL_ID } });
+    expect(updated).toEqual([lnk('Electron.lnk')]);
+  });
+
+  it('leaves other apps, dev-id shortcuts, unreadable and refused shortcuts alone', () => {
+    const { updated, set } = run(
+      {
+        'Other.lnk': { target: devExe, appUserModelId: 'electron.app.Other' },
+        'Dev.lnk': { target: devExe, appUserModelId: DEV_APP_USER_MODEL_ID },
+        'NoId.lnk': { target: devExe },
+        'NoTarget.lnk': { target: '', appUserModelId: APP_USER_MODEL_ID },
+        'Broken.lnk': new Error('not a shortcut'),
+        'Locked.lnk': { target: devExe, appUserModelId: APP_USER_MODEL_ID },
+      },
+      () => false,
+    );
+    expect(set).toEqual([lnk('Locked.lnk')]);
+    expect(updated).toEqual([]);
+  });
+
+  it('survives a writer that throws', () => {
+    const { updated } = run({ 'Electron.lnk': { target: devExe, appUserModelId: APP_USER_MODEL_ID } }, () => {
       throw new Error('access denied');
     });
     expect(updated).toEqual([]);

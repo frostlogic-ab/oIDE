@@ -1,7 +1,19 @@
 import { join, win32 } from 'node:path';
 
-/** Windows taskbar identity; matches `appId` in electron-builder.yml so dev and installed builds group alike. */
+/** Windows identity of the installed app (taskbar grouping, toast sender); matches `appId` in electron-builder.yml. */
 export const APP_USER_MODEL_ID = 'dev.oide.app';
+/**
+ * Windows identity of unpackaged runs (`pnpm dev`, e2e, `electron .`). It must differ from the installed
+ * app's: Electron writes a Start Menu shortcut named after the exe's ProductName for the AUMID it shows
+ * toasts under (`Electron.lnk` for electron.exe), and Windows takes a toast's sender name from a shortcut
+ * that carries the AUMID. Dev runs that shared the installed AUMID left an `Electron.lnk` behind, so the
+ * installed oIDE's notifications came from "Electron".
+ */
+export const DEV_APP_USER_MODEL_ID = 'dev.oide.app.dev';
+
+export function appUserModelId(packaged: boolean): string {
+  return packaged ? APP_USER_MODEL_ID : DEV_APP_USER_MODEL_ID;
+}
 
 export interface AppIconInput {
   packaged: boolean;
@@ -61,6 +73,19 @@ export interface ShortcutIconDeps {
 
 const samePath = (a: string, b: string): boolean => win32.resolve(a).toLowerCase() === win32.resolve(b).toLowerCase();
 
+/** Reads every shortcut `deps.list()` returns, skipping the ones that aren't readable shortcuts. */
+function readShortcuts(deps: Pick<ShortcutIconDeps, 'list' | 'read'>): Array<[string, ShortcutInfo]> {
+  const out: Array<[string, ShortcutInfo]> = [];
+  for (const path of deps.list()) {
+    try {
+      out.push([path, deps.read(path)]);
+    } catch {
+      // Not a readable shortcut.
+    }
+  }
+  return out;
+}
+
 /**
  * Windows, unpackaged runs only. For toast notifications Electron writes `<exe ProductName>.lnk`
  * (`Electron.lnk` for `pnpm dev`) into the Start Menu with our AppUserModelID, the running exe as target
@@ -72,19 +97,40 @@ const samePath = (a: string, b: string): boolean => win32.resolve(a).toLowerCase
  */
 export function brandAppShortcuts(deps: ShortcutIconDeps, o: { execPath: string; appId: string; icon: string }): string[] {
   const updated: string[] = [];
-  for (const path of deps.list()) {
-    let info: ShortcutInfo;
-    try {
-      info = deps.read(path);
-    } catch {
-      continue;
-    }
+  for (const [path, info] of readShortcuts(deps)) {
     if (info.appUserModelId !== o.appId || !info.target || !samePath(info.target, o.execPath)) continue;
     if (info.icon && samePath(info.icon, o.icon) && (info.iconIndex ?? 0) === 0) continue;
     try {
       if (deps.setIcon(path, o.icon, info.target)) updated.push(path);
     } catch {
       // Best effort: a locked or read-only shortcut only costs the taskbar icon.
+    }
+  }
+  return updated;
+}
+
+export interface ShortcutAppIdDeps extends Pick<ShortcutIconDeps, 'list' | 'read'> {
+  /** Sets the AppUserModelID on an existing shortcut, keeping `target`; false when Windows refused. */
+  setAppId: (path: string, appId: string, target: string) => boolean;
+}
+
+/**
+ * Windows, packaged runs only. Before dev runs had their own AUMID (DEV_APP_USER_MODEL_ID), they used the
+ * installed app's, and Electron left a Start Menu `Electron.lnk` (target: a worktree's
+ * node_modules/electron/dist/electron.exe) carrying it, so Windows named the installed app's toasts
+ * "Electron". This moves such shortcuts (installed AUMID, target an `electron.exe`) to the dev AUMID,
+ * which is what a dev run gives them now; the shortcut, its target and its toast CLSID stay. The
+ * installer's own `oIDE.lnk` (target oide.exe) is never touched. Returns the paths updated.
+ */
+export function releaseInstalledAppId(deps: ShortcutAppIdDeps, o: { appId: string; devAppId: string }): string[] {
+  const updated: string[] = [];
+  for (const [path, info] of readShortcuts(deps)) {
+    if (info.appUserModelId !== o.appId || !info.target) continue;
+    if (win32.basename(info.target).toLowerCase() !== 'electron.exe') continue;
+    try {
+      if (deps.setAppId(path, o.devAppId, info.target)) updated.push(path);
+    } catch {
+      // Best effort: a locked or read-only shortcut keeps naming the toasts "Electron".
     }
   }
   return updated;

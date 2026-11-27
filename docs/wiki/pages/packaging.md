@@ -198,8 +198,13 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   `BrowserWindow({ icon })` to `build/icon.ico` (Windows) or `build/icons/512x512.png` (Linux) and
   `app.dock.setIcon(build/icon.png)` on macOS, so the taskbar/dock no longer shows Electron's icon.
   Packaged Windows/macOS use the exe/bundle icon; packaged Linux reads `<resources>/icon.png`
-  (`linux.extraResources`). On Windows `app.setAppUserModelId('dev.oide.app')` (= `appId`) runs before
-  ready so dev and installed windows group under the oIDE icon. Windows draws a window with an explicit
+  (`linux.extraResources`). On Windows `app.setAppUserModelId` runs before ready: `dev.oide.app` (= `appId`)
+  for installed builds, `dev.oide.app.dev` for unpackaged runs (`appUserModelId()` in `main/app-icon.ts`).
+  They must differ: Windows names a toast's sender after the Start Menu shortcut that carries its AUMID,
+  and a dev or e2e run that shared the installed AUMID left an `Electron.lnk` (target a worktree's
+  `electron.exe`), so the installed app's notifications came from "Electron". Installed runs therefore
+  move any such leftover (installed AUMID, target `electron.exe`) to the dev AUMID once at start
+  (`releaseInstalledAppId`); the installer's `oIDE.lnk` is never touched. Windows draws a window with an explicit
   AUMID with the icon of the Start Menu shortcut that carries that AUMID, not the window icon. Electron
   writes such a shortcut itself for toast notifications (`<exe ProductName>.lnk`, so `Electron.lnk` →
   `electron.exe` in dev, with no icon), which made the dev taskbar show Electron's logo. Unpackaged Windows
