@@ -29,6 +29,12 @@ that holds the first open project. Main only accepts a location picked this sess
 holds an open project, so after a restart the remembered location may be refused (`forbidden_path`):
 the dialog then asks for it with the folder picker and retries.
 
+Layout: the dialog body never scrolls sideways (the shared top-positioned `Dialog` clips horizontal
+overflow). On the Clone tab, Location and Folder name share a `minmax(0,1fr) / minmax(0,180px)` grid, so a
+long location path truncates with an ellipsis instead of pushing Folder name out of the dialog. The
+Repository placeholder stays short (`https://github.com/owner/repo.git or owner/repo`); the hint names
+the SSH form.
+
 ## Rules (security)
 
 - **SEC-08 extended.** `projects.initFolder` takes only a path picked this session (or a known
