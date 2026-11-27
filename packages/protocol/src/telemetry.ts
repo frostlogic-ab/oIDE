@@ -213,6 +213,7 @@ export const TELEMETRY_SETTING_KEYS = [
   'permissions.defaults',
   'ui.accent',
   'ui.crashReports',
+  'ui.filesLegendHidden',
   'updates.channel',
   'updates.checkAutomatically',
   'updates.downloadAutomatically',

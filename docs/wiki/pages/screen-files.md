@@ -17,7 +17,8 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   branch, and with All projects a "Folder actions for <project>" menu: Collapse all, Expand loaded
   folders, Expand to depth 1/2/3, Reveal active file, Open terminal here) and a `role="tree"`. With All projects the
   first project starts open; with one project in scope its tree is always open. Legend box at the
-  bottom. When Search is open the column is the 300px Search panel instead.
+  bottom; its × ("Close the legend") hides it for good (`settings.update({ ui: { filesLegendHidden: true } })`,
+  hidden at once, a toast if saving fails) and the tree takes the room. When Search is open the column is the 300px Search panel instead.
 - Middle: open-file tabs (`role="tablist"`, accent top border, close ×, ● when unsaved; right side
   "Ln, Col · Language" and Save; for a Markdown file a "Markdown view" Preview / Edit toggle before
   them), the agent banner, the editor, and under it the terminal panel when shown (`TerminalDock.tsx`).
