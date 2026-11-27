@@ -521,7 +521,8 @@ export class ExtensionsService {
       out.agentId = agent.id;
       out.projectId = agent.projectId;
     } else if (opts.projectId && (await this.registry.isEnabledFor(record, opts.projectId))) out.projectId = opts.projectId;
-    this.o.ctx.emit('extensions.panelOpen', out);
+    // Opens in one window (the one the user used last), not in every open window.
+    (this.o.ctx.emitActive ?? this.o.ctx.emit)('extensions.panelOpen', out);
   }
 
   /** `ctx.panels.postMessage` from host code: to the renderer, which posts it into that panel's iframes. */

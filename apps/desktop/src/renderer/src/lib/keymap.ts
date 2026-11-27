@@ -40,6 +40,7 @@ export const DEFAULT_BINDINGS: Readonly<Record<string, readonly string[]>> = {
   'agent.cycleMode': ['Shift+Tab'],
   'nav.back': ['Alt+ArrowLeft'],
   'nav.forward': ['Alt+ArrowRight'],
+  'app.newWindow': ['Mod+Shift+N'],
   'files.search': ['Mod+Shift+F'],
   // As in VS Code: Ctrl+` on every platform (Cmd+` cycles windows on macOS).
   'files.terminal': ['Ctrl+`'],
@@ -58,6 +59,7 @@ export const ACTION_LABELS: Readonly<Record<string, string>> = {
   'agent.cycleMode': 'Switch permission mode',
   'nav.back': 'Go back',
   'nav.forward': 'Go forward',
+  'app.newWindow': 'Open a new window',
   'files.search': 'Files: search in files',
   'files.terminal': 'Files: show or hide the terminal panel',
   'files.togglePreview': 'Files: switch a Markdown file between preview and edit',
