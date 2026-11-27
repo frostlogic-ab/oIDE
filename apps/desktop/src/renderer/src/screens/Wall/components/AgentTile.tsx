@@ -128,19 +128,29 @@ function SubagentChips({ agent, now }: { agent: AgentSummary; now: number }) {
   if (!agent.subagents.length) return <div className="px-3 pt-2 text-[11px] text-ink-3">No subagents</div>;
   const summary = subagentSummary(agent.subagents);
   return (
-    <div role="group" aria-label={`Subagents: ${summary}`} className="flex items-center gap-[5px] px-3 pt-2 flex-wrap">
-      <Icon name="subagents" size={13} className="text-ink-3" />
-      <span className="text-[11px] text-ink-3 mr-0.5">{summary}</span>
-      {agent.subagents.map((s) => (
-        <ModelLetterChip
-          key={s.id}
-          name={s.name}
-          model={s.model}
-          status={s.status}
-          detailText={subagentDetail(s, agent.pendingPermission, now)}
-          onClick={() => navigate('focus', { agentId: agent.id, subagentId: s.id })}
-        />
-      ))}
+    // Capped at about three and a half rows of chips, then it scrolls: an agent that ran dozens of
+    // subagents must not stretch its tile (and, through the grid row, every tile beside it).
+    <div className="mx-[9px] mt-[5px] max-h-[95px] overflow-y-auto" onClick={swallowScrollbarClick}>
+      <div role="group" aria-label={`Subagents: ${summary}`} className="flex items-center gap-[5px] flex-wrap p-[3px]">
+        <Icon name="subagents" size={13} className="text-ink-3" />
+        <span className="text-[11px] text-ink-3 mr-0.5">{summary}</span>
+        {agent.subagents.map((s) => (
+          <ModelLetterChip
+            key={s.id}
+            name={s.name}
+            model={s.model}
+            status={s.status}
+            detailText={subagentDetail(s, agent.pendingPermission, now)}
+            onClick={() => navigate('focus', { agentId: agent.id, subagentId: s.id })}
+          />
+        ))}
+      </div>
     </div>
   );
+}
+
+/** Dragging or clicking the list's scrollbar scrolls it; it must not also open the agent. */
+function swallowScrollbarClick(e: MouseEvent<HTMLDivElement>) {
+  const el = e.currentTarget;
+  if (e.target === el && e.nativeEvent.offsetX >= el.clientWidth) e.stopPropagation();
 }

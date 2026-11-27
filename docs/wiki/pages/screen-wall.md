@@ -46,6 +46,10 @@ Subagent chips: `ModelLetterChip` per subagent (dot = status, letter = model fam
 from `subagentSummary()` ("2 of 3 running", "1 needs you", "1 running, 1 queued", "3 done"), tooltip from
 `subagentDetail()` ("Sonnet, medium effort · routed as standard · needs permission · asking to run …").
 Clicking a chip opens Focus on that subagent. "No subagents" when there are none.
+The chip list is capped at about three and a half rows (95px) and scrolls past that, so an agent that ran
+dozens of subagents does not stretch its tile and, through the grid row, every tile beside it. Clicks on
+that scrollbar do not open the agent. Chip tooltips use `Tooltip`'s `portal` mode (a fixed bubble in
+`document.body`, hidden on any scroll) so the scroll box cannot clip them.
 
 Context ring: `contextUsed / contextWindow`, amber from Settings `contextWarnAt`, red and tooltip
 "/compact suggested" from `contextSuggestCompactAt`. Clicking opens the confirm; only Compact calls
