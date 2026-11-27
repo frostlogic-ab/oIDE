@@ -18,12 +18,10 @@ export interface ScreenDef {
   /** Which rail item is selected (aria-current) on this screen. */
   rail: RailItemId;
   /**
-   * `command`: the Wall/Focus header (command bar trigger + live counts).
+   * `command`: the Wall/Focus header (command bar trigger).
    * `title`: the other screens (screen title; breadcrumbs via <HeaderSlot name="title">).
    */
   header: 'command' | 'title';
-  /** Header counts on `command` headers: `full` adds the subagents count (Wall). */
-  counts?: 'full' | 'compact';
   /** Show the shared project-scope switcher in the header (Files, Source control). */
   scopeSwitcher?: boolean;
   /** The screen provides its own header title through <HeaderSlot name="title">. */
@@ -34,9 +32,9 @@ export interface ScreenDef {
 }
 
 export const SCREENS: Record<ScreenId, ScreenDef> = {
-  wall: { id: 'wall', title: 'Agents', rail: 'agents', header: 'command', counts: 'full', component: WallScreen },
-  focus: { id: 'focus', title: 'Focus', rail: 'agents', header: 'command', counts: 'compact', component: lazy(() => import('./Focus')) },
-  spawn: { id: 'spawn', title: 'Spawn an agent', rail: 'agents', header: 'command', counts: 'full', overlay: true, component: lazy(() => import('./Spawn')) },
+  wall: { id: 'wall', title: 'Agents', rail: 'agents', header: 'command', component: WallScreen },
+  focus: { id: 'focus', title: 'Focus', rail: 'agents', header: 'command', component: lazy(() => import('./Focus')) },
+  spawn: { id: 'spawn', title: 'Spawn an agent', rail: 'agents', header: 'command', overlay: true, component: lazy(() => import('./Spawn')) },
   'source-control': {
     id: 'source-control',
     title: 'Source control',

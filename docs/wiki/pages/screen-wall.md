@@ -149,7 +149,7 @@ Finished agents leave the tile grid for **Wall › Archived** instead of disappe
 Archive is offered for `has-question`, `ready-for-review`, `paused`, `stopped`, `rate-limited`,
 `error` and `done`; main refuses it (`conflict`) while the agent is working. An archived agent's row,
 summary (`summary.archived = { at, reason, mergeCommit?, worktreeRemoved }`) and transcript stay in the
-database; it is not in `agents.list`, so it never counts toward Max running, the header counters, the
+database; it is not in `agents.list`, so it never counts toward Max running, the Wall filter counts, the
 status bar or the project counts.
 
 The list (`components/ArchivedList.tsx`, TanStack Virtual, pages of 50 from `agents.listArchived`
