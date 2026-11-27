@@ -8,6 +8,7 @@ import { CommitInfo, FileDiff, FileNode, MergePrediction, OverlapWarning, Projec
 import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settings.js';
 import { UpdateInstallTrigger, UpdateStatus } from './updates.js';
 import { FindByNameInput, FindByNameOutput, ReplaceInput, ReplaceOutput, SearchContentInput, SearchResultsEvent } from './search.js';
+import { ProjectScript } from './scripts.js';
 import { TelemetryConsentInput, TelemetryStatus, TelemetryTrackInput } from './telemetry.js';
 
 /**
@@ -289,6 +290,17 @@ export const Commands = {
   'terminal.write': cmd(z.object({ terminalId: Id, data: z.string() }), Ok),
   'terminal.resize': cmd(z.object({ terminalId: Id, cols: z.number().int(), rows: z.number().int() }), Ok),
   'terminal.kill': cmd(z.object({ terminalId: Id }), Ok),
+  /** Files › Run: the run scripts main finds in a project or worktree checkout (package.json, Makefile, Cargo…). */
+  'scripts.list': cmd(z.object({ root: z.string() }), z.array(ProjectScript)),
+  /**
+   * Files › Run › a script: a new interactive shell in `cwd` that runs the script's command, like
+   * VS Code's "Run Script". Only a script id goes in; main finds the script in `cwd` again and builds
+   * the command line itself, so this is no way to run an arbitrary command (SEC-05).
+   */
+  'terminal.runScript': cmd(
+    z.strictObject({ cwd: z.string(), scriptId: z.string().min(1).max(300), cols: z.number().int().default(100), rows: z.number().int().default(30) }),
+    z.object({ terminalId: Id, script: ProjectScript }),
+  ),
 
   // Settings
   'settings.get': cmd(Void, Settings),

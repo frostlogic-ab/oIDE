@@ -27,6 +27,8 @@ import { useSearch } from './searchStore';
 import { TreePanel, type Marker, type ProjectTreeInfo } from './TreePanel';
 import { ResizableAside } from '../../components/ResizableAside';
 import { PANELS } from '../../lib/panels';
+import { useTerminals } from '../../stores/terminals';
+import { FILES_TERMINALS, TerminalDock, toggleFilesTerminal } from './TerminalDock';
 
 const EditorPane = lazy(() => import('./EditorPane'));
 const SECTION_LABEL = 'text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3';
@@ -100,7 +102,19 @@ export default function FilesScreen() {
   const searchOpen = useSearch((st) => st.open);
   const showSearch = useSearch((st) => st.show);
   const setSearchOpen = useSearch((st) => st.setOpen);
+  // Files › Terminal: new shells open in the active file's checkout, else the first project's.
+  const termHome = useMemo(() => {
+    const t = files.tabs.find((x) => x.id === files.active);
+    const project = (t && allProjects.find((p) => p.id === t.projectId)) ?? projects[0];
+    if (!project) return undefined;
+    const root = t?.projectId === project.id ? t.root : (files.checkout[project.id] ?? project.path);
+    const w = (git[project.id]?.worktrees ?? []).find((x) => x.path === root);
+    return { cwd: root, context: `${project.name}${w ? `·${shortBranch(w.branch)}` : ''}` };
+  }, [files.tabs, files.active, files.checkout, allProjects, projects, git]);
+  const terminalOpen = useTerminals((st) => st.groups[FILES_TERMINALS]?.open ?? false);
+  const toggleTerminal = () => toggleFilesTerminal(termHome?.cwd, termHome?.context);
   const searchKey = keymap.label('files.search');
+  const terminalKey = keymap.label('files.terminal');
   const checkouts: SearchCheckout[] = useMemo(
     () =>
       projects.map((project) => {
@@ -136,7 +150,7 @@ export default function FilesScreen() {
     files.setMdView(active.id, next);
     trackMarkdownView(next, 'shortcut');
   };
-  useKeymapScope('files', { 'files.search': () => showSearch(), 'files.togglePreview': (e) => toggleMdView(e.target) });
+  useKeymapScope('files', { 'files.search': () => showSearch(), 'files.terminal': toggleTerminal, 'files.togglePreview': (e) => toggleMdView(e.target) });
   const previewKey = keymap.label('files.togglePreview');
 
   const checkoutLabel = (t: FileTab | undefined) => {
@@ -192,6 +206,9 @@ export default function FilesScreen() {
       <HeaderSlot name="actions">
         <Button variant="secondary" size={28} icon="search" aria-pressed={searchOpen} aria-keyshortcuts="Control+Shift+F Meta+Shift+F" onClick={() => showSearch({ toggle: true })} kbd={searchKey || undefined}>
           Search
+        </Button>
+        <Button variant="secondary" size={28} icon="terminal" aria-pressed={terminalOpen} aria-keyshortcuts="Control+`" disabled={!termHome && !terminalOpen} onClick={toggleTerminal} kbd={terminalKey || undefined}>
+          Terminal
         </Button>
       </HeaderSlot>
       {searchOpen ? (
@@ -329,6 +346,7 @@ export default function FilesScreen() {
             <EmptyState icon="file" title="Pick a file" description="Choose a file in the tree. A dot marks files an agent is changing." className="flex-1" />
           )}
         </div>
+        <TerminalDock newCwd={termHome?.cwd} newContext={termHome?.context} />
       </main>
 
       <ResizableAside panel={PANELS.filesActivity} aria-label="File activity" className="flex flex-col gap-3 p-4 bg-panel border-l border-line box-border overflow-auto">

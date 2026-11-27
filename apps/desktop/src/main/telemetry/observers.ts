@@ -17,6 +17,7 @@ import {
   type MessageAttachment,
   type PermissionAnswer,
   type PermissionMode,
+  type ScriptRunner,
   type SearchResultsEvent,
   type TelemetryEventName,
   type TelemetryEventProps,
@@ -279,6 +280,10 @@ export class TelemetryObservers {
         this.sink.track('file_managed', { action: i.move ? 'move' : 'copy', crossCheckout: i.fromRoot !== i.toRoot });
         return;
       }
+      // Files › Run: the runner only (never the script name or its command line).
+      case 'terminal.runScript':
+        this.sink.track('script_run', { runner: (output as { script: { runner: ScriptRunner } }).script.runner });
+        return;
       case 'files.replace': {
         const results = (output as { results?: Array<{ status: string }> }).results ?? [];
         this.sink.track('file_search_used', {
