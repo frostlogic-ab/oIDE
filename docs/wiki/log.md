@@ -1055,3 +1055,11 @@ exposed a product bug: Settings › Extensions re-synced a field's draft from th
 effect, so a late load or a `settingChanged` reload overwrote what the user had just typed and blur
 saved nothing. The draft now follows the saved value only while the field is unedited (regression
 test added). See [extensions](pages/extensions.md).
+
+## [2026-11-27] build | Windows: installed oIDE showed a blank taskbar icon
+Dev runs set the same AppUserModelID as the installed app (`dev.oide.app`), so Electron's
+notification shortcut `Electron.lnk` carried it too, pointing at a worktree's `electron.exe` and
+`build/icon.ico`. After the worktree was deleted, Windows drew the installed oIDE's taskbar button
+through that orphaned shortcut: a blank page. Unpackaged runs now use `dev.oide.app.dev`, and packaged
+Windows runs delete shortcuts with the installed AUMID whose target is gone (or retag live dev ones).
+See [packaging](pages/packaging.md).
