@@ -170,7 +170,8 @@ Behaviour worth knowing:
 
 **Events**: `agents.summary` / `agents.removed` / `agents.batch` (supervisor + sink), `projects.changed`,
 `scope.changed` (also when the scoped project is removed), `git.changed { projectId }` (watchers,
-~1 s debounce; tile diff refresh; background fetch of trusted projects with a remote 15 s after launch,
+~1 s debounce; tile diff refresh, where only the latest refresh started per agent may write, so a
+slow older `git diff` never restores stale counts; background fetch of trusted projects with a remote 15 s after launch,
 every Settings > Agents > fetch interval, and on window focus when the last round is 3+ minutes old
 (none when the interval is 0 or the machine is offline; one round at a time); after
 commit/pull/push/merge/PR), `settings.changed`, `cli.changed`, `extensions.changed`,
