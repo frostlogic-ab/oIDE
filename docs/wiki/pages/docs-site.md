@@ -24,8 +24,8 @@ Source design: the "oIDE Website" artifact, copied to [raw/design/website/](../r
 
 - **Logo.** The app's own mark (`public/logo-mark.svg`, `logo-mark-light.svg`, from
   [design-system](design-system.md) and `tools/brand/`) replaces the design's outlined square in the nav and footer. Both headers (home page nav and docs nav) use
-  the app header lockup: the 28px mark beside "oIDE" with a "by [Frostlogic wordmark]" subtitle underneath
-  (`FrostlogicLogo.vue`, 11px high, word in the secondary text colour); the footer keeps mark + "oIDE".
+  the app header lockup: the 28px mark beside "oIDE", linking to the site root (https://getoide.com/);
+  the footer keeps mark + "oIDE".
 - **Light and dark** follow VitePress's `<html class="dark">` (set by an inline script before
   hydration, default dark, toggled by the sun/moon button or the docs' switch). The home page never
   derives a class from `isDark`, and theme-dependent bits (logo, toggle icon) are drawn twice and
