@@ -160,6 +160,44 @@ describe('AgentReducer', () => {
     expect(s.subagents[0]!.status).toBe('done');
   });
 
+  it('a turn the CLI starts on its own (a subagent report woke the lead) is running, not has-question', () => {
+    const { s, statuses } = run([
+      ev({ type: 'status', status: 'running' }),
+      ev({ type: 'result', subtype: 'success', isError: false, text: 'The last audit is back too. Waiting on the others.' }),
+      // No user message: the CLI delivers a task notification and the lead goes on by itself.
+      ev({ type: 'init', sessionId: 's1', model: 'haiku', cwd: '/work/repo', tools: [], mcpServers: [] }),
+      ev({ type: 'assistant-text', text: 'All three audits are in. Starting the fixers.' }),
+      ev({ type: 'tool-use', toolUseId: 'fix-1', name: 'Agent', input: { description: 'Fix spawn link', prompt: 'x' } }),
+      ev({ type: 'background-tasks', count: 1 }),
+      ev({ type: 'result', subtype: 'success', isError: false, text: 'Fixers are running.' }),
+    ]);
+    expect(statuses).toEqual(['running', 'has-question', 'running']);
+    expect(s.status).toBe('running');
+  });
+
+  it('a woken turn after a review goes back to ready-for-review when it ends', () => {
+    const { statuses } = run([
+      ev({ type: 'status', status: 'running' }),
+      ev({ type: 'review-submitted', review: { agentId: 'agent-1', summary: 'x', checks: [], submittedAt: 1 } }),
+      ev({ type: 'result', subtype: 'success', isError: false }),
+      ev({ type: 'init', sessionId: 's1', model: 'haiku', cwd: '/work/repo', tools: [], mcpServers: [] }),
+      ev({ type: 'assistant-text', text: 'The last check came back green.' }),
+      ev({ type: 'result', subtype: 'success', isError: false, text: 'The last check came back green.' }),
+    ]);
+    expect(statuses).toEqual(['running', 'ready-for-review', 'running', 'ready-for-review']);
+  });
+
+  it('subagent output and a bare init do not wake an idle agent', () => {
+    const { s } = run([
+      ev({ type: 'status', status: 'running' }),
+      ev({ type: 'result', subtype: 'success', isError: false, text: 'Which option?' }),
+      ev({ type: 'init', sessionId: 's1', model: 'haiku', cwd: '/work/repo', tools: [], mcpServers: [] }),
+      ev({ type: 'assistant-text', text: 'sub work', parentToolUseId: 'task-1' }),
+      ev({ type: 'tool-use', toolUseId: 't2', name: 'Read', input: {}, parentToolUseId: 'task-1' }),
+    ]);
+    expect(s.status).toBe('has-question');
+  });
+
   it('rate limit: rate-limited with reset time, never flips back on the result', () => {
     const { s } = run([
       ev({ type: 'status', status: 'running' }),

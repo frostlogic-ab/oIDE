@@ -8,7 +8,7 @@ export interface StatusDotProps extends HTMLAttributes<HTMLSpanElement> {
   status?: AgentStatus;
   subagentStatus?: SubagentStatus;
   color?: string;
-  /** 6 (status bar, subagent chips), 7 (tiles, sidebar), 8 (header counts, focus title). */
+  /** 6 (status bar, subagent chips), 7 (tiles, sidebar), 8 (focus title). */
   size?: 6 | 7 | 8;
 }
 

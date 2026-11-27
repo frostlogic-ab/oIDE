@@ -33,6 +33,8 @@ export interface ReducerOptions {
 }
 
 const EPHEMERAL = new Set(['Thinking…', 'Writing…']);
+/** Idle statuses a turn the CLI starts on its own (no message from the user) turns back into running. */
+const WOKEN: ReadonlySet<AgentStatus> = new Set(['has-question', 'ready-for-review']);
 const MAX_LINE = 90;
 /** The window assumed when a request outgrows the table's guess (the largest window the CLI reports today). */
 const LARGE_WINDOW = 1_000_000;
@@ -251,6 +253,12 @@ export class AgentReducer {
       const last = s.activity[s.activity.length - 1];
       if (last !== undefined && EPHEMERAL.has(last)) s.activity.pop();
     };
+    // The CLI starts turns of its own: a background subagent's report wakes the lead after its turn
+    // ended. The lead is working again, so it no longer has a question or waits for review. The next
+    // result settles the status again (a submitted review still wins, see statusAfterResult).
+    const leadWorking = () => {
+      if (lead && WOKEN.has(s.status)) s.status = 'running';
+    };
 
     switch (e.type) {
       case 'status':
@@ -286,19 +294,23 @@ export class AgentReducer {
         else delete s.effort;
         break;
       case 'partial':
+        leadWorking();
         if (lead && e.kind === 'thinking') pushActivity('Thinking…', true);
         else if (lead && e.kind === 'text') pushActivity('Writing…', true);
         break;
       case 'thinking':
+        leadWorking();
         if (lead) pushActivity('Thinking…', true);
         break;
       case 'assistant-text':
+        leadWorking();
         if (lead) {
           dropEphemeral();
           if (e.text.trim()) s.lastMessage = e.text;
         }
         break;
       case 'tool-use':
+        leadWorking();
         if (lead) {
           pushActivity(describeToolUse(e.name, e.input, s.worktreePath));
           if (e.name === 'TodoWrite') {

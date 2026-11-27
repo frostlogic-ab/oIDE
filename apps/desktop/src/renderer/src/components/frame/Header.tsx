@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from 'react';
-import { Icon, Kbd, Logo, SegmentedControl, StatusDot } from '@oide/ui';
+import { Icon, Kbd, Logo, SegmentedControl } from '@oide/ui';
 import type { Scope } from '@oide/protocol';
-import { useAgentCounts } from '../../stores/agents';
 import { useProjects } from '../../stores/projects';
 import { useScope } from '../../stores/scope';
 import { useUi } from '../../stores/ui';
@@ -12,7 +11,7 @@ import { oide } from '../../lib/bridge';
 
 const SITE_URL = 'https://getoide.com';
 
-/** 44px title bar: logo (opens getoide.com in the system browser), the Update button when an update is ready, title/breadcrumb slot or command-bar trigger, scope switcher, counts, actions slot. */
+/** 44px title bar: logo (opens getoide.com in the system browser), the Update button when an update is ready, title/breadcrumb slot or command-bar trigger, scope switcher, actions slot. No agent counters: the Wall already shows them. */
 export function Header({ def }: { def: ScreenDef }) {
   const setSlot = useUi((s) => s.setHeaderSlot);
   const titleRef = useCallback((el: HTMLDivElement | null) => setSlot('title', el), [setSlot]);
@@ -38,10 +37,7 @@ export function Header({ def }: { def: ScreenDef }) {
       </div>
 
       {def.header === 'command' ? (
-        <>
-          <CommandTrigger />
-          <HeaderCounts full={def.counts !== 'compact'} />
-        </>
+        <CommandTrigger />
       ) : (
         <>
           <div className="flex-1" />
@@ -69,29 +65,6 @@ function CommandTrigger() {
       <span className="flex-1 truncate">Spawn an agent, jump to a session, or run a command</span>
       <Kbd className="text-[11px]! px-1.5! py-0.5!">{shortcut}</Kbd>
     </button>
-  );
-}
-
-function HeaderCounts({ full }: { full: boolean }) {
-  const scope = useScope((s) => s.scope);
-  const counts = useAgentCounts(scope);
-  return (
-    <div className="flex items-center gap-3 text-ink-3 text-[12px] shrink-0" aria-label="Agent counts" role="group">
-      <span className="flex items-center gap-1.5">
-        <StatusDot color="var(--color-ok)" size={8} />
-        {counts.running} running
-      </span>
-      {full && (
-        <span className="flex items-center gap-1.5">
-          <StatusDot color="var(--color-accent)" size={8} />
-          {counts.subagentsActive} {counts.subagentsActive === 1 ? 'subagent' : 'subagents'}
-        </span>
-      )}
-      <span className={counts.needsYou ? 'flex items-center gap-1.5 text-warn' : 'flex items-center gap-1.5'}>
-        <StatusDot color={counts.needsYou ? 'var(--color-warn)' : 'var(--color-ink-4)'} size={8} />
-        {counts.needsYou} {counts.needsYou === 1 ? 'needs you' : 'need you'}
-      </span>
-    </div>
   );
 }
 

@@ -100,7 +100,8 @@ export function ModelLetterChip({ name, model, status, detail, detailText, class
   const needs = status === 'needs-permission';
   const text = detailText ?? `${modelFamily(model)} · ${meta.label.toLowerCase()}`;
   return (
-    <Tooltip content={detail ?? `${name} · ${text}`} placement="top-start">
+    // Portalled: on the Wall the chips sit in a scrolling list that would clip a CSS bubble.
+    <Tooltip content={detail ?? `${name} · ${text}`} placement="top-start" portal>
       <button
         type={type}
         aria-label={`Subagent ${name} · ${text}`}

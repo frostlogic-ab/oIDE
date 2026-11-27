@@ -46,6 +46,10 @@ Subagent chips: `ModelLetterChip` per subagent (dot = status, letter = model fam
 from `subagentSummary()` ("2 of 3 running", "1 needs you", "1 running, 1 queued", "3 done"), tooltip from
 `subagentDetail()` ("Sonnet, medium effort · routed as standard · needs permission · asking to run …").
 Clicking a chip opens Focus on that subagent. "No subagents" when there are none.
+The chip list is capped at about three and a half rows (95px) and scrolls past that, so an agent that ran
+dozens of subagents does not stretch its tile and, through the grid row, every tile beside it. Clicks on
+that scrollbar do not open the agent. Chip tooltips use `Tooltip`'s `portal` mode (a fixed bubble in
+`document.body`, hidden on any scroll) so the scroll box cannot clip them.
 
 Context ring: `contextUsed / contextWindow`, amber from Settings `contextWarnAt`, red and tooltip
 "/compact suggested" from `contextSuggestCompactAt`. Clicking opens the confirm; only Compact calls
@@ -151,7 +155,7 @@ The "Archived …" toast after archiving has an Undo action that unarchives the 
 Archive is offered for `has-question`, `ready-for-review`, `paused`, `stopped`, `rate-limited`,
 `error` and `done`; main refuses it (`conflict`) while the agent is working. An archived agent's row,
 summary (`summary.archived = { at, reason, mergeCommit?, worktreeRemoved }`) and transcript stay in the
-database; it is not in `agents.list`, so it never counts toward Max running, the header counters, the
+database; it is not in `agents.list`, so it never counts toward Max running, the Wall filter counts, the
 status bar or the project counts.
 
 The list (`components/ArchivedList.tsx`, TanStack Virtual, pages of 50 from `agents.listArchived`

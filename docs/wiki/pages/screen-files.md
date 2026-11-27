@@ -19,10 +19,14 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   first project starts open; with one project in scope its tree is always open. Legend box at the
   bottom; its × ("Close the legend") hides it for good (`settings.update({ ui: { filesLegendHidden: true } })`,
   hidden at once, a toast if saving fails) and the tree takes the room. When Search is open the column is the 300px Search panel instead.
-- Middle: open-file tabs (`role="tablist"`, accent top border, close ×, ● when unsaved; right side
-  the language-server status and problem counts, "Ln, Col · Language" and Save; for a changed file a "Changes view" File / Unified / Split toggle and
-  "vs last commit" / "vs base branch"; for a Markdown file a "Markdown view" Preview / Edit toggle
-  before them), the agent banner, the editor, and under it the terminal panel when shown (`TerminalDock.tsx`).
+- Middle: open-file tabs (`role="tablist"`, accent top border, close ×, ● when unsaved; the tab bar
+  holds the file names only), the agent banner, the editor, the file status bar, and under it the
+  terminal panel when shown (`TerminalDock.tsx`).
+- File status bar (`<footer aria-label="File status">`, 32px, chrome, under the editor while a file is
+  open): on the left a "Changes view" File / Unified / Split toggle for a changed file and a
+  "Markdown view" Preview / Edit toggle for a Markdown file; on the right the language-server status and problem counts, Read only, "Ln, Col ·
+  Language", "vs last commit" / "vs base branch" and Save when unsaved. Anything else about the open
+  file belongs here too, never in the tab bar.
 - Tab labels (`tabLabels.ts`): a tab shows only the file name; its tooltip is the full absolute path.
   When several open tabs share a name, each gets a dim hint after it, as in VS Code: the project
   (`·checkout` when not main) if they sit in different places, and the shortest trailing part of the
@@ -181,12 +185,12 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   `.markdown`, `.mdown`, `.mkd` and `.mkdn` files (not `.mdx`, whose JSX the sanitiser would drop) open
   on their rendered page. **Edit** shows the Monaco source on the left half and the live page on the
   right (re-rendered 150 ms after the last keystroke; the page scrolls with the source,
-  proportionally); **Preview** hides the source again. Toggle with the tab bar's "Markdown view"
+  proportionally); **Preview** hides the source again. Toggle with the status bar's "Markdown view"
   buttons (`aria-pressed`) or Ctrl/Cmd+Shift+V (`files.togglePreview` in the Files scope, rebindable;
   ignored inside a terminal, where it pastes). The choice is per tab in `filesStore.mdView`, follows a
   rename, and is forgotten when the tab closes, so a file always reopens in the preview. Jumping to a
   line (search result, quick open `file.md:12`, Review "Open in editor") switches the tab to Edit. In
-  the preview the tab bar hides Ln/Col; Save still works for unsaved edits.
+  the preview the status bar hides Ln/Col; Save still works for unsaved edits.
   Rendering: `renderMarkdown` (shared with doc artifacts): GFM through its own `Marked` instance,
   front matter stripped, DOMPurify (no `<style>`, `<form>`, `<input>`, `<iframe>`, `style`
   attributes); GFM task items draw a box (`oide-md-task`) as `<input>` is dropped. Styles are scoped
@@ -204,7 +208,7 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   `binary` for binary or over 5 MB, which falls back to the plain editor with a note). The right side
   is the tab's own model, so it stays editable: unsaved edits, the ● dot, Ctrl/Cmd+S, Ln/Col and
   "Ask an agent about this" (context menu) work as in the plain editor; the left side is read only.
-  The tab bar's "Changes view" buttons (`aria-pressed`): **File** (the plain editor), **Unified**
+  The status bar's "Changes view" buttons (`aria-pressed`): **File** (the plain editor), **Unified**
   (one column, removed lines above added ones) and **Split** (side by side;
   `useInlineViewWhenSpaceIsLimited` off, so a narrow pane keeps the pick). The choice is per tab in
   `filesStore.diffView` (follows a rename, forgotten on close); picking a layout also makes it the
@@ -236,7 +240,7 @@ ADR [0019](../../adr/0019-language-servers-in-main-with-a-monaco-bridge.md). Mai
   the worktree is deleted (before the folder is removed), and on quit (`shutdown` + `exit`, then the
   process tree is killed). At most 8 run at once. A crash restarts it (1 s → 30 s backoff) with its
   open documents; after five crashes in three minutes it stays failed.
-- Only trusted projects (servers run repository code). Untrusted: the tab bar says "Language server
+- Only trusted projects (servers run repository code). Untrusted: the file status bar says "Language server
   off" with the reason in its tooltip.
 - Sync: binding a tab's model sends `lsp.open { root, path, version, text }` (the model's version
   id, full text; files over 4 MB and read-only tabs are not sent); edits send `lsp.change` 200 ms
@@ -258,7 +262,7 @@ ADR [0019](../../adr/0019-language-servers-in-main-with-a-monaco-bridge.md). Mai
   Monaco markers (squiggles, the overview ruler, F8 / Shift+F8), the tree colours above and the
   Problems list in File activity (errors first, then warnings, infos, hints; at most 100 shown; a
   click puts the cursor on it). A stopped server clears what it published.
-- Tab bar (`LspStatus.tsx`): problem counts (error and warning icons; click = next problem, F8) and
+- File status bar (`LspStatus.tsx`): problem counts (error and warning icons; click = next problem, F8) and
   the server: a dot (green running, grey starting, amber not installed, red failed, dim when off)
   and its name; the tooltip explains the state. Its menu has Restart language server (or Try again)
   and, when the command was not found, Copy install command.
@@ -379,8 +383,9 @@ against HEAD and the merge-base, binary, missing, before the first commit).
 
 - Banner copy uses the agent's title ("Build the window shell layout is changing…") instead of the
   canvas's short name.
-- Tabs get a close button and the tab bar shows Ln/Col and Save (the canvas puts Ln/Col in the app
-  status bar, which belongs to the shell).
+- Tabs get a close button. Ln/Col, Save and the view toggles sit in a file status bar under the
+  editor (the canvas puts Ln/Col in the app status bar, which belongs to the shell); the tab bar
+  holds only the file names.
 - Folders sort before files, so `docs/rfc` lists above `src` in the oide tree.
 - Editor: JetBrains Mono ligatures on (`fontLigatures`), and TypeScript / JavaScript use a derived
   Monarch tokenizer (`withFunctionNames` in `monaco/setup.ts`) that tints a name followed by `(` as

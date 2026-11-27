@@ -353,78 +353,6 @@ export default function FilesScreen() {
             })}
           </div>
           {tabMenu && <ContextMenu at={tabMenu.at} label={`Actions for ${tabMenu.tab.path.split('/').pop()}`} items={tabMenuItems(tabMenu.tab)} onClose={() => setTabMenu(undefined)} />}
-          <div className="flex-1" />
-          {active && canDiff && (
-            <div role="group" aria-label="Changes view" className="flex items-center gap-0.5 my-auto ml-2 p-[2px] rounded-md border border-line-2 bg-card shrink-0">
-              {DIFF_VIEWS.filter((o) => o.view !== 'off' || !markdown /* Markdown leaves its changes through Preview / Edit */).map((o) => (
-                <button
-                  key={o.view}
-                  type="button"
-                  aria-pressed={diffView === o.view}
-                  title={o.title}
-                  onClick={() => pickDiffView(o.view)}
-                  className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-sm border-0 text-[11.5px] cursor-pointer ${diffView === o.view ? 'bg-selected text-ink' : 'bg-transparent text-ink-3 hover:text-ink-2'}`}
-                >
-                  <Icon name={o.icon} size={13} />
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          )}
-          {active && markdown && (
-            <div role="group" aria-label="Markdown view" className="flex items-center gap-0.5 my-auto ml-2 p-[2px] rounded-md border border-line-2 bg-card shrink-0">
-              {(
-                [
-                  { view: 'preview', label: 'Preview', icon: 'eye', title: 'Show the rendered page' },
-                  { view: 'edit', label: 'Edit', icon: 'pencil', title: 'Edit the source beside the rendered page' },
-                ] as const
-              ).map((o) => (
-                <button
-                  key={o.view}
-                  type="button"
-                  aria-pressed={mdView === o.view}
-                  aria-keyshortcuts="Control+Shift+V Meta+Shift+V"
-                  title={`${o.title}${previewKey ? ` (${previewKey})` : ''}`}
-                  onClick={() => {
-                    if (mdView === o.view) return;
-                    if (diffView !== 'off') pickDiffView('off');
-                    files.setMdView(active.id, o.view);
-                    trackMarkdownView(o.view, 'button');
-                  }}
-                  className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-sm border-0 text-[11.5px] cursor-pointer ${mdView === o.view ? 'bg-selected text-ink' : 'bg-transparent text-ink-3 hover:text-ink-2'}`}
-                >
-                  <Icon name={o.icon} size={13} />
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          )}
-          {active && status && (
-            <div className="flex items-center gap-2.5 px-3 text-[11.5px] text-ink-3 shrink-0">
-              <LspStatusControl status={lspStatus} problems={problems} onNextProblem={() => actionsRef.current?.nextProblem()} onRestart={restartLsp} />
-              {status.readOnly && <span>Read only</span>}
-              <span className="font-mono">
-                {mdView !== 'preview' && `Ln ${status.line}, Col ${status.column}`}
-                {status.language ? `${mdView !== 'preview' ? ' · ' : ''}${active.path.endsWith('.json') ? 'JSON' : status.language}` : ''}
-              </span>
-              {diffView !== 'off' && status.against && (
-                <span title={status.against === 'head' ? 'Uncommitted changes, against the last commit' : 'Everything this branch changed, against where it left its base branch'}>
-                  {status.against === 'head' ? 'vs last commit' : 'vs base branch'}
-                </span>
-              )}
-              {dirty[active.id] && (
-                <button
-                  type="button"
-                  className="h-6 px-2 rounded-sm border border-line-3 bg-transparent text-ink text-[11.5px] cursor-pointer hover:bg-raised disabled:opacity-50"
-                  disabled={status.saving}
-                  onClick={() => void saveRef.current?.()}
-                  aria-keyshortcuts="Control+S Meta+S"
-                >
-                  {status.saving ? 'Saving…' : 'Save'}
-                </button>
-              )}
-            </div>
-          )}
         </div>
 
         {active && editor && (
@@ -466,6 +394,82 @@ export default function FilesScreen() {
             <EmptyState icon="file" title="Pick a file" description="Choose a file in the tree. A dot marks files an agent is changing." className="flex-1" />
           )}
         </div>
+        {active && (
+          // The tab bar holds only the open files; everything else about the open file sits in this bar below it.
+          <footer aria-label="File status" className="flex items-center gap-2 min-h-8 pl-2 bg-chrome border-t border-line shrink-0 overflow-x-auto">
+            {canDiff && (
+              <div role="group" aria-label="Changes view" className="flex items-center gap-0.5 p-[2px] rounded-md border border-line-2 bg-card shrink-0">
+                {DIFF_VIEWS.filter((o) => o.view !== 'off' || !markdown /* Markdown leaves its changes through Preview / Edit */).map((o) => (
+                  <button
+                    key={o.view}
+                    type="button"
+                    aria-pressed={diffView === o.view}
+                    title={o.title}
+                    onClick={() => pickDiffView(o.view)}
+                    className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-sm border-0 text-[11.5px] cursor-pointer ${diffView === o.view ? 'bg-selected text-ink' : 'bg-transparent text-ink-3 hover:text-ink-2'}`}
+                  >
+                    <Icon name={o.icon} size={13} />
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {markdown && (
+              <div role="group" aria-label="Markdown view" className="flex items-center gap-0.5 p-[2px] rounded-md border border-line-2 bg-card shrink-0">
+                {(
+                  [
+                    { view: 'preview', label: 'Preview', icon: 'eye', title: 'Show the rendered page' },
+                    { view: 'edit', label: 'Edit', icon: 'pencil', title: 'Edit the source beside the rendered page' },
+                  ] as const
+                ).map((o) => (
+                  <button
+                    key={o.view}
+                    type="button"
+                    aria-pressed={mdView === o.view}
+                    aria-keyshortcuts="Control+Shift+V Meta+Shift+V"
+                    title={`${o.title}${previewKey ? ` (${previewKey})` : ''}`}
+                    onClick={() => {
+                      if (mdView === o.view) return;
+                      if (diffView !== 'off') pickDiffView('off');
+                      files.setMdView(active.id, o.view);
+                      trackMarkdownView(o.view, 'button');
+                    }}
+                    className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-sm border-0 text-[11.5px] cursor-pointer ${mdView === o.view ? 'bg-selected text-ink' : 'bg-transparent text-ink-3 hover:text-ink-2'}`}
+                  >
+                    <Icon name={o.icon} size={13} />
+                    {o.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {status && (
+              <div className="flex items-center gap-2.5 ml-auto pr-3 text-[11.5px] text-ink-3 shrink-0">
+                <LspStatusControl status={lspStatus} problems={problems} onNextProblem={() => actionsRef.current?.nextProblem()} onRestart={restartLsp} />
+                {status.readOnly && <span>Read only</span>}
+                <span className="font-mono">
+                  {mdView !== 'preview' && `Ln ${status.line}, Col ${status.column}`}
+                  {status.language ? `${mdView !== 'preview' ? ' · ' : ''}${active.path.endsWith('.json') ? 'JSON' : status.language}` : ''}
+                </span>
+                {diffView !== 'off' && status.against && (
+                  <span title={status.against === 'head' ? 'Uncommitted changes, against the last commit' : 'Everything this branch changed, against where it left its base branch'}>
+                    {status.against === 'head' ? 'vs last commit' : 'vs base branch'}
+                  </span>
+                )}
+                {dirty[active.id] && (
+                  <button
+                    type="button"
+                    className="h-6 px-2 rounded-sm border border-line-3 bg-transparent text-ink text-[11.5px] cursor-pointer hover:bg-raised disabled:opacity-50"
+                    disabled={status.saving}
+                    onClick={() => void saveRef.current?.()}
+                    aria-keyshortcuts="Control+S Meta+S"
+                  >
+                    {status.saving ? 'Saving…' : 'Save'}
+                  </button>
+                )}
+              </div>
+            )}
+          </footer>
+        )}
         <TerminalDock newCwd={termHome?.cwd} newContext={termHome?.context} />
       </main>
 
