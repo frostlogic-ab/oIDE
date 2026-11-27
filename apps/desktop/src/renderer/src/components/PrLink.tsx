@@ -60,14 +60,30 @@ export function PrChecks({ pr }: { pr: AgentPrInfo }) {
   );
 }
 
+/** Just the "View PR #12" button; tiles lay it out apart from the state badge and CI so their footer wraps cleanly. */
+export function PrButton({ pr, size = 28 }: { pr: AgentPrInfo; size?: 28 | 32 }) {
+  return (
+    <Button variant="review-outline" size={size} icon="external-link" onClick={() => openPrPage(pr.url)} aria-label={`View pull request #${pr.number} (${pr.state})`}>
+      View PR #{pr.number}
+    </Button>
+  );
+}
+
+/** The PR's state badge and CI checks, kept together (they never wrap apart). */
+export function PrStatus({ pr }: { pr: AgentPrInfo }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 shrink-0">
+      <PrStateBadge pr={pr} />
+      <PrChecks pr={pr} />
+    </span>
+  );
+}
+
 export function PrLink({ pr, size = 28, className }: { pr: AgentPrInfo; size?: 28 | 32; className?: string }) {
   return (
     <span className={`inline-flex items-center gap-1.5 ${className ?? ''}`}>
-      <Button variant="review-outline" size={size} icon="external-link" onClick={() => openPrPage(pr.url)} aria-label={`View pull request #${pr.number} (${pr.state})`}>
-        View PR #{pr.number}
-      </Button>
-      <PrStateBadge pr={pr} />
-      <PrChecks pr={pr} />
+      <PrButton pr={pr} size={size} />
+      <PrStatus pr={pr} />
     </span>
   );
 }

@@ -36,6 +36,12 @@ The 92px body depends on `tileBodyKind(agent)`:
 | rate-limited | reset time; "oIDE does not retry on its own" | "Resets 4:00 PM" · Resume (manual only) · Open |
 | error | "The claude process exited with code N" + last error line | Resume (`agents.resume`, respawns with `--resume`) · Open |
 
+Narrow tiles wrap their footer by group, not button by button (`TileBody.tsx`, `FOOTER` / `TRAILING`):
+the buttons stay on the first row, and the trailing group moves to its own row with its last control
+on the right. On review tiles that row holds the PR state badge and CI (`PrStatus`, split from the
+`PrButton`) on the left and Archive on the right. On the other tiles it holds Archive · Resume · Open,
+right-aligned. When the tile is wide enough, everything fits on one row.
+
 Subagent chips: `ModelLetterChip` per subagent (dot = status, letter = model family H/S/O/F), summary
 from `subagentSummary()` ("2 of 3 running", "1 needs you", "1 running, 1 queued", "3 done"), tooltip from
 `subagentDetail()` ("Sonnet, medium effort · routed as standard · needs permission · asking to run …").
