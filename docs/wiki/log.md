@@ -1072,3 +1072,10 @@ dev Electron binary (`node:fs` rm → `EBUSY`, and an outside `rmdir` fails whil
   downloaded). Folders already waiting in the cleanup queue are removed at the next start.
 - Telemetry: no new event; `worktree_delete_failed` / `worktree_delete_retried_ok` already measure it.
 Page: [git-worktrees](pages/git-worktrees.md#why-a-worktree-cant-be-deleted-on-windows).
+## [2026-11-27] build | Windows: installed oIDE showed a blank taskbar icon
+Dev runs set the same AppUserModelID as the installed app (`dev.oide.app`), so Electron's
+notification shortcut `Electron.lnk` carried it too, pointing at a worktree's `electron.exe` and
+`build/icon.ico`. After the worktree was deleted, Windows drew the installed oIDE's taskbar button
+through that orphaned shortcut: a blank page. Unpackaged runs now use `dev.oide.app.dev`, and packaged
+Windows runs delete shortcuts with the installed AUMID whose target is gone (or retag live dev ones).
+See [packaging](pages/packaging.md).

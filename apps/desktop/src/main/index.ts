@@ -3,7 +3,7 @@ import './security/early-env.js';
 // Must stay before the rest: silences the node:sqlite ExperimentalWarning before anything loads it.
 import './warnings.js';
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, rmSync } from 'node:fs';
 import { hostname, release, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -20,7 +20,7 @@ import { registerArtifactScheme } from './services/electron-platform.js';
 import { hardenApp } from './security/hardening.js';
 import { AllowedRoots } from './security/roots.js';
 import { loadWindowState, MIN_HEIGHT, MIN_WIDTH, trackWindowState } from './window-state.js';
-import { APP_USER_MODEL_ID, brandAppShortcuts, resolveAppIcon } from './app-icon.js';
+import { APP_USER_MODEL_ID, DEV_APP_USER_MODEL_ID, appUserModelId, brandAppShortcuts, releaseForeignShortcuts, resolveAppIcon } from './app-icon.js';
 import { CrashReports, LogManager, openWithRecovery, parseLevel, readCrashReportsPref, Redactor, runShutdown, watchRenderer, writeCrashReportsPref, type ReliabilityContext } from './reliability/index.js';
 import { electronTransport, fileSinkTransport, isOnline } from './telemetry/electron.js';
 import { TelemetryObservers } from './telemetry/observers.js';
@@ -35,9 +35,10 @@ declare const __OIDE_UMAMI_WEBSITE_ID__: string | undefined;
 // which is scoped to the userData folder.
 if (process.env.OIDE_USER_DATA) app.setPath('userData', process.env.OIDE_USER_DATA);
 
-// The oIDE icon in the taskbar/dock, also in dev and unpackaged runs (main/app-icon.ts). The AppUserModelID
-// matches electron-builder's appId so Windows groups dev and installed windows under the oIDE icon.
-if (process.platform === 'win32') app.setAppUserModelId(APP_USER_MODEL_ID);
+// The oIDE icon in the taskbar/dock, also in dev and unpackaged runs (main/app-icon.ts). Installed builds use
+// electron-builder's appId as AppUserModelID (the installer's shortcuts carry it); unpackaged runs use their
+// own, so a dev shortcut left behind by a deleted worktree can never take over the installed app's icon.
+if (process.platform === 'win32') app.setAppUserModelId(appUserModelId(app.isPackaged));
 const appIcon = resolveAppIcon({ packaged: app.isPackaged, platform: process.platform, appPath: join(import.meta.dirname, '..', '..'), resourcesPath: process.resourcesPath, exists: existsSync });
 
 // ---------------------------------------------------------------- logs and crash reports (before ready)
@@ -215,6 +216,7 @@ async function start(): Promise<void> {
   await app.whenReady();
   if (appIcon.dock) app.dock?.setIcon(appIcon.dock);
   if (process.platform === 'win32' && !app.isPackaged && appIcon.window) brandDevShortcut(appIcon.window);
+  if (process.platform === 'win32' && app.isPackaged) releaseDevShortcuts();
 
   await hardenApp({ isAppUrl, dev: Boolean(devServerUrl) });
   setMenu();
@@ -398,7 +400,7 @@ async function start(): Promise<void> {
  * the pass runs again a moment later.
  */
 function brandDevShortcut(icon: string): void {
-  const programs = join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+  const programs = startMenuPrograms();
   const run = (): void => {
     try {
       const updated = brandAppShortcuts(
@@ -408,7 +410,7 @@ function brandDevShortcut(icon: string): void {
           // 'update' only rewrites the given fields; `target` is required by the type and kept as is.
           setIcon: (path, ico, target) => shell.writeShortcutLink(path, 'update', { target, icon: ico, iconIndex: 0 }),
         },
-        { execPath: process.execPath, appId: APP_USER_MODEL_ID, icon },
+        { execPath: process.execPath, appId: DEV_APP_USER_MODEL_ID, icon },
       );
       if (updated.length > 0) log.info('set the oIDE icon on the notification shortcut', { count: updated.length });
     } catch (err) {
@@ -420,6 +422,35 @@ function brandDevShortcut(icon: string): void {
   // Off the startup path; Electron's write is off-thread and can be slow on a cold start, so a few
   // idempotent passes follow.
   for (const ms of [0, 1000, 3000, 10_000, 30_000]) setTimeout(run, ms).unref();
+}
+
+const startMenuPrograms = (): string => join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+
+/**
+ * Packaged Windows runs: release Start Menu shortcuts that carry the installed app's AUMID but launch
+ * something else (a dev run's `Electron.lnk`), or the taskbar can show their (often deleted) icon instead
+ * of oIDE's (main/app-icon.ts). Off the startup path.
+ */
+function releaseDevShortcuts(): void {
+  const programs = startMenuPrograms();
+  setTimeout(() => {
+    try {
+      const { removed, retagged } = releaseForeignShortcuts(
+        {
+          list: () => readdirSync(programs).filter((n) => n.toLowerCase().endsWith('.lnk')).map((n) => join(programs, n)),
+          read: (path) => shell.readShortcutLink(path),
+          exists: existsSync,
+          remove: (path) => rmSync(path),
+          // 'update' only rewrites the given fields; `target` is required by the type and kept as is.
+          setAppUserModelId: (path, appUserModelId, target) => shell.writeShortcutLink(path, 'update', { target, appUserModelId }),
+        },
+        { execPath: process.execPath, appId: APP_USER_MODEL_ID, devAppId: DEV_APP_USER_MODEL_ID },
+      );
+      if (removed.length + retagged.length > 0) log.info('released dev shortcuts that shared the oIDE taskbar identity', { removed: removed.length, retagged: retagged.length });
+    } catch (err) {
+      log.warn('could not check Start Menu shortcuts for the oIDE taskbar identity', { error: String(err) });
+    }
+  }, 0).unref();
 }
 
 function createWindow(userDataDir: string): BrowserWindow {
