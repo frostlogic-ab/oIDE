@@ -9,6 +9,13 @@ Conventional Commit titles of merged pull requests, in the release pull request 
 `main`. Do not add entries by hand; give your pull request a good title instead. The pipeline is
 described in [docs/wiki/pages/release-pipeline.md](docs/wiki/pages/release-pipeline.md).
 
+## [0.5.1](https://github.com/frostlogic-ab/oIDE/compare/v0.5.0...v0.5.1) (2026-11-27)
+
+
+### Fixed
+
+* **artifacts:** focus the open view's heading in the opening commit ([#32](https://github.com/frostlogic-ab/oIDE/issues/32)) ([9cfe1dd](https://github.com/frostlogic-ab/oIDE/commit/9cfe1dd69e9023b35856b75540a6cbefbaa4c889))
+
 ## [0.5.0](https://github.com/frostlogic-ab/oIDE/compare/v0.4.0...v0.5.0) (2026-11-27)
 
 
