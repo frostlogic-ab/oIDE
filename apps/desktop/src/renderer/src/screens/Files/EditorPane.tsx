@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Spinner } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
-import { onTabsMoved, useFiles, type FileTab } from './filesStore';
+import { onTabsMoved, onTabsReloaded, useFiles, type FileTab } from './filesStore';
 import { MarkdownPreview } from './MarkdownPreview';
 import type { MarkdownView } from './markdownLinks';
 import { BASE_OPTIONS, languageFor, languageLabel, monaco } from './monaco/setup';
@@ -52,6 +52,27 @@ onTabsMoved((moves) => {
     entries.set(m.to, e);
     const lang = languageFor(m.to.slice(m.to.indexOf('::') + 2));
     if (lang !== e.model.getLanguageId()) monaco.editor.setModelLanguage(e.model, lang);
+  }
+});
+
+// Discard changes rewrote these files: their models take the content on disk (unsaved edits were
+// warned about in the confirmation).
+onTabsReloaded((ids) => {
+  for (const id of ids) {
+    const e = entries.get(id);
+    if (!e) continue;
+    const at = id.indexOf('::');
+    oide
+      .invoke('files.read', { root: id.slice(0, at), path: id.slice(at + 2) })
+      .then(({ content, binary }) => {
+        if (binary || entries.get(id) !== e || e.model.isDisposed()) return;
+        if (e.model.getValue() !== content) e.model.setValue(content);
+        e.saved = e.model.getAlternativeVersionId();
+        useFiles.getState().setDirty(id, false);
+      })
+      .catch(() => {
+        /* gone meanwhile: the tab shows the error when it is next opened */
+      });
   }
 });
 

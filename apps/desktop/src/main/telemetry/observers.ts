@@ -230,6 +230,11 @@ export class TelemetryObservers {
         this.sink.track('changes_reverted', { files: countBucket(o.reverted), all: !i.files });
         return;
       }
+      case 'files.discardChanges': {
+        const o = output as { reverted: number; against: 'head' | 'branch' };
+        this.sink.track('file_changes_discarded', { files: countBucket(o.reverted), checkout: o.against === 'branch' ? 'worktree' : 'main' });
+        return;
+      }
       case 'git.pull':
         this.sink.track('project_pulled', { from: (input as { from?: string }).from === 'sidebar' ? 'sidebar' : 'source_control' });
         return;

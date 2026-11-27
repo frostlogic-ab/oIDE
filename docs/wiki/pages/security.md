@@ -74,6 +74,15 @@ rules in [constraints](constraints.md). Where things live: [desktop-shell](deskt
   known project. The integration harness (`h.allowOpen`) and unpackaged e2e builds
   (`OIDE_E2E_OPEN_PATHS`) have a test-only list (`Platform.openablePaths`); packaged builds have none.
 
+### Git colours and Discard changes (Files)
+
+`files.changes` and `files.discardChanges` ([screen-files](screen-files.md#git-colours-changesstorets))
+take a `project` or `worktree` root only (`ctx.roots.assertAllowed`). Discard refuses empty, absolute,
+`..` and `.git` paths, then touches only paths git itself reports as changed in that checkout, with
+`--literal-pathspecs` so `*` or `:(top)` in a name is never a pattern. The source commit is HEAD or
+the merge-base with the agent's recorded base ref, never a renderer value. The renderer asks for
+confirmation first; nothing goes to the trash, so the dialog says it can't be undone.
+
 ### Search and replace (Files)
 
 `files.findByName`, `files.searchContent` and `files.replace` ([screen-files](screen-files.md#search),

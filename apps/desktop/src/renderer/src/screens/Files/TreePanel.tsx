@@ -3,7 +3,8 @@ import { ContextMenu, Icon, IconButton, Menu, SectionLabel, Spinner, type MenuIt
 import type { Project, ProjectScript, WorktreeInfo } from '@oide/protocol';
 import { shortBranch } from '../SourceControl/model';
 import { DRAFT_KEY, ancestorDirs, useFiles, visibleRows, type TreeRow } from './filesStore';
-import { DeleteDialog, NameInput, useTreeActions } from './TreeActions';
+import { DeleteDialog, DiscardDialog, NameInput, useTreeActions } from './TreeActions';
+import { STATUS_LABEL, STATUS_LETTER, STATUS_TEXT, useChanges, useCheckoutChanges, type CheckoutChanges } from './changesStore';
 import { isUnder } from './treeOps';
 import { FileIcon } from './fileIcons';
 import { ResizableAside } from '../../components/ResizableAside';
@@ -97,6 +98,9 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
   }, [rootsKey]);
+  // Git colours (VS Code explorer): changed files green, deleted ones red and struck through.
+  useCheckoutChanges(shownRoots.map((r) => ({ projectId: r.project.id, root: r.root })));
+  const changesByRoot = useChanges((st) => st.byRoot);
   const prefix = shownRoots.filter((r) => scriptsByRoot[r.root]?.length).length > 1;
   const runItems: MenuItem[] = shownRoots.flatMap(({ project, root, label }) =>
     (scriptsByRoot[root] ?? []).map((sc) => ({
@@ -151,7 +155,8 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
           const root = s.checkout[p.id] ?? p.path;
           // The first project starts open (canvas: oide open, the others closed).
           const open = scoped || (s.openProjects[p.id] ?? i === 0);
-          const rows = open ? visibleRows(root, s) : [];
+          const changes = changesByRoot[root];
+          const rows = open ? visibleRows(root, s, changes?.ghosts) : [];
           const top = offset;
           offset += HEADER_H + rows.length * ROW_H + SECTION_GAP;
           return (
@@ -162,6 +167,7 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
               open={open}
               scoped={scoped}
               rows={rows}
+              changes={changes}
               windowStart={view.top - top - HEADER_H}
               windowEnd={view.top + viewport - top - HEADER_H}
               scrollTo={(y) => {
@@ -184,6 +190,16 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
         <span className="flex items-center gap-1.5">
           <span aria-hidden="true" className="w-[7px] h-[7px] rounded-full bg-warn" />
           That agent is waiting on you
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span aria-hidden="true" className="w-[7px] text-center text-[11px] font-semibold text-ok">
+            M
+          </span>
+          Changed in this checkout
+          <span aria-hidden="true" className="ml-1.5 text-[11px] font-semibold text-bad line-through">
+            D
+          </span>
+          Deleted
         </span>
         <span className="leading-[1.45] mt-0.5">Each project shows its own branch or agent worktree. The menu next to a project switches it.</span>
       </div>
@@ -223,6 +239,7 @@ function ProjectTree({
   open,
   scoped,
   rows,
+  changes,
   windowStart,
   windowEnd,
   scrollTo,
@@ -232,6 +249,7 @@ function ProjectTree({
   open: boolean;
   scoped: boolean;
   rows: TreeRow[];
+  changes?: CheckoutChanges;
   windowStart: number;
   windowEnd: number;
   scrollTo: (y: number) => void;
@@ -302,9 +320,11 @@ function ProjectTree({
     scrollTo(rows.indexOf(r) * ROW_H);
   };
 
+  // A deleted folder (git colours) opens from the changes, never from the disk.
+  const expand = (r: TreeRow, open: boolean) => void s.setExpanded(root, r.path, open, !r.ghost);
   const activate = (r: TreeRow) => {
-    if (r.kind === 'dir') void s.setExpanded(root, r.path, !r.expanded);
-    else s.openFile(p.id, root, r.path);
+    if (r.kind === 'dir') expand(r, !r.expanded);
+    else if (!r.ghost) s.openFile(p.id, root, r.path);
   };
 
   const onKey = (e: KeyboardEvent, r: TreeRow, i: number) => {
@@ -334,19 +354,19 @@ function ProjectTree({
         moveTo(rows.length - 1);
         break;
       case 'ArrowRight':
-        if (r.kind === 'dir' && !r.expanded) void s.setExpanded(root, r.path, true);
+        if (r.kind === 'dir' && !r.expanded) expand(r, true);
         else if (r.kind === 'dir') moveTo(i + 1);
         break;
       case 'ArrowLeft':
-        if (r.kind === 'dir' && r.expanded) void s.setExpanded(root, r.path, false);
+        if (r.kind === 'dir' && r.expanded) expand(r, false);
         else if (r.parent) moveTo(rows.findIndex((x) => x.key === r.parent));
         break;
       case '*':
         // Tree convention: expand every sibling folder of the focused row.
-        for (const x of rows) if (x.parent === r.parent && x.depth === r.depth && x.kind === 'dir' && !x.expanded) void s.setExpanded(root, x.path, true);
+        for (const x of rows) if (x.parent === r.parent && x.depth === r.depth && x.kind === 'dir' && !x.expanded) expand(x, true);
         break;
       case '-':
-        if (r.kind === 'dir' && r.expanded) void s.setExpanded(root, r.path, false);
+        if (r.kind === 'dir' && r.expanded) expand(r, false);
         else if (r.parent) {
           void s.setExpanded(root, r.parent, false);
           moveTo(rows.findIndex((x) => x.key === r.parent));
@@ -475,6 +495,9 @@ function ProjectTree({
             const markers = r.kind === 'file' ? info.markers.get(r.path) : undefined;
             const selected = r.key === selectedKey;
             const isCut = !!clip && !r.draft && isUnder(r.contentPath, clip.path);
+            // Files: their own status; folders: the strongest status under them (VS Code tints both).
+            const change = r.draft ? undefined : r.kind === 'file' ? changes?.byPath.get(r.path)?.status : changes?.dirs.get(r.path);
+            const struck = change === 'deleted' && (r.kind === 'file' || r.ghost);
             return (
               <div
                 key={r.key}
@@ -502,7 +525,7 @@ function ProjectTree({
                   selected || r.draft ? 'bg-selected text-ink' : 'text-ink-2 hover:bg-raised hover:text-ink'
                 }`}
                 style={{ top: i * ROW_H, height: ROW_H, paddingLeft: PAD + r.depth * INDENT }}
-                title={r.draft ? undefined : (r.error ?? r.path)}
+                title={r.draft ? undefined : (r.error ?? (change && (r.kind === 'file' || r.ghost) ? `${r.path} • ${STATUS_LABEL[change]}` : r.path))}
               >
                 {/* Indent guides: one line per ancestor level, the focused folder's brighter. */}
                 {Array.from({ length: r.depth }, (_, d) => (
@@ -536,8 +559,10 @@ function ProjectTree({
                     <NameInput row={r} root={root} onDone={afterEdit} />
                   </>
                 ) : (
-                  <span className={`flex-1 min-w-0 ml-1.5 truncate whitespace-pre ${r.error ? 'text-bad' : ''}`}>{r.label}</span>
+                  <span className={`flex-1 min-w-0 ml-1.5 truncate whitespace-pre ${r.error ? 'text-bad' : change ? STATUS_TEXT[change] : ''} ${struck ? 'line-through' : ''}`}>{r.label}</span>
                 )}
+                {change && !r.draft && (r.kind === 'file' || r.ghost) && <span className="sr-only">, {STATUS_LABEL[change].toLowerCase()}</span>}
+                {change && !r.draft && r.kind === 'dir' && !r.ghost && <span className="sr-only">, contains changes</span>}
                 {r.kind === 'dir' && r.error && <span className="sr-only">, failed to load. Press Enter to retry.</span>}
                 {r.kind === 'dir' && r.error && (
                   <button
@@ -557,6 +582,11 @@ function ProjectTree({
                 {markers?.slice(0, 3).map((m) => (
                   <span key={m.agentId} title={m.title} className="w-[7px] h-[7px] ml-1 rounded-full shrink-0" style={{ background: m.color }} role="img" aria-label={m.title} />
                 ))}
+                {change && !r.draft && r.kind === 'file' && (
+                  <span aria-hidden="true" className={`shrink-0 w-3 ml-1.5 text-center font-mono text-[11px] font-semibold ${STATUS_TEXT[change]}`}>
+                    {STATUS_LETTER[change]}
+                  </span>
+                )}
               </div>
             );
           })}
@@ -570,6 +600,7 @@ function ProjectTree({
           onClose={() => setMenu(undefined)}
         />
       )}
+      <DiscardDialog root={root} pending={actions.discarding} onClose={() => actions.setDiscarding(undefined)} />
       <DeleteDialog
         root={root}
         row={actions.confirming}

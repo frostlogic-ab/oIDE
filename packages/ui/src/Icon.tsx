@@ -227,6 +227,13 @@ const P = {
       <path d="M12 10v6M9 13h6" />
     </>
   ),
+  /** Extra: Discard changes (VS Code's curved arrow back). */
+  undo: (
+    <>
+      <path d="M9 14L4 9l5-5" />
+      <path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+    </>
+  ),
   /** Extra: Rename. */
   pencil: (
     <>
