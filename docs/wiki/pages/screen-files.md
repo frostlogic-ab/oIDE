@@ -45,6 +45,35 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   same chevron. Row tooltip is the relative path.
 - Rows are a fixed 22px pitch and windowed (only visible rows plus overscan are in the DOM).
 
+## Managing files (`TreeActions.tsx`, `treeOps.ts`)
+
+- Right-click a row (or the ContextMenu key / Shift+F10 on a focused row) for the `ContextMenu`:
+  New file…, New folder…, Cut, Copy, Paste, Copy path, Copy relative path, Reveal in File Explorer /
+  Finder (`shell.revealPath`), Rename…, Delete. Right-click a project header for the root's New file,
+  New folder, Paste, Copy path and Reveal; the per-project folder menu also has New file / New folder.
+- New file / New folder: an inline name field at the top of the target folder (the folder itself,
+  or a file's folder; it expands). Type the name with its extension (`/` makes missing folders:
+  `utils/helpers.ts`). Enter creates (`files.create`), Esc cancels, leaving the field commits a
+  valid name. A new file opens in the editor. Problems show under the field as you type
+  (`validateName`: empty, leading/trailing spaces, `..`, `.git`, Windows-reserved names and
+  characters, a name already in the folder, case-insensitive); a refusal from main keeps the field open.
+- Rename (F2): the same field on the row, the stem selected ("index" of "index.ts"); a compacted
+  chain renames its last folder. `files.rename`. Open tabs under the old path follow it with their
+  unsaved edits (`onTabsMoved` re-keys the editor models; the language follows the new name), and so
+  do recents and open folders.
+- Cut / Copy / Paste (Ctrl/Cmd+X, C, V on a row; the clipboard is oIDE's own, in `filesStore`):
+  Paste goes into the row's folder in any project or worktree (`files.copy`). A copy whose name is
+  taken becomes "name copy.ext", "name copy 2.ext"; a cut row is dimmed, a move refuses a taken name
+  and its tabs follow it. Copy path / relative path use the system clipboard.
+- Delete (Delete, Cmd+Backspace on macOS): a confirm ("Delete X?", the folder note, unsaved edits
+  in its open tabs are lost) then `files.delete` moves it to the Recycle Bin / Trash
+  (`shell.trashItem`); its tabs close.
+- Main (`handlers/files.ts`): project and worktree roots only (never artifact folders), the
+  parent folder goes through the path guard and the entry itself is not resolved, so renaming or
+  deleting a symlink acts on the link; `.git` is refused; a folder cannot go into itself; moves to
+  another disk copy then delete. Each success refreshes the quick-open index and the git status.
+  Telemetry: `file_managed { action, crossCheckout }`.
+
 ## Editor (`EditorPane.tsx`, `monaco/setup.ts`)
 
 - `monaco-editor` from the local package, lazy chunk (Monaco loads only when a file opens). Imports
@@ -56,6 +85,8 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   selection, keywords `#C4A7E7`, strings `#A8E0C6`, types `#9DBBFA`, comments `#7A8494`).
 - At most one live editor; one model per tab with saved view state; models of closed tabs are disposed.
 - Ctrl/Cmd+S or Save → `files.write`. Files over 5 MB open read only; binary files show a notice.
+- Cut / Copy / Paste work from the keyboard and Monaco's context menu (Paste reads the system
+  clipboard, which main allows for the app page only; see [security](security.md)).
 - Selection toolbar: "Ask an agent about this" (→ Spawn with a file context chip
   `{ kind: 'file', path, title: 'StatusBar.tsx:5-6' }`, also in the context menu) and "Send to <agent>"
   when an agent is editing the file (`agents.send` text with the path, lines and snippet).

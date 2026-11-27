@@ -18,7 +18,7 @@ export function remapPath(path: string, from: string, to: string): string {
 }
 
 // Windows refuses these in names; refusing them everywhere keeps a checkout usable on every OS.
-const BAD_CHARS = /[<>:"|?*\u0000-\u001f]/;
+const hasBadChar = (name: string) => /[<>:"|?*]/.test(name) || [...name].some((c) => c.charCodeAt(0) < 32);
 const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])(\..*)?$/i;
 
 /**
@@ -36,7 +36,7 @@ export function validateName(input: string, siblings: readonly string[], self?: 
     if (!p) return i === parts.length - 1 ? 'A file or folder name must be provided.' : 'A file or folder name cannot contain an empty folder name.';
     if (p === '.' || p === '..') return `The name ${p} is not valid as a file or folder name.`;
     if (p === '.git') return 'The .git folder is managed by git.';
-    if (BAD_CHARS.test(p)) return `The name ${p} contains a character that is not allowed in file names.`;
+    if (hasBadChar(p)) return `The name ${p} contains a character that is not allowed in file names.`;
     if (RESERVED.test(p)) return `${p} is a reserved name on Windows.`;
     if (/[. ]$/.test(p)) return `The name ${p} cannot end with a dot or a space.`;
   }
