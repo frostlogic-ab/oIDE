@@ -45,7 +45,15 @@ export interface LoadedExtension {
   main?: string;
   panels: ResolvedPanel[];
   artifactTypes: Array<{ id: string; label: string; entry: string }>;
-  languages: Array<{ id: string; extensions: string[]; command: string; args: string[] }>;
+  languages: Array<{
+    id: string;
+    extensions: string[];
+    command: string;
+    args: string[];
+    name?: string | undefined;
+    install?: string | undefined;
+    initializationOptions?: Record<string, unknown> | undefined;
+  }>;
   mcpServers: Record<string, ResolvedMcpServer>;
   /** Declared activation events plus `onCommand:<id>` for every contributed command. */
   activation: string[];
@@ -173,6 +181,9 @@ export function resolveManifest(root: string, manifest: ExtensionManifest, requi
     extensions: l.extensions,
     command: resolveCmd(l.command, `language ${l.id} command`),
     args: resolveArgs(l.args, `language ${l.id} args`),
+    ...(l.name ? { name: l.name } : {}),
+    ...(l.install ? { install: l.install } : {}),
+    ...(l.initializationOptions ? { initializationOptions: l.initializationOptions } : {}),
   }));
   const mcpServers: Record<string, ResolvedMcpServer> = {};
   const tools: LoadedExtension['tools'] = [];

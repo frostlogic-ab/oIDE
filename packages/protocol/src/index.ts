@@ -9,5 +9,6 @@ export * from './updates.js';
 export * from './distribution.js';
 export * from './search.js';
 export * from './scripts.js';
+export * from './lsp.js';
 export * from './telemetry.js';
 export * from './ipc.js';

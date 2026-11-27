@@ -1,7 +1,7 @@
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { AgentDriver } from '@oide/agent-core';
-import { WorktreeManager, isInside, resolveTool, setRepoTrustResolver, type GhCli } from '@oide/git';
+import { WorktreeManager, isInside, resolveTool, samePath, setRepoTrustResolver, type GhCli } from '@oide/git';
 import { OideMcpServer, type ArtifactsBackend as McpArtifactsBackend } from '@oide/mcp-server';
 import { countBucket, resolveModel, type AgentArtifactFileInput, type ArtifactMeta, type ModelStrategy, type PermissionMode } from '@oide/protocol';
 import { ArtifactStore, SqliteSecretStore, openStore, type Store } from '@oide/store';
@@ -14,6 +14,7 @@ import { ArtifactAgentService } from './artifact-agent.js';
 import { agentFileBytes, ArtifactRetrievalService } from './artifact-retrieval.js';
 import { CliService } from './cli.js';
 import { ExtensionsService } from './extensions.js';
+import { LanguageServerService, lspLanguageBucket, type LanguageServerDef } from './lsp/language-servers.js';
 import { GitService, parcelWatch, type WatchFn } from './git.js';
 import type { Platform } from './platform.js';
 import { ProjectsService } from './projects.js';
@@ -33,6 +34,8 @@ export interface Services {
   agents: AgentsService;
   git: GitService;
   extensions: ExtensionsService;
+  /** Language servers for the Files editor (ADR 0019). */
+  lsp: LanguageServerService;
   /** Agent retrieval of linked claude.ai artifacts (ADR 0014). */
   retrieval: ArtifactRetrievalService;
   /** Artifact agents: an agent that edits one artifact from its open view. */
@@ -291,6 +294,45 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   });
   agents.extensions = extensions;
   late.agents = agents;
+  // Files editor language servers: from extensions that are on for the project, trusted projects only.
+  const lsp = new LanguageServerService({
+    checkout: (root) => {
+      for (const p of projects.list()) if (samePath(p.path, root)) return { projectId: p.id, trusted: p.trusted };
+      for (const a of agents.list()) {
+        if (!a.worktreePath || !samePath(a.worktreePath, root)) continue;
+        const p = projects.get(a.projectId);
+        return p ? { projectId: p.id, trusted: p.trusted } : undefined;
+      }
+      return undefined;
+    },
+    servers: async (projectId) => {
+      const on = await extensions.registry.enabledFor(projectId);
+      return on.flatMap((rec) =>
+        (extensions.registry.resolved(rec.id)?.languages ?? []).map(
+          (l): LanguageServerDef => ({
+            key: `${rec.id}:${l.id}`,
+            language: l.id,
+            extensions: l.extensions,
+            command: l.command,
+            args: l.args,
+            name: l.name ?? l.id,
+            extension: rec.displayName || rec.name,
+            install: l.install,
+            initializationOptions: l.initializationOptions,
+            builtin: rec.source === 'builtin',
+          }),
+        ),
+      );
+    },
+    emitDiagnostics: (e) => void ctx.emit('lsp.diagnostics', e),
+    emitState: (e) => void ctx.emit('lsp.state', e),
+    log: ctx.log,
+    appVersion: ctx.appVersion,
+    platform: ctx.platform,
+    onOutcome: (def, outcome) => void ctx.telemetry?.service.track('language_server_started', { language: lspLanguageBucket(def), outcome }),
+  });
+  agents.releaseFolder = (path) => lsp.stopUnder(path);
+  extensions.registry.onChange(() => void lsp.recheck());
   // What Spawn starts with for this project: its default mode (no bypass unless allowed) and preset.
   const agentDefaults = async (projectId: string): Promise<{ mode: PermissionMode; strategy: ModelStrategy }> => {
     const p = projects.require(projectId);
@@ -363,6 +405,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     await artifacts.rescan([{ id: p.id, path: p.path }]).catch((err) => ctx.log.warn('artifact rescan failed', err));
   });
   projects.onTrustChanged(async (p) => {
+    await lsp.recheck();
     if (!p.trusted) return git.unwatchProject(p.id);
     git.watch(p.path, p.id);
     for (const a of agents.list()) if (a.projectId === p.id && a.worktreePath) git.watch(a.worktreePath, p.id);
@@ -370,6 +413,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
   projects.onRemoved(async (p) => {
     // The project's rows are deleted with it: a hard delete, not an archive.
     for (const a of agents.list().filter((x) => x.projectId === p.id)) await agents.purge(a.id, false).catch(() => undefined);
+    await lsp.stopUnder(p.path);
+    await lsp.recheck();
     await git.unwatchProject(p.id);
   });
 
@@ -424,6 +469,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     agents,
     git,
     extensions,
+    lsp,
     retrieval,
     artifactAgents,
     cleanup: cleanupScheduler,
@@ -445,6 +491,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
       // After agents: closes watchers and waits for in-flight git work, so nothing holds files
       // in a worktree when the process exits or the caller deletes it.
       await git.dispose().catch(() => undefined);
+      await lsp.dispose().catch(() => undefined);
       await extensions.dispose().catch(() => undefined);
       store.close();
     },

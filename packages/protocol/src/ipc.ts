@@ -9,6 +9,23 @@ import { CliInfo, CustomModel, FocusPreset, Settings, Technique } from './settin
 import { UpdateInstallTrigger, UpdateStatus } from './updates.js';
 import { FindByNameInput, FindByNameOutput, ReplaceInput, ReplaceOutput, SearchContentInput, SearchResultsEvent } from './search.js';
 import { ProjectScript } from './scripts.js';
+import {
+  LspAt,
+  LspCompletionItem,
+  LspCompletionList,
+  LspDiagnosticsEvent,
+  LspDocument,
+  LspFormatInput,
+  LspHighlight,
+  LspHover,
+  LspLocation,
+  LspSignatureHelp,
+  LspStateEvent,
+  LspStatus,
+  LspSymbol,
+  LspSync,
+  LspTextEdit,
+} from './lsp.js';
 import { TelemetryConsentInput, TelemetryStatus, TelemetryTrackInput } from './telemetry.js';
 
 /**
@@ -296,6 +313,30 @@ export const Commands = {
   'files.cancelSearch': cmd(z.object({ searchId: z.string().min(1).max(64) }), Ok),
   /** Files › Search › Replace: replaces exactly the confirmed matches; files changed since the search are refused. */
   'files.replace': cmd(ReplaceInput, ReplaceOutput),
+
+  // Language servers (ADR 0019): the Files editor's open documents and the features it asks for.
+  // Only for project / worktree checkouts of trusted projects; every path goes through the guard.
+  /** A tab opened (or its model was created): starts the matching server on first use. */
+  'lsp.open': cmd(LspSync, LspStatus),
+  /** The document changed (full text, the editor's version id). */
+  'lsp.change': cmd(LspSync, Ok),
+  'lsp.close': cmd(LspDocument, Ok),
+  /** The server state for a document, without opening it. */
+  'lsp.status': cmd(LspDocument, LspStatus),
+  /** Stop and start the document's server again (the status menu's Restart). */
+  'lsp.restart': cmd(LspDocument, LspStatus),
+  'lsp.hover': cmd(LspAt, LspHover.nullable()),
+  'lsp.completion': cmd(LspAt.extend({ triggerCharacter: z.string().max(4).optional() }), LspCompletionList.nullable()),
+  /** Documentation and detail of one item of the last `lsp.completion` result. */
+  'lsp.resolveCompletion': cmd(LspDocument.extend({ resultId: z.number().int(), index: z.number().int().min(0) }), LspCompletionItem.nullable()),
+  'lsp.signatureHelp': cmd(LspAt.extend({ triggerCharacter: z.string().max(4).optional() }), LspSignatureHelp.nullable()),
+  'lsp.definition': cmd(LspAt, z.array(LspLocation)),
+  'lsp.typeDefinition': cmd(LspAt, z.array(LspLocation)),
+  'lsp.implementation': cmd(LspAt, z.array(LspLocation)),
+  'lsp.references': cmd(LspAt.extend({ includeDeclaration: z.boolean().default(true) }), z.array(LspLocation)),
+  'lsp.highlights': cmd(LspAt, z.array(LspHighlight)),
+  'lsp.symbols': cmd(LspDocument, z.array(LspSymbol)),
+  'lsp.format': cmd(LspFormatInput, z.array(LspTextEdit)),
 
   // Terminals
   // No `command` (SEC-05): renderers get interactive shells only; the sign-in terminal runs in main.
@@ -590,6 +631,10 @@ export const Events = {
   /** A batch of `files.searchContent` results (the last one has `done: true`). */
   'files.searchResults': SearchResultsEvent,
   'updates.changed': UpdateStatus,
+  /** A language server published diagnostics for a file of a checkout (an empty list clears them). */
+  'lsp.diagnostics': LspDiagnosticsEvent,
+  /** A language server started, stopped, failed or is not installed. */
+  'lsp.state': LspStateEvent,
 } as const;
 
 export type EventName = keyof typeof Events;

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-26T08:34:56.457Z",
+  "generatedAt": "2026-11-27T15:53:06.876Z",
   "extensions": [
     {
       "name": "@oide/ext-browser-preview",
@@ -59,6 +59,32 @@
             "network": [
               "github.com"
             ],
+            "spawn": true
+          }
+        }
+      ],
+      "repository": "https://github.com/frostlogic-ab/oIDE"
+    },
+    {
+      "name": "@oide/ext-languages",
+      "displayName": "Languages",
+      "publisher": "oide",
+      "description": "Language servers for the Files editor: TypeScript and JavaScript, Python, Rust, Go, C and C++, CSS, HTML, JSON, YAML and shell scripts. Uses the servers you have installed.",
+      "categories": [
+        "languages"
+      ],
+      "verified": true,
+      "source": "builtin",
+      "downloads": 0,
+      "versions": [
+        {
+          "version": "1.0.0",
+          "tarball": "oide-builtin:@oide/ext-languages@1.0.0",
+          "integrity": "sha512-QZhWLszzcuhG4Q+mMwCTpItjM5X89TSOkSoyq7YHC3SHhPQlZHlqEqsAzQyHGiD03h+sgBny4DMtFQtDmuAx7g==",
+          "engine": "^1.0.0",
+          "tools": [],
+          "capabilities": {
+            "network": [],
             "spawn": true
           }
         }

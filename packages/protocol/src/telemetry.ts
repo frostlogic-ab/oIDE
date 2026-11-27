@@ -561,6 +561,15 @@ export const TELEMETRY_EVENTS = {
       runner: ScriptRunner,
     }),
   }),
+  language_server_started: def({
+    from: 'main',
+    question: 'Do the Files editor language servers start for people, for which languages, and how often is the server simply not installed?',
+    props: z.object({
+      /** The built-in Languages extension's language, from a fixed list; any other extension's is `other`. */
+      language: z.enum(['typescript', 'python', 'rust', 'go', 'c_cpp', 'css', 'html', 'json', 'yaml', 'shell', 'other']),
+      outcome: z.enum(['running', 'not_installed', 'failed']),
+    }),
+  }),
   artifact_imported: def({
     from: 'main',
     question:
