@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
-import { Icon, IconButton, Menu, SectionLabel, Spinner, type MenuItem } from '@oide/ui';
+import { ContextMenu, Icon, IconButton, Menu, SectionLabel, Spinner, type MenuItem } from '@oide/ui';
 import type { Project, WorktreeInfo } from '@oide/protocol';
 import { shortBranch } from '../SourceControl/model';
-import { ancestorDirs, useFiles, visibleRows, type TreeRow } from './filesStore';
+import { DRAFT_KEY, ancestorDirs, useFiles, visibleRows, type TreeRow } from './filesStore';
+import { DeleteDialog, NameInput, useTreeActions } from './TreeActions';
+import { isUnder } from './treeOps';
 import { FileIcon } from './fileIcons';
 import { ResizableAside } from '../../components/ResizableAside';
 import { PANELS } from '../../lib/panels';
@@ -181,6 +183,19 @@ function ProjectTree({
   const selectedKey = activeTab && activeTab.root === root ? activeTab.path : undefined;
   const focusIndex = Math.max(0, rows.findIndex((r) => r.key === (focusKey ?? selectedKey)));
   const treeId = `files-tree-${p.id}`;
+  const actions = useTreeActions(p.id, root);
+  const [menu, setMenu] = useState<{ at: { x: number; y: number }; row?: TreeRow }>();
+  const clip = s.clipboard?.cut && s.clipboard.root === root ? s.clipboard : undefined;
+  const openMenuAt = (el: Element, row?: TreeRow) => {
+    const b = el.getBoundingClientRect();
+    setMenu({ at: { x: b.left + 24, y: b.bottom }, row });
+  };
+  // The name field closed from the keyboard: the tree gets focus back (the new or renamed row once
+  // it shows, else the row that had it).
+  const afterEdit = () => {
+    if (focusKey === DRAFT_KEY) setFocusKey(undefined);
+    wantFocus.current = true;
+  };
   const agentCount = info.worktrees.filter((w) => w.agentId).length;
   // VS Code highlights the indent guide of the folder holding the focused row (or of the focused
   // folder itself when it is open).
@@ -204,6 +219,7 @@ function ProjectTree({
     const i = rows.findIndex((r) => r.key === target.path);
     if (i < 0) return;
     setFocusKey(target.path);
+    if (document.activeElement === document.body) wantFocus.current = true;
     scrollTo(i * ROW_H);
     s.clearRevealTarget(target.nonce);
   }, [target, root, open, rows, scrollTo, s]);
@@ -230,6 +246,18 @@ function ProjectTree({
   };
 
   const onKey = (e: KeyboardEvent, r: TreeRow, i: number) => {
+    if (r.draft) return;
+    if (actions.onKey(e, r)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      e.preventDefault();
+      e.stopPropagation();
+      openMenuAt(e.currentTarget, r);
+      return;
+    }
     switch (e.key) {
       case 'ArrowDown':
         moveTo(i + 1);
@@ -280,7 +308,13 @@ function ProjectTree({
     ...info.worktrees.filter((w) => !w.orphaned).map((w) => ({ root: w.path, label: shortBranch(w.branch) })),
   ];
   const tabHere = activeTab && activeTab.projectId === p.id ? activeTab : undefined;
+  const newAtRoot = (kind: 'file' | 'dir') => {
+    s.setProjectOpen(p.id, true);
+    s.startCreate(p.id, root, '', kind);
+  };
   const folderActions: MenuItem[] = [
+    { id: 'new-file', label: 'New file…', icon: 'file-plus', onSelect: () => newAtRoot('file') },
+    { id: 'new-folder', label: 'New folder…', icon: 'folder-plus', onSelect: () => newAtRoot('dir') },
     { id: 'collapse', label: 'Collapse all', onSelect: () => s.collapseAll(root) },
     { id: 'expand', label: 'Expand loaded folders', onSelect: () => (open ? s.expandLoaded(root) : s.setProjectOpen(p.id, true)) },
     ...DEPTHS.map((d) => ({
@@ -296,7 +330,15 @@ function ProjectTree({
 
   return (
     <section aria-label={`${p.name} files`} className="flex flex-col mb-1">
-      <div className="flex items-center gap-1 pr-2 pl-1" style={{ height: HEADER_H, boxSizing: 'border-box' }}>
+      <div
+        className="flex items-center gap-1 pr-2 pl-1"
+        style={{ height: HEADER_H, boxSizing: 'border-box' }}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          s.setProjectOpen(p.id, true);
+          setMenu({ at: { x: e.clientX, y: e.clientY } });
+        }}
+      >
         <button
           type="button"
           aria-expanded={open}
@@ -369,6 +411,7 @@ function ProjectTree({
             const r = rows[i]!;
             const markers = r.kind === 'file' ? info.markers.get(r.path) : undefined;
             const selected = r.key === selectedKey;
+            const isCut = !!clip && !r.draft && isUnder(r.contentPath, clip.path);
             return (
               <div
                 key={r.key}
@@ -380,16 +423,23 @@ function ProjectTree({
                 aria-busy={r.loading || undefined}
                 tabIndex={i === focusIndex ? 0 : -1}
                 onClick={() => {
+                  if (r.draft) return;
                   setFocusKey(r.key);
                   activate(r);
                 }}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  if (r.draft) return;
+                  setFocusKey(r.key);
+                  setMenu({ at: { x: e.clientX, y: e.clientY }, row: r });
+                }}
                 onKeyDown={(e) => onKey(e, r, i)}
                 onFocus={() => setFocusKey(r.key)}
-                className={`group/row absolute left-0 right-0 flex items-center pr-2 text-[13px] cursor-pointer outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--color-accent)] ${
-                  selected ? 'bg-selected text-ink' : 'text-ink-2 hover:bg-raised hover:text-ink'
+                className={`group/row absolute left-0 right-0 flex items-center pr-2 text-[13px] cursor-pointer outline-none focus-visible:shadow-[inset_0_0_0_1px_var(--color-accent)] ${isCut ? 'opacity-60' : ''} ${
+                  selected || r.draft ? 'bg-selected text-ink' : 'text-ink-2 hover:bg-raised hover:text-ink'
                 }`}
                 style={{ top: i * ROW_H, height: ROW_H, paddingLeft: PAD + r.depth * INDENT }}
-                title={r.error ?? r.path}
+                title={r.draft ? undefined : (r.error ?? r.path)}
               >
                 {/* Indent guides: one line per ancestor level, the focused folder's brighter. */}
                 {Array.from({ length: r.depth }, (_, d) => (
@@ -400,7 +450,13 @@ function ProjectTree({
                     style={{ left: PAD + d * INDENT + GLYPH / 2 - 1 }}
                   />
                 ))}
-                {r.kind === 'dir' ? (
+                {r.draft === 'create' && r.kind === 'dir' ? (
+                  <span aria-hidden="true" className="w-4 h-4 shrink-0 flex items-center justify-center text-ink-3">
+                    <Icon name="chevron-right" size={14} />
+                  </span>
+                ) : r.draft === 'create' ? (
+                  <span aria-hidden="true" className="w-4 h-4 shrink-0" />
+                ) : r.kind === 'dir' ? (
                   <span aria-hidden="true" className="w-4 h-4 shrink-0 flex items-center justify-center text-ink-3">
                     {r.loading ? (
                       <Spinner size={10} />
@@ -411,7 +467,14 @@ function ProjectTree({
                 ) : (
                   <FileIcon name={r.label} />
                 )}
-                <span className={`flex-1 min-w-0 ml-1.5 truncate whitespace-pre ${r.error ? 'text-bad' : ''}`}>{r.label}</span>
+                {r.draft ? (
+                  <>
+                    {r.draft === 'rename' && r.label.includes('/') && <span className="ml-1.5 shrink-0 text-ink-3 whitespace-pre">{r.label.slice(0, r.label.lastIndexOf('/') + 1)}</span>}
+                    <NameInput row={r} root={root} onDone={afterEdit} />
+                  </>
+                ) : (
+                  <span className={`flex-1 min-w-0 ml-1.5 truncate whitespace-pre ${r.error ? 'text-bad' : ''}`}>{r.label}</span>
+                )}
                 {r.kind === 'dir' && r.error && <span className="sr-only">, failed to load. Press Enter to retry.</span>}
                 {r.kind === 'dir' && r.error && (
                   <button
@@ -436,6 +499,26 @@ function ProjectTree({
           })}
         </div>
       )}
+      {menu && (
+        <ContextMenu
+          at={menu.at}
+          label={menu.row ? `Actions for ${menu.row.label}` : `Actions for ${p.name}`}
+          items={actions.menu(menu.row)}
+          onClose={() => setMenu(undefined)}
+        />
+      )}
+      <DeleteDialog
+        root={root}
+        row={actions.confirming}
+        onClose={() => actions.setConfirming(undefined)}
+        onDeleted={(r) => {
+          // Focus moves to the row that takes the deleted one's place.
+          const i = rows.findIndex((x) => x.key === r.key);
+          const next = rows.slice(i + 1).find((x) => !isUnder(x.contentPath, r.contentPath)) ?? rows[i - 1];
+          setFocusKey(next?.key);
+          wantFocus.current = true;
+        }}
+      />
     </section>
   );
 }

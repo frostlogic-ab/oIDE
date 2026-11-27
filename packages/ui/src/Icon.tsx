@@ -199,6 +199,43 @@ const P = {
       <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
     </>
   ),
+  /** Extra: Files tree › New file. */
+  'file-plus': (
+    <>
+      <path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z" />
+      <path d="M14 3v5h5" />
+      <path d="M12 11v6M9 14h6" />
+    </>
+  ),
+  /** Extra: Files tree › New folder. */
+  'folder-plus': (
+    <>
+      <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <path d="M12 10v6M9 13h6" />
+    </>
+  ),
+  /** Extra: Rename. */
+  pencil: (
+    <>
+      <path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z" />
+      <path d="M13.5 6.5l4 4" />
+    </>
+  ),
+  /** Extra: Cut. */
+  scissors: (
+    <>
+      <circle cx="6" cy="6" r="3" />
+      <circle cx="6" cy="18" r="3" />
+      <path d="M8.1 8.1L20 20M8.1 15.9L20 4" />
+    </>
+  ),
+  /** Extra: Paste. */
+  clipboard: (
+    <>
+      <rect x="5" y="4" width="14" height="17" rx="2" />
+      <rect x="9" y="2.5" width="6" height="3.5" rx="1" />
+    </>
+  ),
   /** Files search: replace. */
   replace: (
     <>

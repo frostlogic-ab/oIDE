@@ -26,6 +26,8 @@ export interface Platform {
   notify(title: string, body: string, onClick?: () => void): void;
   /** Open a local folder in the file manager (`shell.openPath`); resolves an error message or ''. */
   openPath?(path: string): Promise<string>;
+  /** Move a file or folder to the system trash (`shell.trashItem`); absent in plain-Node tests (they delete). */
+  trashItem?(path: string): Promise<void>;
   /** System browser (`shell.openExternal`); callers check the URL first. */
   openExternal(url: string): Promise<void>;
   /** Fork for extension host processes (`utilityProcessFork(utilityProcess)`); none = host code off. */

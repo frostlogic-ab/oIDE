@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Spinner } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
-import { useFiles, type FileTab } from './filesStore';
+import { onTabsMoved, useFiles, type FileTab } from './filesStore';
 import { BASE_OPTIONS, languageFor, languageLabel, monaco } from './monaco/setup';
 
 export interface SelectionInfo {
@@ -38,6 +38,19 @@ interface Entry {
  */
 const entries = new Map<string, Entry>();
 const isDirty = (e: Entry) => e.model.getAlternativeVersionId() !== e.saved;
+
+// A renamed or moved file keeps its model (and unsaved edits) under its tab's new id; saving then
+// writes to the new path. The model's language follows the new name.
+onTabsMoved((moves) => {
+  const taken = moves.map((m) => [m, entries.get(m.from)] as const);
+  for (const [m] of taken) entries.delete(m.from);
+  for (const [m, e] of taken) {
+    if (!e) continue;
+    entries.set(m.to, e);
+    const lang = languageFor(m.to.slice(m.to.indexOf('::') + 2));
+    if (lang !== e.model.getLanguageId()) monaco.editor.setModelLanguage(e.model, lang);
+  }
+});
 
 function disposeClosed(open: Set<string>): void {
   for (const [id, e] of entries) {
@@ -189,8 +202,12 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
           setLoad({ state: 'binary' });
           return;
         }
-        const uri = monaco.Uri.from({ scheme: 'oide', path: `/${encodeURIComponent(active.root)}/${active.path}` });
-        const model = monaco.editor.getModel(uri) ?? monaco.editor.createModel(content, languageFor(active.path), uri);
+        let uri = monaco.Uri.from({ scheme: 'oide', path: `/${encodeURIComponent(active.root)}/${active.path}` });
+        const existing = monaco.editor.getModel(uri);
+        // A renamed tab keeps its model under the old URI: a new file at that path needs its own.
+        const owned = existing && [...entries.values()].some((x) => x.model === existing);
+        if (owned) uri = uri.with({ query: `n=${Date.now()}` });
+        const model = (!owned && existing) || monaco.editor.createModel(content, languageFor(active.path), uri);
         const e: Entry = { model, saved: model.getAlternativeVersionId(), readOnly: content.length > 5_000_000 };
         entries.set(active.id, e);
         show(e);

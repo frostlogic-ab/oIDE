@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { FileNode } from '@oide/protocol';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
+import { isUnder, joinRel, parentDir, remapPath } from './treeOps';
 
 /**
  * Files screen state: which checkout each project shows (main or an agent worktree), which
@@ -31,6 +32,27 @@ export interface OpenRequest {
 export interface RecentFile {
   root: string;
   path: string;
+}
+
+/** The inline name field in the tree: a new entry in `dir`, or renaming `path`. */
+export type TreeEdit =
+  | { root: string; projectId: string; mode: 'create'; kind: 'file' | 'dir'; dir: string; error?: string }
+  | { root: string; projectId: string; mode: 'rename'; kind: 'file' | 'dir'; path: string; error?: string };
+
+/** Copy or Cut in the tree: what Paste copies (or moves). Any checkout can paste it. */
+export interface TreeClipboard {
+  root: string;
+  path: string;
+  kind: 'file' | 'dir';
+  cut: boolean;
+}
+
+/** Tabs moved by a rename or a move: the editor keeps their models (and unsaved edits) under the new ids. */
+type TabMoveListener = (moves: ReadonlyArray<{ from: string; to: string }>) => void;
+const tabMoveListeners = new Set<TabMoveListener>();
+export function onTabsMoved(fn: TabMoveListener): () => void {
+  tabMoveListeners.add(fn);
+  return () => tabMoveListeners.delete(fn);
 }
 
 const RECENT_KEY = 'oide.files.recent';
@@ -77,6 +99,9 @@ interface FilesState {
   pending?: OpenRequest;
   /** Row the tree should scroll to and focus once it is visible. */
   revealTarget?: { root: string; path: string; nonce: number };
+  /** The tree's inline name field (New file, New folder, Rename). */
+  edit?: TreeEdit;
+  clipboard?: TreeClipboard;
 
   setProjectOpen(projectId: string, open: boolean): void;
   setCheckout(projectId: string, root: string): void;
@@ -99,6 +124,18 @@ interface FilesState {
   expandLoaded(root: string): void;
   /** Load and expand folders down to `depth` levels (1 = the top folders), at most `cap` folders. */
   expandToDepth(root: string, depth: number, cap?: number): Promise<void>;
+
+  /** Open the inline name field for a new file or folder in `dir`, expanding the folder row `expandKey` (default `dir`). */
+  startCreate(projectId: string, root: string, dir: string, kind: 'file' | 'dir', expandKey?: string): void;
+  startRename(projectId: string, root: string, path: string, kind: 'file' | 'dir'): void;
+  cancelEdit(): void;
+  /** Commit the name field; on failure the field stays open showing the error. */
+  commitEdit(name: string): Promise<boolean>;
+  setClipboard(clip: TreeClipboard | undefined): void;
+  /** Paste the clipboard into `dir` of `root` (a project or worktree); resolves the new path or an error. */
+  paste(projectId: string, root: string, dir: string): Promise<{ path?: string; error?: string }>;
+  /** Move to the trash, close its tabs (their unsaved edits are dropped) and refresh the tree. */
+  deleteEntry(root: string, path: string): Promise<{ error?: string }>;
 }
 
 export const tabId = (root: string, path: string) => `${root}::${path}`;
@@ -126,6 +163,8 @@ export const useFiles = create<FilesState>()((set, get) => ({
   recent: loadRecent(),
   pending: undefined,
   revealTarget: undefined,
+  edit: undefined,
+  clipboard: undefined,
 
   setProjectOpen: (projectId, open) => set({ openProjects: { ...get().openProjects, [projectId]: open } }),
   setCheckout: (projectId, root) => set({ checkout: { ...get().checkout, [projectId]: root } }),
@@ -228,7 +267,123 @@ export const useFiles = create<FilesState>()((set, get) => ({
     }
     await Promise.all(level.map((dir) => get().loadDir(root, dir)));
   },
+
+  startCreate: (projectId, root, dir, kind, expandKey) => {
+    if (dir) void get().setExpanded(root, expandKey ?? dir, true);
+    set({ edit: { root, projectId, mode: 'create', kind, dir } });
+  },
+  startRename: (projectId, root, path, kind) => set({ edit: { root, projectId, mode: 'rename', kind, path } }),
+  cancelEdit: () => set({ edit: undefined }),
+  commitEdit: async (input) => {
+    const e = get().edit;
+    if (!e) return false;
+    const name = input.split('\\').join('/');
+    try {
+      if (e.mode === 'create') {
+        const path = joinRel(e.dir, name);
+        await oide.invoke('files.create', { root: e.root, path, kind: e.kind });
+        set({ edit: undefined });
+        await refreshChain(e.root, e.dir, parentDir(path));
+        if (e.kind === 'file') get().openFile(e.projectId, e.root, path);
+        get().revealPath(e.root, path);
+      } else {
+        const from = e.path;
+        const to = joinRel(parentDir(from), name);
+        if (to !== from) {
+          await oide.invoke('files.rename', { root: e.root, from, to });
+          moved(e.root, from, e.root, to, e.projectId);
+          await refreshChain(e.root, parentDir(from), parentDir(to));
+          get().revealPath(e.root, to);
+        }
+        set({ edit: undefined });
+      }
+      return true;
+    } catch (err) {
+      if (get().edit === e) set({ edit: { ...e, error: ipcErrorMessage(err) } });
+      return false;
+    }
+  },
+  setClipboard: (clipboard) => set({ clipboard }),
+  paste: async (projectId, root, dir) => {
+    const c = get().clipboard;
+    if (!c) return {};
+    try {
+      const { path } = await oide.invoke('files.copy', { fromRoot: c.root, from: c.path, toRoot: root, toDir: dir, move: c.cut });
+      if (c.cut) {
+        set({ clipboard: undefined });
+        if (c.root !== root || c.path !== path) {
+          moved(c.root, c.path, root, path, projectId);
+          await refreshChain(c.root, parentDir(c.path), parentDir(c.path));
+        }
+      }
+      await refreshChain(root, dir, dir);
+      get().revealPath(root, path);
+      return { path };
+    } catch (err) {
+      return { error: ipcErrorMessage(err) };
+    }
+  },
+  deleteEntry: async (root, path) => {
+    try {
+      await oide.invoke('files.delete', { root, path });
+    } catch (err) {
+      return { error: ipcErrorMessage(err) };
+    }
+    for (const t of get().tabs.filter((x) => x.root === root && isUnder(x.path, path))) get().closeTab(t.id);
+    const c = get().clipboard;
+    set({ ...dropUnder(root, path), clipboard: c && c.root === root && isUnder(c.path, path) ? undefined : c });
+    await refreshChain(root, parentDir(path), parentDir(path));
+    return {};
+  },
 }));
+
+/** Reload `from` and the loaded folders between it and `to` (a folder under `from`), so new entries show. */
+async function refreshChain(root: string, from: string, to: string): Promise<void> {
+  const s = useFiles.getState();
+  const dirs = [from];
+  if (to !== from && (from === '' || to.startsWith(`${from}/`))) {
+    const rest = (from ? to.slice(from.length + 1) : to).split('/');
+    for (let i = 1; i <= rest.length; i++) dirs.push(joinRel(from, rest.slice(0, i).join('/')));
+  }
+  await Promise.all(dirs.filter((d, i) => i === 0 || s.nodes[root]?.[d]).map((d) => s.loadDir(root, d, true)));
+}
+
+/** Tree state (listings, open folders, errors) of `path` and everything under it, dropped. */
+function dropUnder(root: string, path: string) {
+  const s = useFiles.getState();
+  const prune = <T,>(map: PerRoot<T>): PerRoot<T> => ({ ...map, [root]: Object.fromEntries(Object.entries(map[root] ?? {}).filter(([k]) => !isUnder(k, path))) });
+  return { nodes: prune(s.nodes), expanded: prune(s.expanded), errors: prune(s.errors) };
+}
+
+/**
+ * `from` (in `fromRoot`) is now `to` (in `toRoot`): its tabs, unsaved-edit dots, recents and open
+ * folders follow it. Listings under the old path are dropped; open folders reload under the new one.
+ */
+function moved(fromRoot: string, from: string, toRoot: string, to: string, toProject: string): void {
+  const s = useFiles.getState();
+  const moves: Array<{ from: string; to: string }> = [];
+  const tabs = s.tabs.map((t) => {
+    if (t.root !== fromRoot || !isUnder(t.path, from)) return t;
+    const path = remapPath(t.path, from, to);
+    const id = tabId(toRoot, path);
+    moves.push({ from: t.id, to: id });
+    return { id, projectId: toProject, root: toRoot, path };
+  });
+  const ids = new Map(moves.map((m) => [m.from, m.to]));
+  const dirty = Object.fromEntries(Object.entries(s.dirty).map(([k, v]) => [ids.get(k) ?? k, v]));
+  const recent = s.recent.map((r) => (r.root === fromRoot && isUnder(r.path, from) ? { root: toRoot, path: remapPath(r.path, from, to) } : r));
+  saveRecent(recent);
+  const reopen = Object.keys(s.expanded[fromRoot] ?? {})
+    .filter((k) => isUnder(k, from))
+    .map((k) => remapPath(k, from, to));
+  const dropped = dropUnder(fromRoot, from);
+  let expanded = dropped.expanded;
+  for (const d of reopen) expanded = put(expanded, toRoot, d, true);
+  // Listeners first: the editor re-keys its models before it renders the renamed tabs.
+  if (moves.length) for (const fn of tabMoveListeners) fn(moves);
+  useFiles.setState({ ...dropped, expanded, tabs, dirty, recent, active: s.active ? (ids.get(s.active) ?? s.active) : s.active });
+  for (const d of reopen) void useFiles.getState().loadDir(toRoot, d);
+}
 
 export interface TreeRow {
   key: string;
@@ -243,16 +398,29 @@ export interface TreeRow {
   loading: boolean;
   error?: string;
   parent?: string;
+  /** The inline name field: a new entry's row, or the row being renamed. */
+  draft?: 'create' | 'rename';
 }
 
-/** Visible rows of one checkout, depth-first, with single-child folder chains compacted. */
-export function visibleRows(root: string, s: Pick<FilesState, 'nodes' | 'expanded' | 'loading' | 'errors'>): TreeRow[] {
+/** Key of the new-entry row (no real path holds a NUL). */
+export const DRAFT_KEY = '\u0000new';
+
+/**
+ * Visible rows of one checkout, depth-first, with single-child folder chains compacted. A New file /
+ * New folder field is a row at the top of its folder; the row being renamed is marked.
+ */
+export function visibleRows(root: string, s: Pick<FilesState, 'nodes' | 'expanded' | 'loading' | 'errors'> & { edit?: TreeEdit }): TreeRow[] {
   const out: TreeRow[] = [];
   const nodes = s.nodes[root] ?? {};
+  const edit = s.edit?.root === root ? s.edit : undefined;
   const walk = (dir: string, depth: number, parent?: string) => {
+    if (edit?.mode === 'create' && edit.dir === dir) {
+      out.push({ key: DRAFT_KEY, path: dir, contentPath: dir, label: '', kind: edit.kind, depth, expanded: false, loading: false, parent, draft: 'create' });
+    }
     for (const n of nodes[dir] ?? []) {
       if (n.kind === 'file') {
-        out.push({ key: n.path, path: n.path, contentPath: n.path, label: n.name, kind: 'file', depth, expanded: false, loading: false, parent });
+        const draft = edit?.mode === 'rename' && edit.path === n.path ? { draft: 'rename' as const } : {};
+        out.push({ key: n.path, path: n.path, contentPath: n.path, label: n.name, kind: 'file', depth, expanded: false, loading: false, parent, ...draft });
         continue;
       }
       let label = n.name;
@@ -276,6 +444,7 @@ export function visibleRows(root: string, s: Pick<FilesState, 'nodes' | 'expande
         loading: Boolean(s.loading[root]?.[cur]),
         error: s.errors[root]?.[cur],
         parent,
+        ...(edit?.mode === 'rename' && edit.path === cur ? { draft: 'rename' as const } : {}),
       });
       if (expanded) walk(cur, depth + 1, n.path);
     }

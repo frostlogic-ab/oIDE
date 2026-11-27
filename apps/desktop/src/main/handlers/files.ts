@@ -1,4 +1,4 @@
-import { basename, dirname, join, relative } from 'node:path';
+import { basename, dirname, extname, join, relative } from 'node:path';
 import { fileHistory, isInside as gitIsInside, plainFs, samePath } from '@oide/git';
 import { buildSearchRegExp, type ArtifactMeta, type FileNode } from '@oide/protocol';
 import type { MainContext } from '../context.js';
@@ -9,7 +9,7 @@ import type { Services } from '../services/index.js';
 
 // Not node:fs: in Electron it treats `*.asar` files as folders and keeps them open (@oide/git plain-fs).
 const { existsSync } = plainFs;
-const { mkdir, readdir, readFile, stat, writeFile } = plainFs.promises;
+const { cp, lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } = plainFs.promises;
 
 const MAX_READ = 5 * 1024 * 1024;
 const toPosix = (p: string) => p.split('\\').join('/');
@@ -87,6 +87,111 @@ export function registerFileHandlers(router: IpcRouter, s: Services, ctx: MainCo
     index.invalidate(r);
     const co = checkoutOf(s, abs);
     if (co) s.git.changed(co.projectId);
+    return { ok: true as const };
+  });
+
+  // ---------------------------------------------------------------- tree: new, rename, copy, move, delete
+  // Checkouts only (never the artifact store). The entry itself is not resolved: renaming or deleting
+  // a symlink acts on the link, never on what it points to; its parent folder goes through the guard.
+  const entryIn = (root: string, rel: string) => {
+    const r = ctx.roots.assertAllowed(root, ['project', 'worktree']);
+    const parts = toPosix(rel).split('/').filter((x) => x && x !== '.');
+    const name = parts.pop();
+    if (!name || name === '..' || parts.includes('..')) throw new IpcError('A file or folder name is required', 'invalid_input');
+    if (name === '.git' || parts.includes('.git')) throw new IpcError('The .git folder is not available here', 'forbidden_path');
+    const { abs: parent } = inRoot(r, parts.join('/'));
+    const abs = join(parent, name);
+    return { root: r, abs, parent, name, rel: toPosix(relative(r, abs)) };
+  };
+  const exists = (abs: string) => lstat(abs).then(
+    () => true,
+    () => false,
+  );
+  const touched = (r: string, abs: string) => {
+    index.invalidate(r);
+    const co = checkoutOf(s, abs);
+    if (co) s.git.changed(co.projectId);
+  };
+  const fsError = (what: string, err: unknown) => new IpcError(`${what}: ${(err as Error).message}`, 'internal');
+
+  router.register('files.create', async ({ root, path, kind }) => {
+    const e = entryIn(root, path);
+    if (await exists(e.abs)) throw new IpcError(`A file or folder named ${e.name} already exists here`, 'conflict');
+    try {
+      await mkdir(e.parent, { recursive: true });
+      if (kind === 'dir') await mkdir(e.abs);
+      else await writeFile(e.abs, '', { encoding: 'utf8', flag: 'wx' });
+    } catch (err) {
+      throw fsError(`Couldn't create ${e.rel}`, err);
+    }
+    touched(e.root, e.abs);
+    return { ok: true as const };
+  });
+
+  router.register('files.rename', async ({ root, from, to }) => {
+    const a = entryIn(root, from);
+    const b = entryIn(root, to);
+    if (a.abs === b.abs) return { ok: true as const };
+    if (!(await exists(a.abs))) throw new IpcError(`${a.rel} no longer exists`, 'not_found');
+    // A case-only rename on a case-insensitive disk is the same entry, not a clash.
+    if (!samePath(a.abs, b.abs) && (await exists(b.abs))) throw new IpcError(`A file or folder named ${b.name} already exists here`, 'conflict');
+    if (gitIsInside(a.abs, b.parent)) throw new IpcError(`Cannot move ${a.name} into itself`, 'invalid_input');
+    try {
+      await mkdir(b.parent, { recursive: true });
+      await rename(a.abs, b.abs);
+    } catch (err) {
+      throw fsError(`Couldn't rename ${a.rel}`, err);
+    }
+    touched(a.root, a.abs);
+    return { ok: true as const };
+  });
+
+  router.register('files.copy', async ({ fromRoot, from, toRoot, toDir, move }) => {
+    const src = entryIn(fromRoot, from);
+    const r = ctx.roots.assertAllowed(toRoot, ['project', 'worktree']);
+    const { abs: dir } = inRoot(r, toDir);
+    const st = await lstat(src.abs).catch(() => undefined);
+    if (!st) throw new IpcError(`${src.rel} no longer exists`, 'not_found');
+    if (!(await stat(dir).catch(() => undefined))?.isDirectory()) throw new IpcError(`Not a folder: ${toDir || '/'}`, 'not_found');
+    if (st.isDirectory() && gitIsInside(src.abs, dir)) throw new IpcError(`Cannot paste ${src.name} into itself`, 'invalid_input');
+    const cross = !samePath(src.root, r);
+    if (move && samePath(dirname(src.abs), dir)) return { path: src.rel };
+    let target = join(dir, src.name);
+    if (await exists(target)) {
+      if (move) throw new IpcError(`A file or folder named ${src.name} already exists in ${toDir || 'the root folder'}`, 'conflict');
+      target = await freeName(dir, src.name, exists);
+    }
+    try {
+      if (move) {
+        try {
+          await rename(src.abs, target);
+        } catch (err) {
+          // Another disk (a worktree on another drive): copy, then remove the original.
+          if ((err as NodeJS.ErrnoException).code !== 'EXDEV') throw err;
+          await cp(src.abs, target, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true });
+          await rm(src.abs, { recursive: true, force: true });
+        }
+      } else {
+        await cp(src.abs, target, { recursive: true, errorOnExist: true, force: false, verbatimSymlinks: true, filter: (p) => basename(p) !== '.git' });
+      }
+    } catch (err) {
+      throw fsError(`Couldn't ${move ? 'move' : 'copy'} ${src.rel}`, err);
+    }
+    touched(r, target);
+    if (move && cross) touched(src.root, src.abs);
+    return { path: toPosix(relative(r, target)) };
+  });
+
+  router.register('files.delete', async ({ root, path }) => {
+    const e = entryIn(root, path);
+    if (!(await exists(e.abs))) throw new IpcError(`${e.rel} no longer exists`, 'not_found');
+    try {
+      if (s.platform.trashItem) await s.platform.trashItem(e.abs);
+      else await rm(e.abs, { recursive: true, force: true });
+    } catch (err) {
+      throw fsError(`Couldn't move ${e.rel} to the trash`, err);
+    }
+    touched(e.root, e.abs);
     return { ok: true as const };
   });
 
@@ -181,4 +286,15 @@ export function registerFileHandlers(router: IpcRouter, s: Services, ctx: MainCo
     }
     return out;
   });
+}
+
+/** "name copy.ext", then "name copy 2.ext"... (as file managers name a pasted duplicate). */
+export async function freeName(dir: string, name: string, exists: (abs: string) => Promise<boolean>): Promise<string> {
+  const ext = extname(name);
+  const stem = ext ? name.slice(0, -ext.length) : name;
+  for (let i = 1; i < 1000; i++) {
+    const candidate = join(dir, `${stem} copy${i === 1 ? '' : ` ${i}`}${ext}`);
+    if (!(await exists(candidate))) return candidate;
+  }
+  throw new IpcError(`Too many copies of ${name}`, 'conflict');
 }

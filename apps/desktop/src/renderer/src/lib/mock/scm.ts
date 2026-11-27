@@ -460,11 +460,17 @@ addRoot(`${WT_ROOT}/billing-api/webhook-retry`, BILLING_FILES, {
 addRoot(`${WT_ROOT}/billing-api/invoice-test`, BILLING_FILES);
 addRoot(`${WT_ROOT}/docs-site/getting-started`, DOCS_FILES, { 'content/docs/start/index.mdx': '---\ntitle: Getting started\n---\n' });
 
+/** Root path → folders with no files (made by New folder); the file map only implies folders. */
+export const emptyDirs = new Map<string, Set<string>>();
+
 export function listDir(root: string, dir: string): FileNode[] {
   const all = files.get(root);
   if (!all) throw new Error(`[forbidden_path] ${root} is not a known project or worktree`);
   const prefix = dir ? dir.replace(/\/$/, '') + '/' : '';
   const dirs = new Set<string>();
+  for (const d of emptyDirs.get(root) ?? []) {
+    if (d.startsWith(prefix) && d.length > prefix.length) dirs.add(d.slice(prefix.length).split('/')[0]!);
+  }
   const out: FileNode[] = [];
   for (const p of all.keys()) {
     if (!p.startsWith(prefix)) continue;
@@ -475,6 +481,82 @@ export function listDir(root: string, dir: string): FileNode[] {
   }
   const dirNodes: FileNode[] = [...dirs].sort().map((name) => ({ name, path: prefix + name, kind: 'dir' }));
   return [...dirNodes, ...out.sort((a, b) => a.name.localeCompare(b.name))];
+}
+
+/** Mock file management (files.create / rename / copy / delete) over the in-memory trees. */
+function entryKind(root: string, path: string): 'file' | 'dir' | undefined {
+  const tree = files.get(root);
+  if (!tree) throw new Error(`[forbidden_path] ${root}`);
+  if (tree.has(path)) return 'file';
+  const pre = `${path}/`;
+  if ([...tree.keys()].some((k) => k.startsWith(pre)) || [...(emptyDirs.get(root) ?? [])].some((d) => d === path || d.startsWith(pre))) return 'dir';
+  return undefined;
+}
+function under(path: string, key: string): string | undefined {
+  if (key === path) return '';
+  return key.startsWith(`${path}/`) ? key.slice(path.length) : undefined;
+}
+export function mockCreate(root: string, path: string, kind: 'file' | 'dir'): void {
+  if (entryKind(root, path)) throw new Error(`[conflict] A file or folder named ${path.split('/').pop()} already exists here`);
+  if (kind === 'file') files.get(root)!.set(path, '');
+  else emptyDirs.set(root, new Set([...(emptyDirs.get(root) ?? []), path]));
+}
+function takeEntry(root: string, path: string): { files: Array<[string, string]>; dirs: string[] } {
+  const tree = files.get(root)!;
+  const out = { files: [] as Array<[string, string]>, dirs: [] as string[] };
+  for (const [k, v] of [...tree]) {
+    const rest = under(path, k);
+    if (rest !== undefined) out.files.push([rest, v]);
+  }
+  for (const d of emptyDirs.get(root) ?? []) {
+    const rest = under(path, d);
+    if (rest !== undefined) out.dirs.push(rest);
+  }
+  return out;
+}
+function dropEntry(root: string, path: string): void {
+  const tree = files.get(root)!;
+  for (const k of [...tree.keys()]) if (under(path, k) !== undefined) tree.delete(k);
+  const dirs = emptyDirs.get(root);
+  if (dirs) for (const d of [...dirs]) if (under(path, d) !== undefined) dirs.delete(d);
+}
+function putEntry(root: string, path: string, e: { files: Array<[string, string]>; dirs: string[] }): void {
+  const tree = files.get(root)!;
+  for (const [rest, v] of e.files) tree.set(path + rest, v);
+  if (e.dirs.length) emptyDirs.set(root, new Set([...(emptyDirs.get(root) ?? []), ...e.dirs.map((d) => path + d)]));
+  if (!e.files.length && !e.dirs.length) emptyDirs.set(root, new Set([...(emptyDirs.get(root) ?? []), path]));
+}
+export function mockRename(root: string, from: string, to: string): void {
+  if (!entryKind(root, from)) throw new Error(`[not_found] ${from} no longer exists`);
+  if (from === to) return;
+  if (entryKind(root, to)) throw new Error(`[conflict] A file or folder named ${to.split('/').pop()} already exists here`);
+  const e = takeEntry(root, from);
+  dropEntry(root, from);
+  putEntry(root, to, e);
+}
+export function mockCopy(fromRoot: string, from: string, toRoot: string, toDir: string, move: boolean): string {
+  const kind = entryKind(fromRoot, from);
+  if (!kind) throw new Error(`[not_found] ${from} no longer exists`);
+  if (!files.has(toRoot)) throw new Error(`[forbidden_path] ${toRoot}`);
+  if (kind === 'dir' && fromRoot === toRoot && (toDir === from || toDir.startsWith(`${from}/`))) throw new Error('[invalid_input] Cannot paste a folder into itself');
+  const name = from.split('/').pop()!;
+  const join = (n: string) => (toDir ? `${toDir}/${n}` : n);
+  let target = join(name);
+  if (move && fromRoot === toRoot && target === from) return from;
+  if (entryKind(toRoot, target)) {
+    if (move) throw new Error(`[conflict] A file or folder named ${name} already exists in ${toDir || 'the root folder'}`);
+    const dot = kind === 'file' ? name.lastIndexOf('.') : -1;
+    const [stem, ext] = dot > 0 ? [name.slice(0, dot), name.slice(dot)] : [name, ''];
+    for (let i = 1; entryKind(toRoot, target); i++) target = join(`${stem} copy${i === 1 ? '' : ` ${i}`}${ext}`);
+  }
+  const e = takeEntry(fromRoot, from);
+  if (move) dropEntry(fromRoot, from);
+  putEntry(toRoot, target, e);
+  return target;
+}
+export function mockDelete(root: string, path: string): void {
+  if (!entryKind(root, path)) throw new Error(`[not_found] ${path} no longer exists`);
+  dropEntry(root, path);
 }
 
 export function fileHistory(path: string, root: string): CommitInfo[] {
@@ -698,6 +780,19 @@ export function createScmHandlers({ agents, emit, fallbackDiffs = {}, artifacts 
     'files.write': ({ root, path, content }) => {
       const tree = need(files.get(root), `[forbidden_path] ${root}`);
       tree.set(path, content);
+      return { ok: true as const };
+    },
+    'files.create': ({ root, path, kind }) => {
+      mockCreate(root, path, kind);
+      return { ok: true as const };
+    },
+    'files.rename': ({ root, from, to }) => {
+      mockRename(root, from, to);
+      return { ok: true as const };
+    },
+    'files.copy': ({ fromRoot, from, toRoot, toDir = '', move = false }) => ({ path: mockCopy(fromRoot, from, toRoot, toDir, move) }),
+    'files.delete': ({ root, path }) => {
+      mockDelete(root, path);
       return { ok: true as const };
     },
     'files.history': ({ root, path }) => fileHistory(path, root),
