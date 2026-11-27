@@ -1,27 +1,34 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { files as mockFiles, mockHash } from '../../lib/mock/scm';
+import { keymap } from '../../lib/keymap';
 import { useScope } from '../../stores/scope';
 import { useUi } from '../../stores/ui';
 import { setupMockApp } from '../SourceControl/testing';
-import { ancestorDirs, useFiles, visibleRows } from './filesStore';
+import { ancestorDirs, tabId, useFiles, visibleRows } from './filesStore';
 import FilesScreen from './index';
 import { useSearch } from './searchStore';
 import type { EditorPaneProps } from './EditorPane';
 
 // Monaco does not run in jsdom: a stand-in pane that can "type" into the active tab.
 vi.mock('./EditorPane', () => ({
-  default: ({ active, onDirty }: EditorPaneProps) => (
-    <button type="button" onClick={() => onDirty(active.id, true)}>
-      Type in {active.path}
-    </button>
+  default: ({ active, onDirty, mdView, onOpenFile }: EditorPaneProps) => (
+    <>
+      <button type="button" onClick={() => onDirty(active.id, true)}>
+        Type in {active.path}
+      </button>
+      <output aria-label="Pane view">{mdView ?? 'source'}</output>
+      <button type="button" onClick={() => onOpenFile?.('docs/guide.md')}>
+        Follow a link
+      </button>
+    </>
   ),
 }));
 
 afterEach(cleanup);
 beforeEach(() => {
-  useFiles.setState({ openProjects: {}, checkout: {}, expanded: {}, nodes: {}, loading: {}, errors: {}, tabs: [], active: undefined, dirty: {}, revealed: {}, pending: undefined, revealTarget: undefined });
+  useFiles.setState({ openProjects: {}, checkout: {}, expanded: {}, nodes: {}, loading: {}, errors: {}, tabs: [], active: undefined, dirty: {}, mdView: {}, revealed: {}, pending: undefined, revealTarget: undefined });
   useSearch.setState({ open: false, query: '', replacement: '', replaceOpen: false, isRegex: false, matchCase: false, wholeWord: false, include: '', exclude: '', filtersOpen: false, scope: 'all', status: 'idle', files: [], searchId: undefined, ran: undefined });
 });
 
@@ -227,6 +234,55 @@ describe('Files editor tabs', () => {
     } finally {
       confirm.mockRestore();
     }
+  });
+});
+
+describe('Files Markdown preview', () => {
+  const BILLING = '/Users/you/code/billing-api';
+  const view = () => screen.getByRole('group', { name: 'Markdown view' });
+  const pressed = (name: string) => within(view()).getByRole('button', { name }).getAttribute('aria-pressed');
+
+  it('opens Markdown in the preview, switches to edit (button or Ctrl+Shift+V) and reopens in the preview', async () => {
+    await setupMockApp({ screen: 'files', params: {} });
+    useFiles.getState().openFile('billing-api', BILLING, 'README.md');
+    render(<FilesScreen />);
+    expect((await screen.findByLabelText('Pane view')).textContent).toBe('preview');
+    expect(pressed('Preview')).toBe('true');
+    expect(pressed('Edit')).toBe('false');
+
+    const detach = keymap.attach(window);
+    onTestFinished(detach);
+    fireEvent.click(within(view()).getByRole('button', { name: 'Edit' }));
+    expect(screen.getByLabelText('Pane view').textContent).toBe('edit');
+    expect(pressed('Edit')).toBe('true');
+
+    fireEvent.keyDown(window, { key: 'V', ctrlKey: true, shiftKey: true });
+    expect(screen.getByLabelText('Pane view').textContent).toBe('preview');
+    fireEvent.keyDown(window, { key: 'V', ctrlKey: true, shiftKey: true });
+    expect(screen.getByLabelText('Pane view').textContent).toBe('edit');
+
+    // Closing forgets the choice: the file opens on its rendered page again.
+    fireEvent.click(screen.getByRole('button', { name: 'Close README.md' }));
+    expect(useFiles.getState().mdView).toEqual({});
+    useFiles.getState().openFile('billing-api', BILLING, 'README.md');
+    await waitFor(() => expect(screen.getByLabelText('Pane view').textContent).toBe('preview'));
+  });
+
+  it('shows no Markdown toggle for other files, opens linked files and shows the source when jumping to a line', async () => {
+    await setupMockApp({ screen: 'files', params: {} });
+    useFiles.getState().openFile('billing-api', BILLING, 'src/invoices/invoice.ts');
+    render(<FilesScreen />);
+    expect((await screen.findByLabelText('Pane view')).textContent).toBe('source');
+    expect(screen.queryByRole('group', { name: 'Markdown view' })).toBeNull();
+
+    // A relative link in the preview opens that file of the same checkout.
+    fireEvent.click(screen.getByRole('button', { name: 'Follow a link' }));
+    expect(useFiles.getState().active).toBe(tabId(BILLING, 'docs/guide.md'));
+
+    // Quick open to a line of a Markdown file shows its source beside the preview.
+    useFiles.getState().requestOpen({ root: BILLING, path: 'README.md', line: 2 });
+    await waitFor(() => expect(useFiles.getState().active).toBe(tabId(BILLING, 'README.md')));
+    await waitFor(() => expect(screen.getByLabelText('Pane view').textContent).toBe('edit'));
   });
 });
 

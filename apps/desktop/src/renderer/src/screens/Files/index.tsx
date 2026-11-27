@@ -5,11 +5,12 @@
  * Wiki: screen-files.md.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, ContextMenu, EmptyState, Spinner } from '@oide/ui';
+import { Button, ContextMenu, EmptyState, Icon, Spinner } from '@oide/ui';
 import { NEEDS_YOU, type AgentSummary, type ArtifactMeta, type CommitInfo, type ContentMatch, type Project } from '@oide/protocol';
 import { HeaderSlot } from '../../components/frame/HeaderSlot';
 import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
 import { keymap } from '../../lib/keymap';
+import { trackMarkdownView } from '../../lib/telemetry';
 import { useKeymapScope } from '../../lib/useKeymap';
 import { useAgents } from '../../stores/agents';
 import { useProjects } from '../../stores/projects';
@@ -20,6 +21,7 @@ import { useGit, useGitData } from '../SourceControl/gitStore';
 import { C, commitAuthor, shortBranch, timeAgo } from '../SourceControl/model';
 import type { EditorPaneProps, EditorStatus, SelectionInfo } from './EditorPane';
 import { joinPath, tabId, useFiles, type FileTab } from './filesStore';
+import { isMarkdownPath, type MarkdownView } from './markdownLinks';
 import { SearchPanel, type SearchCheckout } from './SearchPanel';
 import { useSearch } from './searchStore';
 import { TreePanel, type Marker, type ProjectTreeInfo } from './TreePanel';
@@ -60,7 +62,12 @@ export default function FilesScreen() {
   // Open a file from route params ({ root, path, line }) once.
   const params = useMemo<{ root?: string; path?: string; line?: number }>(() => (route.screen === 'files' ? route.params : {}), [route]);
   const applied = useRef<string>('');
-  const [reveal, setReveal] = useState<EditorPaneProps['reveal']>();
+  const [reveal, setRevealState] = useState<EditorPaneProps['reveal']>();
+  // Jumping to a line of a Markdown file shows its source (beside the preview).
+  const setReveal = useCallback((r: EditorPaneProps['reveal']) => {
+    setRevealState(r);
+    if (r && isMarkdownPath(r.tabId.slice(r.tabId.indexOf('::') + 2))) useFiles.getState().setMdView(r.tabId, 'edit');
+  }, []);
   useEffect(() => {
     const key = JSON.stringify(params);
     if (!params.root || applied.current === key) return;
@@ -73,7 +80,7 @@ export default function FilesScreen() {
       files.openFile(projectId, params.root, params.path);
       if (params.line) setReveal({ tabId: tabId(params.root, params.path), line: params.line, nonce: Date.now() });
     }
-  }, [params, allProjects, agents, git, files]);
+  }, [params, allProjects, agents, git, files, setReveal]);
 
   // Quick open (Ctrl/Cmd+K): open the file in its project and checkout, reveal it in the tree.
   const pending = files.pending;
@@ -89,7 +96,7 @@ export default function FilesScreen() {
     setReveal(pending.line ? { tabId: tab, line: pending.line, ...(pending.column !== undefined ? { column: pending.column } : {}), nonce: pending.nonce, focus: true } : undefined);
     useSearch.getState().setOpen(false);
     files.revealPath(pending.root, pending.path);
-  }, [pending, allProjects, agents, git, files]);
+  }, [pending, allProjects, agents, git, files, setReveal]);
 
   // Files › Search (header button, Ctrl/Cmd+Shift+F).
   const searchOpen = useSearch((st) => st.open);
@@ -106,8 +113,6 @@ export default function FilesScreen() {
   }, [files.tabs, files.active, files.checkout, allProjects, projects, git]);
   const terminalOpen = useTerminals((st) => st.groups[FILES_TERMINALS]?.open ?? false);
   const toggleTerminal = () => toggleFilesTerminal(termHome?.cwd, termHome?.context);
-
-  useKeymapScope('files', { 'files.search': () => showSearch(), 'files.terminal': toggleTerminal });
   const searchKey = keymap.label('files.search');
   const terminalKey = keymap.label('files.terminal');
   const checkouts: SearchCheckout[] = useMemo(
@@ -126,7 +131,7 @@ export default function FilesScreen() {
       files.openFile(projectId, root, path);
       if (m) setReveal({ tabId: tabId(root, path), line: m.line, column: m.column, length: m.length, nonce: Date.now() + Math.random() });
     },
-    [allProjects, agents, git, files],
+    [allProjects, agents, git, files, setReveal],
   );
 
   const active = files.tabs.find((t) => t.id === files.active);
@@ -136,6 +141,17 @@ export default function FilesScreen() {
   const dirty = files.dirty;
   const saveRef = useRef<(() => Promise<void>) | null>(null);
   const info = useFileInfo(active);
+  // Markdown files open on their rendered page; Edit shows the source beside it.
+  const mdView: MarkdownView | undefined = active && isMarkdownPath(active.path) ? (files.mdView[active.id] ?? 'preview') : undefined;
+  const toggleMdView = (target: EventTarget | null) => {
+    // Ctrl+Shift+V is paste in a terminal: leave it alone there.
+    if (!active || !mdView || (target instanceof Element && target.closest('.xterm'))) return false;
+    const next = mdView === 'preview' ? 'edit' : 'preview';
+    files.setMdView(active.id, next);
+    trackMarkdownView(next, 'shortcut');
+  };
+  useKeymapScope('files', { 'files.search': () => showSearch(), 'files.terminal': toggleTerminal, 'files.togglePreview': (e) => toggleMdView(e.target) });
+  const previewKey = keymap.label('files.togglePreview');
 
   const checkoutLabel = (t: FileTab | undefined) => {
     if (!t) return 'main';
@@ -284,12 +300,39 @@ export default function FilesScreen() {
           </div>
           {tabMenu && <ContextMenu at={tabMenu.at} label={`Actions for ${tabMenu.tab.path.split('/').pop()}`} items={tabMenuItems(tabMenu.tab)} onClose={() => setTabMenu(undefined)} />}
           <div className="flex-1" />
+          {active && mdView && (
+            <div role="group" aria-label="Markdown view" className="flex items-center gap-0.5 my-auto ml-2 p-[2px] rounded-md border border-line-2 bg-card shrink-0">
+              {(
+                [
+                  { view: 'preview', label: 'Preview', icon: 'eye', title: 'Show the rendered page' },
+                  { view: 'edit', label: 'Edit', icon: 'pencil', title: 'Edit the source beside the rendered page' },
+                ] as const
+              ).map((o) => (
+                <button
+                  key={o.view}
+                  type="button"
+                  aria-pressed={mdView === o.view}
+                  aria-keyshortcuts="Control+Shift+V Meta+Shift+V"
+                  title={`${o.title}${previewKey ? ` (${previewKey})` : ''}`}
+                  onClick={() => {
+                    if (mdView === o.view) return;
+                    files.setMdView(active.id, o.view);
+                    trackMarkdownView(o.view, 'button');
+                  }}
+                  className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-sm border-0 text-[11.5px] cursor-pointer ${mdView === o.view ? 'bg-selected text-ink' : 'bg-transparent text-ink-3 hover:text-ink-2'}`}
+                >
+                  <Icon name={o.icon} size={13} />
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
           {active && status && (
             <div className="flex items-center gap-2.5 px-3 text-[11.5px] text-ink-3 shrink-0">
               {status.readOnly && <span>Read only</span>}
               <span className="font-mono">
-                Ln {status.line}, Col {status.column}
-                {status.language ? ` · ${active.path.endsWith('.json') ? 'JSON' : status.language}` : ''}
+                {mdView !== 'preview' && `Ln ${status.line}, Col ${status.column}`}
+                {status.language ? `${mdView !== 'preview' ? ' · ' : ''}${active.path.endsWith('.json') ? 'JSON' : status.language}` : ''}
               </span>
               {dirty[active.id] && (
                 <button
@@ -334,6 +377,8 @@ export default function FilesScreen() {
                 onAsk={ask}
                 sendTo={sendTo}
                 saveRef={saveRef}
+                mdView={mdView}
+                onOpenFile={(path) => files.openFile(active.projectId, active.root, path)}
               />
             </Suspense>
           ) : (

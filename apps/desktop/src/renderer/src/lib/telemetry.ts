@@ -103,6 +103,12 @@ export function trackArtifactAgentMessage(kind: ArtifactKind, feedback: number, 
   send({ type: 'event', name: 'artifact_agent_message', props: { kind, feedback: Math.max(0, Math.min(10_000, Math.round(feedback))), has_text: hasText } });
 }
 
+/** A Markdown tab in Files switched between its preview and editing beside it. Never the file. */
+export function trackMarkdownView(view: 'preview' | 'edit', via: 'button' | 'shortcut'): void {
+  if (!usageOn()) return;
+  send({ type: 'event', name: 'files_markdown_view', props: { view, via } });
+}
+
 // ----------------------------------------------------------------------------- vitals
 
 interface Visit {
