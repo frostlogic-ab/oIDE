@@ -286,6 +286,10 @@ export class Git {
         },
       );
       if (opts.input !== undefined) {
+        // git may exit before reading stdin (e.g. `check-ignore --stdin` outside a checkout); the
+        // write then fails with EPIPE. The exit code already reports the outcome through the
+        // callback above, so a stdin error must not become an uncaught exception.
+        child.stdin?.on('error', () => {});
         child.stdin?.end(opts.input);
       }
     });

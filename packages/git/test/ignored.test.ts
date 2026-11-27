@@ -43,4 +43,12 @@ describe('ignoredPaths', () => {
     write(plain, 'a.txt', 'a\n');
     expect((await ignoredPaths(plain, ['a.txt'])).size).toBe(0);
   });
+
+  it('does not crash when git exits before reading a large stdin (EPIPE)', async () => {
+    // Outside a checkout git exits at once; a payload larger than the pipe buffer makes the
+    // write fail with EPIPE, which used to surface as an uncaught exception.
+    const plain = tempDir('oide-plain-');
+    const many = Array.from({ length: 50_000 }, (_, i) => `some/fairly/long/path/segment/file-${i}.txt`);
+    expect((await ignoredPaths(plain, many)).size).toBe(0);
+  });
 });
