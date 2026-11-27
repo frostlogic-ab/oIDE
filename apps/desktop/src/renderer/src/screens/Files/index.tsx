@@ -23,6 +23,7 @@ import { useChanges, useCheckoutChanges } from './changesStore';
 import { effectiveDiffView, type DiffView } from './diffView';
 import type { EditorActions, EditorPaneProps, EditorStatus, SelectionInfo } from './EditorPane';
 import { joinPath, tabId, useFiles, type FileTab } from './filesStore';
+import { ensureInstallPrompts, installLanguageServer } from './lspInstall';
 import { LspStatusControl } from './LspStatus';
 import { docKey, ensureLspEvents, useLsp } from './lspStore';
 import { isMarkdownPath, type MarkdownView } from './markdownLinks';
@@ -154,7 +155,10 @@ export default function FilesScreen() {
   const actionsRef = useRef<EditorActions | null>(null);
   const info = useFileInfo(active);
   // Language servers (ADR 0019): the open file's server state and problems.
-  useEffect(() => ensureLspEvents(), []);
+  useEffect(() => {
+    ensureLspEvents();
+    ensureInstallPrompts();
+  }, []);
   const activeDoc = active ? docKey(active.root, active.path) : '';
   const lspStatus = useLsp((st) => (activeDoc ? st.status[activeDoc] : undefined));
   const problems = useLsp((st) => (activeDoc ? st.problems[activeDoc] : undefined));
@@ -172,6 +176,9 @@ export default function FilesScreen() {
   const restartLsp = () => {
     if (!active) return;
     void import('./monaco/lsp').then((m) => m.lspRestart(active.root, active.path));
+  };
+  const installLsp = () => {
+    if (active && lspStatus) installLanguageServer(active.root, active.path, lspStatus, 'menu');
   };
   // Markdown files open on their rendered page; Edit shows the source beside it.
   // A changed file (git colours of the tree) opens on its changes, unified or side by side; the
@@ -444,7 +451,7 @@ export default function FilesScreen() {
             )}
             {status && (
               <div className="flex items-center gap-2.5 ml-auto pr-3 text-[11.5px] text-ink-3 shrink-0">
-                <LspStatusControl status={lspStatus} problems={problems} onNextProblem={() => actionsRef.current?.nextProblem()} onRestart={restartLsp} />
+                <LspStatusControl status={lspStatus} problems={problems} onNextProblem={() => actionsRef.current?.nextProblem()} onRestart={restartLsp} onInstall={installLsp} />
                 {status.readOnly && <span>Read only</span>}
                 <span className="font-mono">
                   {mdView !== 'preview' && `Ln ${status.line}, Col ${status.column}`}

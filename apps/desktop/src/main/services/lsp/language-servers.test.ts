@@ -219,6 +219,33 @@ describe('LanguageServerService against the fixture server', () => {
     expect(whichCommand('fake-lsp-not-on-path', t.root)).toBeUndefined();
   });
 
+  it('Install: gives the install command only while not installed, then starts the server once it is on PATH', async () => {
+    let installed = false;
+    const t = setup({ options: { which: (c) => (installed ? c : undefined), installPollMs: 20 } });
+    expect(t.svc.installCommand(t.root, DOC)).toBeUndefined(); // not open
+    await t.svc.open(t.root, DOC, 1, TEXT);
+    expect(t.svc.installCommand(t.root, DOC)).toEqual({ command: 'npm install -g fake-lsp', server: 'Fake LSP' });
+    t.svc.watchInstall(t.root, DOC);
+    await new Promise((r) => setTimeout(r, 80));
+    expect(t.spawned).toEqual([]);
+    installed = true;
+    await t.running();
+    expect(t.spawned).toHaveLength(1);
+    expect(t.svc.installCommand(t.root, DOC)).toBeUndefined();
+  });
+
+  it('Install: stops looking after installWatchMs', async () => {
+    let installed = false;
+    const t = setup({ options: { which: (c) => (installed ? c : undefined), installPollMs: 20, installWatchMs: 50 } });
+    await t.svc.open(t.root, DOC, 1, TEXT);
+    t.svc.watchInstall(t.root, DOC);
+    await new Promise((r) => setTimeout(r, 150));
+    installed = true;
+    await new Promise((r) => setTimeout(r, 100));
+    expect(t.spawned).toEqual([]);
+    expect((await t.svc.status(t.root, DOC)).state).toBe('not-installed');
+  });
+
   it('closing the last document stops the server after idleMs and clears its diagnostics', async () => {
     const t = setup({ options: { idleMs: 50 } });
     await t.svc.open(t.root, DOC, 1, TEXT);

@@ -23,9 +23,14 @@ export interface TermSession {
   title: string;
   /** Shown before the title, dimmed (the project and checkout in Files). */
   context?: string;
-  kind: 'shell' | 'script';
+  kind: 'shell' | 'script' | 'install';
   /** For `kind: 'script'`: what main runs (it finds the script again by id). */
   script?: Pick<ProjectScript, 'id' | 'name' | 'command' | 'runner'>;
+  /**
+   * For `kind: 'install'`: the open document whose language server is not installed. Main looks up
+   * the server's install command itself (`lsp.install`), so only the document goes over IPC.
+   */
+  install?: { root: string; path: string };
   terminalId?: string;
   status: TermStatus;
   exitCode?: number | null;
@@ -54,6 +59,8 @@ interface TerminalsState {
   openShell(group: string, cwd: string, opts?: OpenOptions): string;
   /** A new terminal that runs `script` in `cwd` (VS Code's Run Script). */
   runScript(group: string, cwd: string, script: ProjectScript, opts?: OpenOptions): string;
+  /** A new terminal in the document's checkout that installs its language server (`lsp.install`). */
+  installServer(group: string, doc: { root: string; path: string }, title: string, opts?: OpenOptions): string;
   /** Kills the session's process and drops its tab; the neighbour tab becomes active. */
   close(key: string): void;
   closeWhere(pred: (s: TermSession) => boolean): void;
@@ -103,6 +110,8 @@ export const useTerminals = create<TerminalsState>((set, get) => {
         script: { id: script.id, name: script.name, command: script.command, runner: script.runner },
         ...(opts?.context ? { context: opts.context } : {}),
       })),
+    installServer: (group, doc, title, opts) =>
+      add(group, () => ({ cwd: doc.root, kind: 'install', title, install: { root: doc.root, path: doc.path }, ...(opts?.context ? { context: opts.context } : {}) })),
     close: (key) => {
       const s = get().sessions[key];
       if (!s) return;

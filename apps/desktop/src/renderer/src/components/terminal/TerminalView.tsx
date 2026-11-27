@@ -158,7 +158,9 @@ function start(session: TermSession, inst: Instance): void {
   const req =
     session.kind === 'script' && session.script
       ? oide.invoke('terminal.runScript', { cwd: session.cwd, scriptId: session.script.id, cols, rows }).then((r) => r.terminalId)
-      : oide.invoke('terminal.create', { cwd: session.cwd, cols, rows }).then((r) => r.terminalId);
+      : session.kind === 'install' && session.install
+        ? oide.invoke('lsp.install', { ...session.install, cols, rows }).then((r) => r.terminalId)
+        : oide.invoke('terminal.create', { cwd: session.cwd, cols, rows }).then((r) => r.terminalId);
   req.then(
     (terminalId) => {
       if (!instances.has(session.key)) {

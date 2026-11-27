@@ -582,6 +582,11 @@ export const TELEMETRY_EVENTS = {
       outcome: z.enum(['running', 'not_installed', 'failed']),
     }),
   }),
+  language_server_install: def({
+    from: 'renderer',
+    question: 'When a language server is not installed, do people let oIDE install it (from the prompt or the server menu), or say No?',
+    props: z.object({ choice: z.enum(['install', 'declined']), via: z.enum(['prompt', 'menu']) }),
+  }),
   artifact_imported: def({
     from: 'main',
     question:

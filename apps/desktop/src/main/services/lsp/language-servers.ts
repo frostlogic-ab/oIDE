@@ -71,6 +71,9 @@ export interface LanguageServiceOptions {
   requestTimeoutMs?: number;
   /** `initialize` timeout. Default 45 s. */
   initTimeoutMs?: number;
+  /** After Install: how often to look for the server on PATH (default 3 s) and for how long (default 10 min). */
+  installPollMs?: number;
+  installWatchMs?: number;
 }
 
 /** Env vars a server inherits: what toolchains need to find themselves, never secrets or tokens. */
@@ -187,6 +190,8 @@ class Session {
   lastUsed = Date.now();
   idleTimer: ReturnType<typeof setTimeout> | undefined;
   restartTimer: ReturnType<typeof setTimeout> | undefined;
+  /** After Install: polls PATH for the server's command (see `watchInstall`). */
+  installTimer: ReturnType<typeof setInterval> | undefined;
   stopping = false;
   /** Bumped on each start, so callbacks of an old process are ignored. */
   generation = 0;
@@ -408,6 +413,42 @@ export class LanguageServerService {
     );
   }
 
+  /**
+   * The install command of the open document's server when it is not installed: main's own copy,
+   * from the extension's manifest, so the renderer only names a document (SEC-05).
+   */
+  installCommand(root: string, path: string): { command: string; server: string } | undefined {
+    const s = this.sessionOf(root, path);
+    if (!s || s.state !== 'not-installed' || !s.def.install) return undefined;
+    return { command: s.def.install, server: s.def.name };
+  }
+
+  /**
+   * After Install opened a terminal: look for the server's command on PATH every few seconds (for
+   * at most `installWatchMs`) and start it once it is there, so the user need not choose Try again.
+   */
+  watchInstall(root: string, path: string): void {
+    const s = this.sessionOf(root, path);
+    if (!s || s.state !== 'not-installed') return;
+    this.stopInstallWatch(s);
+    const every = this.o.installPollMs ?? 3000;
+    const until = Date.now() + (this.o.installWatchMs ?? 10 * 60_000);
+    const which = this.o.which ?? ((c, r) => whichCommand(c, r, process.env, this.platform));
+    s.installTimer = setInterval(() => {
+      if (this.disposed || this.sessions.get(s.id) !== s || s.state !== 'not-installed' || Date.now() > until) return this.stopInstallWatch(s);
+      if (!which(s.def.command, s.root)) return;
+      this.stopInstallWatch(s);
+      s.crashes = [];
+      this.start(s);
+    }, every);
+    s.installTimer.unref?.();
+  }
+
+  private stopInstallWatch(s: Session): void {
+    if (s.installTimer) clearInterval(s.installTimer);
+    s.installTimer = undefined;
+  }
+
   async dispose(): Promise<void> {
     this.disposed = true;
     await Promise.all([...[...this.sessions.values()].map((s) => this.drop(s)), ...this.stopping.values()]);
@@ -463,6 +504,7 @@ export class LanguageServerService {
     this.sessions.delete(s.id);
     for (const path of s.docs.keys()) this.docSession.delete(this.docKey(s.root, path));
     if (s.idleTimer) clearTimeout(s.idleTimer);
+    this.stopInstallWatch(s);
     const stopped = this.stopProcess(s);
     this.stopping.set(s, stopped);
     try {

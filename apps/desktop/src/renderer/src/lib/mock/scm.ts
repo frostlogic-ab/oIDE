@@ -823,6 +823,9 @@ export function createScmHandlers({ agents, emit, fallbackDiffs = {}, artifacts 
     'lsp.close': () => ({ ok: true as const }),
     'lsp.status': () => ({ state: 'none' as const }),
     'lsp.restart': () => ({ state: 'none' as const }),
+    'lsp.install': () => {
+      throw new Error('[not_found] No language servers in the browser mock.');
+    },
     'lsp.hover': () => null,
     'lsp.completion': () => null,
     'lsp.resolveCompletion': () => null,

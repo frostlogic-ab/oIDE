@@ -46,6 +46,15 @@ export function registerLspHandlers(router: IpcRouter, s: Services, ctx: MainCon
     return lsp.restart(d.root, d.path);
   });
 
+  router.register('lsp.install', async ({ root, path, cols, rows }) => {
+    const d = doc(root, path);
+    const install = lsp.installCommand(d.root, d.path);
+    if (!install) throw new IpcError('This language server has no install command, or is installed already.', 'not_found');
+    const { terminalId } = await s.terminals.create({ cwd: d.root, cols, rows, input: `${install.command}` });
+    lsp.watchInstall(d.root, d.path);
+    return { terminalId, ...install };
+  });
+
   router.register('lsp.hover', ({ root, path, position }) => {
     const d = doc(root, path);
     return lsp.request(d.root, d.path, 'hoverProvider', 'textDocument/hover', () => ({ position }), toHover, null);

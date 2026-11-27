@@ -93,7 +93,7 @@ export function TerminalTabs({ group, label, newCwd, newContext, autoStart, visi
                   onKeyDown={(e) => onTabKey(e, i)}
                   className="h-full flex items-center gap-1.5 pl-2 pr-1 border-0 bg-transparent text-inherit text-[12px] whitespace-nowrap cursor-pointer"
                 >
-                  <Icon name={s.kind === 'script' ? 'play' : 'terminal'} size={12} className={dotClass(s)} />
+                  <Icon name={s.kind === 'script' ? 'play' : s.kind === 'install' ? 'download' : 'terminal'} size={12} className={dotClass(s)} />
                   {s.context && <span className="text-ink-3">{s.context} ›</span>}
                   <span className={s.kind === 'script' ? 'font-mono text-[11.5px]' : undefined}>{s.title}</span>
                   {statusText(s) && <span className={`text-[11px] ${s.status === 'error' || (s.exitCode ?? 0) !== 0 ? 'text-bad' : 'text-ink-3'}`}>{statusText(s)}</span>}
@@ -148,5 +148,5 @@ function statusText(s: TermSession): string {
 function dotClass(s: TermSession): string {
   if (s.status === 'error' || (s.status === 'exited' && (s.exitCode ?? 0) !== 0)) return 'text-bad';
   if (s.status === 'exited') return 'text-ink-4';
-  return s.kind === 'script' ? 'text-ok' : 'text-ink-3';
+  return s.kind === 'shell' ? 'text-ink-3' : 'text-ok';
 }

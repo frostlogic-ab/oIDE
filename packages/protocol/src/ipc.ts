@@ -339,6 +339,16 @@ export const Commands = {
   'lsp.status': cmd(LspDocument, LspStatus),
   /** Stop and start the document's server again (the status menu's Restart). */
   'lsp.restart': cmd(LspDocument, LspStatus),
+  /**
+   * The open document's language server is not installed and the user chose Install: a new
+   * interactive shell in the checkout that types the server's install command. Only the document
+   * goes in; main takes the command from the extension's manifest (SEC-05), then starts the server
+   * on its own once the command shows up on PATH.
+   */
+  'lsp.install': cmd(
+    LspDocument.extend({ cols: z.number().int().default(100), rows: z.number().int().default(30) }),
+    z.object({ terminalId: Id, command: z.string(), server: z.string() }),
+  ),
   'lsp.hover': cmd(LspAt, LspHover.nullable()),
   'lsp.completion': cmd(LspAt.extend({ triggerCharacter: z.string().max(4).optional() }), LspCompletionList.nullable()),
   /** Documentation and detail of one item of the last `lsp.completion` result. */
