@@ -10,7 +10,7 @@ import { navigate } from '../../../stores/router';
 import { freshnessText, useMergePrediction } from '../../../stores/mergePrediction';
 import { useSetting } from '../../../stores/settings';
 import { AttachFileButton, AttachmentTray, useAttachments } from '../../../components/Attachments';
-import { PrLink } from '../../../components/PrLink';
+import { PrButton, PrLink, PrStatus } from '../../../components/PrLink';
 import { findWorktree, hasPendingForPr, useGit, useGitData } from '../../SourceControl/gitStore';
 import { answerPermission, openPullRequest, pushToPullRequest, resumeAgent, sendReply, type PermissionChoice } from '../actions';
 import { canArchive, interruptionText, parseActivity, permissionView, tileBodyKind } from '../logic';
@@ -192,7 +192,14 @@ function Marker({ active }: { active: boolean }) {
 
 // ---------- footer ----------
 
-const FOOTER = 'flex items-center gap-1.5 px-3 py-2.5 mt-auto flex-wrap';
+/**
+ * Tile footers wrap when the tile is narrow. Their children are grouped so a wrap moves whole groups:
+ * the buttons stay together on the first row, and the trailing group (status, Archive, Open) takes
+ * the next row with its last control pushed to the right edge, instead of one button per row.
+ */
+const FOOTER = 'flex items-center gap-x-1.5 gap-y-2 px-3 py-2.5 mt-auto flex-wrap';
+/** The trailing group: right-aligned on the tile's row, or alone on its own row once the footer wraps. */
+const TRAILING = 'ml-auto flex items-center justify-end gap-1.5 flex-wrap';
 
 export function TileFooter({ agent, projectName, focused }: { agent: AgentSummary; projectName: string; focused: boolean }) {
   const kind = tileBodyKind(agent);
@@ -230,10 +237,15 @@ export function TileFooter({ agent, projectName, focused }: { agent: AgentSummar
           >
             Review diff
           </LinkButton>
-          {agent.pr ? <PrLink pr={agent.pr} /> : <OpenPrButton agent={agent} />}
+          {agent.pr ? <PrButton pr={agent.pr} /> : <OpenPrButton agent={agent} />}
           {agent.pr && (agent.pr.state === 'open' || agent.pr.state === 'draft') && <PushToPrButton agent={agent} number={agent.pr.number} />}
-          <div className="flex-1" />
-          <ArchiveButton agent={agent} />
+          {/* PR state and CI on the left, Archive on the right: beside the buttons when they fit, else its own row. */}
+          <div className="flex-1 min-w-fit flex items-center gap-1.5">
+            {agent.pr && <PrStatus pr={agent.pr} />}
+            <div className="ml-auto">
+              <ArchiveButton agent={agent} />
+            </div>
+          </div>
         </div>
       );
     case 'rate-limited':
@@ -241,31 +253,34 @@ export function TileFooter({ agent, projectName, focused }: { agent: AgentSummar
       return (
         <div className={`${FOOTER} text-ink-3 text-[12px]`}>
           {kind === 'rate-limited' && agent.rateLimitResetAt ? <span>Resets {formatResetTime(agent.rateLimitResetAt)}</span> : agent.diff ? <Diff agent={agent} /> : null}
-          <div className="flex-1" />
-          <ArchiveButton agent={agent} />
-          <ResumeButton agent={agent} />
-          {open()}
+          <div className={TRAILING}>
+            <ArchiveButton agent={agent} />
+            <ResumeButton agent={agent} />
+            {open()}
+          </div>
         </div>
       );
     case 'interrupted-run':
       return (
         <div className={`${FOOTER} gap-2.5 text-ink-3 text-[12px]`}>
           {agent.diff ? <Diff agent={agent} /> : <span>No changes yet</span>}
-          <div className="flex-1" />
-          <ArchiveButton agent={agent} />
-          <ResumeButton agent={agent} />
-          {open()}
+          <div className={TRAILING}>
+            <ArchiveButton agent={agent} />
+            <ResumeButton agent={agent} />
+            {open()}
+          </div>
         </div>
       );
     default:
       return (
         <div className={`${FOOTER} gap-2.5 text-ink-3 text-[12px]`}>
           {kind === 'queued' ? <span>Queued</span> : agent.diff ? <Diff agent={agent} /> : <span>No changes yet</span>}
-          <div className="flex-1" />
-          {agent.pr && <PrLink pr={agent.pr} />}
-          {(agent.status === 'paused' || agent.status === 'stopped' || agent.status === 'done') && <ArchiveButton agent={agent} />}
-          {(agent.status === 'paused' || agent.status === 'stopped') && <ResumeButton agent={agent} />}
-          {open()}
+          <div className={TRAILING}>
+            {agent.pr && <PrLink pr={agent.pr} />}
+            {(agent.status === 'paused' || agent.status === 'stopped' || agent.status === 'done') && <ArchiveButton agent={agent} />}
+            {(agent.status === 'paused' || agent.status === 'stopped') && <ResumeButton agent={agent} />}
+            {open()}
+          </div>
         </div>
       );
   }
@@ -411,8 +426,7 @@ function PermissionActions({ agent, projectName, focused, open }: { agent: Agent
       <Button variant="warn-outline" disabled={busy} kbd={focused ? denyKey : undefined} onClick={() => void answer('deny')}>
         Deny
       </Button>
-      <div className="flex-1" />
-      {open}
+      <div className={TRAILING}>{open}</div>
     </div>
   );
 }
