@@ -1055,3 +1055,6 @@ exposed a product bug: Settings › Extensions re-synced a field's draft from th
 effect, so a late load or a `settingChanged` reload overwrote what the user had just typed and blur
 saved nothing. The draft now follows the saved value only while the field is unedited (regression
 test added). See [extensions](pages/extensions.md).
+
+## [2026-11-27] decision | Remove the Wall's "Next that needs you" button
+The header button duplicated the "Needs you" filter chip and the N shortcut; removed it. N still jumps to the next tile that needs you. Updated [screen-wall](pages/screen-wall.md).
