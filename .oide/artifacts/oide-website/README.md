@@ -5,6 +5,7 @@ Anything left out is listed below.
 
 ## Contents
 
+- `Direct.dc.html`
 - `Features.dc.html`
 - `Main.dc.html`
 - `More.dc.html`

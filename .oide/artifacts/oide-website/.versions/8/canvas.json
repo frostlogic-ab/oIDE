@@ -1,0 +1,73 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 4038,
+      "title": "Home, top: hero, the loop and Plan",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "Direct.dc.html",
+      "x": 0,
+      "y": 4158,
+      "w": 1440,
+      "h": 2768,
+      "title": "Home, upper middle: Direct",
+      "expand": "fill"
+    },
+    {
+      "file": "Features.dc.html",
+      "x": 0,
+      "y": 7046,
+      "w": 1440,
+      "h": 4093,
+      "title": "Home, lower middle: Review and Extend",
+      "expand": "fill"
+    },
+    {
+      "file": "More.dc.html",
+      "x": 0,
+      "y": 11259,
+      "w": 1440,
+      "h": 4905,
+      "title": "Home, bottom: how it works to footer",
+      "expand": "fill",
+      "is_interactive": true
+    },
+    {
+      "file": "Phone.dc.html",
+      "x": 1520,
+      "y": 0,
+      "w": 390,
+      "h": 4512,
+      "title": "Home on a phone, top",
+      "expand": "fill",
+      "is_interactive": true
+    }
+  ],
+  "annotations": [
+    {
+      "id": "heading",
+      "x": 0,
+      "y": -300,
+      "w": 240,
+      "maxW": 1910,
+      "text": "oIDE website",
+      "kind": "title1"
+    },
+    {
+      "id": "split",
+      "x": 1990,
+      "y": 0,
+      "w": 340,
+      "text": "One page, four artboards. An artboard can be 8000 px tall at most, so the home page is cut into four parts. Read them downwards.\n\nThe page follows the Developer Cowork loop: Plan, Direct, Review. The backlog in Plan is marked \"coming next\" and its picture is a drawing, not a screenshot.\n\nThe phone artboard is the top part at 390 px wide. It mirrors the desktop artboard, so edit the desktop one.\n\nTweaks on each artboard: Theme (Dark or Light) and which system the Download button names."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

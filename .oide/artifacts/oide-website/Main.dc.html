@@ -23,7 +23,7 @@ body{margin:0}
     <div class="wrap">
       <a class="brand" href="#top"><img class="on-dark" src="logo-mark.svg" width="24" height="24" alt=""><img class="on-light" src="logo-mark-light.svg" width="24" height="24" alt="">oIDE</a>
       <nav class="nav-links" aria-label="Main">
-        <a href="#direct">Features</a>
+        <a href="#plan">Features</a>
         <a href="Features.dc.html">Extensions</a>
         <a href="More.dc.html">How it works</a>
         <a href="More.dc.html">Compare</a>
@@ -47,13 +47,13 @@ body{margin:0}
 
   <main id="top">
 
-    <!-- HERO: the moat, then proof -->
+    <!-- HERO: the position, the moat, then proof -->
     <section class="hero">
       <div class="wrap">
-        <span class="label go"><i></i>Open source · agent-first IDE · preview</span>
-        <h1><span>Six agents.</span> <span>Three projects.</span> <span class="punch">One window.</span></h1>
+        <span class="label go"><i></i>Developer Cowork · open source · preview</span>
+        <h1><span>Your agents</span> <span>work here.</span> <span class="punch">So do you.</span></h1>
         <div class="hero-row">
-          <p class="lede">oIDE is a desktop app for directing coding agents instead of typing code. Run many Claude Code sessions side by side across all your repos, <b>on the Claude plan you already have</b>.</p>
+          <p class="lede">oIDE is a Developer Cowork: one desktop workspace for you and a team of coding agents. Plan in shared designs and docs, run many Claude Code sessions side by side across all your repos, and review every change, <b>on the Claude plan you already have</b>.</p>
           <div class="cta">
             <div class="cta-btns">
               <div class="dl">
@@ -71,14 +71,18 @@ body{margin:0}
               <a class="btn btn-ghost btn-lg" href="More.dc.html">Star on GitHub</a>
             </div>
             <small>Free, MIT licensed. {{ alsoFor }}</small>
+            <div class="ph-badge">
+              <a class="on-dark" href="https://www.producthunt.com/products/oide?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-oide" target="_blank" rel="noopener noreferrer"><img alt="oIDE - Run many coding agents in one window | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1333137&amp;theme=dark&amp;t=1795806135926"></a>
+              <a class="on-light" href="https://www.producthunt.com/products/oide?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-oide" target="_blank" rel="noopener noreferrer"><img alt="oIDE - Run many coding agents in one window | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1333137&amp;theme=light&amp;t=1795806166254"></a>
+            </div>
           </div>
         </div>
 
         <ol class="moat">
-          <li><i class="pin" aria-hidden="true">1</i><b>Runs on your Claude plan</b><span>oIDE drives your own signed-in <span class="mono">claude</span> CLI. No API key, and it never sees your credentials.</span></li>
-          <li><i class="pin" aria-hidden="true">2</i><b>Every project in one window</b><span>Agents from all your repos on one wall, each working in its own git worktree.</span></li>
+          <li><i class="pin" aria-hidden="true">1</i><b>Many sessions, one window</b><span>Agents from all your repos on one wall, each working in its own git worktree.</span></li>
+          <li><i class="pin" aria-hidden="true">2</i><b>Artifacts you both work in</b><span>Designs, docs and whiteboards that you and your agents read and write.</span></li>
           <li><i class="pin" aria-hidden="true">3</i><b>A marketplace of agent tools</b><span>Extensions give agents new abilities. Any MCP server works too, listed or not.</span></li>
-          <li><i class="pin" aria-hidden="true">4</i><b>claude.ai artifacts built in</b><span>Designs, docs and whiteboards that your agents can read and write.</span></li>
+          <li><i class="pin" aria-hidden="true">4</i><b>Runs on your Claude plan</b><span>oIDE drives your own signed-in <span class="mono">claude</span> CLI. No API key, and it never sees your credentials.</span></li>
         </ol>
       </div>
 
@@ -86,82 +90,80 @@ body{margin:0}
         <div class="window">
           <img src="shots/wall.jpg" width="2880" height="1928" alt="The oIDE agent wall. Six agent tiles from three projects show live activity, subagents and context use. One tile asks permission to run npm install, one has a question, one is ready for review. A projects list is on the left, artifacts and the marketplace on the right, and plan usage in the status bar.">
           <span class="needs-you" aria-hidden="true"></span>
-          <i class="pin" style="left: 64.2%; top: 98.6%;" aria-hidden="true">1</i>
-          <i class="pin" style="left: 11.2%; top: 7.6%;" aria-hidden="true">2</i>
+          <i class="pin" style="left: 64.2%; top: 98.6%;" aria-hidden="true">4</i>
+          <i class="pin" style="left: 11.2%; top: 7.6%;" aria-hidden="true">1</i>
           <i class="pin" style="left: 97.1%; top: 82.7%;" aria-hidden="true">3</i>
-          <i class="pin" style="left: 87.6%; top: 8%;" aria-hidden="true">4</i>
+          <i class="pin" style="left: 87.6%; top: 8%;" aria-hidden="true">2</i>
         </div>
       </div>
     </section>
 
-    <!-- DIRECT -->
-    <section class="sec alt" id="direct">
+    <!-- THE LOOP: what "Developer Cowork" means -->
+    <section class="sec alt" id="cowork">
       <div class="wrap">
         <div class="sec-head">
-          <span class="label go"><i></i>Direct</span>
-          <h2><span class="s">Hand out goals.</span> <span class="s">Step in only when asked.</span></h2>
-          <p>The wall shows every agent you have running. Most of the time you just watch. When one of them needs you, it says so.</p>
+          <span class="label go"><i></i>Developer Cowork</span>
+          <h2><span class="s">One workspace for the plan,</span> <span class="s">the agents and the review.</span></h2>
+          <p>Writing the code is one part of shipping it. Someone has to decide what gets built, and someone has to check the result. oIDE keeps all three in one window, and your agents take part in each.</p>
+        </div>
+        <div class="doors">
+          <a href="#plan"><em class="step">01 · Plan</em><b>Decide what gets built</b><span>Write the spec as a design, a doc or a whiteboard that your agents read and write. A shared backlog, kept by you and PM agents, is coming next.</span><code>Plan in oIDE →</code></a>
+          <a href="Direct.dc.html"><em class="step">02 · Direct</em><b>Hand it to an agent</b><span>Start a session for each task, across all your repos. The wall shows who is working and who needs you.</span><code>The agent wall →</code></a>
+          <a href="Features.dc.html"><em class="step">03 · Review</em><b>Check it, then merge</b><span>Each agent works in its own worktree. Comment on the diff, the agent fixes it, and nothing reaches main until you say so.</span><code>Review and merge →</code></a>
+        </div>
+      </div>
+    </section>
+
+    <!-- PLAN -->
+    <section class="sec" id="plan">
+      <div class="wrap">
+        <div class="sec-head">
+          <span class="label"><i></i>Plan</span>
+          <h2>Give every agent a plan to work from.</h2>
+          <p>An agent does its best work from a clear brief. In oIDE the brief sits next to the code, as designs, docs and whiteboards that you and your agents both edit. A shared backlog is next.</p>
         </div>
 
         <article class="feat">
           <div class="feat-head">
-            <span class="label hold"><i></i>The wall</span>
-            <h3>An agent that needs you shows it on its tile</h3>
+            <span class="label"><i></i>Artifacts</span>
+            <h3>Designs, docs and whiteboards next to the code</h3>
             <div class="feat-body">
-              <p>Three things stop an agent: it wants permission, it has a question, or it is finished. Each one shows up in color on the wall, and you deal with it right there. <span class="kbd">N</span> jumps to the next agent that is waiting.</p>
-            </div>
-          </div>
-          <div class="fig tiles">
-            <figure class="tile">
-              <div class="shot"><img src="shots/tile-permission.jpg" width="836" height="592" alt="Agent tile marked Needs permission: a subagent wants to run npm install node-pty. Buttons: Allow once, Always in oide, Deny."></div>
-              <b><i></i>Needs permission</b>
-              <span>Allow once, always allow in this project, or deny. The prompt names the subagent that asked.</span>
-            </figure>
-            <figure class="tile">
-              <div class="shot"><img src="shots/tile-question.jpg" width="836" height="540" alt="Agent tile marked Has a question, asking whether invoice dates should use the customer's timezone or UTC, with a reply box and a Send button."></div>
-              <b><i></i>Has a question</b>
-              <span>Type the answer on the tile. The agent picks up where it stopped.</span>
-            </figure>
-            <figure class="tile">
-              <div class="shot"><img src="shots/tile-review.jpg" width="836" height="540" alt="Agent tile marked Ready for review with a summary, 8 files changed, and buttons Review diff and Open PR."></div>
-              <b class="review"><i></i>Ready for review</b>
-              <span>Read the agent's summary, then open the diff or go straight to a pull request.</span>
-            </figure>
-          </div>
-        </article>
-
-        <article class="feat split">
-          <div class="feat-copy">
-            <span class="label"><i></i>Spawn</span>
-            <h3>Start an agent with a goal, a mode and a budget</h3>
-            <p>Describe the outcome and attach what the agent should read. Then choose how much freedom it gets and how much of your plan it may spend.</p>
-            <ul class="ticks">
-              <li>Attach a design, a doc, a file or a URL as context.</li>
-              <li>Every Claude Code permission mode, from Manual to Bypass. Auto is the default.</li>
-              <li>Cheap, Balanced or Quality decides which model leads and which ones do the subagent work.</li>
-              <li>Run the same goal as several parallel attempts and keep the best one.</li>
-            </ul>
-          </div>
-          <figure class="fig">
-            <div class="shot fade"><img src="shots/spawn.jpg" width="1440" height="1160" alt="Spawn an agent dialog: a goal, context chips, project and worktree pickers, five permission modes with Auto selected, and model presets Cheap, Balanced, Quality and Custom."></div>
-          </figure>
-        </article>
-
-        <article class="feat">
-          <div class="feat-head">
-            <span class="label"><i></i>Focus view</span>
-            <h3><span class="s">Open one agent.</span> <span class="s">Keep the other five in reach.</span></h3>
-            <div class="feat-body">
-              <p>The focus view has the full transcript, the plan, the changed files and a real terminal. Subagents get their own cards and a timeline, each with its model, effort and token count.</p>
+              <p>Import artifacts from claude.ai or let an agent write one. Hand a design to an agent as its spec, and see which agents are reading or writing each artifact.</p>
               <ul class="ticks">
-                <li><span class="kbd">J</span> <span class="kbd">K</span> move between agents without going back to the wall.</li>
-                <li>A context ring per agent. Compact the conversation when it fills up.</li>
+                <li>Open an artifact and tell its agent what to change, or pin a comment on the preview.</li>
+                <li>Every change is a version you can compare or restore.</li>
               </ul>
             </div>
           </div>
           <figure class="fig">
-            <div class="shot"><img src="shots/focus.jpg" width="2334" height="1520" alt="Focus view of the agent 'Wire the Claude Code CLI bridge': the transcript with file edits and three subagent cards, and a Subagents panel with a timeline and each subagent's model, status and tokens."></div>
-            <figcaption><b>Focus view.</b> The lead agent's transcript on the left, its three subagents on the right.</figcaption>
+            <div class="shot"><img src="shots/artifacts.jpg" width="2766" height="972" alt="Artifacts library with design, doc and whiteboard cards from three projects. The selected design, Main window v2, is synced from claude.ai and read by two agents, with buttons Open, Give to an agent and Open in claude.ai."></div>
+            <figcaption><b>Artifacts.</b> "Give to an agent" starts a new agent with the artifact attached.</figcaption>
+          </figure>
+        </article>
+
+        <article class="feat split">
+          <div class="feat-copy">
+            <span class="label soon"><i></i>Backlog · coming next</span>
+            <h3><span class="s">One backlog,</span> <span class="s">kept by you and your agents</span></h3>
+            <p>The project backlog is moving into oIDE. You and your agents both add items and keep them in order, and PM agents do the upkeep. When an item is ready, you start an agent on it from the list.</p>
+            <ul class="ticks">
+              <li>PM agents write up new items and link the design or doc that describes them.</li>
+              <li>You decide what goes in and what comes first.</li>
+              <li>Start an agent session from any item, with the item and its spec as the goal.</li>
+            </ul>
+          </div>
+          <figure class="fig">
+            <div class="shot mock" role="img" aria-label="Concept drawing of the oIDE backlog for the project billing-api. Five items, each with a number, a title, where it came from and a status. Two are ready and have a Start agent button. One has an agent working on it that asked a question, one is ready for review, and one is being written up by a PM agent.">
+              <div class="mock-bar"><b>Backlog</b><span class="proj">billing-api</span><span class="mock-pm"><i></i>PM agent sorted 3 items · 12 min ago</span></div>
+              <ul class="mock-rows">
+                <li class="next"><span class="id">#142</span><div class="what"><b>Add proration to plan changes</b><small>Doc: Proration rules · added by you</small></div><div class="do"><span class="st go"><i></i>Ready</span><span class="act primary">Start agent</span></div></li>
+                <li><span class="id">#147</span><div class="what"><b>Export invoices as CSV</b><small>Design: Invoice page · written up by PM agent</small></div><div class="do"><span class="st go"><i></i>Ready</span><span class="act">Start agent</span></div></li>
+                <li><span class="id">#143</span><div class="what"><b>Fix the flaky invoice test</b><small>Agent working · asked a question 2 min ago</small></div><div class="do"><span class="st hold"><i></i>Has a question</span><span class="act">Answer</span></div></li>
+                <li><span class="id">#139</span><div class="what"><b>Retry failed Stripe webhooks</b><small>Agent finished · 8 files changed</small></div><div class="do"><span class="st review"><i></i>Ready for review</span><span class="act">Review diff</span></div></li>
+                <li><span class="id">#150</span><div class="what"><b>Refunds fail for zero-amount invoices</b><small>From issue #212 · PM agent is writing it up</small></div><div class="do"><span class="st"><i></i>Needs a spec</span></div></li>
+              </ul>
+            </div>
+            <figcaption><b>Concept.</b> A drawing, not a screenshot. The backlog and PM agents are in development.</figcaption>
           </figure>
         </article>
       </div>
@@ -170,7 +172,7 @@ body{margin:0}
   </main>
 </div>
 </x-dc>
-<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"visitor":{"editor":"enum","options":["Detect","macOS","Windows","Linux"],"default":"Detect","section":"Download button"},"$preview":{"width":1440,"height":4362}}'>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"visitor":{"editor":"enum","options":["Detect","macOS","Windows","Linux"],"default":"Detect","section":"Download button"},"$preview":{"width":1440,"height":4081}}'>
 class Component extends DCLogic {
   constructor(props) {
     super(props);

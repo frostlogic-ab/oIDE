@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oIDE website · Home, upper middle</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="site {{themeClass}}">
+
+  <!-- DIRECT -->
+  <section class="sec alt" id="direct">
+    <div class="wrap">
+      <div class="sec-head">
+        <span class="label go"><i></i>Direct</span>
+        <h2><span class="s">Hand out goals.</span> <span class="s">Step in only when asked.</span></h2>
+        <p>The wall shows every agent you have running. Most of the time you just watch. When one of them needs you, it says so.</p>
+      </div>
+
+      <article class="feat">
+        <div class="feat-head">
+          <span class="label hold"><i></i>The wall</span>
+          <h3>An agent that needs you shows it on its tile</h3>
+          <div class="feat-body">
+            <p>Three things stop an agent: it wants permission, it has a question, or it is finished. Each one shows up in color on the wall, and you deal with it right there. <span class="kbd">N</span> jumps to the next agent that is waiting.</p>
+          </div>
+        </div>
+        <div class="fig tiles">
+          <figure class="tile">
+            <div class="shot"><img src="shots/tile-permission.jpg" width="836" height="592" alt="Agent tile marked Needs permission: a subagent wants to run npm install node-pty. Buttons: Allow once, Always in oide, Deny."></div>
+            <b><i></i>Needs permission</b>
+            <span>Allow once, always allow in this project, or deny. The prompt names the subagent that asked.</span>
+          </figure>
+          <figure class="tile">
+            <div class="shot"><img src="shots/tile-question.jpg" width="836" height="540" alt="Agent tile marked Has a question, asking whether invoice dates should use the customer's timezone or UTC, with a reply box and a Send button."></div>
+            <b><i></i>Has a question</b>
+            <span>Type the answer on the tile. The agent picks up where it stopped.</span>
+          </figure>
+          <figure class="tile">
+            <div class="shot"><img src="shots/tile-review.jpg" width="836" height="540" alt="Agent tile marked Ready for review with a summary, 8 files changed, and buttons Review diff and Open PR."></div>
+            <b class="review"><i></i>Ready for review</b>
+            <span>Read the agent's summary, then open the diff or go straight to a pull request.</span>
+          </figure>
+        </div>
+      </article>
+
+      <article class="feat split">
+        <div class="feat-copy">
+          <span class="label"><i></i>Spawn</span>
+          <h3>Start an agent with a goal, a mode and a budget</h3>
+          <p>Describe the outcome and attach what the agent should read. Then choose how much freedom it gets and how much of your plan it may spend.</p>
+          <ul class="ticks">
+            <li>Attach a design, a doc, a file or a URL as context.</li>
+            <li>Every Claude Code permission mode, from Manual to Bypass. Auto is the default.</li>
+            <li>Cheap, Balanced or Quality decides which model leads and which ones do the subagent work.</li>
+            <li>Run the same goal as several parallel attempts and keep the best one.</li>
+          </ul>
+        </div>
+        <figure class="fig">
+          <div class="shot fade"><img src="shots/spawn.jpg" width="1440" height="1160" alt="Spawn an agent dialog: a goal, context chips, project and worktree pickers, five permission modes with Auto selected, and model presets Cheap, Balanced, Quality and Custom."></div>
+        </figure>
+      </article>
+
+      <article class="feat">
+        <div class="feat-head">
+          <span class="label"><i></i>Focus view</span>
+          <h3><span class="s">Open one agent.</span> <span class="s">Keep the other five in reach.</span></h3>
+          <div class="feat-body">
+            <p>The focus view has the full transcript, the plan, the changed files and a real terminal. Subagents get their own cards and a timeline, each with its model, effort and token count.</p>
+            <ul class="ticks">
+              <li><span class="kbd">J</span> <span class="kbd">K</span> move between agents without going back to the wall.</li>
+              <li>A context ring per agent. Compact the conversation when it fills up.</li>
+            </ul>
+          </div>
+        </div>
+        <figure class="fig">
+          <div class="shot"><img src="shots/focus.jpg" width="2334" height="1520" alt="Focus view of the agent 'Wire the Claude Code CLI bridge': the transcript with file edits and three subagent cards, and a Subagents panel with a timeline and each subagent's model, status and tokens."></div>
+          <figcaption><b>Focus view.</b> The lead agent's transcript on the left, its three subagents on the right.</figcaption>
+        </figure>
+      </article>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"$preview":{"width":1440,"height":2768}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { themeClass: (this.props.theme ?? 'Dark') === 'Light' ? 'light' : '' };
+  }
+}
+</script>
+</body>
+</html>
