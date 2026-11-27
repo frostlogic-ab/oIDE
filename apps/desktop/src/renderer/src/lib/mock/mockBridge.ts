@@ -6,7 +6,10 @@
  * exactly like main does for commands without a handler. Add cases as you build screens.
  */
 import {
+  accountKeys,
+  accountLabel,
   AgentEvent,
+  type AccountUsage,
   Commands,
   Events,
   type AgentSummary,
@@ -49,6 +52,21 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
   const emit = <K extends EventName>(event: K, payload: EventPayload<K>) => {
     const parsed = Events[event].parse(payload);
     for (const fn of listeners.get(event) ?? []) fn(parsed);
+  };
+
+  // Claude Code accounts (ADR 0021): made-up usage so the status bar shows meters in dev:web.
+  const accountUsage = (): AccountUsage[] =>
+    accountKeys(settings.accounts).map((key, i) => ({
+      accountId: key,
+      label: accountLabel(settings.accounts, key) ?? key,
+      signedIn: i === 2 ? ('no' as const) : ('yes' as const),
+      windows: i === 2 ? [] : [{ window: 'five_hour', status: 'allowed', utilization: [0.42, 0.78, 0.1][i % 3]!, resetsAt: Date.now() + (i + 1) * 3_600_000, seenAt: Date.now() - i * 600_000 }],
+      tokensToday: [182_000, 64_500, 0][i % 3]!,
+    }));
+  const saveAccounts = (accounts: typeof settings.accounts) => {
+    settings = { ...settings, accounts };
+    emit('settings.changed', settings);
+    emit('accounts.usage', accountUsage());
   };
 
   const updateAgent = (id: string, patch: Partial<AgentSummary>) => {
@@ -182,6 +200,24 @@ export function createMockBridge(opts: MockBridgeOptions = {}): OideBridge & { e
       return settings;
     },
     'usage.summary': () => fx.usage,
+    'accounts.usage': () => accountUsage(),
+    'accounts.add': ({ label }) => {
+      const account = { id: `acc-${Math.random().toString(36).slice(2, 10).padEnd(6, '0')}`, label: label.trim() };
+      saveAccounts({ ...settings.accounts, list: [...settings.accounts.list, account] });
+      return account;
+    },
+    'accounts.rename': ({ id, label }) => {
+      const a = settings.accounts;
+      saveAccounts(id === 'default' ? { ...a, defaultLabel: label.trim() } : { ...a, list: a.list.map((x) => (x.id === id ? { ...x, label: label.trim() } : x)) });
+      return { ok: true as const };
+    },
+    'accounts.remove': ({ id }) => {
+      const a = settings.accounts;
+      const { spawnDefault, ...rest } = a;
+      saveAccounts({ ...rest, ...(spawnDefault && spawnDefault !== id ? { spawnDefault } : {}), list: a.list.filter((x) => x.id !== id) });
+      return { ok: true as const };
+    },
+    'accounts.openSignIn': () => ({ terminalId: 'term-signin' }),
     'usage.stats': ({ range }) => mockUsageStats(range),
     'updates.status': () => ({ state: 'disabled', currentVersion: '0.1.0-mock', channel: settings.updates.channel, disabledReason: 'Updates are off in development builds.', canInstall: false }),
     'extensions.installed': () => [],

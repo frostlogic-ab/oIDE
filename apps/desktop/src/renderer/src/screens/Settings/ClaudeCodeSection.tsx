@@ -4,6 +4,7 @@ import { cn } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { cliHealth, useCli } from '../../stores/cli';
 import { toast } from '../../stores/ui';
+import { AccountsList } from './AccountsList';
 import { H1, Rd, Row, Sec, describedBy, inp, inpSm, outlineBtn, savePatch } from './ui';
 
 const MODE_OPTIONS: Array<{ value: PermissionMode; label: string }> = [
@@ -99,18 +100,9 @@ export function ClaudeCodeSection({ settings, goModels }: { settings: Settings; 
         </button>
       </div>
 
-      <Sec>Account</Sec>
-      <Row title="Plan" desc="Read from the CLI when it reports it. Sign-in happens in a terminal running claude, through Anthropic's own flow.">
-        {() =>
-          info?.signedIn === 'yes' ? (
-            <span>Signed in</span>
-          ) : (
-            <button type="button" className={outlineBtn} onClick={signIn}>
-              Sign in
-            </button>
-          )
-        }
-      </Row>
+      <AccountsList settings={settings} />
+
+      <Sec>CLI</Sec>
       <Row title="CLI path" desc="Leave empty to find claude on your PATH.">
         {({ titleId, descId }) => <CliPathInput value={settings.claude.cliPath ?? ''} labelledBy={titleId} describedById={descId} />}
       </Row>

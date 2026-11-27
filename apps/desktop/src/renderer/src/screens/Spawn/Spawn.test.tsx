@@ -5,6 +5,7 @@ import { AgentSummary, type AgentSpec, type OideBridge } from '@oide/protocol';
 import { installFallbackBridge } from '../../lib/bridge';
 import { keymap } from '../../lib/keymap';
 import { projects, settings } from '../../lib/mock/fixtures';
+import { useAccounts } from '../../stores/accounts';
 import { useAgents } from '../../stores/agents';
 import { useProjects } from '../../stores/projects';
 import { useRouter } from '../../stores/router';
@@ -81,6 +82,39 @@ describe('Spawn', () => {
     expect(useRouter.getState().route.screen).toBe('wall');
     expect(Object.keys(useWall.getState().highlighted)).toEqual(['new-0', 'new-1', 'new-2']);
     expect(useAgents.getState().order).toHaveLength(3);
+  });
+
+  it('shows no account picker with a single Claude Code account', () => {
+    render(<SpawnScreen />);
+    expect(screen.queryByLabelText('Account')).toBeNull();
+  });
+
+  it('picks the Settings default account, offers the others with their usage, and spawns on the chosen one', async () => {
+    const now = Date.now();
+    useSettings.setState({ settings: { ...settings, accounts: { defaultLabel: 'Personal', list: [{ id: 'acc-work01', label: 'Work' }, { id: 'acc-client', label: 'Client' }], spawnDefault: 'acc-work01' } } });
+    useAccounts.setState({
+      usage: [
+        { accountId: 'default', label: 'Personal', signedIn: 'yes', windows: [{ window: 'five_hour', status: 'allowed', utilization: 0.42, resetsAt: now + 3_600_000, seenAt: now }], tokensToday: 0 },
+        { accountId: 'acc-work01', label: 'Work', signedIn: 'yes', windows: [], tokensToday: 0 },
+        { accountId: 'acc-client', label: 'Client', signedIn: 'no', windows: [], tokensToday: 0 },
+      ],
+    });
+    render(<SpawnScreen />);
+    const select = screen.getByLabelText('Account') as HTMLSelectElement;
+    expect(select.value).toBe('acc-work01');
+    const options = [...select.options].map((o) => [o.textContent, o.disabled]);
+    expect(options).toEqual([
+      ['Personal · Session 42%', false],
+      ['Work', false],
+      ['Client (not signed in)', true],
+    ]);
+    fireEvent.change(select, { target: { value: 'default' } });
+    fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'Fix the flaky test' } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Spawn agent/ }));
+    });
+    expect(spawnCall()!.accountId).toBeUndefined();
+    useAccounts.setState({ usage: [] });
   });
 
   it('Ctrl+Enter spawns', async () => {

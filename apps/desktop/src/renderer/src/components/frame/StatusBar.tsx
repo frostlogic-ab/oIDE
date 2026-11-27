@@ -8,12 +8,16 @@ import { navigate } from '../../stores/router';
 import { ipcErrorMessage } from '../../lib/bridge';
 import { formatResetTime, formatTokens, plural } from '../../lib/format';
 import { PlanUsageMeter, latestPlanUsage } from './PlanUsage';
+import { AccountsUsage } from './AccountsUsage';
+import { useAccounts } from '../../stores/accounts';
+import { useSettings } from '../../stores/settings';
 
 /**
  * 26px status bar. The plan meter (Session / Week) shows only when an agent's `planUsage` (the
  * CLI's `rate_limit_event`) carries a utilization; otherwise only its reset time (PlanUsage.tsx).
  * Also shows what oIDE measures: tokens today (opens the Usage screen) and the reset time of the last
- * rate-limit event.
+ * rate-limit event. With two or more Claude Code accounts (ADR 0021), the plan meter and the
+ * rate-limit notice are per account instead (AccountsUsage.tsx).
  */
 export function StatusBar() {
   const info = useCli((s) => s.info);
@@ -21,6 +25,10 @@ export function StatusBar() {
   const usage = useCli((s) => s.usage);
   const byId = useAgents((s) => s.byId);
   const projects = useProjects((s) => s.list);
+  const extraAccounts = useSettings((s) => s.settings?.accounts.list.length ?? 0);
+  const accountUsage = useAccounts((s) => s.usage);
+  // One account: exactly the single meter as before. More: per account, once main sent the usage.
+  const perAccount = extraAccounts > 0 && accountUsage.length > 1;
 
   const derived = useMemo(() => {
     const list = Object.values(byId);
@@ -51,7 +59,7 @@ export function StatusBar() {
       <div className="flex-1" />
       <div role="group" aria-label="Usage" className="h-[22px] flex items-center gap-1 shrink-0">
         {/* Plan meter only from the CLI's own rate_limit_event utilization (never a guessed %). */}
-        {derived.planUsage && <PlanUsageMeter usage={derived.planUsage} />}
+        {perAccount ? <AccountsUsage accounts={accountUsage} /> : derived.planUsage && <PlanUsageMeter usage={derived.planUsage} />}
         {usage && (
           <Tooltip content="Tokens used by oIDE agents today (cache included). Open Usage for charts and stats." placement="top-end">
             <button type="button" onClick={() => navigate('usage', {})} className="h-[22px] flex items-center gap-1.5 px-2 border-0 rounded-[5px] bg-transparent text-ink-3 text-[11.5px] hover:bg-selected hover:text-ink focus-visible:bg-selected">
@@ -59,7 +67,7 @@ export function StatusBar() {
             </button>
           </Tooltip>
         )}
-        {limited && (
+        {limited && !perAccount && (
           <Tooltip content={`Rate limit resets ${formatResetTime(resetAt)}. Agents wait, they do not retry in a loop.`} placement="top-end">
             <button type="button" className="h-[22px] flex items-center gap-1.5 px-2 border-0 rounded-[5px] bg-transparent text-warn text-[11.5px] hover:bg-selected focus-visible:bg-selected">
               <StatusDot color="var(--color-warn)" size={6} />

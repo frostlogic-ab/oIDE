@@ -1,3 +1,4 @@
+import { connectAccounts, useAccounts } from '../stores/accounts';
 import { connectAgents, useAgents } from '../stores/agents';
 import { connectArchive } from '../stores/archive';
 import { connectCli, useCli } from '../stores/cli';
@@ -80,6 +81,7 @@ export function startStores(): () => void {
     connectScope(),
     connectSettings(),
     connectCli(),
+    connectAccounts(),
     connectExtensionHosts(),
     connectNotifications((agentId) =>
       promptOnScreen(agentId, {
@@ -89,7 +91,7 @@ export function startStores(): () => void {
       }),
     ),
     connectKeybindings(),
-    connectUsage(() => quiet(useCli.getState().refreshUsage())),
+    connectUsage(() => Promise.all([quiet(useCli.getState().refreshUsage()), quiet(useAccounts.getState().refresh())])),
     // A needs-permission toast goes as soon as its prompt is answered (here, on the tile, or in Focus).
     useAgents.subscribe((s, prev) => {
       if (s.byId !== prev.byId || s.loaded !== prev.loaded) retireStaleToasts(s.byId, s.loaded);
@@ -107,6 +109,7 @@ export function startStores(): () => void {
   void quiet(useAgents.getState().load());
   void quiet(useCli.getState().detect());
   void quiet(useCli.getState().refreshUsage());
+  void quiet(useAccounts.getState().refresh());
 
   return () => offs.forEach((off) => off());
 }

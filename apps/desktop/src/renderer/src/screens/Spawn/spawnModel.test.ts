@@ -13,6 +13,7 @@ import {
   matchPreset,
   slotsFromStrategy,
   strategySummary,
+  accountOptions,
   titleFromGoal,
   type SpawnForm,
 } from './spawnModel';
@@ -178,5 +179,43 @@ describe('defaultExtensions', () => {
   it('starts from the last selection, falling back to the project default for new ones', () => {
     expect(defaultExtensions(list, 'p1', { a: false, b: true, gone: true })).toEqual({ a: false, b: true });
     expect(defaultExtensions(list, 'p1', { b: true })).toEqual({ a: true, b: true });
+  });
+});
+
+describe('accounts', () => {
+  const accounts = { defaultLabel: 'Personal', list: [{ id: 'acc-work01', label: 'Work' }] };
+
+  it('starts on the default account, or the Settings default while it exists', () => {
+    expect(form().account).toBe('default');
+    const withDefault = Settings.parse({ ...settings, accounts: { ...accounts, spawnDefault: 'acc-work01' } });
+    expect(initialForm({ settings: withDefault, projects, scope: 'all', params: {}, cli: null }).account).toBe('acc-work01');
+    const gone = Settings.parse({ ...settings, accounts: { ...accounts, list: [], spawnDefault: 'acc-work01' } });
+    expect(initialForm({ settings: gone, projects, scope: 'all', params: {}, cli: null }).account).toBe('default');
+  });
+
+  it('sets accountId for an extra account only, never for a custom model, and refuses a removed one', () => {
+    const ok = buildSpec(form({ account: 'acc-work01' }), { allowBypass: true, accounts });
+    expect(ok.ok && ok.spec.accountId).toBe('acc-work01');
+    const def = buildSpec(form(), { allowBypass: true, accounts });
+    expect(def.ok && def.spec.accountId).toBeUndefined();
+    const custom = form({ account: 'acc-work01' });
+    custom.slots = { ...custom.slots, lead: { model: 'custom:cm' } };
+    const cm = buildSpec(custom, { allowBypass: true, accounts, customModels: [{ id: 'cm', name: 'Local', provider: 'local', model: 'qwen', hasKey: false, extraEnv: {} }] });
+    expect(cm.ok && cm.spec.accountId).toBeUndefined();
+    const gone = buildSpec(form({ account: 'acc-gone01' }), { allowBypass: true, accounts });
+    expect(gone.ok).toBe(false);
+    expect(!gone.ok && gone.errors.account).toMatch(/removed/);
+  });
+
+  it('labels options with sign-in state, rate limits and the tightest live window', () => {
+    const now = 1_000_000;
+    const opts = accountOptions(accounts, [
+      { accountId: 'default', label: 'Personal', signedIn: 'yes', windows: [{ window: 'seven_day', status: 'allowed', utilization: 0.3, resetsAt: now + 1, seenAt: now }, { window: 'five_hour', status: 'allowed', utilization: 0.9, resetsAt: now - 1, seenAt: now }], tokensToday: 0 },
+      { accountId: 'acc-work01', label: 'Work', signedIn: 'yes', windows: [], rateLimitedUntil: now + 10, tokensToday: 0 },
+    ], now);
+    expect(opts).toEqual([
+      { value: 'default', label: 'Personal · Week 30%' },
+      { value: 'acc-work01', label: 'Work · rate limited' },
+    ]);
   });
 });
