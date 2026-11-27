@@ -38,6 +38,9 @@
 .label.go i{background:var(--go)}
 .label.hold i{background:var(--hold)}
 .label.review i{background:var(--review)}
+/* Coming next: a hollow marker for what is planned and not shipped yet */
+.label.soon{color:var(--hold)}
+.label.soon i{background:transparent;box-shadow:inset 0 0 0 1.5px var(--hold)}
 .kbd{font:500 12px/1 var(--f-mono);padding:3px 6px;border:1px solid var(--line-strong);border-bottom-width:2px;border-radius:5px;color:var(--fg);background:var(--raise);white-space:nowrap}
 .ic{width:16px;height:16px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .ic.solid{fill:currentColor;stroke:none}
@@ -94,6 +97,10 @@
 .cta-btns{display:flex;flex-wrap:wrap;gap:10px}
 .cta small{font-size:13px;color:var(--fg-3)}
 .site .cta small a{color:var(--fg-2)}
+/* Product Hunt badge: one self-hosted image per theme, like the logo (custom.css hides the other) */
+.ph-badge{margin-top:6px}
+.site .ph-badge a{display:inline-block;border-radius:10px}
+.site .ph-badge img{display:block;width:250px;height:54px}
 
 /* Moat: four numbered claims, pinned on the screenshot below */
 .moat{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:clamp(36px,4.5vw,56px);border-top:1px solid var(--line-strong)}
@@ -161,6 +168,38 @@
 
 .usage{display:flex;flex-direction:column;gap:10px;margin-top:10px;padding-top:18px;border-top:1px solid var(--line)}
 .usage .shot{border-radius:7px;box-shadow:none;max-width:504px}
+
+/* Backlog concept: drawn in CSS in the app's dark palette, so it looks the same in both themes */
+.mock{--m-panel:#14181D;--m-line:#232932;--m-fg:#E8EAED;--m-fg2:#A9B1BC;--m-fg3:#7A8390;container-type:inline-size;color:var(--m-fg);font:13px/1.4 var(--f-body)}
+.shot.mock{border:1px dashed color-mix(in srgb,var(--hold) 60%,transparent);box-shadow:none}
+.mock-bar{display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--m-line);background:var(--m-panel)}
+.mock-bar b{font:700 14.5px/1 var(--f-display);font-stretch:106%}
+.mock-bar .proj{padding:3px 7px;border:1px solid var(--m-line);border-radius:5px;font:11.5px/1 var(--f-mono);color:var(--m-fg2)}
+.mock-pm{display:inline-flex;align-items:center;gap:7px;margin-left:auto;font:11.5px/1 var(--f-mono);color:var(--m-fg3);white-space:nowrap}
+.mock-pm i{width:7px;height:7px;border-radius:50%;background:#7FC8A9}
+.mock-rows li{display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:6px 12px;padding:12px 16px;border-bottom:1px solid var(--m-line)}
+.mock-rows li:last-child{border-bottom:0}
+.mock-rows li.next{background:rgba(122,162,247,.07)}
+.mock-rows .id{font:12px/1 var(--f-mono);color:var(--m-fg3)}
+.mock-rows .what{min-width:0}
+.mock-rows b,.mock-rows small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mock-rows b{font-weight:600;font-size:13.5px}
+.mock-rows small{margin-top:2px;font-size:12px;color:var(--m-fg3)}
+.mock-rows .do{display:grid;grid-template-columns:122px 92px;align-items:center;gap:10px}
+.mock-rows .st{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--m-fg2);white-space:nowrap}
+.mock-rows .st i{width:7px;height:7px;border-radius:50%;box-shadow:inset 0 0 0 1.5px var(--m-fg3)}
+.mock-rows .st.go i{background:#7FC8A9;box-shadow:none}
+.mock-rows .st.hold i{background:#F2C078;box-shadow:none}
+.mock-rows .st.review i{background:#9DBBFA;box-shadow:none}
+.mock-rows .act{display:inline-flex;align-items:center;justify-content:center;height:28px;border:1px solid #343B46;border-radius:7px;font:600 12px/1 var(--f-body);color:var(--m-fg);white-space:nowrap}
+.mock-rows .act.primary{border-color:transparent;background:#7AA2F7;color:#0A0C0F}
+@container (max-width:560px){
+  .mock-pm{display:none}
+  .mock-rows li{grid-template-columns:36px minmax(0,1fr)}
+  .mock-rows b{white-space:normal}
+  .mock-rows .do{grid-column:2;display:flex;gap:12px;margin-top:2px}
+  .mock-rows .act{padding:0 10px}
+}
 .usage span{font-size:13.5px;color:var(--fg-3)}
 
 /* How it works */
@@ -231,6 +270,8 @@
 .doors b{font:700 21px/1.2 var(--f-display);font-stretch:106%;letter-spacing:-.01em}
 .doors span{font-size:15px;color:var(--fg-2)}
 .doors code{margin-top:6px;font:13px var(--f-mono);color:var(--accent)}
+/* The loop reuses the doors, with a numbered step above each title */
+.doors .step{margin-bottom:6px;font:500 11.5px/1 var(--f-mono);font-style:normal;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
 @media (max-width:820px){.doors{grid-template-columns:minmax(0,1fr);gap:24px}}
 
 /* FAQ */

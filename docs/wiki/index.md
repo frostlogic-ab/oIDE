@@ -8,7 +8,8 @@ one file per entry (entries up to 2026-11-27 are in the frozen [log.md](log.md))
 
 - [raw/build-brief.md](raw/build-brief.md): the architecture and build brief (M0 to M7, stack, constraints).
 - [raw/design/](raw/design/): the Mission Control design screens (Main, Focus, Spawn, SourceControl, Review, Artifacts, Marketplace, Files, Settings).
-- [raw/design/website/](raw/design/website/): the oIDE Website design (home page top, middle, bottom and phone; `site.css`).
+- [raw/design/website/](raw/design/website/): the first oIDE Website design (home page top, middle, bottom and phone; `site.css`).
+- [raw/design/website-2026-11-27/](raw/design/website-2026-11-27/): the current oIDE Website design, the "Developer Cowork" copy (Main, Direct, Features, More, Phone; `site.css`).
 - [raw/claude-cli-help-2.1.325.txt](raw/claude-cli-help-2.1.325.txt): `claude --help` of the CLI version oIDE was first built against.
 
 ## Overview
