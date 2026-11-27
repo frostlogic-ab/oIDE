@@ -106,6 +106,8 @@ The source of truth is `TELEMETRY_EVENTS` in `packages/protocol/src/telemetry.ts
 | `changes_reverted` | main | `files` (count bucket), `all` (no file pick), from `git.discard` | Do people throw away uncommitted main-checkout changes from Source control (Revert…), how many files, all or a pick? Never the paths. |
 | `pr_view_opened` | main | none (the URL is never sent) | Do people follow an agent's PR from oIDE? |
 | `pr_merged_detected` | main | none | How often does oIDE see an agent's PR merged? |
+| `pr_checks_finished` | main | `result` [success, failure] | Do agents' PRs pass CI? Sent once per CI run, when the checks oIDE watched running finish. Never the check names. |
+| `pr_checks_opened` | main | none (the URL is never sent) | Do people open a PR's CI checks from the tile's CI indicator? |
 | `worktree_delete_failed` | main | `holder` [docker, editor, terminal, node, unknown] | How often can a worktree folder not be deleted, and what kind of program holds it? Never the program's name or any path. |
 | `worktree_delete_retried_ok` | main | `attempts` (count bucket) | Does the background retry finish removing those folders, and after how many tries? |
 | `agent_mode_changed` | main | `from` [permission modes, unknown], `to` [permission modes] | Do people change an agent's permission mode after it started (Focus header menu, Shift+Tab), and between which modes? |

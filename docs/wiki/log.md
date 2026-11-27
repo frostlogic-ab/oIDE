@@ -1,6 +1,8 @@
 # oIDE wiki: log
 
-Append-only. Newest at the bottom. Each entry: `## [YYYY-MM-DD] <op> | <title>`.
+Frozen archive of entries up to 2026-11-27. **Do not append here.** New entries go in
+[log/](log/), one file per entry, so parallel pull requests never conflict (see
+[log/README.md](log/README.md)). `pnpm wiki:log` prints this archive and every entry file in order.
 
 ## [2026-11-24] ingest | Build brief and Mission Control design
 Ingested the oIDE architecture and build brief (raw/build-brief.md) and the nine Mission Control
@@ -1056,6 +1058,8 @@ effect, so a late load or a `settingChanged` reload overwrote what the user had 
 saved nothing. The draft now follows the saved value only while the field is unedited (regression
 test added). See [extensions](pages/extensions.md).
 
+## [2026-11-27] decision | Remove the Wall's "Next that needs you" button
+The header button duplicated the "Needs you" filter chip and the N shortcut; removed it. N still jumps to the next tile that needs you. Updated [screen-wall](pages/screen-wall.md).
 ## [2026-11-27] build | Worktree folders no longer held open by oIDE itself
 User report: when an agent finished, deleting its worktree failed; with oIDE open (no agents)
 Explorer could not delete the folder either, and after quitting oIDE it could. oIDE's log showed
@@ -1095,3 +1099,14 @@ one message. Deleting an artifact archives its agent. Telemetry: `artifact_agent
 `artifact_agent_message`, `agent_model_changed`. Pages: [screen-artifacts](pages/screen-artifacts.md),
 [artifacts](pages/artifacts.md), [mcp-server](pages/mcp-server.md), [agent-supervisor](pages/agent-supervisor.md),
 [protocol](pages/protocol.md), [telemetry](pages/telemetry.md).
+## [2026-11-27] build | CI checks indicator on an agent's pull request
+Tiles, the Focus header and Review now show the CI status of an agent's open PR next to its state
+badge: running ("7/9", amber), passed (green) or failed ("2 failed", red), opening the PR's Checks
+tab. Counted from gh's `statusCheckRollup`; PRs with running checks are polled every minute until they
+finish, and a push watches for new checks for 10 minutes. New telemetry: `pr_checks_finished`,
+`pr_checks_opened`. See [screen-wall](pages/screen-wall.md) and [telemetry](pages/telemetry.md).
+## [2026-11-27] build | Windows notifications come from oIDE, not Electron
+Same root cause as the blank taskbar icon above: Windows names a toast's sender after the Start Menu
+shortcut with its AUMID, so a dev `Electron.lnk` holding `dev.oide.app` made the installed app's
+notifications come from "Electron". The AUMID split and `releaseForeignShortcuts` fix it; added a test
+that the installed AUMID stays equal to electron-builder `appId`. See [packaging](pages/packaging.md).

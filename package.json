@@ -19,6 +19,7 @@
     "test:watch": "vitest",
     "e2e": "pnpm --filter @oide/desktop e2e",
     "wiki:lint": "node tools/wiki-lint.mjs",
+    "wiki:log": "node tools/wiki-log.mjs",
     "docs:dev": "vitepress dev docs/site",
     "docs:build": "vitepress build docs/site",
     "docs:preview": "vitepress preview docs/site",

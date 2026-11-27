@@ -336,12 +336,29 @@ export type AgentInterruption = z.infer<typeof AgentInterruption>;
  * The pull request for an agent's branch (opened from oIDE or anywhere else), from the user's own
  * `gh`. An open or draft PR is polled; once merged the agent is archived (reason `merged`).
  */
+/**
+ * The PR head's CI checks (GitHub's status check rollup: check runs and commit statuses), counted.
+ * `pending` while any check has not finished; `failure` once all finished and at least one failed;
+ * `success` when all finished without a failure (skipped and neutral count as passed).
+ */
+export const AgentPrChecks = z.object({
+  state: z.enum(['pending', 'success', 'failure']),
+  total: z.number().int().positive().max(10_000),
+  /** Checks that finished (passed or failed). */
+  completed: z.number().int().nonnegative().max(10_000),
+  /** Finished checks that failed (failure, error, cancelled, timed out, action required). */
+  failed: z.number().int().nonnegative().max(10_000),
+});
+export type AgentPrChecks = z.infer<typeof AgentPrChecks>;
+
 export const AgentPrInfo = z.object({
   number: z.number().int().positive(),
   url: z.string().url(),
   state: z.enum(['open', 'draft', 'merged', 'closed']),
   /** The merge commit on the base branch, when gh reports it (merged PRs). */
   mergeCommit: z.string().optional(),
+  /** CI checks on the PR's head commit; absent when the PR has none (or gh is too old to say). */
+  checks: AgentPrChecks.optional(),
   /** When oIDE last saw this state. */
   checkedAt: z.number().optional(),
 });

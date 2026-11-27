@@ -1,6 +1,6 @@
 import { join, win32 } from 'node:path';
 
-/** Windows taskbar identity of the installed app; matches `appId` in electron-builder.yml (the NSIS shortcuts carry it). */
+/** Windows taskbar and notification identity of the installed app; matches `appId` in electron-builder.yml (the NSIS shortcuts carry it). */
 export const APP_USER_MODEL_ID = 'dev.oide.app';
 
 /**
@@ -8,7 +8,8 @@ export const APP_USER_MODEL_ID = 'dev.oide.app';
  * app's: Electron writes a Start Menu `Electron.lnk` with the running AUMID for notifications, and Windows
  * draws every window with that AUMID using the icon of whichever shortcut carries it. When dev runs shared
  * `dev.oide.app`, an `Electron.lnk` left behind by a since-deleted worktree (icon and target gone) made the
- * installed oIDE show a blank taskbar icon.
+ * installed oIDE show a blank taskbar icon. Windows also names a toast's sender after that shortcut, so the
+ * installed oIDE's notifications came from "Electron".
  */
 export const DEV_APP_USER_MODEL_ID = 'dev.oide.app.dev';
 

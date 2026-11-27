@@ -454,6 +454,16 @@ export const TELEMETRY_EVENTS = {
     question: 'How often does oIDE see the pull request of an agent merged (and archive the agent)?',
     props: z.object({}),
   }),
+  pr_checks_finished: def({
+    from: 'main',
+    question: "Do agents' pull requests pass CI, as oIDE sees the checks on the PR finish (the tile's CI indicator)?",
+    props: z.object({ result: z.enum(['success', 'failure']) }),
+  }),
+  pr_checks_opened: def({
+    from: 'main',
+    question: "Do people open a pull request's CI checks from the tile's CI indicator?",
+    props: z.object({}),
+  }),
   worktree_delete_failed: def({
     from: 'main',
     question:

@@ -44,7 +44,7 @@ import type { SettingsService, Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { IpcError } from '../ipc/router.js';
 import type { ProjectsService } from './projects.js';
-import { PrWatcher, toAgentPr } from './pr-watch.js';
+import { CHECKS_POLL_MS, PrWatcher, toAgentPr } from './pr-watch.js';
 
 /** Minimal view of the agents the git service needs (avoids a cycle with AgentsService). */
 export interface AgentLookup {
@@ -109,6 +109,7 @@ export class GitService {
   private readonly watchers = new Map<string, { projectId: string; sub: Promise<Subscription | undefined> }>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private fetchTimer: ReturnType<typeof setInterval> | undefined;
+  private checksTimer: ReturnType<typeof setInterval> | undefined;
   private fetchMinutes = -1;
   private closed = false;
   /** Background git work (diff refreshes, periodic fetch) that dispose() waits for. */
@@ -159,6 +160,7 @@ export class GitService {
     });
     if (o.background) {
       this.armFetchTimer();
+      this.armChecksTimer();
       o.settings.onChange(() => this.armFetchTimer());
     }
   }
@@ -621,9 +623,12 @@ export class GitService {
     });
   }
 
+  /** After a push: the PR's head moved, so its old CI checks are stale and new ones are about to start. */
   private notePr(a: AgentSummary, pr: NonNullable<AgentSummary['pr']>, existing: boolean) {
-    this.o.agents.setPr?.(a.id, pr);
+    const { checks: _stale, ...fresh } = pr;
+    this.o.agents.setPr?.(a.id, fresh);
     this.prs.noteKnown(a.id);
+    this.prs.expectChecks(a.id);
     if (a.branch) this.prCache.delete(a.branch);
     this.changed(a.projectId);
     return { url: pr.url, number: pr.number, state: pr.state, existing };
@@ -776,6 +781,15 @@ export class GitService {
     this.fetchTimer.unref?.();
   }
 
+  /** While a PR's CI checks run (or are expected after a push), look at that PR every CHECKS_POLL_MS. */
+  private armChecksTimer(): void {
+    this.checksTimer = setInterval(() => {
+      if (this.closed || !this.prs.hasRunningChecks()) return;
+      void this.track(() => this.prs.poll('checks'));
+    }, CHECKS_POLL_MS);
+    this.checksTimer.unref?.();
+  }
+
   /** Background fetch of every project (the only remote command that runs without a click). */
   async fetchAll(): Promise<void> {
     if (this.closed) return;
@@ -804,6 +818,7 @@ export class GitService {
   async dispose(): Promise<void> {
     this.closed = true;
     if (this.fetchTimer) clearInterval(this.fetchTimer);
+    if (this.checksTimer) clearInterval(this.checksTimer);
     for (const t of this.timers.values()) clearTimeout(t);
     this.timers.clear();
     // Close watchers and let in-flight git commands finish (capped) before the caller removes
