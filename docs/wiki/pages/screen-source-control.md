@@ -17,7 +17,7 @@ Data meaning: [git-worktrees](git-worktrees.md). Frame and stores: [desktop-shel
 | Part | Source |
 | --- | --- |
 | Name toggle (expand/collapse), `~/code/x` path, branch chip | `Project`, `git.sync` → `SyncState.branch` |
-| "2 behind origin" + Pull / "1 to push" + Push / "Up to date" + Fetch | `syncView()` in `model.ts`; actions `git.pull` / `git.push` / `git.fetch` (`actions.ts`) |
+| "2 behind origin" + Pull / "1 to push" + Push / "Up to date" + Fetch | `syncView()` in `model.ts`; actions `git.pull` / `git.push` / `git.fetch` (`actions.ts`). The same Pull is offered in the Wall's Projects sidebar ([screen-wall](screen-wall.md)) |
 | Your changes on main + Commit… | `SyncState.dirtyFiles`; `CommitDialog.tsx` (message, per-file checkboxes, Ctrl/Cmd+Enter) → `git.commit` (`files` omitted when all are picked). While the commit runs, Cancel is disabled and Esc / scrim are ignored, so the result (toast) or the error stays in context; the typed message survives closing and reopening |
 | Your changes on main + Revert… | `RevertDialog.tsx` (per-file checkboxes, "can't be undone" warning, Cancel focused, danger button) → `git.discard` (`files` omitted when all are picked): `@oide/git` `discard()` runs `git restore --source=HEAD --staged --worktree` on tracked paths (both sides of a staged rename) and `git clean -f` on untracked ones, literal pathspecs; only paths `git status` reports as changed are touched |
 | Agent worktrees · N | `git.worktrees`; row = status dot, agent title (→ Focus), `branch · from main · 2 behind`, status, `7 files · +214 −37`, PR state, Review (blue when ready-for-review), ··· menu |

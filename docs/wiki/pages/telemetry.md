@@ -105,6 +105,7 @@ The source of truth is `TELEMETRY_EVENTS` in `packages/protocol/src/telemetry.ts
 | `pr_opened` | main | `existing`, `draft` (`agent` / `template` / `plain` / `given`, new PRs only) | Do people open PRs instead of merging locally? Do new PRs follow the project's conventions (agent draft, project template) or go up as the plain summary? |
 | `pr_pushed` | main | `commits` (count bucket), `committed` | Do people send follow-up work to an open PR (Push to PR), how many commits at a time, and how often did oIDE commit leftover files first? Never the URL. |
 | `changes_reverted` | main | `files` (count bucket), `all` (no file pick), from `git.discard` | Do people throw away uncommitted main-checkout changes from Source control (Revert…), how many files, all or a pick? Never the paths. |
+| `project_pulled` | main | `from` [sidebar, source_control], from `git.pull` | Do people bring a project up to date from the Projects sidebar's Pull button (shown after a background fetch finds new commits) or from Source control? Never the project, branch or commits. |
 | `pr_view_opened` | main | none (the URL is never sent) | Do people follow an agent's PR from oIDE? |
 | `pr_merged_detected` | main | none | How often does oIDE see an agent's PR merged? |
 | `pr_checks_finished` | main | `result` [success, failure] | Do agents' PRs pass CI? Sent once per CI run, when the checks oIDE watched running finish. Never the check names. |

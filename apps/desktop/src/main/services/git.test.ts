@@ -1,9 +1,9 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AgentSummary } from '@oide/protocol';
-import { GitService } from './git.js';
+import { FOCUS_FETCH_MS, GitService } from './git.js';
 
 /**
  * Shutdown must not leave git running against a worktree: on Windows an in-flight `git diff`
@@ -86,5 +86,65 @@ describe('GitService shutdown', () => {
     const t = Date.now();
     await svc.dispose();
     expect(Date.now() - t).toBeLessThan(2000);
+  });
+});
+
+describe('GitService background fetch', () => {
+  function background(opts: { minutes?: number; online?: boolean } = {}) {
+    const projects = [
+      { id: 'p1', name: 'one', path: '/r/one', trusted: true, createdAt: 0 },
+      { id: 'p2', name: 'two', path: '/r/two', trusted: false, createdAt: 0 },
+    ];
+    const svc = new GitService({
+      ctx: { log: { debug: () => {}, warn: () => {}, error: () => {} }, emit: () => true } as never,
+      store: {} as never,
+      settings: { get: () => ({ agents: { fetchIntervalMinutes: opts.minutes ?? 10 } }), onChange: () => () => {} } as never,
+      worktrees: {} as never,
+      projects: { list: () => projects, get: (id: string) => projects.find((p) => p.id === id) } as never,
+      agents: { list: () => [], get: () => undefined, setDiff: () => {} },
+      archiveMerged: async () => {},
+      removeWorktreeOf: async () => false,
+      background: true,
+      startupFetchMs: 0,
+      isOnline: () => opts.online ?? true,
+    });
+    const fetched: string[] = [];
+    vi.spyOn(svc, 'hasRemote').mockResolvedValue(true);
+    vi.spyOn(svc, 'fetch').mockImplementation(async (id) => (fetched.push(id), {}) as never);
+    vi.spyOn(svc.prs, 'poll').mockResolvedValue(undefined as never);
+    return { svc, fetched };
+  }
+  const tick = () => new Promise((r) => setTimeout(r, 20));
+
+  it('fetches trusted projects soon after launch, so Pull shows without waiting a full interval', async () => {
+    const { svc, fetched } = background();
+    await tick();
+    expect(fetched).toEqual(['p1']);
+    await svc.dispose();
+  });
+
+  it('fetches again on window focus only when the last round is old enough', async () => {
+    const { svc, fetched } = background();
+    await tick();
+    svc.onWindowFocus();
+    await tick();
+    expect(fetched).toEqual(['p1']);
+    (svc as unknown as { lastRoundAt: number }).lastRoundAt = Date.now() - FOCUS_FETCH_MS;
+    svc.onWindowFocus();
+    await tick();
+    expect(fetched).toEqual(['p1', 'p1']);
+    await svc.dispose();
+  });
+
+  it('does not fetch on its own when auto-fetch is off or the machine is offline', async () => {
+    const off = background({ minutes: 0 });
+    const offline = background({ online: false });
+    await tick();
+    off.svc.onWindowFocus();
+    offline.svc.onWindowFocus();
+    await tick();
+    expect(off.fetched).toEqual([]);
+    expect(offline.fetched).toEqual([]);
+    await Promise.all([off.svc.dispose(), offline.svc.dispose()]);
   });
 });
