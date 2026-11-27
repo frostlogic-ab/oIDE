@@ -9,6 +9,34 @@ Conventional Commit titles of merged pull requests, in the release pull request 
 `main`. Do not add entries by hand; give your pull request a good title instead. The pipeline is
 described in [docs/wiki/pages/release-pipeline.md](docs/wiki/pages/release-pipeline.md).
 
+## [0.7.0](https://github.com/frostlogic-ab/oIDE/compare/v0.6.0...v0.7.0) (2026-11-27)
+
+
+### Added
+
+* **files:** close the Files tree legend with an × in its corner ([#50](https://github.com/frostlogic-ab/oIDE/issues/50)) ([1dec6f9](https://github.com/frostlogic-ab/oIDE/commit/1dec6f9955b7f57cdc8d69d9f022fb1b33b742b4))
+* **files:** keep the tab bar to file names, move file status below the editor ([#62](https://github.com/frostlogic-ab/oIDE/issues/62)) ([e2edac3](https://github.com/frostlogic-ab/oIDE/commit/e2edac320b089f27d924715a073ccda24a65dcc9))
+* **files:** language servers in the Files editor ([#53](https://github.com/frostlogic-ab/oIDE/issues/53)) ([d213c00](https://github.com/frostlogic-ab/oIDE/commit/d213c001ee2ddecd785123c0a407cf6171458ee5))
+* **files:** minimap with a draggable slider in the Files editor ([#49](https://github.com/frostlogic-ab/oIDE/issues/49)) ([a789ae3](https://github.com/frostlogic-ab/oIDE/commit/a789ae30e5c3494bbaf258bbbf2ae51c9a144bbb))
+* **files:** open changed files on their changes, unified or side by side ([#51](https://github.com/frostlogic-ab/oIDE/issues/51)) ([193dfe4](https://github.com/frostlogic-ab/oIDE/commit/193dfe49da29c1d89beef5aef42658936b894f23))
+* **files:** show only the file name on editor tabs ([#52](https://github.com/frostlogic-ab/oIDE/issues/52)) ([689b266](https://github.com/frostlogic-ab/oIDE/commit/689b266a1476a18cc6bc0f1d6c4873c0b204fefb))
+* **shell:** drop the agent counters from the Wall and Focus header ([#63](https://github.com/frostlogic-ab/oIDE/issues/63)) ([72a12b6](https://github.com/frostlogic-ab/oIDE/commit/72a12b6c215ca6247db574b74332edbcda81e68e))
+* **shell:** mouse back / forward buttons navigate screen history ([#56](https://github.com/frostlogic-ab/oIDE/issues/56)) ([fa4d655](https://github.com/frostlogic-ab/oIDE/commit/fa4d655d1f85508f26793a72079a642bb2f297f1))
+* **shell:** open several windows on one profile ([#55](https://github.com/frostlogic-ab/oIDE/issues/55)) ([8becaa4](https://github.com/frostlogic-ab/oIDE/commit/8becaa41375e57e4ed7ea5128c0779a5edce5f84))
+* **terminal:** copy and paste in terminals, from the keyboard and a right-click menu ([#54](https://github.com/frostlogic-ab/oIDE/issues/54)) ([f9e52ff](https://github.com/frostlogic-ab/oIDE/commit/f9e52ff3507467a9cf0bed04149cbd3c12b28cda))
+
+
+### Fixed
+
+* **agents:** replies to idle agents respect Max running ([#59](https://github.com/frostlogic-ab/oIDE/issues/59)) ([c309e98](https://github.com/frostlogic-ab/oIDE/commit/c309e989b12d6b2ce6a278a4a859c93f1d8336f2))
+* **agents:** show Running when a subagent report wakes the lead ([#60](https://github.com/frostlogic-ab/oIDE/issues/60)) ([39f18b7](https://github.com/frostlogic-ab/oIDE/commit/39f18b76f21f866f47aabc63ccfff05c16af5fa2))
+* **artifacts:** show live thumbnails on the Artifacts grid and the Wall aside ([#57](https://github.com/frostlogic-ab/oIDE/issues/57)) ([b85304f](https://github.com/frostlogic-ab/oIDE/commit/b85304f1554b3bb4c3677ed57698daacdb8da0a8))
+* **telemetry:** one Umami session per install across launches and upgrades ([#46](https://github.com/frostlogic-ab/oIDE/issues/46)) ([8a766c3](https://github.com/frostlogic-ab/oIDE/commit/8a766c3e832e17c70b9172375fcea8da4dbf9111))
+* ten usability fixes across Spawn, Wall, Review, Source control, Files, Settings and Extensions ([#58](https://github.com/frostlogic-ab/oIDE/issues/58)) ([7416b4e](https://github.com/frostlogic-ab/oIDE/commit/7416b4eaded2fe4943124db2524f8d81257d7917))
+* **ui:** drop "by Frostlogic" from header logos; app logo opens getoide.com ([#64](https://github.com/frostlogic-ab/oIDE/issues/64)) ([fd3d905](https://github.com/frostlogic-ab/oIDE/commit/fd3d905503c79ad6fb0abb6f440ad9f2d12628a6))
+* **ui:** highlight menu items under the pointer ([#47](https://github.com/frostlogic-ab/oIDE/issues/47)) ([6084a2b](https://github.com/frostlogic-ab/oIDE/commit/6084a2bdf8c421737a3215347534bf87354dd87d))
+* **wall:** scroll long subagent lists instead of stretching the tile ([#61](https://github.com/frostlogic-ab/oIDE/issues/61)) ([93f3d61](https://github.com/frostlogic-ab/oIDE/commit/93f3d61710a191f9c4e003d92a2680ad2fe6dc25))
+
 ## [0.6.0](https://github.com/frostlogic-ab/oIDE/compare/v0.5.1...v0.6.0) (2026-11-27)
 
 
