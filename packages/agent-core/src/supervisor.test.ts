@@ -157,6 +157,44 @@ describe('Supervisor with fake-claude and the oIDE MCP server', () => {
     await status(h, a!.id, 'needs-permission');
   });
 
+  it('a reply to an idle agent waits for a free slot under Max running, without restarting its process', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic', maxRunning: 1 });
+    const [a] = await h.sup.spawn(spec());
+    await status(h, a!.id, 'has-question');
+    h.settings.claude.extraFlags = '--fake-scenario permission';
+    const [b] = await h.sup.spawn(spec({ title: 'Other' }));
+    const pb = await status(h, b!.id, 'needs-permission');
+    expect(h.sup.runningCount()).toBe(1);
+
+    // b holds the only slot: the reply to a is queued, not delivered (a must not become a 2nd running agent).
+    const results = () => h.events.filter((e) => e.agentId === a!.id && e.type === 'result').length;
+    const before = results();
+    h.sup.send(a!.id, { kind: 'text', text: 'go on' });
+    h.sup.send(a!.id, { kind: 'text', text: 'and this' });
+    await status(h, a!.id, 'queued');
+    expect(h.sup.runningCount()).toBe(1);
+    expect(h.events.some((e) => e.agentId === a!.id && e.type === 'user-text' && e.text === 'go on')).toBe(false);
+
+    // b finishes: a gets the slot and both held messages, in the same process (it never exited).
+    await h.sup.answerPermission(b!.id, { requestId: pb.pendingPermission!.requestId, behavior: 'allow', always: false });
+    await status(h, b!.id, 'has-question');
+    await waitFor(() => results() > before, 10_000, 'a answered the reply');
+    const texts = h.events.filter((e) => e.agentId === a!.id && e.type === 'user-text').map((e) => (e as { text: string }).text);
+    expect(texts.slice(-2)).toEqual(['go on', 'and this']);
+    expect(h.events.some((e) => e.agentId === a!.id && e.type === 'exit')).toBe(false);
+  });
+
+  it('a reply to an idle agent goes straight out when a slot is free', async () => {
+    const h = await harness({ extraFlags: '--fake-scenario basic', maxRunning: 2 });
+    const [a] = await h.sup.spawn(spec());
+    await status(h, a!.id, 'has-question');
+    const before = h.events.filter((e) => e.agentId === a!.id && e.type === 'result').length;
+    const mark = h.events.length;
+    h.sup.send(a!.id, { kind: 'text', text: 'go on' });
+    await waitFor(() => h.events.filter((e) => e.agentId === a!.id && e.type === 'result').length > before, 10_000, 'a answered');
+    expect(h.events.slice(mark).some((e) => e.agentId === a!.id && e.type === 'status' && e.status === 'queued')).toBe(false);
+  });
+
   it('a queued spawn publishes its summary before it starts (m1)', async () => {
     const h = await harness({ extraFlags: '--fake-scenario permission', maxRunning: 1 });
     const published: AgentSummary[] = [];

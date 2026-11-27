@@ -1,6 +1,6 @@
 # Screen: Review changes
 
-Design: [../raw/design/Review.dc.html](../raw/design/Review.dc.html). Route `review { agentId }`, reached from
+Design: [../raw/design/Review.dc.html](../raw/design/Review.dc.html). Route `review { agentId, path? }`, reached from
 [Source control](screen-source-control.md) (Review buttons, Ready to review) and the Wall tiles. Code:
 `apps/desktop/src/renderer/src/screens/Review/`. Diff semantics: [git-worktrees](git-worktrees.md).
 
@@ -10,6 +10,7 @@ Design: [../raw/design/Review.dc.html](../raw/design/Review.dc.html). Route `rev
 - Left (260px, "Changed files"): "8 files changed" with +/− totals, one button per `FileDiff`
   (current = accent dot, viewed = small check and dimmer text; names drop a leading `src/` as
   drawn, full path in the tooltip), Unified / Split toggle (`aria-pressed`).
+- The optional route `path` (set by clicking a changed file in the Focus Inspector's Changes tab) selects that file when Review opens. It is applied once per navigation, so picking another file afterwards sticks, and it falls back to the first file when the path is not in the diff.
 - Middle: file path, Viewed checkbox (`review.setViewed`, initial state from `review.viewed`),
   "Open in editor" (→ Files with `{ root: worktree, path }`), then the diff.
 - Right (`SummaryPanel.tsx`): status, title, `worktree <short branch> → <base>`, Agent's summary

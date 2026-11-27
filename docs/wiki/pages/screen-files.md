@@ -24,9 +24,9 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   terminal panel when shown (`TerminalDock.tsx`).
 - File status bar (`<footer aria-label="File status">`, 32px, chrome, under the editor while a file is
   open): on the left a "Changes view" File / Unified / Split toggle for a changed file and a
-  "Markdown view" Preview / Edit toggle for a Markdown file; on the right Read only, "Ln, Col ·
+  "Markdown view" Preview / Edit toggle for a Markdown file; on the right the language-server status and problem counts, Read only, "Ln, Col ·
   Language", "vs last commit" / "vs base branch" and Save when unsaved. Anything else about the open
-  file (language server state, problems) belongs here too, never in the tab bar.
+  file belongs here too, never in the tab bar.
 - Tab labels (`tabLabels.ts`): a tab shows only the file name; its tooltip is the full absolute path.
   When several open tabs share a name, each gets a dim hint after it, as in VS Code: the project
   (`·checkout` when not main) if they sit in different places, and the shortest trailing part of the
@@ -35,7 +35,8 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
   (disabled on the last tab) and Close all. Middle click closes a tab. Closing several tabs asks
   once when any has unsaved changes; `useFiles.closeTabs` keeps the active tab if it stays, else
   picks the kept tab nearest its place (Close all to the right makes the clicked tab active).
-- Right ("File activity"): This file's history, Mentioned in, the language-servers note.
+- Right ("File activity"): Problems (the open file's diagnostics, when it has any), This file's history,
+  Mentioned in, the language-servers note.
 
 ## Tree (`filesStore.ts`)
 
@@ -77,6 +78,11 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   from `visibleRows(root, state, ghosts)`, sorted in with the listing; a deleted folder opens from
   the changes, never from the disk. Tooltip "path • Modified"; screen readers hear ", modified" /
   ", contains changes". The legend under the tree explains M and D.
+- Language-server problems (see [Language servers](#language-servers)) win over the git colour of
+  the name, as in VS Code: a file with errors is red (`text-bad`), with only warnings amber
+  (`text-warn`), with the number of errors and warnings before the git letter; folders above it are
+  tinted with the worst level. Screen readers hear ", 2 errors, 1 warning" / ", contains errors";
+  the tooltip adds the summary.
 - Refreshed on `git.changed` for the project (debounced 250 ms; the checkout watchers and every tree
   action emit it) and when the window gets focus.
 - Right-click a changed file or a folder holding changes: **Discard changes** (VS Code's undo
@@ -144,7 +150,7 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   close × per tab that kills its process (Delete on a focused tab), ←/→/Home/End between tabs,
   "New terminal" (in the active file's checkout, else the first project's), and Hide (terminals keep
   running). Top edge drags (and ↑/↓ on the focused separator) between 120px and 70% of the window;
-  closing the last tab hides the panel; showing it with none open starts a shell.
+  closing the last tab hides the panel; showing it with none open starts a shell. Closing a tab (× or Delete) moves focus to the neighbouring tab, or to New terminal when none remain.
 - Sessions (`stores/terminals.ts`) are grouped (`files`, `agent:<id>` for Focus) and outlive their
   view: each keeps its own xterm (`TerminalView.tsx` moves the xterm element into whichever host
   shows it), so a dev server keeps running across screens. Terminals of an agent that is archived or
@@ -161,8 +167,9 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
 
 - `monaco-editor` from the local package, lazy chunk (Monaco loads only when a file opens). Imports
   `monaco-editor/editor` (API), `features/register.all` (contributions, diff editor, codicons) and
-  `languages/definitions/register.all` (Monarch tokenizers; JSON uses the JavaScript one). No TS/JSON
-  language services. The editor worker is `?worker&inline` (blob URL, allowed by `worker-src blob:`,
+  `languages/definitions/register.all` (Monarch tokenizers; JSON uses the JavaScript one). No
+  built-in TS/JSON language services (workers): language features come from language servers, see
+  [Language servers](#language-servers). The editor worker is `?worker&inline` (blob URL, allowed by `worker-src blob:`,
   works under `file://`).
 - Theme `oide-dark` from the tokens (ground background, `#5E6774` line numbers, `#1B2333`
   selection, keywords `#C4A7E7`, strings `#A8E0C6`, types `#9DBBFA`, comments `#7A8494`).
@@ -216,6 +223,51 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   `{ kind: 'file', path, title: 'StatusBar.tsx:5-6' }`, also in the context menu) and "Send to <agent>"
   when an agent is editing the file (`agents.send` text with the path, lines and snippet).
 
+## Language servers
+
+ADR [0019](../../adr/0019-language-servers-in-main-with-a-monaco-bridge.md). Main:
+`services/lsp/` (`language-servers.ts`, `jsonrpc.ts`, `convert.ts`), `handlers/lsp.ts`. Renderer:
+`monaco/lsp.ts` (bridge), `lspStore.ts` (status and problems outside Monaco), `LspStatus.tsx`.
+
+- Servers come from `contributes.languages` of extensions that are on for the project; the built-in
+  **Languages** extension (`@oide/ext-languages`, see [extensions](extensions.md#built-in-extensions))
+  covers TypeScript/JavaScript, Python, Rust, Go, C/C++, CSS, HTML, JSON, YAML and Bash with the
+  servers installed on PATH (or in the checkout's `node_modules/.bin`). The first matching
+  contribution (by extension, or whole file name) wins.
+- One server per (language, checkout): the main checkout and each agent worktree get their own,
+  rooted at that folder. It starts on the first open tab of its language and stops 3 minutes after
+  its last tab closes, when the project is untrusted or removed, when the extension goes off, when
+  the worktree is deleted (before the folder is removed), and on quit (`shutdown` + `exit`, then the
+  process tree is killed). At most 8 run at once. A crash restarts it (1 s → 30 s backoff) with its
+  open documents; after five crashes in three minutes it stays failed.
+- Only trusted projects (servers run repository code). Untrusted: the file status bar says "Language server
+  off" with the reason in its tooltip.
+- Sync: binding a tab's model sends `lsp.open { root, path, version, text }` (the model's version
+  id, full text; files over 4 MB and read-only tabs are not sent); edits send `lsp.change` 200 ms
+  after the last keystroke, and every feature request flushes a pending change first; closing the
+  tab sends `lsp.close`. Rename follows the tab (close + open under the new path). Saving sends
+  `didSave` from main's `files.write`.
+- Features (Monaco providers registered for every language; they answer only for Files tabs, so
+  Review's diff editor is untouched): hover; completions as you type (trigger characters `.` `:`
+  `<` `"` `'` `/` `@` `#` `$` `>` `-`), with documentation fetched on focus
+  (`lsp.resolveCompletion`, by the item's index in main's last result); signature help on `(` and
+  `,`; Go to Definition (F12, Ctrl/Cmd+click), Go to Type Definition, Go to Implementations; Find All
+  References / Peek (Shift+F12); highlights of the symbol under the cursor; Go to Symbol
+  (Ctrl/Cmd+Shift+O) and the outline; Format Document (Shift+Alt+F). A definition in another file
+  opens it as a tab at that place in the same checkout (`registerEditorOpener` → `onOpenLocation`);
+  a peek of other files reads them into helper models (at most 20 per peek, 40 kept) that a tab
+  opened on the file later adopts with the content on disk. Locations outside the checkout (a
+  library in the server's own install folder) are dropped by main.
+- Diagnostics: `lsp.diagnostics { root, path, version?, diagnostics }` (at most 500 per file) become
+  Monaco markers (squiggles, the overview ruler, F8 / Shift+F8), the tree colours above and the
+  Problems list in File activity (errors first, then warnings, infos, hints; at most 100 shown; a
+  click puts the cursor on it). A stopped server clears what it published.
+- File status bar (`LspStatus.tsx`): problem counts (error and warning icons; click = next problem, F8) and
+  the server: a dot (green running, grey starting, amber not installed, red failed, dim when off)
+  and its name; the tooltip explains the state. Its menu has Restart language server (or Try again)
+  and, when the command was not found, Copy install command.
+- Telemetry: `language_server_started { language, outcome }` per start attempt.
+
 ## Search
 
 `SearchPanel.tsx`, `searchStore.ts`, `searchModel.ts`, `ReplaceDialog.tsx`; main:
@@ -239,7 +291,7 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   `bad-line` and the new text on `ok-line`; per-match "Replace" and per-file "Replace all in <file>"
   buttons appear on hover or focus. Every replace (one match, one file or Replace all) opens a confirm:
   per file a checkbox, "<agent> is changing this file" when `files.editingAgents` says so, and the old
-  and new text of each matched line (`data-kind` del/add rows in the Review colours). Confirm sends only
+  and new text of each matched line (`data-kind` del/add rows in the Review colours). While replacing, Cancel is disabled and Esc / scrim clicks are ignored, so the dialog stays until the operation finishes. Confirm sends only
   the checked files' listed matches to `files.replace`; files changed since the search come back
   `stale` and are left alone (warning toast), then the search runs again. Regex replacements expand
   `$1`, `$<name>`, `$&` and `$$`.
@@ -311,7 +363,13 @@ escape, heading slugs) and `MarkdownPreview.test.tsx` (sanitising, task boxes, l
 `apps/desktop/src/main/services/file-search.test.ts` (index, 100k-path query, git grep argument
 safety, regex vs text, untracked / ignored / binary, cap, cancel, non-git scan, replace safety),
 `test/integration/files-search.test.ts` (IPC validation and path guard),
-`lib/quickOpen.test.ts` and `components/frame/CommandBar.test.tsx` (sections, `>`, `:line`), and
+`lib/quickOpen.test.ts` and `components/frame/CommandBar.test.tsx` (sections, `>`, `:line`),
+`Lsp.test.tsx` (problem counts per file and folder, server state fan-out, tree colours and counts, the
+Problems list, the status control's states and menu), the main-side LSP tests in
+`apps/desktop/src/main/services/lsp/*.test.ts` (framing, conversion and path mapping, the service
+against the fixture server `fixtures/fake-lsp.mjs`), `test/integration/lsp.test.ts` (IPC validation
+and path guard), `e2e/files-lsp.spec.ts` (the built app starts a `typescript-language-server` shim
+that runs the fixture: running status, problem counts, red tree row, Problems list, hover), and
 `e2e/files-search.spec.ts` (Ctrl+K opens a file; Ctrl+Shift+F finds and replaces one match),
 `e2e/files-diff.spec.ts` (a changed file opens on its unified diff, Split shows both sides, the
 right side saves, File shows the plain editor; an unchanged file has no Changes view).

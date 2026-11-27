@@ -146,6 +146,8 @@ Finished agents leave the tile grid for **Wall › Archived** instead of disappe
 | Status `done` | `completed` | kept |
 | Archive on a finished or stopped tile, or in the Focus header | `archived-by-user` (`completed` when done) | kept |
 
+The "Archived …" toast after archiving has an Undo action that unarchives the agent (`unarchiveAgent` in `stores/archive.ts`).
+
 Archive is offered for `has-question`, `ready-for-review`, `paused`, `stopped`, `rate-limited`,
 `error` and `done`; main refuses it (`conflict`) while the agent is working. An archived agent's row,
 summary (`summary.archived = { at, reason, mergeCommit?, worktreeRemoved }`) and transcript stay in the

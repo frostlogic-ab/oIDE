@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, type KeyboardEvent } from 'react';
+import { Suspense, lazy, useEffect, useRef, type KeyboardEvent } from 'react';
 import { Button, EmptyState, Icon, IconButton, Spinner } from '@oide/ui';
 import { useTerminals, type TermSession } from '../../stores/terminals';
 
@@ -43,11 +43,27 @@ export function TerminalTabs({ group, label, newCwd, newContext, autoStart, visi
     if (!(useTerminals.getState().groups[group]?.order.length ?? 0)) openShell(group, newCwd);
   }, [autoStart, visible, newCwd, group, openShell]);
 
+  const newButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  /** Closes a tab, then keeps keyboard focus in the strip: on the neighbour tab (next, else previous), or the New terminal button. */
+  const closeTab = (i: number) => {
+    const closing = list[i];
+    if (!closing) return;
+    const neighbour = list[i + 1] ?? list[i - 1];
+    // Closing a background tab leaves the active one alone; closing the active one hands over to its neighbour.
+    const target = closing.key === active?.key ? neighbour : active;
+    close(closing.key);
+    if (target) setActive(group, target.key);
+    requestAnimationFrame(() => {
+      (target ? document.getElementById(`term-tab-${target.key}`) : newButtonRef.current)?.focus();
+    });
+  };
+
   const onTabKey = (e: KeyboardEvent, i: number) => {
     const to = e.key === 'ArrowRight' ? i + 1 : e.key === 'ArrowLeft' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? list.length - 1 : null;
     if (e.key === 'Delete') {
       e.preventDefault();
-      close(list[i]!.key);
+      closeTab(i);
       return;
     }
     if (to === null || !list.length) return;
@@ -86,7 +102,7 @@ export function TerminalTabs({ group, label, newCwd, newContext, autoStart, visi
                   type="button"
                   aria-label={`Close ${s.context ? `${s.context} › ` : ''}${s.title}`}
                   title={s.status === 'running' ? 'Close and stop the process' : 'Close'}
-                  onClick={() => close(s.key)}
+                  onClick={() => closeTab(i)}
                   className={`w-5 h-5 mr-1 flex items-center justify-center rounded-xs border-0 bg-transparent text-ink-3 cursor-pointer hover:bg-raised hover:text-ink ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100'}`}
                 >
                   <Icon name="close" size={12} />
@@ -95,7 +111,7 @@ export function TerminalTabs({ group, label, newCwd, newContext, autoStart, visi
             );
           })}
         </div>
-        <IconButton icon="plus" aria-label="New terminal" title={newCwd ? `New terminal in ${newCwd}` : 'New terminal'} disabled={!newCwd} onClick={openNew} />
+        <IconButton ref={newButtonRef} icon="plus" aria-label="New terminal" title={newCwd ? `New terminal in ${newCwd}` : 'New terminal'} disabled={!newCwd} onClick={openNew} />
         {onHide && <IconButton icon="chevron-down" aria-label="Hide the terminal panel" title="Hide the terminal panel (terminals keep running)" onClick={onHide} />}
       </div>
       <div id={`term-panel-${group}`} role="tabpanel" aria-labelledby={active ? `term-tab-${active.key}` : undefined} className="flex-1 min-h-0 flex flex-col">

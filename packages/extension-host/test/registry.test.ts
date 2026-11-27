@@ -25,7 +25,7 @@ describe('ExtensionRegistry', () => {
     const repo = memoryExtensionRepo();
     const reg = new ExtensionRegistry({ repo, builtinDirs: [repoExtensions] });
     const list = await reg.load();
-    expect(list.map((e) => e.name).sort()).toEqual(['@oide/ext-browser-preview', '@oide/ext-git', '@oide/ext-themes']);
+    expect(list.map((e) => e.name).sort()).toEqual(['@oide/ext-browser-preview', '@oide/ext-git', '@oide/ext-languages', '@oide/ext-themes']);
     expect(list.every((e) => e.source === 'builtin' && e.reviewed && e.enabledGlobally)).toBe(true);
     expect(reg.resolved('@oide/ext-browser-preview')?.tools[0]?.tool).toBe('preview_url');
     await expect(reg.remove('@oide/ext-git')).rejects.toThrow(/built in/);

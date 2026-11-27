@@ -96,6 +96,8 @@ interface AgentRecord {
   modeChain?: Promise<void>;
   /** A model or effort was picked while the process ran: restart it with `--resume` once it is idle. */
   relaunch?: boolean;
+  /** An idle live process got a message and is checking for a free running slot (see wake()). */
+  waking?: boolean;
 }
 
 export interface RestoreEntry {
@@ -299,6 +301,12 @@ export class Supervisor {
           const entry = this.queue.shift()!;
           const rec = this.agents.get(entry.id);
           if (!rec || rec.reducer.summary.status !== 'queued') continue;
+          if (rec.handle?.alive) {
+            // An idle process that waited for a slot (wake()): hand it its messages, no relaunch.
+            if (rec.held.length) this.flushHeld(rec);
+            else this.emitDraft(rec, { type: 'status', status: rec.idleStatus, detail: 'resume' });
+            continue;
+          }
           rec.launching = true;
           void this.launch(rec, entry.resume);
         }
@@ -595,7 +603,7 @@ export class Supervisor {
     const rec = this.require(agentId);
     const status = rec.reducer.summary.status;
     if (rec.reducer.summary.resumeBlocked && !rec.handle?.alive) throw new LaunchError(rec.reducer.summary.resumeBlocked);
-    if (status === 'paused' || status === 'queued' || rec.launching) {
+    if (status === 'paused' || status === 'queued' || rec.launching || rec.waking) {
       rec.held.push(msg);
       return;
     }
@@ -606,11 +614,44 @@ export class Supervisor {
       void this.killProcess(rec).then(() => this.enqueueResume(rec));
       return;
     }
-    if (rec.handle?.alive) {
+    if (rec.handle?.alive && ACTIVE.has(status)) {
       this.deliver(rec, msg);
       return;
     }
     rec.held.push(msg);
+    // An idle process (has a question, ready for review) starts working again: that takes a slot.
+    if (rec.handle?.alive) void this.wake(rec);
+    else this.enqueueResume(rec);
+  }
+
+  /**
+   * Held messages for an idle, live process: deliver them now if a running slot is free and no one is
+   * waiting ahead, else queue the agent (its process stays up) until pump() frees a slot. Without this,
+   * replying to idle agents would run more of them than Settings › Agents › Max running allows.
+   */
+  private async wake(rec: AgentRecord): Promise<void> {
+    if (rec.waking) return;
+    rec.waking = true;
+    let max: number;
+    try {
+      max = (await this.deps.settings.get()).agents.maxRunning;
+    } catch (err) {
+      this.deps.log?.('settings read failed; queueing the message', (err as Error).message);
+      max = 0;
+    } finally {
+      rec.waking = false;
+    }
+    if (this.closed || this.agents.get(rec.id) !== rec || !rec.held.length) return;
+    const status = rec.reducer.summary.status;
+    // Paused or queued meanwhile: the held messages go out on resume or when the queue starts it.
+    if (status === 'paused' || status === 'queued') return;
+    if (!rec.handle?.alive) return this.enqueueResume(rec);
+    const waiting = this.queue.some((q) => this.agents.get(q.id)?.reducer.summary.status === 'queued');
+    if (ACTIVE.has(status) || (!waiting && this.runningCount() < max)) {
+      this.flushHeld(rec);
+      return;
+    }
+    rec.idleStatus = status;
     this.enqueueResume(rec);
   }
 
@@ -754,8 +795,9 @@ export class Supervisor {
       return;
     }
     if (rec.handle?.alive) {
-      if (rec.held.length) this.flushHeld(rec);
-      else if (status === 'paused') this.emitDraft(rec, { type: 'status', status: rec.idleStatus, detail: 'resume' });
+      // Messages sent while paused: back to idle first, then they go out once a running slot is free.
+      if (status === 'paused') this.emitDraft(rec, { type: 'status', status: rec.idleStatus, detail: 'resume' });
+      if (rec.held.length) void this.wake(rec);
       return;
     }
     if (ACTIVE.has(status) || status === 'queued') return;

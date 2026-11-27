@@ -10,6 +10,8 @@
  *   for anything inside a Monaco editor (its EditContext input is a plain div), a contenteditable
  *   ancestor, or the Excalidraw whiteboard (its text editor and its own single-key tool shortcuts).
  * - `Mod` means Cmd on macOS and Ctrl elsewhere.
+ * - The mouse's back and forward buttons (buttons 3 and 4) run `nav.back` / `nav.forward` through
+ *   the same scopes, so they go to the previous screen like Alt+Left / Alt+Right.
  */
 
 export type ActionId =
@@ -78,6 +80,20 @@ export interface KeyEventLike {
   isComposing?: boolean;
   preventDefault(): void;
 }
+
+export interface MouseEventLike {
+  button: number;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+  target: EventTarget | null;
+  defaultPrevented?: boolean;
+  preventDefault(): void;
+}
+
+/** Mouse side buttons (MouseEvent.button) and the action each one runs. */
+export const MOUSE_NAV_ACTIONS: Readonly<Record<number, ActionId>> = { 3: 'nav.back', 4: 'nav.forward' };
 
 /** Return `false` to let the key fall through to lower scopes. */
 export type ActionHandler = (e: KeyEventLike) => void | boolean;
@@ -324,7 +340,20 @@ export class Keymap {
     if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return false;
     if (isEditableTarget(e.target) && !isChorded(e)) return false;
     const combo = comboFromEvent(e);
-    const actions = this.actionsFor(combo);
+    return this.dispatch(this.actionsFor(combo), e);
+  }
+
+  /**
+   * Mouse back / forward buttons. Returns true when `nav.back` / `nav.forward` handled the press.
+   * Chromium reports them as buttons 3 and 4 on every platform.
+   */
+  handleMouseButton(e: MouseEventLike): boolean {
+    const action = MOUSE_NAV_ACTIONS[e.button];
+    if (!action || e.defaultPrevented) return false;
+    return this.dispatch([action], { key: '', ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, shiftKey: e.shiftKey, target: e.target, preventDefault: () => e.preventDefault() });
+  }
+
+  private dispatch(actions: string[], e: KeyEventLike): boolean {
     if (!actions.length) return false;
     for (let i = this.scopes.length - 1; i >= 0; i--) {
       const scope = this.scopes[i]!;
@@ -344,8 +373,26 @@ export class Keymap {
     const listener = (e: Event) => {
       this.handleKeyDown(e as KeyboardEvent);
     };
+    // Act on mouseup (the press completes, like a browser) and swallow the matching mousedown and
+    // auxclick so nothing underneath also reacts to the side button. Capture phase, so a view that
+    // stops propagation (a terminal, an editor) still lets the button navigate.
+    const onMouseUp = (e: Event) => {
+      this.handleMouseButton(e as MouseEvent);
+    };
+    const CAPTURE = { capture: true } as const;
+    const swallow = (e: Event) => {
+      if (MOUSE_NAV_ACTIONS[(e as MouseEvent).button]) e.preventDefault();
+    };
     target.addEventListener('keydown', listener);
-    return () => target.removeEventListener('keydown', listener);
+    target.addEventListener('mouseup', onMouseUp, CAPTURE);
+    target.addEventListener('mousedown', swallow, CAPTURE);
+    target.addEventListener('auxclick', swallow, CAPTURE);
+    return () => {
+      target.removeEventListener('keydown', listener);
+      target.removeEventListener('mouseup', onMouseUp, CAPTURE);
+      target.removeEventListener('mousedown', swallow, CAPTURE);
+      target.removeEventListener('auxclick', swallow, CAPTURE);
+    };
   }
 
   private actionsFor(combo: string): string[] {

@@ -12,7 +12,8 @@ export interface ScreenParams {
   /** `context`: chips to pre-fill (Artifacts › Give to an agent passes the artifact). */
   spawn: { projectId?: string; goal?: string; context?: ContextChip[] };
   'source-control': Record<string, never>;
-  review: { agentId: string };
+  /** `path`: a changed file to open on (Focus > Inspector rows); falls back to the first file if it is not in the diff. */
+  review: { agentId: string; path?: string };
   files: { root?: string; path?: string; line?: number };
   artifacts: { artifactId?: string };
   marketplace: { extension?: string };

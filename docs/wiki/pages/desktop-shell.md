@@ -262,7 +262,7 @@ meter (`components/frame/PlanUsage.tsx`: `latestPlanUsage(agents)` + `PlanUsageM
 agent's `planUsage` (the CLI's `rate_limit_event`) carries a utilization; without one it shows only the
 reset time, never a guessed percentage ("Context ring and plan usage" in the
 [build brief](../raw/build-brief.md); [ADR 0007](../../adr/0007-plan-usage-meters-from-rate-limit-events.md)).
-It also shows tokens today and the rate-limit reset time. Sessions, worktrees, active subagents and open projects are counted from the live stores (`countAgents`, the same as the header), never from `usage.summary`, so the two never disagree; the reset time is time-only when under 24h away, and the counts text truncates first at 1100px.
+The CLI status in the status bar ("Claude Code CLI not found", or untested version) is a button that opens Settings › Claude Code. It also shows tokens today and the rate-limit reset time. Sessions, worktrees, active subagents and open projects are counted from the live stores (`countAgents`, the same as the header), never from `usage.summary`, so the two never disagree; the reset time is time-only when under 24h away, and the counts text truncates first at 1100px.
 
 Extension UI lives in `src/extensions/` ([extensions](extensions.md#ui-contributions)): the
 `extension` screen (`screens/Extension`, params `{ extension, panelId }`) shows a full-screen panel;
@@ -280,7 +280,12 @@ placeholders marked `PLACEHOLDER` (the Wall placeholder lists agents with the sh
 `lib/keymap.ts` holds every shortcut in one rebindable map (`DEFAULT_BINDINGS`): J next agent,
 K previous, N next that needs you, Y allow, D deny, Esc back, Mod+K command bar, Mod+Enter send,
 Shift+Tab switch mode, Alt+←/→ history, Mod+Shift+N new window, Mod+Shift+F search in files and Mod+Shift+V Markdown preview / edit (Files screen scope). `Mod` is Cmd on macOS, Ctrl elsewhere. It listens on the
-renderer window only (never OS-global). Screens activate a scope while mounted:
+renderer window only (never OS-global). The mouse's back / forward side buttons (`MouseEvent.button`
+3 / 4, `MOUSE_NAV_ACTIONS`) run `nav.back` / `nav.forward` through the same scopes, so they step
+through the router history like Alt+←/→ (also inside inputs and editors), and a modal scope blocks
+them too. `attach` handles them on `mouseup` in the capture phase and swallows the matching
+`mousedown` / `auxclick`. Presses inside sandboxed extension iframes never reach the window. Screens
+activate a scope while mounted:
 
 ```ts
 useKeymapScope('focus', { 'agent.next': () => …, 'permission.allow': () => … });

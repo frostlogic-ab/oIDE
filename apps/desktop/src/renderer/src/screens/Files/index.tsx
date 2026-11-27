@@ -6,7 +6,7 @@
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button, ContextMenu, EmptyState, Icon, Spinner } from '@oide/ui';
-import { NEEDS_YOU, type AgentSummary, type ArtifactMeta, type CommitInfo, type ContentMatch, type Project } from '@oide/protocol';
+import { NEEDS_YOU, type AgentSummary, type ArtifactMeta, type CommitInfo, type ContentMatch, type LspDiagnostic, type Project } from '@oide/protocol';
 import { HeaderSlot } from '../../components/frame/HeaderSlot';
 import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
 import { keymap } from '../../lib/keymap';
@@ -21,8 +21,10 @@ import { useGit, useGitData } from '../SourceControl/gitStore';
 import { C, commitAuthor, shortBranch, timeAgo } from '../SourceControl/model';
 import { useChanges, useCheckoutChanges } from './changesStore';
 import { effectiveDiffView, type DiffView } from './diffView';
-import type { EditorPaneProps, EditorStatus, SelectionInfo } from './EditorPane';
+import type { EditorActions, EditorPaneProps, EditorStatus, SelectionInfo } from './EditorPane';
 import { joinPath, tabId, useFiles, type FileTab } from './filesStore';
+import { LspStatusControl } from './LspStatus';
+import { docKey, ensureLspEvents, useLsp } from './lspStore';
 import { isMarkdownPath, type MarkdownView } from './markdownLinks';
 import { SearchPanel, type SearchCheckout } from './SearchPanel';
 import { useSearch } from './searchStore';
@@ -149,7 +151,28 @@ export default function FilesScreen() {
   // In the store, not local state: the screen unmounts when you leave Files, the editor models don't.
   const dirty = files.dirty;
   const saveRef = useRef<(() => Promise<void>) | null>(null);
+  const actionsRef = useRef<EditorActions | null>(null);
   const info = useFileInfo(active);
+  // Language servers (ADR 0019): the open file's server state and problems.
+  useEffect(() => ensureLspEvents(), []);
+  const activeDoc = active ? docKey(active.root, active.path) : '';
+  const lspStatus = useLsp((st) => (activeDoc ? st.status[activeDoc] : undefined));
+  const problems = useLsp((st) => (activeDoc ? st.problems[activeDoc] : undefined));
+  // Go to definition into another file: open it in its checkout at that place.
+  const openLocation = useCallback(
+    (root: string, path: string, line: number, column: number) => {
+      const projectId = projectForRoot(root, allProjects, agents, git);
+      if (!projectId) return;
+      files.openFile(projectId, root, path);
+      setReveal({ tabId: tabId(root, path), line, column, nonce: Date.now() + Math.random(), focus: true });
+      files.revealPath(root, path);
+    },
+    [allProjects, agents, git, files, setReveal],
+  );
+  const restartLsp = () => {
+    if (!active) return;
+    void import('./monaco/lsp').then((m) => m.lspRestart(active.root, active.path));
+  };
   // Markdown files open on their rendered page; Edit shows the source beside it.
   // A changed file (git colours of the tree) opens on its changes, unified or side by side; the
   // active tab's checkout is kept loaded even when the tree shows another one.
@@ -363,6 +386,8 @@ export default function FilesScreen() {
                 mdView={mdView}
                 diff={diffView === 'off' ? undefined : { layout: diffView, ...(change?.oldPath ? { oldPath: change.oldPath } : {}), refresh: activeChanges }}
                 onOpenFile={(path) => files.openFile(active.projectId, active.root, path)}
+                onOpenLocation={openLocation}
+                actionsRef={actionsRef}
               />
             </Suspense>
           ) : (
@@ -419,6 +444,7 @@ export default function FilesScreen() {
             )}
             {status && (
               <div className="flex items-center gap-2.5 ml-auto pr-3 text-[11.5px] text-ink-3 shrink-0">
+                <LspStatusControl status={lspStatus} problems={problems} onNextProblem={() => actionsRef.current?.nextProblem()} onRestart={restartLsp} />
                 {status.readOnly && <span>Read only</span>}
                 <span className="font-mono">
                   {mdView !== 'preview' && `Ln ${status.line}, Col ${status.column}`}
@@ -448,6 +474,12 @@ export default function FilesScreen() {
       </main>
 
       <ResizableAside panel={PANELS.filesActivity} aria-label="File activity" className="flex flex-col gap-3 p-4 bg-panel border-l border-line box-border overflow-auto">
+        {active && problems && problems.list.length > 0 && (
+          <ProblemsList
+            list={problems.list}
+            onOpen={(d) => setReveal({ tabId: active.id, line: d.range.start.line + 1, column: d.range.start.character, nonce: Date.now() + Math.random(), focus: true })}
+          />
+        )}
         <h2 className={`m-0 ${SECTION_LABEL}`}>This file's history</h2>
         {!active && <span className="text-[12.5px] text-ink-3">Open a file to see who changed it.</span>}
         {active && (
@@ -511,7 +543,9 @@ export default function FilesScreen() {
           </>
         )}
         <div className="flex-1" />
-        <span className="text-[12px] text-ink-3 leading-normal">A full editor is here when you need it. Language servers come from extensions.</span>
+        <span className="text-[12px] text-ink-3 leading-normal">
+          A full editor is here when you need it. Language servers come from extensions (the built-in Languages extension uses the servers installed on your PATH) and run for trusted projects.
+        </span>
       </ResizableAside>
     </>
   );
@@ -565,6 +599,48 @@ function Banner({
         Open agent
       </a>
     </div>
+  );
+}
+
+/** The open file's diagnostics, errors first; a click puts the cursor on the problem. */
+function ProblemsList({ list, onOpen }: { list: LspDiagnostic[]; onOpen(d: LspDiagnostic): void }) {
+  const MAX = 100;
+  const sorted = [...list].sort((a, b) => a.severity - b.severity || a.range.start.line - b.range.start.line || a.range.start.character - b.range.start.character);
+  const SEV: Record<number, { icon: 'alert-circle' | 'warning' | 'info'; color: string; label: string }> = {
+    1: { icon: 'alert-circle', color: C.bad, label: 'Error' },
+    2: { icon: 'warning', color: C.warn, label: 'Warning' },
+    3: { icon: 'info', color: C.review, label: 'Info' },
+    4: { icon: 'info', color: C.ink3, label: 'Hint' },
+  };
+  return (
+    <section aria-label="Problems" className="flex flex-col gap-1.5">
+      <h2 className={`m-0 ${SECTION_LABEL}`}>
+        Problems <span className="font-normal normal-case tracking-normal">({list.length})</span>
+      </h2>
+      <ul className="list-none m-0 p-0 flex flex-col">
+        {sorted.slice(0, MAX).map((d, i) => {
+          const sev = SEV[d.severity] ?? SEV[1]!;
+          return (
+            <li key={i}>
+              <button
+                type="button"
+                onClick={() => onOpen(d)}
+                title={`${sev.label}: ${d.message}${d.source ? ` (${d.source}${d.code ? ` ${d.code}` : ''})` : ''}`}
+                className="w-full flex items-start gap-1.5 px-1.5 py-1 -mx-1.5 rounded-sm border-0 bg-transparent text-left text-[12px] text-ink-2 cursor-pointer hover:bg-raised hover:text-ink"
+              >
+                <span aria-hidden="true" className="mt-[2px] shrink-0" style={{ color: sev.color }}>
+                  <Icon name={sev.icon} size={12} />
+                </span>
+                <span className="sr-only">{sev.label}: </span>
+                <span className="flex-1 min-w-0 line-clamp-2 break-words">{d.message}</span>
+                <span className="shrink-0 font-mono text-[11px] text-ink-3">Ln {d.range.start.line + 1}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {list.length > MAX && <span className="text-[11.5px] text-ink-3">Showing the first {MAX}.</span>}
+    </section>
   );
 }
 

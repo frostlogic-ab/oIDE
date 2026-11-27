@@ -87,6 +87,8 @@ export function registerFileHandlers(router: IpcRouter, s: Services, ctx: MainCo
     index.invalidate(r);
     const co = checkoutOf(s, abs);
     if (co) s.git.changed(co.projectId);
+    // An open document's language server hears about the save (some lint or type-check on save).
+    s.lsp?.saved(r, toPosix(relative(r, abs)));
     return { ok: true as const };
   });
 

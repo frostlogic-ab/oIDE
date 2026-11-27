@@ -32,7 +32,22 @@ export const ExtensionManifest = z.object({
         themes: z.array(z.object({ id: z.string(), label: z.string(), tokens: z.record(z.string(), z.string()) })).default([]),
         techniques: z.array(z.object({ id: z.string(), name: z.string(), text: z.string(), placement: z.enum(['first-message', 'system-prompt']) })).default([]),
         artifactTypes: z.array(z.object({ id: z.string(), label: z.string(), entry: z.string() })).default([]),
-        languages: z.array(z.object({ id: z.string(), extensions: z.array(z.string()), command: z.string(), args: z.array(z.string()).default([]) })).default([]),
+        languages: z
+          .array(
+            z.object({
+              id: z.string(),
+              extensions: z.array(z.string()),
+              command: z.string(),
+              args: z.array(z.string()).default([]),
+              /** Shown in the editor ("TypeScript language server"); defaults to the id. */
+              name: z.string().max(200).optional(),
+              /** How to install the server when its command is not found ("npm i -g …"). */
+              install: z.string().max(500).optional(),
+              /** Sent as `initializationOptions`. */
+              initializationOptions: z.record(z.string(), z.unknown()).optional(),
+            }),
+          )
+          .default([]),
         deployTargets: z.array(z.object({ id: z.string(), title: z.string() })).default([]),
       })
       .default({ panels: [], commands: [], settings: {}, themes: [], techniques: [], artifactTypes: [], languages: [], deployTargets: [] }),

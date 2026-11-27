@@ -206,6 +206,31 @@ describe('Review screen', () => {
     });
   });
 
+  describe('opening on a file from the route', () => {
+    const current = () => screen.getByLabelText('Changed files').querySelector('button[aria-current="true"]')!;
+
+    it('selects the file named by params.path', async () => {
+      await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook', path: 'test/handler.test.ts' } });
+      render(<ReviewScreen />);
+      await waitFor(() => expect(current().getAttribute('title')).toBe('test/handler.test.ts'));
+      expect(screen.getByRole('heading', { name: 'test/handler.test.ts' })).toBeTruthy();
+    });
+
+    it('falls back to the first file when the path is not in the diff', async () => {
+      await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook', path: 'nope/missing.ts' } });
+      render(<ReviewScreen />);
+      await waitFor(() => expect(current().getAttribute('title')).toBe('src/webhooks/retry.ts'));
+    });
+
+    it('does not snap back to the route path after the user picks another file', async () => {
+      await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook', path: 'test/handler.test.ts' } });
+      render(<ReviewScreen />);
+      await waitFor(() => expect(current().getAttribute('title')).toBe('test/handler.test.ts'));
+      fireEvent.click(screen.getByTitle('src/webhooks/handler.ts'));
+      await waitFor(() => expect(current().getAttribute('title')).toBe('src/webhooks/handler.ts'));
+    });
+  });
+
   it('toggles Viewed through review.setViewed', async () => {
     const { invoke } = await setupMockApp({ screen: 'review', params: { agentId: 'a-webhook' } });
     render(<ReviewScreen />);

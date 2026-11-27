@@ -1,6 +1,6 @@
 # ADR 0008: Extension language servers are deferred
 
-- Status: accepted
+- Status: superseded by [ADR 0019](0019-language-servers-in-main-with-a-monaco-bridge.md) (2026-11-27)
 - Date: 2026-11-24
 - Departs from: build brief, Extension system › Contribution points (v1): "`languages` | A language
   server for the Files editor | Child process started by the host"

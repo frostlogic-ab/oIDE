@@ -287,7 +287,7 @@ function ChangesList({ agent, showReviewAll }: { agent: AgentSummary; showReview
           <li key={f.path}>
             <button
               type="button"
-              onClick={() => navigate('review', { agentId: agent.id })}
+              onClick={() => navigate('review', { agentId: agent.id, path: f.path })}
               title={`Open ${f.path} in Review`}
               className="w-full flex gap-2 p-1.5 border-0 rounded-sm bg-transparent text-ink-2 text-left font-mono text-[11.5px] hover:bg-raised"
             >

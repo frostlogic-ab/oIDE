@@ -14,6 +14,7 @@ import type { DiffLayout } from './diffView';
 import { onTabsMoved, onTabsReloaded, useFiles, type FileTab } from './filesStore';
 import { MarkdownPreview } from './MarkdownPreview';
 import type { MarkdownView } from './markdownLinks';
+import { adoptPeekModel, lspAttach, lspDetach, modelUri, setLspOpenHandler } from './monaco/lsp';
 import { BASE_OPTIONS, FILE_MINIMAP, languageFor, languageLabel, monaco } from './monaco/setup';
 
 export interface SelectionInfo {
@@ -56,8 +57,12 @@ onTabsMoved((moves) => {
   for (const [m, e] of taken) {
     if (!e) continue;
     entries.set(m.to, e);
-    const lang = languageFor(m.to.slice(m.to.indexOf('::') + 2));
+    const at = m.to.indexOf('::');
+    const lang = languageFor(m.to.slice(at + 2));
     if (lang !== e.model.getLanguageId()) monaco.editor.setModelLanguage(e.model, lang);
+    // The language server follows the document to its new path (and maybe another server).
+    lspDetach(e.model);
+    lspAttach(e.model, m.to.slice(0, at), m.to.slice(at + 2), e.readOnly);
   }
 });
 
@@ -88,6 +93,7 @@ let releaseDiff: (model: monaco.editor.ITextModel) => void = () => {};
 function disposeClosed(open: Set<string>): void {
   for (const [id, e] of entries) {
     if (!open.has(id)) {
+      lspDetach(e.model);
       releaseDiff(e.model);
       e.model.dispose();
       entries.delete(id);
@@ -119,12 +125,21 @@ export interface EditorPaneProps {
    * checkout's changes were reloaded) reads the original again.
    */
   diff?: { layout: DiffLayout; oldPath?: string; refresh?: unknown };
+  /** Go to definition (or a peek) into another file: open it at that place. `column` is 0-based. */
+  onOpenLocation?(root: string, path: string, line: number, column: number): void;
+  /** Imperative hooks for the tab bar's problem counts. */
+  actionsRef?: { current: EditorActions | null };
+}
+
+export interface EditorActions {
+  /** Move to the next error or warning (Monaco's F8) and show it. */
+  nextProblem(): void;
 }
 
 /** Re-render the preview this long after the last keystroke. */
 const PREVIEW_DEBOUNCE_MS = 150;
 
-export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, onAsk, sendTo, saveRef, mdView, onOpenFile, diff }: EditorPaneProps) {
+export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, onAsk, sendTo, saveRef, mdView, onOpenFile, diff, onOpenLocation, actionsRef }: EditorPaneProps) {
   const host = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const diffHost = useRef<HTMLDivElement>(null);
@@ -139,8 +154,8 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
   const [load, setLoad] = useState<LoadState>({ state: 'loading' });
   const [selection, setSelection] = useState<(SelectionInfo & { top: number; left: number }) | null>(null);
   const [saving, setSaving] = useState(false);
-  const cb = useRef({ onStatus, onDirty, onAsk });
-  cb.current = { onStatus, onDirty, onAsk };
+  const cb = useRef({ onStatus, onDirty, onAsk, onOpenLocation });
+  cb.current = { onStatus, onDirty, onAsk, onOpenLocation };
   const mdRef = useRef(mdView);
   mdRef.current = mdView;
   const previewRef = useRef<HTMLDivElement>(null);
@@ -193,12 +208,28 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
     }
   };
   if (saveRef) saveRef.current = save;
+  if (actionsRef)
+    actionsRef.current = {
+      nextProblem: () => {
+        const ed = editorRef.current;
+        if (!ed) return;
+        ed.focus();
+        void ed.getAction('editor.action.marker.next')?.run();
+      },
+    };
 
   // Create the editor once.
   useEffect(() => {
     if (!host.current) return;
-    const ed = monaco.editor.create(host.current, { ...BASE_OPTIONS, minimap: FILE_MINIMAP, model: null });
+    const ed = monaco.editor.create(host.current, {
+      ...BASE_OPTIONS,
+      minimap: FILE_MINIMAP,
+      model: null,
+      // Language servers: go straight to the definition; several references open the peek.
+      gotoLocation: { multipleDefinitions: 'goto', multipleTypeDefinitions: 'goto', multipleDeclarations: 'goto', multipleImplementations: 'peek', multipleReferences: 'peek' },
+    });
     editorRef.current = ed;
+    setLspOpenHandler((root, path, line, column) => cb.current.onOpenLocation?.(root, path, line, column));
     ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => void save());
     ed.addAction({
       id: 'oide.askAgent',
@@ -296,14 +327,17 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
           setLoad({ state: 'binary' });
           return;
         }
-        let uri = monaco.Uri.from({ scheme: 'oide', path: `/${encodeURIComponent(active.root)}/${active.path}` });
+        let uri = modelUri(active.root, active.path);
         const existing = monaco.editor.getModel(uri);
         // A renamed tab keeps its model under the old URI: a new file at that path needs its own.
         const owned = existing && [...entries.values()].some((x) => x.model === existing);
         if (owned) uri = uri.with({ query: `n=${Date.now()}` });
+        // A model a references peek created for this file becomes the tab's, with the content on disk.
+        if (existing && !owned) adoptPeekModel(existing, content);
         const model = (!owned && existing) || monaco.editor.createModel(content, languageFor(active.path), uri);
         const e: Entry = { model, saved: model.getAlternativeVersionId(), readOnly: content.length > 5_000_000 };
         entries.set(active.id, e);
+        lspAttach(model, active.root, active.path, e.readOnly);
         show(e);
       })
       .catch((err: unknown) => !cancelled && setLoad({ state: 'error', message: ipcErrorMessage(err) }));

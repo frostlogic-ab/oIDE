@@ -1,0 +1,107 @@
+{
+  "name": "@oide/ext-languages",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Language servers for the Files editor: TypeScript and JavaScript, Python, Rust, Go, C and C++, CSS, HTML, JSON, YAML and shell scripts. Uses the servers you have installed.",
+  "license": "MIT",
+  "type": "module",
+  "files": ["dist"],
+  "repository": { "type": "git", "url": "https://github.com/frostlogic-ab/oIDE.git", "directory": "extensions/languages" },
+  "scripts": { "typecheck": "tsc --noEmit -p ." },
+  "devDependencies": {
+    "@oide/extension-api": "workspace:*",
+    "@oide/extension-host": "workspace:*"
+  },
+  "oide": {
+    "engine": "^1.0.0",
+    "displayName": "Languages",
+    "publisher": "oide",
+    "categories": ["languages"],
+    "activation": [],
+    "capabilities": { "spawn": true },
+    "contributes": {
+      "languages": [
+        {
+          "id": "typescript",
+          "name": "TypeScript language server",
+          "extensions": [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
+          "command": "typescript-language-server",
+          "args": ["--stdio"],
+          "install": "npm install -g typescript-language-server typescript"
+        },
+        {
+          "id": "python",
+          "name": "Pyright",
+          "extensions": [".py", ".pyi"],
+          "command": "pyright-langserver",
+          "args": ["--stdio"],
+          "install": "npm install -g pyright"
+        },
+        {
+          "id": "rust",
+          "name": "rust-analyzer",
+          "extensions": [".rs"],
+          "command": "rust-analyzer",
+          "install": "rustup component add rust-analyzer"
+        },
+        {
+          "id": "go",
+          "name": "gopls",
+          "extensions": [".go"],
+          "command": "gopls",
+          "install": "go install golang.org/x/tools/gopls@latest"
+        },
+        {
+          "id": "cpp",
+          "name": "clangd",
+          "extensions": [".c", ".h", ".cc", ".cpp", ".cxx", ".hh", ".hpp", ".hxx"],
+          "command": "clangd",
+          "install": "Install clangd from LLVM (or your package manager) and put it on PATH"
+        },
+        {
+          "id": "css",
+          "name": "CSS language server",
+          "extensions": [".css", ".scss", ".less"],
+          "command": "vscode-css-language-server",
+          "args": ["--stdio"],
+          "install": "npm install -g vscode-langservers-extracted",
+          "initializationOptions": { "provideFormatter": true }
+        },
+        {
+          "id": "html",
+          "name": "HTML language server",
+          "extensions": [".html", ".htm"],
+          "command": "vscode-html-language-server",
+          "args": ["--stdio"],
+          "install": "npm install -g vscode-langservers-extracted",
+          "initializationOptions": { "provideFormatter": true }
+        },
+        {
+          "id": "json",
+          "name": "JSON language server",
+          "extensions": [".json", ".jsonc"],
+          "command": "vscode-json-language-server",
+          "args": ["--stdio"],
+          "install": "npm install -g vscode-langservers-extracted",
+          "initializationOptions": { "provideFormatter": true }
+        },
+        {
+          "id": "yaml",
+          "name": "YAML language server",
+          "extensions": [".yaml", ".yml"],
+          "command": "yaml-language-server",
+          "args": ["--stdio"],
+          "install": "npm install -g yaml-language-server"
+        },
+        {
+          "id": "shellscript",
+          "name": "Bash language server",
+          "extensions": [".sh", ".bash"],
+          "command": "bash-language-server",
+          "args": ["start"],
+          "install": "npm install -g bash-language-server"
+        }
+      ]
+    }
+  }
+}

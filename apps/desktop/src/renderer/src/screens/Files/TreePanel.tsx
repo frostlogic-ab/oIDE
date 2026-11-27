@@ -6,6 +6,7 @@ import { DRAFT_KEY, ancestorDirs, useFiles, visibleRows, type TreeRow } from './
 import { DeleteDialog, DiscardDialog, NameInput, useTreeActions } from './TreeActions';
 import { STATUS_LABEL, STATUS_LETTER, STATUS_TEXT, useChanges, useCheckoutChanges, type CheckoutChanges } from './changesStore';
 import { isUnder } from './treeOps';
+import { problemSummary, problemsOf, useLsp } from './lspStore';
 import { FileIcon } from './fileIcons';
 import { ResizableAside } from '../../components/ResizableAside';
 import { PANELS } from '../../lib/panels';
@@ -288,6 +289,9 @@ function ProjectTree({
 }) {
   const s = useFiles();
   const p = info.project;
+  // Language-server problems (VS Code explorer): files with errors red, warnings amber, a count at the end.
+  const allProblems = useLsp((st) => st.problems);
+  const problems = useMemo(() => problemsOf(allProblems, root), [allProblems, root]);
   const [focusKey, setFocusKey] = useState<string>();
   const wantFocus = useRef(false);
   const treeRef = useRef<HTMLDivElement>(null);
@@ -530,6 +534,10 @@ function ProjectTree({
             // Files: their own status; folders: the strongest status under them (VS Code tints both).
             const change = r.draft ? undefined : r.kind === 'file' ? changes?.byPath.get(r.path)?.status : changes?.dirs.get(r.path);
             const struck = change === 'deleted' && (r.kind === 'file' || r.ghost);
+            const fileProblems = !r.draft && r.kind === 'file' && !r.ghost ? problems.files.get(r.path) : undefined;
+            const problem = fileProblems ? (fileProblems.errors ? 'error' : 'warning') : !r.draft && r.kind === 'dir' && !r.ghost ? problems.dirs.get(r.path) : undefined;
+            const problemText = problem === 'error' ? 'text-bad' : problem === 'warning' ? 'text-warn' : '';
+            const baseTitle = r.error ?? (change && (r.kind === 'file' || r.ghost) ? `${r.path} • ${STATUS_LABEL[change]}` : r.path);
             return (
               <div
                 key={r.key}
@@ -557,7 +565,7 @@ function ProjectTree({
                   selected || r.draft ? 'bg-selected text-ink' : 'text-ink-2 hover:bg-raised hover:text-ink'
                 }`}
                 style={{ top: i * ROW_H, height: ROW_H, paddingLeft: PAD + r.depth * INDENT }}
-                title={r.draft ? undefined : (r.error ?? (change && (r.kind === 'file' || r.ghost) ? `${r.path} • ${STATUS_LABEL[change]}` : r.path))}
+                title={r.draft ? undefined : fileProblems && !r.error ? `${baseTitle} • ${problemSummary(fileProblems)}` : baseTitle}
               >
                 {/* Indent guides: one line per ancestor level, the focused folder's brighter. */}
                 {Array.from({ length: r.depth }, (_, d) => (
@@ -591,10 +599,12 @@ function ProjectTree({
                     <NameInput row={r} root={root} onDone={afterEdit} />
                   </>
                 ) : (
-                  <span className={`flex-1 min-w-0 ml-1.5 truncate whitespace-pre ${r.error ? 'text-bad' : change ? STATUS_TEXT[change] : ''} ${struck ? 'line-through' : ''}`}>{r.label}</span>
+                  <span className={`flex-1 min-w-0 ml-1.5 truncate whitespace-pre ${r.error ? 'text-bad' : problemText || (change ? STATUS_TEXT[change] : '')} ${struck ? 'line-through' : ''}`}>{r.label}</span>
                 )}
                 {change && !r.draft && (r.kind === 'file' || r.ghost) && <span className="sr-only">, {STATUS_LABEL[change].toLowerCase()}</span>}
                 {change && !r.draft && r.kind === 'dir' && !r.ghost && <span className="sr-only">, contains changes</span>}
+                {fileProblems && <span className="sr-only">, {problemSummary(fileProblems)}</span>}
+                {!fileProblems && problem && <span className="sr-only">, contains {problem === 'error' ? 'errors' : 'warnings'}</span>}
                 {r.kind === 'dir' && r.error && <span className="sr-only">, failed to load. Press Enter to retry.</span>}
                 {r.kind === 'dir' && r.error && (
                   <button
@@ -614,6 +624,12 @@ function ProjectTree({
                 {markers?.slice(0, 3).map((m) => (
                   <span key={m.agentId} title={m.title} className="w-[7px] h-[7px] ml-1 rounded-full shrink-0" style={{ background: m.color }} role="img" aria-label={m.title} />
                 ))}
+                {fileProblems && (
+                  <span aria-hidden="true" data-testid="problem-count" className={`shrink-0 ml-1.5 font-mono text-[11px] font-semibold ${problemText}`}>
+                    {Math.min(99, fileProblems.errors + fileProblems.warnings)}
+                    {fileProblems.errors + fileProblems.warnings > 99 ? '+' : ''}
+                  </span>
+                )}
                 {change && !r.draft && r.kind === 'file' && (
                   <span aria-hidden="true" className={`shrink-0 w-3 ml-1.5 text-center font-mono text-[11px] font-semibold ${STATUS_TEXT[change]}`}>
                     {STATUS_LETTER[change]}

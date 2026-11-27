@@ -62,27 +62,37 @@ export function SidePanel({
       {overlaps.map((o) => (
         <OverlapCard key={`${o.projectId}:${o.agentIds.join('+')}`} o={o} projectName={names[o.projectId] ?? o.projectId} byId={byId} />
       ))}
-      {unpushed.map((p) => {
-        const n = git[p.id]?.sync?.ahead ?? 0;
-        const branch = git[p.id]?.sync?.branch ?? 'main';
-        return (
-          <div key={p.id} className="flex flex-col gap-1.5 p-2.5 rounded-lg border border-line-2 text-[12.5px] leading-normal text-ink-2">
-            <span className="font-semibold text-ink">
-              {p.name} has {n} unpushed {n === 1 ? 'commit' : 'commits'}
-            </span>
-            <span>
-              {n === 1 ? `Your commit on ${branch} isn't on the remote yet.` : `Your ${n} commits on ${branch} aren't on the remote yet.`}
-            </span>
-            <Button variant="secondary" size={28} className="self-start" onClick={() => void runSync(p.id, 'Push')} aria-label={`Push ${p.name}`}>
-              Push
-            </Button>
-          </div>
-        );
-      })}
+      {unpushed.map((p) => (
+        <UnpushedCard key={p.id} project={p} n={git[p.id]?.sync?.ahead ?? 0} branch={git[p.id]?.sync?.branch ?? 'main'} />
+      ))}
 
       <div className="flex-1" />
       <span className="text-[12px] text-ink-3 leading-normal">Project scope is shared: picking a project here also scopes the agent wall and Files.</span>
     </ResizableAside>
+  );
+}
+
+/** Heads-up card for a project with unpushed commits; Push is disabled while the push runs. */
+function UnpushedCard({ project, n, branch }: { project: Project; n: number; branch: string }) {
+  const [busy, setBusy] = useState(false);
+  const push = async () => {
+    setBusy(true);
+    try {
+      await runSync(project.id, 'Push');
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-col gap-1.5 p-2.5 rounded-lg border border-line-2 text-[12.5px] leading-normal text-ink-2">
+      <span className="font-semibold text-ink">
+        {project.name} has {n} unpushed {n === 1 ? 'commit' : 'commits'}
+      </span>
+      <span>{n === 1 ? `Your commit on ${branch} isn't on the remote yet.` : `Your ${n} commits on ${branch} aren't on the remote yet.`}</span>
+      <Button variant="secondary" size={28} className="self-start" disabled={busy} onClick={() => void push()} aria-label={`Push ${project.name}`}>
+        {busy ? 'Pushing…' : 'Push'}
+      </Button>
+    </div>
   );
 }
 
