@@ -516,6 +516,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
       await git.dispose().catch(() => undefined);
       await lsp.dispose().catch(() => undefined);
       await extensions.dispose().catch(() => undefined);
+      // Before the store closes: its throttled push reads tokens today from the database.
+      accounts.dispose();
       store.close();
     },
   };

@@ -53,6 +53,7 @@ export interface AccountsServiceOptions {
 export class AccountsService {
   private state: Stored;
   private usageTimer: ReturnType<typeof setTimeout> | undefined;
+  private disposed = false;
 
   constructor(private readonly o: AccountsServiceOptions) {
     this.state = o.kv.get(KV_KEY, Stored) ?? {};
@@ -115,8 +116,16 @@ export class AccountsService {
     this.publish();
   }
 
+  /** Stop pushing (before the store closes): clears the throttled tokens-today push. */
+  dispose(): void {
+    this.disposed = true;
+    if (this.usageTimer) clearTimeout(this.usageTimer);
+    this.usageTimer = undefined;
+  }
+
   /** Feed an agent event of an agent on `key` (agents.ts eventSink). */
   observe(key: AccountKey, e: AgentEvent): void {
+    if (this.disposed) return;
     const st = (this.state[key] ??= { signedIn: 'unknown', windows: [] });
     let changed: boolean;
     switch (e.type) {
@@ -152,7 +161,12 @@ export class AccountsService {
         // Tokens today come from the store; tell the renderer at most every 2 s.
         this.usageTimer ??= setTimeout(() => {
           this.usageTimer = undefined;
-          this.publish();
+          // A late push must never crash main (e.g. the store closed without dispose).
+          try {
+            this.publish();
+          } catch {
+            /* the next event pushes again */
+          }
         }, 2000);
         this.usageTimer.unref?.();
         return;
@@ -190,6 +204,7 @@ export class AccountsService {
   }
 
   private publish(): void {
+    if (this.disposed) return;
     this.o.emit('accounts.usage', this.snapshot());
   }
 }

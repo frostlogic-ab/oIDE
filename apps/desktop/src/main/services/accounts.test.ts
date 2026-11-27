@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { openStore } from '@oide/store';
 import type { AgentEvent, AccountUsage } from '@oide/protocol';
 import { ACCOUNTS_DIR, AccountsService } from './accounts';
@@ -96,6 +96,22 @@ describe('AccountsService', () => {
     // Once the reset time passes the account is no longer shown as limited.
     tick(700_000);
     expect(svc.snapshot()[1]!.rateLimitedUntil).toBeUndefined();
+  });
+
+  it('stops its throttled tokens-today push on dispose, so nothing reads a closed store', () => {
+    vi.useFakeTimers();
+    try {
+      const { svc, store, emitted } = setup();
+      svc.observe('default', ev({ type: 'usage', usage: { input: 1, output: 0, cacheRead: 0, cacheCreation: 0 } } as never));
+      svc.dispose();
+      store.close();
+      expect(() => vi.advanceTimersByTime(5000)).not.toThrow();
+      expect(emitted).toHaveLength(0);
+      svc.observe('default', ev({ type: 'init' } as never));
+      expect(emitted).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('counts tokens today per account', () => {
