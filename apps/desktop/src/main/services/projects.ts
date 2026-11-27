@@ -311,8 +311,8 @@ export class ProjectsService {
     await this.fire(this.removed, p);
     this.o.store.projects.remove(id);
     this.o.ctx.roots.remove(p.path);
-    const scope = this.o.store.ui.scope();
-    if (scope === id) this.o.ctx.emit('scope.changed', this.o.store.ui.setScope('all'));
+    // Windows scoped to it fall back to all projects on `projects.changed` (renderer stores/scope.ts).
+    if (this.o.store.ui.scope() === id) this.o.store.ui.setScope('all');
     this.emitChanged();
   }
 

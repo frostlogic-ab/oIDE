@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, Notification, screen, shell } from 'electron';
 import { openStore, type Store } from '@oide/store';
-import { AppVersion, appVersionValue, cliVersionBucket, countBucket, screenBucket, telemetryTarget, type AgentEvent } from '@oide/protocol';
+import { AppVersion, appVersionValue, cliVersionBucket, countBucket, screenBucket, telemetryTarget, type AgentEvent, type WindowOpenTrigger } from '@oide/protocol';
 import type { MainContext } from './context.js';
 import { createAgentEventBatcher, createEmitter } from './ipc/emit.js';
 import { attachRouter, IpcRouter, type Logger } from './ipc/router.js';
@@ -20,6 +20,7 @@ import { registerArtifactScheme } from './services/electron-platform.js';
 import { hardenApp } from './security/hardening.js';
 import { AllowedRoots } from './security/roots.js';
 import { loadWindowState, MIN_HEIGHT, MIN_WIDTH, trackWindowState } from './window-state.js';
+import { cascadePosition, NEW_WINDOW_ARG, WindowRegistry } from './windows.js';
 import { APP_USER_MODEL_ID, DEV_APP_USER_MODEL_ID, appUserModelId, brandAppShortcuts, releaseForeignShortcuts, resolveAppIcon } from './app-icon.js';
 import { CrashReports, LogManager, openWithRecovery, parseLevel, readCrashReportsPref, Redactor, runShutdown, watchRenderer, writeCrashReportsPref, type ReliabilityContext } from './reliability/index.js';
 import { electronTransport, fileSinkTransport, isOnline } from './telemetry/electron.js';
@@ -133,8 +134,12 @@ app.enableSandbox();
 // Privileged schemes must be registered before the app is ready.
 registerArtifactScheme();
 
+// One main process per profile (it owns the database, agents and worktrees). Starting oIDE again
+// while it runs asks the running process for another window on the same profile (`second-instance`
+// in start()) and exits at once, before Chromium touches the profile's caches.
 if (!app.requestSingleInstanceLock()) {
-  app.quit();
+  if (!app.isPackaged) console.log('oIDE is already running with this profile: opened a new window there. Set OIDE_USER_DATA to run a separate profile.');
+  app.exit(0);
 } else {
   void start();
 }
@@ -157,19 +162,30 @@ async function start(): Promise<void> {
     return url.startsWith(rendererDirUrl) || url.split('#')[0] === rendererFileUrl;
   };
 
-  let mainWindow: BrowserWindow | null = null;
+  // Every window shows the same profile; events go to all of them (main/windows.ts).
+  const windows = new WindowRegistry<BrowserWindow>();
+  /** Set once the app is ready to open windows; earlier relaunches only focus (the first window is coming). */
+  let openAnotherWindow: ((trigger: WindowOpenTrigger) => void) | null = null;
   const quitHooks: Array<{ name: string; fn: () => void | Promise<void> }> = [];
 
   let observers: TelemetryObservers | null = null;
-  const sendEvent = createEmitter(() => (mainWindow && !mainWindow.isDestroyed() ? [mainWindow.webContents] : []), log);
+  const sendEvent = createEmitter(() => windows.all().map((w) => w.webContents), log);
+  const sendActive = createEmitter(() => {
+    const w = windows.active();
+    return w ? [w.webContents] : [];
+  }, log);
   // Telemetry observes what main tells the renderer (search results, removed agents); it never changes it.
-  const emit: typeof sendEvent = (event, payload) => {
-    const sent = sendEvent(event, payload);
-    try {
-      observers?.emitted(event, payload);
-    } catch {}
-    return sent;
-  };
+  const observed =
+    (send: typeof sendEvent): typeof sendEvent =>
+    (event, payload) => {
+      const sent = send(event, payload);
+      try {
+        observers?.emitted(event, payload);
+      } catch {}
+      return sent;
+    };
+  const emit = observed(sendEvent);
+  const emitActive = observed(sendActive);
   const agentEvents = createAgentEventBatcher(emit);
   const pushAgentEvent = agentEvents.push.bind(agentEvents);
   agentEvents.push = (e: AgentEvent) => {
@@ -180,10 +196,16 @@ async function start(): Promise<void> {
   };
   const roots = new AllowedRoots();
 
-  app.on('second-instance', () => {
-    if (!mainWindow) return;
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
+  // oIDE started again (Start menu, a shortcut, the taskbar "New window" task, `pnpm dev`): another window.
+  app.on('second-instance', (_e, argv) => {
+    if (openAnotherWindow) {
+      openAnotherWindow(argv.includes(NEW_WINDOW_ARG) ? 'taskbar' : 'relaunch');
+      return;
+    }
+    const w = windows.active();
+    if (!w) return;
+    if (w.isMinimized()) w.restore();
+    w.focus();
   });
 
   // before-quit: from here on the window is never reloaded after a crash. will-quit: flush the
@@ -225,7 +247,7 @@ async function start(): Promise<void> {
   if (process.platform === 'win32' && app.isPackaged) releaseDevShortcuts();
 
   await hardenApp({ isAppUrl, dev: Boolean(devServerUrl) });
-  setMenu();
+  setMenu(() => openAnotherWindow?.('menu'));
 
   const userDataDir = app.getPath('userData');
   roots.add(userDataDir, 'app-data');
@@ -262,9 +284,11 @@ async function start(): Promise<void> {
     appVersion: app.getVersion(),
     userDataDir,
     emit,
+    emitActive,
     agentEvents,
     roots,
-    getWindow: () => mainWindow,
+    getWindow: () => windows.active(),
+    openWindow: (trigger) => openAnotherWindow?.(trigger),
     log,
     onQuit: (fn, name) => quitHooks.push({ name: name ?? `hook ${quitHooks.length + 1}`, fn }),
     reliability,
@@ -338,17 +362,19 @@ async function start(): Promise<void> {
    * the database and the extension host keep running in main; the page reloads and its stores
    * rehydrate from `agents.list` / `agents.events` (reliability/renderer-watchdog.ts).
    */
-  const openWindow = (): BrowserWindow => {
-    const win = createWindow(userDataDir);
-    win.on('closed', () => {
-      if (mainWindow === win) mainWindow = null;
-    });
+  const openWindow = (from?: BrowserWindow): BrowserWindow => {
+    const win = createWindow(userDataDir, from);
+    windows.add(win);
+    win.on('closed', () => windows.remove(win));
     win.webContents.on('did-finish-load', () => {
       setTimeout(() => services.flushNotices(), 500);
       void reportStart();
     });
     // Open pull requests are looked at again when the user comes back (throttled, see pr-watch.ts).
-    win.on('focus', () => services.git.onWindowFocus());
+    win.on('focus', () => {
+      windows.focused(win);
+      services.git.onWindowFocus();
+    });
     watchRenderer(win.webContents, {
       log,
       reloadApp: () => void loadApp(win).catch((err) => log.error('window reload failed', err)),
@@ -389,14 +415,29 @@ async function start(): Promise<void> {
     return win;
   };
 
-  mainWindow = openWindow();
-  await loadApp(mainWindow);
+  const firstWindow = openWindow();
+  await loadApp(firstWindow);
+
+  openAnotherWindow = (trigger) => {
+    if (quitRequested) return;
+    const win = openWindow(windows.active() ?? undefined);
+    void loadApp(win).catch((err) => log.error('window load failed', err));
+    log.info('opened a window', { trigger, windows: windows.size });
+    telemetry.track('window_opened', { trigger, windows: countBucket(windows.size) });
+  };
+  // macOS: the Dock menu. Windows: a "New window" task in the taskbar jump list (installed builds;
+  // a dev run's electron.exe would need the app path as an argument).
+  if (process.platform === 'darwin') app.dock?.setMenu(Menu.buildFromTemplate([{ label: 'New Window', click: () => openAnotherWindow?.('dock') }]));
+  if (process.platform === 'win32' && app.isPackaged) {
+    try {
+      app.setUserTasks([{ program: process.execPath, arguments: NEW_WINDOW_ARG, title: 'New window', description: 'Open another oIDE window', iconPath: process.execPath, iconIndex: 0 }]);
+    } catch (err) {
+      log.warn('could not set the taskbar tasks', err);
+    }
+  }
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      mainWindow = openWindow();
-      void loadApp(mainWindow);
-    }
+    if (windows.size === 0 && !quitRequested) void loadApp(openWindow());
   });
 }
 
@@ -460,11 +501,14 @@ function releaseDevShortcuts(): void {
   }, 0).unref();
 }
 
-function createWindow(userDataDir: string): BrowserWindow {
-  const state = loadWindowState(
-    userDataDir,
-    screen.getAllDisplays().map((d) => d.workArea),
-  );
+/** A window on the saved bounds; one opened from another window (`from`) cascades from it instead. */
+function createWindow(userDataDir: string, from?: BrowserWindow): BrowserWindow {
+  const workAreas = screen.getAllDisplays().map((d) => d.workArea);
+  const state = loadWindowState(userDataDir, workAreas);
+  if (from && !from.isDestroyed()) {
+    const base = from.getNormalBounds();
+    Object.assign(state, { width: base.width, height: base.height, maximized: from.isMaximized() }, cascadePosition(base, base, workAreas));
+  }
   const win = new BrowserWindow({
     title: 'oIDE',
     width: state.width,
@@ -495,10 +539,17 @@ function createWindow(userDataDir: string): BrowserWindow {
   return win;
 }
 
-function setMenu(): void {
+function setMenu(newWindow: () => void): void {
   if (process.platform === 'darwin') {
     Menu.setApplicationMenu(
-      Menu.buildFromTemplate([{ role: 'appMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' }]),
+      Menu.buildFromTemplate([
+        { role: 'appMenu' },
+        // The window's own keymap handles Cmd+Shift+N (app.newWindow); the menu only shows the shortcut.
+        { label: 'File', submenu: [{ label: 'New Window', accelerator: 'CmdOrCtrl+Shift+N', registerAccelerator: false, click: newWindow }] },
+        { role: 'editMenu' },
+        { role: 'viewMenu' },
+        { role: 'windowMenu' },
+      ]),
     );
   } else if (app.isPackaged) {
     Menu.setApplicationMenu(null);

@@ -3,6 +3,7 @@ import { ArchiveReason, Effort, PermissionMode, WorkIn } from './agent.js';
 import { ArtifactKind } from './artifacts.js';
 import { ScriptRunner } from './scripts.js';
 import { UpdateChannel, UpdateInstallTrigger } from './updates.js';
+import { WindowOpenTrigger } from './windows.js';
 
 /**
  * Opt-in usage analytics and error reports (docs/wiki/pages/telemetry.md, ADR 0011).
@@ -331,6 +332,11 @@ export const TELEMETRY_EVENTS = {
     from: 'main',
     question: 'How do people apply updates: from the header Update button, from Settings, or by quitting oIDE?',
     props: z.object({ trigger: UpdateInstallTrigger, channel: UpdateChannel }),
+  }),
+  window_opened: def({
+    from: 'main',
+    question: 'Do people work in more than one oIDE window, how do they open the extra windows, and how many do they keep open?',
+    props: z.object({ trigger: WindowOpenTrigger, windows: CountBucket }),
   }),
   update_checked: def({
     from: 'main',
