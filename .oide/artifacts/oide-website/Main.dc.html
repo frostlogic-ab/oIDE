@@ -21,7 +21,7 @@ body{margin:0}
 
   <header class="nav">
     <div class="wrap">
-      <a class="brand" href="#top"><i aria-hidden="true"></i>oIDE</a>
+      <a class="brand" href="#top"><img class="on-dark" src="logo-mark.svg" width="24" height="24" alt=""><img class="on-light" src="logo-mark-light.svg" width="24" height="24" alt="">oIDE</a>
       <nav class="nav-links" aria-label="Main">
         <a href="#direct">Features</a>
         <a href="Features.dc.html">Extensions</a>
@@ -35,10 +35,10 @@ body{margin:0}
         <button class="btn btn-primary dl-caret" type="button" aria-expanded="{{ navExpanded }}" aria-label="Choose another platform" onClick="{{ toggleNav }}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
         <sc-if value="{{ navOpen }}" hint-placeholder-val="{{ false }}">
           <div class="dl-menu">
-            <a href="More.dc.html">macOS <small>universal · .dmg</small></a>
+            <a href="More.dc.html">macOS <small>Apple silicon · Intel</small></a>
             <a href="More.dc.html">Windows <small>x64 · ARM64</small></a>
-            <a href="More.dc.html">Linux <small>.deb · .rpm · AppImage</small></a>
-            <a class="all" href="More.dc.html">All downloads and package managers</a>
+            <a href="More.dc.html">Linux <small>AppImage · .deb · .rpm</small></a>
+            <a class="all" href="More.dc.html">All downloads and checksums</a>
           </div>
         </sc-if>
       </div>
@@ -50,7 +50,7 @@ body{margin:0}
     <!-- HERO: the moat, then proof -->
     <section class="hero">
       <div class="wrap">
-        <span class="label go"><i></i>Open source · agent-first IDE · v0.1 preview</span>
+        <span class="label go"><i></i>Open source · agent-first IDE · preview</span>
         <h1><span>Six agents.</span> <span>Three projects.</span> <span class="punch">One window.</span></h1>
         <div class="hero-row">
           <p class="lede">oIDE is a desktop app for directing coding agents instead of typing code. Run many Claude Code sessions side by side across all your repos, <b>on the Claude plan you already have</b>.</p>
@@ -61,10 +61,10 @@ body{margin:0}
                 <button class="btn btn-primary btn-lg dl-caret" type="button" aria-expanded="{{ heroExpanded }}" aria-label="Choose another platform" onClick="{{ toggleHero }}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
                 <sc-if value="{{ heroOpen }}" hint-placeholder-val="{{ false }}">
                   <div class="dl-menu">
-                    <a href="More.dc.html">macOS <small>universal · .dmg</small></a>
+                    <a href="More.dc.html">macOS <small>Apple silicon · Intel</small></a>
                     <a href="More.dc.html">Windows <small>x64 · ARM64</small></a>
-                    <a href="More.dc.html">Linux <small>.deb · .rpm · AppImage</small></a>
-                    <a class="all" href="More.dc.html">All downloads and package managers</a>
+                    <a href="More.dc.html">Linux <small>AppImage · .deb · .rpm</small></a>
+                    <a class="all" href="More.dc.html">All downloads and checksums</a>
                   </div>
                 </sc-if>
               </div>

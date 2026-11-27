@@ -26,5 +26,19 @@
     "author": "user",
     "note": "Opens on Main.dc.html",
     "entry": "Main.dc.html"
+  },
+  {
+    "version": 5,
+    "ts": 1795786041792,
+    "author": "agent:agt-4b4c40fa-ab18-4c82-829d-c5955d4ea57f",
+    "note": "Sync copy with getoide.com: no version tag, checksum commands instead of package managers, live download options, guide links, FAQ and footer updates",
+    "entry": "Main.dc.html"
+  },
+  {
+    "version": 6,
+    "ts": 1795786080736,
+    "author": "agent:agt-4b4c40fa-ab18-4c82-829d-c5955d4ea57f",
+    "note": "Use the live oIDE logo mark (dark and light variants) in the nav and footer",
+    "entry": "Main.dc.html"
   }
 ]

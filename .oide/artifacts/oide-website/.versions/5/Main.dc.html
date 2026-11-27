@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>oIDE website · Home, top</title>
+<script src="./_runtime/react.js"></script>
+<script src="./_runtime/react-dom.js"></script>
+<script src="./_runtime/support.js"></script>
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..900&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+</style>
+</helmet>
+<div class="site {{themeClass}}">
+
+  <header class="nav">
+    <div class="wrap">
+      <a class="brand" href="#top"><i aria-hidden="true"></i>oIDE</a>
+      <nav class="nav-links" aria-label="Main">
+        <a href="#direct">Features</a>
+        <a href="Features.dc.html">Extensions</a>
+        <a href="More.dc.html">How it works</a>
+        <a href="More.dc.html">Compare</a>
+        <a href="More.dc.html">Docs</a><!-- live: /guide/getting-started -->
+      </nav>
+      <a class="nav-gh" href="More.dc.html"><svg class="ic solid" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"></path></svg><span>GitHub</span></a>
+      <div class="dl">
+        <a class="btn btn-primary dl-main" href="More.dc.html"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path></svg><span>{{ dlShort }}</span></a>
+        <button class="btn btn-primary dl-caret" type="button" aria-expanded="{{ navExpanded }}" aria-label="Choose another platform" onClick="{{ toggleNav }}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+        <sc-if value="{{ navOpen }}" hint-placeholder-val="{{ false }}">
+          <div class="dl-menu">
+            <a href="More.dc.html">macOS <small>Apple silicon · Intel</small></a>
+            <a href="More.dc.html">Windows <small>x64 · ARM64</small></a>
+            <a href="More.dc.html">Linux <small>AppImage · .deb · .rpm</small></a>
+            <a class="all" href="More.dc.html">All downloads and checksums</a>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+
+    <!-- HERO: the moat, then proof -->
+    <section class="hero">
+      <div class="wrap">
+        <span class="label go"><i></i>Open source · agent-first IDE · preview</span>
+        <h1><span>Six agents.</span> <span>Three projects.</span> <span class="punch">One window.</span></h1>
+        <div class="hero-row">
+          <p class="lede">oIDE is a desktop app for directing coding agents instead of typing code. Run many Claude Code sessions side by side across all your repos, <b>on the Claude plan you already have</b>.</p>
+          <div class="cta">
+            <div class="cta-btns">
+              <div class="dl">
+                <a class="btn btn-primary btn-lg dl-main" href="More.dc.html"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"></path></svg><span>{{ dlLong }}</span></a>
+                <button class="btn btn-primary btn-lg dl-caret" type="button" aria-expanded="{{ heroExpanded }}" aria-label="Choose another platform" onClick="{{ toggleHero }}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
+                <sc-if value="{{ heroOpen }}" hint-placeholder-val="{{ false }}">
+                  <div class="dl-menu">
+                    <a href="More.dc.html">macOS <small>Apple silicon · Intel</small></a>
+                    <a href="More.dc.html">Windows <small>x64 · ARM64</small></a>
+                    <a href="More.dc.html">Linux <small>AppImage · .deb · .rpm</small></a>
+                    <a class="all" href="More.dc.html">All downloads and checksums</a>
+                  </div>
+                </sc-if>
+              </div>
+              <a class="btn btn-ghost btn-lg" href="More.dc.html">Star on GitHub</a>
+            </div>
+            <small>Free, MIT licensed. {{ alsoFor }}</small>
+          </div>
+        </div>
+
+        <ol class="moat">
+          <li><i class="pin" aria-hidden="true">1</i><b>Runs on your Claude plan</b><span>oIDE drives your own signed-in <span class="mono">claude</span> CLI. No API key, and it never sees your credentials.</span></li>
+          <li><i class="pin" aria-hidden="true">2</i><b>Every project in one window</b><span>Agents from all your repos on one wall, each working in its own git worktree.</span></li>
+          <li><i class="pin" aria-hidden="true">3</i><b>A marketplace of agent tools</b><span>Extensions give agents new abilities. Any MCP server works too, listed or not.</span></li>
+          <li><i class="pin" aria-hidden="true">4</i><b>claude.ai artifacts built in</b><span>Designs, docs and whiteboards that your agents can read and write.</span></li>
+        </ol>
+      </div>
+
+      <div class="hero-shot">
+        <div class="window">
+          <img src="shots/wall.jpg" width="2880" height="1928" alt="The oIDE agent wall. Six agent tiles from three projects show live activity, subagents and context use. One tile asks permission to run npm install, one has a question, one is ready for review. A projects list is on the left, artifacts and the marketplace on the right, and plan usage in the status bar.">
+          <span class="needs-you" aria-hidden="true"></span>
+          <i class="pin" style="left: 64.2%; top: 98.6%;" aria-hidden="true">1</i>
+          <i class="pin" style="left: 11.2%; top: 7.6%;" aria-hidden="true">2</i>
+          <i class="pin" style="left: 97.1%; top: 82.7%;" aria-hidden="true">3</i>
+          <i class="pin" style="left: 87.6%; top: 8%;" aria-hidden="true">4</i>
+        </div>
+      </div>
+    </section>
+
+    <!-- DIRECT -->
+    <section class="sec alt" id="direct">
+      <div class="wrap">
+        <div class="sec-head">
+          <span class="label go"><i></i>Direct</span>
+          <h2><span class="s">Hand out goals.</span> <span class="s">Step in only when asked.</span></h2>
+          <p>The wall shows every agent you have running. Most of the time you just watch. When one of them needs you, it says so.</p>
+        </div>
+
+        <article class="feat">
+          <div class="feat-head">
+            <span class="label hold"><i></i>The wall</span>
+            <h3>An agent that needs you shows it on its tile</h3>
+            <div class="feat-body">
+              <p>Three things stop an agent: it wants permission, it has a question, or it is finished. Each one shows up in color on the wall, and you deal with it right there. <span class="kbd">N</span> jumps to the next agent that is waiting.</p>
+            </div>
+          </div>
+          <div class="fig tiles">
+            <figure class="tile">
+              <div class="shot"><img src="shots/tile-permission.jpg" width="836" height="592" alt="Agent tile marked Needs permission: a subagent wants to run npm install node-pty. Buttons: Allow once, Always in oide, Deny."></div>
+              <b><i></i>Needs permission</b>
+              <span>Allow once, always allow in this project, or deny. The prompt names the subagent that asked.</span>
+            </figure>
+            <figure class="tile">
+              <div class="shot"><img src="shots/tile-question.jpg" width="836" height="540" alt="Agent tile marked Has a question, asking whether invoice dates should use the customer's timezone or UTC, with a reply box and a Send button."></div>
+              <b><i></i>Has a question</b>
+              <span>Type the answer on the tile. The agent picks up where it stopped.</span>
+            </figure>
+            <figure class="tile">
+              <div class="shot"><img src="shots/tile-review.jpg" width="836" height="540" alt="Agent tile marked Ready for review with a summary, 8 files changed, and buttons Review diff and Open PR."></div>
+              <b class="review"><i></i>Ready for review</b>
+              <span>Read the agent's summary, then open the diff or go straight to a pull request.</span>
+            </figure>
+          </div>
+        </article>
+
+        <article class="feat split">
+          <div class="feat-copy">
+            <span class="label"><i></i>Spawn</span>
+            <h3>Start an agent with a goal, a mode and a budget</h3>
+            <p>Describe the outcome and attach what the agent should read. Then choose how much freedom it gets and how much of your plan it may spend.</p>
+            <ul class="ticks">
+              <li>Attach a design, a doc, a file or a URL as context.</li>
+              <li>Every Claude Code permission mode, from Manual to Bypass. Auto is the default.</li>
+              <li>Cheap, Balanced or Quality decides which model leads and which ones do the subagent work.</li>
+              <li>Run the same goal as several parallel attempts and keep the best one.</li>
+            </ul>
+          </div>
+          <figure class="fig">
+            <div class="shot fade"><img src="shots/spawn.jpg" width="1440" height="1160" alt="Spawn an agent dialog: a goal, context chips, project and worktree pickers, five permission modes with Auto selected, and model presets Cheap, Balanced, Quality and Custom."></div>
+          </figure>
+        </article>
+
+        <article class="feat">
+          <div class="feat-head">
+            <span class="label"><i></i>Focus view</span>
+            <h3><span class="s">Open one agent.</span> <span class="s">Keep the other five in reach.</span></h3>
+            <div class="feat-body">
+              <p>The focus view has the full transcript, the plan, the changed files and a real terminal. Subagents get their own cards and a timeline, each with its model, effort and token count.</p>
+              <ul class="ticks">
+                <li><span class="kbd">J</span> <span class="kbd">K</span> move between agents without going back to the wall.</li>
+                <li>A context ring per agent. Compact the conversation when it fills up.</li>
+              </ul>
+            </div>
+          </div>
+          <figure class="fig">
+            <div class="shot"><img src="shots/focus.jpg" width="2334" height="1520" alt="Focus view of the agent 'Wire the Claude Code CLI bridge': the transcript with file edits and three subagent cards, and a Subagents panel with a timeline and each subagent's model, status and tokens."></div>
+            <figcaption><b>Focus view.</b> The lead agent's transcript on the left, its three subagents on the right.</figcaption>
+          </figure>
+        </article>
+      </div>
+    </section>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Dark","Light"],"default":"Dark"},"visitor":{"editor":"enum","options":["Detect","macOS","Windows","Linux"],"default":"Detect","section":"Download button"},"$preview":{"width":1440,"height":4362}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { menu: null, os: null };
+  }
+  componentDidMount() {
+    // Name the visitor's system on the download buttons.
+    var hint = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || '';
+    var ua = navigator.userAgent || '';
+    if (/Android|iPhone|iPad|iPod/i.test(ua)) return;
+    var os = /Win/i.test(hint) ? 'win' : /Mac/i.test(hint) ? 'mac' : /Linux|X11|CrOS/i.test(hint + ua) ? 'linux' : null;
+    if (os) this.setState({ os: os });
+  }
+  renderVals() {
+    var NAME = { mac: 'macOS', win: 'Windows', linux: 'Linux' };
+    var pick = this.props.visitor ?? 'Detect';
+    var os = pick === 'Detect' ? this.state.os : { macOS: 'mac', Windows: 'win', Linux: 'linux' }[pick];
+    var rest = ['mac', 'win', 'linux'].filter(function (k) { return k !== os; });
+    var menu = this.state.menu;
+    var self = this;
+    function toggle(id) { return function () { self.setState({ menu: self.state.menu === id ? null : id }); }; }
+    return {
+      themeClass: (this.props.theme ?? 'Dark') === 'Light' ? 'light' : '',
+      dlShort: os ? 'Download for ' + NAME[os] : 'Download',
+      dlLong: os ? 'Download for ' + NAME[os] : 'Download oIDE',
+      alsoFor: os ? 'Also for ' + NAME[rest[0]] + ' and ' + NAME[rest[1]] + '.' : 'For macOS, Windows and Linux.',
+      navOpen: menu === 'nav',
+      heroOpen: menu === 'hero',
+      navExpanded: menu === 'nav' ? 'true' : 'false',
+      heroExpanded: menu === 'hero' ? 'true' : 'false',
+      toggleNav: toggle('nav'),
+      toggleHero: toggle('hero'),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -61,7 +61,7 @@ body{margin:0}
           <tbody><tr><th scope="row">Uses your Claude plan through the official CLI</th><td class="us"><span class="yes">Yes</span></td><td><span class="some">Often API pricing</span></td><td><span class="yes">Yes</span></td><td><span class="yes">Yes</span></td></tr><tr><th scope="row">Agents from many projects in one window</th><td class="us"><span class="yes">Yes</span></td><td><span class="no">One project per window</span></td><td><span class="some">Some</span></td><td><span class="some">By hand</span></td></tr><tr><th scope="row">A worktree per agent, with overlap warnings</th><td class="us"><span class="yes">Yes</span></td><td><span class="some">Some</span></td><td><span class="some">Worktrees, no warnings</span></td><td><span class="no">By hand</span></td></tr><tr><th scope="row">A marketplace of tools made for agents</th><td class="us"><span class="yes">Yes</span></td><td><span class="some">Editor extensions</span></td><td><span class="no">No</span></td><td><span class="no">No</span></td></tr><tr><th scope="row">claude.ai designs, docs and whiteboards inside</th><td class="us"><span class="yes">Yes</span></td><td><span class="no">No</span></td><td><span class="no">No</span></td><td><span class="no">No</span></td></tr><tr><th scope="row">Model routing per subagent task</th><td class="us"><span class="yes">Yes</span></td><td><span class="some">One model picker</span></td><td><span class="some">One model picker</span></td><td><span class="some">Flags and config</span></td></tr><tr><th scope="row">Free and open source</th><td class="us"><span class="yes">Yes, MIT</span></td><td><span class="no">Mostly not</span></td><td><span class="some">Some</span></td><td><span class="yes">Yes</span></td></tr></tbody>
         </table>
       </div>
-      <p class="fine">These are categories, not specific products. Last checked November 2026. Open an issue if a row is out of date.</p>
+      <p class="fine">These are categories, not specific products. Last checked November 2026. <a href="#compare">Open an issue</a> if a row is out of date.</p>
     </div>
   </section>
 
@@ -69,34 +69,37 @@ body{margin:0}
   <section class="sec" id="download">
     <div class="wrap">
       <div class="sec-head">
-        <span class="label go"><i></i>Download · v0.1 preview</span>
+        <span class="label go"><i></i>Download · preview</span>
         <h2>Get oIDE for your desktop</h2>
-        <p>The same app on all three platforms. It updates itself.</p>
+        <p>The same app on all three platforms. It checks for updates and asks before it installs one.</p>
       </div>
       <div class="os-grid">
         <div class="os {{ macClass }}" id="dl-mac">
           <div class="os-top"><h3>macOS</h3><sc-if value="{{ isMac }}" hint-placeholder-val="{{ false }}"><span class="os-flag">Your system</span></sc-if></div>
           <a class="btn btn-primary" href="#dl-mac">Download .dmg</a>
           <div class="os-alt"><a href="#dl-mac">Apple silicon</a><a href="#dl-mac">Intel</a><a href="#dl-mac">.zip</a></div>
-          <div class="cmd"><code>brew install --cask oide</code><button type="button" onClick="{{ copyMac }}">{{ macCopyLabel }}</button></div>
+          <span class="cmd-label">Check the download against SHA256SUMS</span>
+          <div class="cmd"><code>shasum -a 256 -c SHA256SUMS --ignore-missing</code><button type="button" onClick="{{ copyMac }}">{{ macCopyLabel }}</button></div>
           <p class="os-req">macOS 12 or later.</p>
         </div>
         <div class="os {{ winClass }}" id="dl-win">
           <div class="os-top"><h3>Windows</h3><sc-if value="{{ isWin }}" hint-placeholder-val="{{ false }}"><span class="os-flag">Your system</span></sc-if></div>
           <a class="btn btn-primary" href="#dl-win">Download installer</a>
           <div class="os-alt"><a href="#dl-win">x64</a><a href="#dl-win">ARM64</a><a href="#dl-win">.zip</a></div>
-          <div class="cmd"><code>winget install oide</code><button type="button" onClick="{{ copyWin }}">{{ winCopyLabel }}</button></div>
+          <span class="cmd-label">Check the download against SHA256SUMS</span>
+          <div class="cmd"><code>Get-FileHash .\oIDE-*-win-x64.exe</code><button type="button" onClick="{{ copyWin }}">{{ winCopyLabel }}</button></div>
           <p class="os-req">Windows 10 or 11.</p>
         </div>
         <div class="os {{ linuxClass }}" id="dl-linux">
           <div class="os-top"><h3>Linux</h3><sc-if value="{{ isLinux }}" hint-placeholder-val="{{ false }}"><span class="os-flag">Your system</span></sc-if></div>
           <a class="btn btn-primary" href="#dl-linux">Download AppImage</a>
-          <div class="os-alt"><a href="#dl-linux">.deb</a><a href="#dl-linux">.rpm</a><a href="#dl-linux">.tar.gz</a><a href="#dl-linux">ARM64</a></div>
-          <div class="cmd"><code>sudo apt install ./oide_amd64.deb</code><button type="button" onClick="{{ copyLinux }}">{{ linuxCopyLabel }}</button></div>
+          <div class="os-alt"><a href="#dl-linux">.deb</a><a href="#dl-linux">.rpm</a><a href="#dl-linux">ARM64</a></div>
+          <span class="cmd-label">Check the download against SHA256SUMS</span>
+          <div class="cmd"><code>sha256sum -c SHA256SUMS --ignore-missing</code><button type="button" onClick="{{ copyLinux }}">{{ linuxCopyLabel }}</button></div>
           <p class="os-req">Ubuntu 22.04, Fedora 39 or newer.</p>
         </div>
       </div>
-      <p class="need"><i aria-hidden="true"></i><span><b>You also need Claude Code.</b> oIDE uses the Claude Code CLI that you install and sign in to yourself, with a Claude Pro or Max plan or your own API key. On first launch oIDE looks for it and points you to Anthropic's install guide if it is missing.</span></p>
+      <p class="need"><i aria-hidden="true"></i><span><b>You also need Claude Code.</b> oIDE uses the Claude Code CLI that you install and sign in to yourself, with a Claude Pro or Max plan or your own API key. On first launch oIDE looks for it and points you to Anthropic's install guide if it is missing. <a href="#open">Getting started</a></span></p>
     </div>
   </section>
 
@@ -109,9 +112,9 @@ body{margin:0}
         <p>oIDE is MIT licensed. The app, the marketplace index and every first-party extension live on GitHub.</p>
       </div>
       <div class="doors">
-        <a href="#open"><b>Read the docs</b><span>Getting started, keyboard shortcuts, settings, and how agents, worktrees and permissions fit together.</span><code>wiki/Home →</code></a>
-        <a href="#open"><b>Write an extension</b><span>Package an MCP server or a view, declare its tools and what they are allowed to do, and publish it.</span><code>wiki/Extensions →</code></a>
-        <a href="#open"><b>Contribute</b><span>Pick up a good first issue, propose a feature, or share the techniques that make your agents better.</span><code>CONTRIBUTING.md →</code></a>
+        <a href="#open"><b>Read the docs</b><span>Getting started, keyboard shortcuts, settings, and how agents, worktrees and permissions fit together.</span><code>Guide →</code></a>
+        <a href="#open"><b>Write an extension</b><span>Package an MCP server or a view, declare its tools and what they are allowed to do, and publish it.</span><code>Extension author guide →</code></a>
+        <a href="#open"><b>Contribute</b><span>Pick up a good first issue, propose a feature, or share the techniques that make your agents better.</span><code>Contributing →</code></a>
       </div>
     </div>
   </section>
@@ -125,8 +128,8 @@ body{margin:0}
         <details><summary>Can oIDE see my credentials?</summary><p>No. You sign in through Anthropic's own flow in the CLI. oIDE starts the CLI and reads its event stream. It does not touch tokens and it does not modify the CLI.</p></details>
         <details><summary>Is oIDE made by Anthropic?</summary><p>No. oIDE is an independent open-source project that works with Claude Code. It is not affiliated with or endorsed by Anthropic.</p></details>
         <details><summary>Can I still edit files myself?</summary><p>Yes. There is a file editor with tabs, search and a terminal. It is simple on purpose, because most of your time in oIDE goes into directing and reviewing agents.</p></details>
-        <details><summary>How many agents can I run at once?</summary><p>As many as your machine and your plan's limits allow. The status bar shows session and weekly usage, so you can see how fast you are spending it.</p></details>
-        <details><summary>Does it work with local models?</summary><p>Yes, through the CLI's own environment variables. Add an endpoint under Settings › Models and it appears next to the built-in models. A model needs tool use to work well as an agent.</p></details>
+        <details><summary>How many agents can I run at once?</summary><p>As many as your machine and your plan's limits allow. Settings &gt; Agents &gt; Max running (3 by default) queues the rest. The status bar shows session and weekly usage, so you can see how fast you are spending it.</p></details>
+        <details><summary>Does it work with local models?</summary><p>Yes, through the CLI's own environment variables. Add an endpoint under Settings &gt; Models and it appears next to the built-in models. A model needs tool use to work well as an agent.</p></details>
       </div>
     </div>
   </section>
@@ -140,9 +143,9 @@ body{margin:0}
         <button class="btn btn-primary btn-lg dl-caret" type="button" aria-expanded="{{ closeExpanded }}" aria-label="Choose another platform" onClick="{{ toggleClose }}"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg></button>
         <sc-if value="{{ closeOpen }}" hint-placeholder-val="{{ false }}">
           <div class="dl-menu up">
-            <a href="#dl-mac">macOS <small>universal · .dmg</small></a>
+            <a href="#dl-mac">macOS <small>Apple silicon · Intel</small></a>
             <a href="#dl-win">Windows <small>x64 · ARM64</small></a>
-            <a href="#dl-linux">Linux <small>.deb · .rpm · AppImage</small></a>
+            <a href="#dl-linux">Linux <small>AppImage · .deb · .rpm</small></a>
           </div>
         </sc-if>
       </div>
@@ -152,9 +155,9 @@ body{margin:0}
   <footer class="foot-band">
     <div class="wrap">
       <div class="foot">
-        <div><a class="brand" href="Main.dc.html"><i aria-hidden="true"></i>oIDE</a><p>The open desktop app for running teams of coding agents.</p></div>
+        <div><a class="brand" href="Main.dc.html"><img class="on-dark" src="logo-mark.svg" width="24" height="24" alt=""><img class="on-light" src="logo-mark-light.svg" width="24" height="24" alt="">oIDE</a><p>The open desktop app for running teams of coding agents.</p></div>
         <div><h4>Product</h4><ul><li><a href="Main.dc.html">Features</a></li><li><a href="Features.dc.html">Extensions</a></li><li><a href="#download">Download</a></li><li><a href="#open">Release notes</a></li></ul></div>
-        <div><h4>Docs</h4><ul><li><a href="#open">Getting started</a></li><li><a href="#open">Keyboard shortcuts</a></li><li><a href="#open">Writing extensions</a></li><li><a href="#how">Architecture</a></li></ul></div>
+        <div><h4>Docs</h4><ul><li><a href="#open">Getting started</a></li><li><a href="#open">Keyboard shortcuts</a></li><li><a href="#open">Writing extensions</a></li><li><a href="#how">Architecture wiki</a></li></ul></div>
         <div><h4>Community</h4><ul><li><a href="#open">GitHub</a></li><li><a href="#open">Discussions</a></li><li><a href="#open">Issues</a></li><li><a href="#open">Security policy</a></li></ul></div>
       </div>
       <p class="legal">oIDE is an independent open-source project released under the MIT License. It is not affiliated with, sponsored by or endorsed by Anthropic. Claude and Claude Code are trademarks of Anthropic, PBC, and are used here only to describe compatibility.</p>
@@ -179,7 +182,7 @@ class Component extends DCLogic {
   }
   renderVals() {
     var NAME = { mac: 'macOS', win: 'Windows', linux: 'Linux' };
-    var CMD = { mac: 'brew install --cask oide', win: 'winget install oide', linux: 'sudo apt install ./oide_amd64.deb' };
+    var CMD = { mac: 'shasum -a 256 -c SHA256SUMS --ignore-missing', win: 'Get-FileHash .\\oIDE-*-win-x64.exe', linux: 'sha256sum -c SHA256SUMS --ignore-missing' };
     var pick = this.props.visitor ?? 'Detect';
     var os = pick === 'Detect' ? this.state.os : { macOS: 'mac', Windows: 'win', Linux: 'linux' }[pick];
     var copied = this.state.copied;
