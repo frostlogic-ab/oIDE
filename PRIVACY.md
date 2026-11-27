@@ -29,7 +29,8 @@ Both are **off until you agree**:
 - Crash and error reports: the kind of error, its message with paths, names, links, quoted text and
   tokens removed, and where it happened in oIDE's own code.
 - Your setup: oIDE, Claude Code CLI and Electron versions, operating system and version, CPU
-  architecture, language, screen size rounded to 100 px, and a random install id created when you agree.
+  architecture, language, the country in your OS region settings, screen size rounded to 100 px, and a
+  random install id created when you agree.
 
 The full list of events and the only values they may carry is in Settings › Privacy › See what's sent
 and in [docs/wiki/pages/telemetry.md](docs/wiki/pages/telemetry.md).
@@ -45,8 +46,10 @@ not record sessions or the screen.
 
 Official builds send to an [Umami](https://umami.is) server at `data.frostlogic.se`, run by the
 maintainers. oIDE's main process sends it directly; the app window loads no analytics script and has
-no network access. As with any web request, the server sees your IP address; Umami keeps only the
-country, region and city derived from it, and no cookies are used. Nothing is stored on your computer
+no network access. As with any web request, the server sees your IP address. Usage statistics tell
+Umami to ignore it (oIDE sends a fixed placeholder address instead, so no location is stored, only
+the country set in your operating system's region settings); for crash and error reports Umami keeps
+the country, region and city derived from it. No cookies are used. Nothing is stored on your computer
 for sending later: anything not sent when oIDE quits is dropped.
 
 Forks and your own builds can point at their own Umami (`OIDE_UMAMI_HOST`, `OIDE_UMAMI_WEBSITE_ID`) or

@@ -23,6 +23,7 @@ import {
   identifyBody,
   pageviewBody,
   performanceBody,
+  stableUserAgent,
   UmamiClient,
   type ClientLogger,
   type Transport,
@@ -63,8 +64,12 @@ export interface TelemetryServiceOptions {
   unavailable: TelemetryUnavailableReason | null;
   dev: boolean;
   appVersion: string;
-  /** Session properties sent once per run with `identify` (all enum-like). */
-  session: { os: string; osVersion: string; arch: string; electron: string };
+  /**
+   * Session properties sent once per run with `identify` (all enum-like). `os` also picks the
+   * version-free User-Agent; `country` is the OS region setting (ISO 3166 alpha-2), sent because
+   * Umami no longer derives a location from the IP (see `SESSION_IP`).
+   */
+  session: { os: string; osVersion: string; arch: string; electron: string; country?: string };
   /** `<userData>/telemetry.json`: the install id and the last version that ran. */
   stateFile: string;
   scrubber: Scrubber;
@@ -135,6 +140,7 @@ export class TelemetryService {
       screen: '0x0',
       release: o.appVersion,
       environment: o.dev ? 'development' : 'production',
+      userAgent: stableUserAgent(o.session.os),
     };
     this.client =
       this.available && o.target
@@ -326,7 +332,7 @@ export class TelemetryService {
     this.cliVersion = v;
   }
 
-  /** Session properties, once per run: versions, channel, OS family and arch. All enum-like. */
+  /** Session properties, once per run: versions, channel, OS family, arch, OS region. All enum-like. */
   identify(): boolean {
     if (this.identified || !this.usage || !this.client || !this.state.installId) return false;
     this.identified = true;
@@ -339,6 +345,8 @@ export class TelemetryService {
       electron: this.o.session.electron,
       dev: this.o.dev,
     };
+    const country = this.o.session.country?.toUpperCase();
+    if (country && /^[A-Z]{2}$/.test(country)) data.country = country;
     const cli = /^(\d{1,3}\.\d{1,3}\.\d{1,6})/.exec(this.cliVersion ?? '')?.[1];
     if (cli) data.cli_version = cli;
     return this.client.enqueueUsage(identifyBody(this.fullCtx(), this.state.installId, data));

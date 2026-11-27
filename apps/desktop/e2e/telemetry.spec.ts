@@ -104,6 +104,13 @@ test('opt in, then switching both off in Settings › Privacy stops sending', as
   expect(text).not.toMatch(/[A-Za-z]:\\\\|\/Users\/|\/home\/|oide-e2e-/);
   const installId = sent[0]!.payload.id;
   expect(installId).toMatch(/^[0-9a-f-]{36}$/);
+  // One Umami session per install: usage payloads pin the fingerprint (umami.ts, SESSION_IP).
+  for (const p of sent.filter((x) => x.type !== 'error'))
+    expect(p.payload).toMatchObject({
+      id: installId,
+      ip: '127.0.0.1',
+      userAgent: expect.stringMatching(/^Mozilla\/5\.0 /),
+    });
 
   await page.getByRole('switch', { name: 'Share anonymous usage analytics' }).click();
   await expect(page.getByRole('switch', { name: 'Share anonymous usage analytics' })).toHaveAttribute(

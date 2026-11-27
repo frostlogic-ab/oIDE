@@ -703,20 +703,31 @@ export class GitService {
     );
   }
 
+  /** Latest diff refresh started per agent (from `diffSeq`), so an older one finishing late is dropped. */
+  private readonly latestDiff = new Map<string, number>();
+  private diffSeq = 0;
+
   async refreshDiff(agentId: string): Promise<void> {
     if (this.closed) return;
     const a = this.o.agents.get(agentId);
     if (!a?.worktreePath || !a.baseRef || !existsSync(a.worktreePath)) return;
     const worktreePath = a.worktreePath;
     const baseRef = a.baseRef;
+    // Refreshes can overlap (one per debounce window, and `git diff` can take seconds on a busy
+    // machine). Only the latest one started may write: an older, slower one would otherwise put back
+    // counts taken before the agent's last change (seen on Windows CI as 1 file instead of 2).
+    const seq = ++this.diffSeq;
+    this.latestDiff.set(agentId, seq);
     await this.track(async () => {
       try {
         const stat = await (this.o.diffStat ?? diffStat)(worktreePath, baseRef);
-        if (this.closed) return;
+        if (this.closed || this.latestDiff.get(agentId) !== seq) return;
         this.o.agents.setDiff(agentId, stat);
         this.changed(a.projectId);
       } catch (err) {
         this.o.ctx.log.debug('diff refresh failed', agentId, err);
+      } finally {
+        if (this.latestDiff.get(agentId) === seq) this.latestDiff.delete(agentId);
       }
     });
   }

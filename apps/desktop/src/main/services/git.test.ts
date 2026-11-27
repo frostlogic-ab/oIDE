@@ -89,6 +89,28 @@ describe('GitService shutdown', () => {
   });
 });
 
+describe('GitService diff refresh', () => {
+  it('keeps the newest counts when an older refresh finishes last', async () => {
+    const answers = [
+      { ms: 120, stat: { files: 1, additions: 1, deletions: 0 } }, // started first, slow
+      { ms: 10, stat: { files: 2, additions: 2, deletions: 0 } }, // started second, fast
+    ];
+    const { svc, diffs } = service({
+      diffStat: () => {
+        const { ms, stat } = answers.shift()!;
+        return new Promise((r) => setTimeout(() => r(stat), ms));
+      },
+    });
+    await Promise.all([svc.refreshDiff('a1'), svc.refreshDiff('a1')]);
+    expect(diffs).toEqual([{ files: 2, additions: 2, deletions: 0 }]);
+    // A later refresh still writes.
+    answers.push({ ms: 0, stat: { files: 3, additions: 3, deletions: 0 } });
+    await svc.refreshDiff('a1');
+    expect(diffs.at(-1)).toEqual({ files: 3, additions: 3, deletions: 0 });
+    await svc.dispose();
+  });
+});
+
 describe('GitService background fetch', () => {
   function background(opts: { minutes?: number; online?: boolean } = {}) {
     const projects = [

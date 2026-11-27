@@ -2,7 +2,7 @@ import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { net, session } from 'electron';
 import type { TelemetryTarget } from '@oide/protocol';
-import type { Transport } from './umami.js';
+import { stableUserAgent, type Transport } from './umami.js';
 
 /**
  * The network side of telemetry (Electron only). Requests go through a dedicated in-memory session
@@ -14,6 +14,8 @@ import type { Transport } from './umami.js';
 /** A session that can reach only `target.origin` (https). */
 export function telemetrySession(target: TelemetryTarget): Electron.Session {
   const ses = session.fromPartition('oide-telemetry', { cache: false });
+  // Error reports cannot carry `userAgent` in the payload; the header keeps them version-free too.
+  ses.setUserAgent(stableUserAgent(process.platform));
   ses.setPermissionRequestHandler((_wc, _p, cb) => cb(false));
   ses.setPermissionCheckHandler(() => false);
   ses.webRequest.onBeforeRequest((details, cb) => {

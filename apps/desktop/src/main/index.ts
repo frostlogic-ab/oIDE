@@ -83,7 +83,13 @@ const telemetry = new TelemetryService({
   unavailable: unavailableReason(process.env),
   dev: !app.isPackaged,
   appVersion: app.getVersion(),
-  session: { os: process.platform, osVersion: osVersion(), arch: process.arch, electron: process.versions.electron ?? 'unknown' },
+  session: {
+    os: process.platform,
+    osVersion: osVersion(),
+    arch: process.arch,
+    electron: process.versions.electron ?? 'unknown',
+    country: app.getLocaleCountryCode(),
+  },
   stateFile: join(userDataAtBoot, 'telemetry.json'),
   scrubber: createScrubber({
     redactor,

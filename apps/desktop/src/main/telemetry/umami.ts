@@ -5,7 +5,8 @@ import type { TelemetryTarget, TelemetryValue } from '@oide/protocol';
  * (server v3.5.0, `src/tracker/index.ts` and `src/tracker/errors.ts`; checked against
  * `src/app/api/send/request-schema.ts` and `src/lib/errors/schema.ts`):
  *
- * - pageview:     `{ type: 'event', payload: { website, hostname, language, screen, title, url, referrer, id } }`
+ * - pageview:     `{ type: 'event', payload: { website, hostname, language, screen, title, url, referrer, id, ip, userAgent } }`
+ *                 (`ip` and `userAgent` pin the session to the install id: see `SESSION_IP`)
  * - custom event: the same plus `name` and `data`
  * - identify:     `{ type: 'identify', payload: { website, hostname, language, screen, id, data } }` (session data)
  * - performance:  `{ type: 'performance', payload: { website, hostname, language, screen, title, url, id, fcp, lcp, cls, inp, ttfb } }`
@@ -23,6 +24,34 @@ import type { TelemetryTarget, TelemetryValue } from '@oide/protocol';
  * stops sending for this run, and no request at all while offline, paused or not allowed.
  */
 
+/**
+ * Session fingerprint (ADR 0011). Umami v3.5.0 makes the session id
+ * `uuid(website, ip, userAgent, salt, distinctId)` (`src/lib/collection-session.ts`), with `ip` and
+ * `userAgent` taken from the payload when present, else from the request. The request IP changes
+ * whenever the network does (Windows rotates its temporary IPv6 address daily), and Electron's
+ * default User-Agent carries the app and Chromium versions, so one install showed up as a new
+ * session after most launches and every upgrade, and the Retention report (which counts session
+ * ids) saw no one come back. Every usage payload therefore carries the same loopback `ip` and a
+ * `userAgent` with no version in it: the session is then the install id (plus Umami's salt, monthly
+ * unless the server sets `SALT_ROTATION`). The loopback address also means Umami stores no location.
+ */
+export const SESSION_IP = '127.0.0.1';
+
+/**
+ * A browser-like User-Agent (Umami rejects bot-like ones) that never changes with an oIDE, Electron
+ * or OS update: only the OS family is in it, so Umami's OS and browser columns still work. Versions
+ * go in session data instead.
+ */
+export function stableUserAgent(platform: string): string {
+  const os =
+    platform === 'win32'
+      ? 'Windows NT 10.0; Win64; x64'
+      : platform === 'darwin'
+        ? 'Macintosh; Intel Mac OS X 10_15_7'
+        : 'X11; Linux x86_64';
+  return `Mozilla/5.0 (${os}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36`;
+}
+
 export interface UmamiContext {
   websiteId: string;
   /** `oide` (release builds) or `oide-dev` (unpackaged runs). */
@@ -34,6 +63,8 @@ export interface UmamiContext {
   /** App version, e.g. `0.1.0`. */
   release: string;
   environment: 'production' | 'development';
+  /** `stableUserAgent(platform)`: part of the session fingerprint. */
+  userAgent: string;
 }
 
 export interface Vitals {
@@ -44,7 +75,15 @@ export interface Vitals {
   ttfb?: number;
 }
 
-type Base = { website: string; hostname: string; language: string; screen: string; id: string };
+type Base = {
+  website: string;
+  hostname: string;
+  language: string;
+  screen: string;
+  id: string;
+  ip: string;
+  userAgent: string;
+};
 export type UsageBody =
   | {
       type: 'event';
@@ -84,6 +123,8 @@ const base = (c: UmamiContext, id: string): Base => ({
   language: c.language,
   screen: c.screen,
   id,
+  ip: SESSION_IP,
+  userAgent: c.userAgent,
 });
 
 export function pageviewBody(

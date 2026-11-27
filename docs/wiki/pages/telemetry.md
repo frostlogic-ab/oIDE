@@ -36,7 +36,7 @@ Claude account information, ids of custom or local extensions, setting values. S
 
 ### Allowed
 
-App version, channel, OS family and version, arch, Electron version, locale, screen size rounded to
+App version, channel, OS family and version, arch, Electron version, locale, OS region setting (country), screen size rounded to
 100 px, Claude Code CLI version (major.minor in events), counts, durations and buckets, enum-like values
 (screen, model family such as `opus`, effort, permission mode, outcome, tool category such as `Bash` /
 `Edit` / `mcp`), feature-used events, ids of extensions from the official marketplace index.
@@ -50,7 +50,7 @@ test `apps/desktop/src/main/telemetry/umami.test.ts` holds a copy of those schem
 
 | Kind | Endpoint | Body |
 | --- | --- | --- |
-| Screen view | `POST /api/batch` | `{ type: 'event', payload: { website, hostname, language, screen, title, url, referrer?, id } }` |
+| Screen view | `POST /api/batch` | `{ type: 'event', payload: { website, hostname, language, screen, title, url, referrer?, id, ip, userAgent } }` |
 | Event | `POST /api/batch` | the same plus `name` and `data` |
 | Session data | `POST /api/batch` | `{ type: 'identify', payload: { …, id, data } }`, once per run |
 | Web vitals | `POST /api/batch` | `{ type: 'performance', payload: { …, url, fcp?, lcp?, cls?, inp?, ttfb? } }` |
@@ -58,8 +58,23 @@ test `apps/desktop/src/main/telemetry/umami.test.ts` holds a copy of those schem
 
 - `id` is the anonymous install id (Umami's distinct id). Headers as the tracker's: `content-type`,
   `x-umami-website-id`, `x-umami-hostname`, and the `x-umami-cache` token the server returned (memory
-  only). The User-Agent is the Electron session's default (Umami drops requests whose UA looks like a
-  bot, such as Node's `node`).
+  only).
+- **One session per install.** Umami v3.5.0 makes the session id from website, IP, User-Agent, a salt
+  (monthly unless the server sets `SALT_ROTATION`) and the distinct id (`src/lib/collection-session.ts`).
+  The request IP changes with the network (Windows rotates its temporary IPv6 address daily) and
+  Electron's default User-Agent carries the app and Chromium versions, so one person used to show up
+  as a new session after most launches and after every upgrade, and the **Retention** report (which
+  counts session ids) showed almost no one coming back. Usage payloads now carry `ip: '127.0.0.1'` and
+  a constant, version-free, browser-like `userAgent` (`stableUserAgent(platform)` in `umami.ts`; only
+  the OS family is in it), so the session is the install id and stays the same across restarts,
+  networks and oIDE, Electron and OS upgrades. The telemetry network session sends the same
+  User-Agent header (error reports cannot set it in the payload; they still carry the real request IP,
+  so they may sit in a separate session). Side effect: Umami stores no location for usage (the
+  loopback IP has none); the OS region setting goes in session data as `country` instead. A browser-
+  like UA is required: Umami drops requests whose UA looks like a bot, such as Node's `node`.
+- Retention caveat: the session id still changes when Umami's salt rotates (by default at the start
+  of each month). For retention across months, set `SALT_ROTATION` on the server to a fixed string
+  (any value that is not a period name), which makes the salt constant.
 - No `timestamp` on usage payloads (Umami would treat them as historical imports).
 - Main's session `oide-telemetry` (in memory, no cache, no permissions) only lets requests to the
   compiled-in Umami origin through; the window's session still has no network route.
@@ -137,7 +152,8 @@ The source of truth is `TELEMETRY_EVENTS` in `packages/protocol/src/telemetry.ts
 | `perf_summary` | renderer | `window_min`, `ipc_samples`, `ipc_p50_ms`, `ipc_p95_ms` (1 in 10 calls), `long_tasks`, `memory` (bucket), `wall_render_ms`, `wall_agents` (bucket) | Is the UI fast? After 10 min, then every 30 min. |
 
 Session data (`identify`, once per run): `app_version`, `channel`, `os`, `os_version`, `arch`,
-`electron`, `dev`, `cli_version`.
+`electron`, `dev`, `country` (the OS region setting, ISO 3166 alpha-2, from
+`app.getLocaleCountryCode()`; left out when empty), `cli_version`.
 
 ### Which version each user runs
 
