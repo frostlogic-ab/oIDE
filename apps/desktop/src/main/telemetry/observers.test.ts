@@ -392,6 +392,17 @@ describe('archived agents and the PR lifecycle', () => {
     expect(JSON.stringify(events)).not.toMatch(/secret|plan|p1/);
   });
 
+  it('project_pulled says whether Pull was clicked in the Projects sidebar or Source control, never the project', () => {
+    const { o, events } = make();
+    o.command('git.pull', { projectId: 'p1', from: 'sidebar' }, {});
+    o.command('git.pull', { projectId: 'p1' }, {});
+    expect(events).toEqual([
+      { name: 'project_pulled', props: { from: 'sidebar' } },
+      { name: 'project_pulled', props: { from: 'source_control' } },
+    ]);
+    expect(JSON.stringify(events)).not.toMatch(/p1/);
+  });
+
   it('pr_pushed buckets the commits sent to an open PR and says whether oIDE committed files first, never the URL', () => {
     const { o, events } = make();
     o.command('git.pushToPr', { agentId: 'a1' }, { url: 'https://github.com/acme/private/pull/13', number: 13, state: 'open', committed: true, pushed: 3 });

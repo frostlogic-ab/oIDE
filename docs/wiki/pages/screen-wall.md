@@ -10,7 +10,7 @@ Data: [agent-supervisor](agent-supervisor.md) (statuses, activity, context), [su
 
 | Part | What it shows | Source |
 | --- | --- | --- |
-| Projects sidebar (248px) | "All projects" + each project with its agent count; agent rows with status dot (click selects the tile); New project (+, opens the [New project](new-project.md) dialog); Legend | `useProjects`, `useAgents`; "All projects" and project headers set the shared scope (`useScope.setScope`), so they double as the project scope switcher for Files and Source control |
+| Projects sidebar (248px) | "All projects" + each project with its agent count and, when its main checkout is behind its upstream after the background fetch, an amber **Pull N** button (`git.pull` with `from: 'sidebar'`, fast-forward only; a toast says what was pulled or why git refused; sync state from `useSyncStates`, one `git.sync` per project, refreshed on `git.changed`); agent rows with status dot (click selects the tile); New project (+, opens the [New project](new-project.md) dialog); Legend | `useProjects`, `useAgents`; "All projects" and project headers set the shared scope (`useScope.setScope`), so they double as the project scope switcher for Files and Source control |
 | Header row | "All agents" or the project name; filter chips All / Needs you / Running / Review with counts; Spawn agent | counts from `filterCounts()` over agents in scope |
 | Tile grid | `repeat(auto-fill, minmax(300px, 1fr))`, gap 12 | one `AgentTile` per visible id |
 | Artifacts aside (280px, hidden under 1280px) | three newest artifacts in scope with kind thumbnails, "used by N agents" / "being written now"; Marketplace teaser | `artifacts.list`, `artifacts.uses` (reloads on `artifacts.changed`) |

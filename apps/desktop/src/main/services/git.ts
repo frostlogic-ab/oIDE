@@ -90,6 +90,10 @@ export const parcelWatch: WatchFn = async (dir, onChange) => {
 
 const MERGED_KEY = (agentId: string) => `merged:${agentId}`;
 const REMOTE_TTL_MS = 10 * 60_000;
+/** First background fetch after launch, so the Projects sidebar can offer Pull without waiting a full interval. */
+export const STARTUP_FETCH_MS = 15_000;
+/** A focused window fetches again when the last background round is at least this old. */
+export const FOCUS_FETCH_MS = 3 * 60_000;
 const DAY = 24 * 60 * 60 * 1000;
 
 /**
@@ -109,6 +113,10 @@ export class GitService {
   private readonly watchers = new Map<string, { projectId: string; sub: Promise<Subscription | undefined> }>();
   private readonly timers = new Map<string, ReturnType<typeof setTimeout>>();
   private fetchTimer: ReturnType<typeof setInterval> | undefined;
+  private startupFetchTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The background fetch round in flight (one at a time), and when the last one started. */
+  private fetchRound: Promise<void> | undefined;
+  private lastRoundAt = 0;
   private checksTimer: ReturnType<typeof setInterval> | undefined;
   private fetchMinutes = -1;
   private closed = false;
@@ -144,6 +152,8 @@ export class GitService {
       diffStat?: typeof diffStat;
       /** How long dispose() waits for in-flight git commands (default 5 s). */
       disposeWaitMs?: number;
+      /** Delay of the first background fetch after launch (default STARTUP_FETCH_MS). */
+      startupFetchMs?: number;
     },
   ) {
     this.gh = o.gh ?? new GhCli();
@@ -162,6 +172,9 @@ export class GitService {
       this.armFetchTimer();
       this.armChecksTimer();
       o.settings.onChange(() => this.armFetchTimer());
+      // Fetch soon after launch: a stale main checkout is what new agents branch from.
+      this.startupFetchTimer = setTimeout(() => void this.fetchRoundNow(), o.startupFetchMs ?? STARTUP_FETCH_MS);
+      this.startupFetchTimer.unref?.();
     }
   }
 
@@ -793,7 +806,7 @@ export class GitService {
   /** Background fetch of every project (the only remote command that runs without a click). */
   async fetchAll(): Promise<void> {
     if (this.closed) return;
-    await this.track(() => this.fetchAllNow());
+    await this.fetchRoundNow();
     // Then the PR states (open/draft PRs only; backs off on gh errors).
     if (!this.closed) await this.track(() => this.prs.poll('timer'));
   }
@@ -802,6 +815,22 @@ export class GitService {
   onWindowFocus(): void {
     if (this.closed || !this.o.background) return;
     void this.track(() => this.prs.poll('focus'));
+    // Coming back to oIDE: bring the Projects sidebar's Pull state up to date (throttled).
+    if (Date.now() - this.lastRoundAt >= FOCUS_FETCH_MS) void this.fetchRoundNow();
+  }
+
+  /**
+   * One background fetch of every trusted project with a remote. Skipped when Settings › Agents ›
+   * fetch interval is 0 (auto-fetch off) or the machine is offline; a round already running is reused.
+   */
+  private fetchRoundNow(): Promise<void> {
+    if (this.closed) return Promise.resolve();
+    if (this.fetchRound) return this.fetchRound;
+    if (this.o.settings.get().agents.fetchIntervalMinutes <= 0) return Promise.resolve();
+    if (this.o.isOnline && !this.o.isOnline()) return Promise.resolve();
+    this.lastRoundAt = Date.now();
+    this.fetchRound = this.track(() => this.fetchAllNow()).finally(() => (this.fetchRound = undefined));
+    return this.fetchRound;
   }
 
   private async fetchAllNow(): Promise<void> {
@@ -818,6 +847,7 @@ export class GitService {
   async dispose(): Promise<void> {
     this.closed = true;
     if (this.fetchTimer) clearInterval(this.fetchTimer);
+    if (this.startupFetchTimer) clearTimeout(this.startupFetchTimer);
     if (this.checksTimer) clearInterval(this.checksTimer);
     for (const t of this.timers.values()) clearTimeout(t);
     this.timers.clear();

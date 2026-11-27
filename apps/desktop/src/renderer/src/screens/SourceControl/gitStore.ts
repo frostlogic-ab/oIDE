@@ -90,6 +90,46 @@ export function useGitData(projectIds: string[]): void {
   }, [key]);
 }
 
+const syncing = new Map<string, { again: boolean }>();
+
+/** Refresh only a project's sync state (`git.sync`: one `git status`). Calls during a refresh coalesce into one more. */
+export async function loadSync(projectId: string): Promise<void> {
+  const running = syncing.get(projectId);
+  if (running) {
+    running.again = true;
+    return;
+  }
+  const state = { again: false };
+  syncing.set(projectId, state);
+  try {
+    do {
+      state.again = false;
+      try {
+        useGit.getState().patch(projectId, { sync: await oide.invoke('git.sync', { projectId }) });
+      } catch {
+        // Not a git repo, or the project went away: no Pull offer.
+      }
+    } while (state.again);
+  } finally {
+    syncing.delete(projectId);
+  }
+}
+
+/**
+ * Keep the sync state (ahead/behind after the background fetch) of the given projects fresh while
+ * mounted. Lighter than useGitData: the Projects sidebar only needs `behind` for its Pull button.
+ */
+export function useSyncStates(projectIds: string[]): void {
+  const key = projectIds.join('|');
+  useEffect(() => {
+    const ids = key ? key.split('|') : [];
+    for (const id of ids) void loadSync(id);
+    return oide.on('git.changed', ({ projectId }) => {
+      if (ids.includes(projectId)) void loadSync(projectId);
+    });
+  }, [key]);
+}
+
 /** The worktree record for an agent, across loaded projects. */
 export function findWorktree(byProject: Record<string, ProjectGit>, agentId: string): WorktreeInfo | undefined {
   for (const p of Object.values(byProject)) {

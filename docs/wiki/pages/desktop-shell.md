@@ -170,7 +170,9 @@ Behaviour worth knowing:
 
 **Events**: `agents.summary` / `agents.removed` / `agents.batch` (supervisor + sink), `projects.changed`,
 `scope.changed` (also when the scoped project is removed), `git.changed { projectId }` (watchers,
-~1 s debounce; tile diff refresh; fetch every Settings > Agents > fetch interval; after
+~1 s debounce; tile diff refresh; background fetch of trusted projects with a remote 15 s after launch,
+every Settings > Agents > fetch interval, and on window focus when the last round is 3+ minutes old
+(none when the interval is 0 or the machine is offline; one round at a time); after
 commit/pull/push/merge/PR), `settings.changed`, `cli.changed`, `extensions.changed`,
 `extensions.hostState`, `artifacts.changed { id? }` (store changes and MCP artifact use), `notify`
 (plus a native `Notification` per Settings > Agents > Notifications for needs-permission,
