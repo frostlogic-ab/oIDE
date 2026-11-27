@@ -130,6 +130,8 @@ export const Settings = z.object({
      * that panel's own min and max (see `PANEL_WIDTH_LIMITS`), so this schema only bounds the shape.
      */
     panelWidths: PanelWidths.default({}),
+    /** The legend under the Files tree was closed (its ×): it stays hidden and the tree takes the room. */
+    filesLegendHidden: z.boolean().default(false),
   }),
   /**
    * Settings › Privacy: opt-in usage analytics and error reports (ADR 0011, wiki telemetry.md). Both

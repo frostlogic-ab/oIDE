@@ -5,6 +5,7 @@ import { files as mockFiles, mockHash } from '../../lib/mock/scm';
 import { keymap } from '../../lib/keymap';
 import { useScope } from '../../stores/scope';
 import { useUi } from '../../stores/ui';
+import { useSettings } from '../../stores/settings';
 import { setupMockApp } from '../SourceControl/testing';
 import { ancestorDirs, tabId, useFiles, visibleRows } from './filesStore';
 import FilesScreen from './index';
@@ -399,5 +400,26 @@ describe('tree model', () => {
       ['a.md', 0],
     ]);
     expect(ancestorDirs(['src/main/x.ts', 'docs/a.md'])).toEqual(['src', 'docs', 'src/main']);
+  });
+});
+
+describe('Files tree legend', () => {
+  it('closes with its × for good: the choice is saved in settings and the legend stays gone', async () => {
+    const { invoke } = await setupMockApp({ screen: 'files', params: {} });
+    await useSettings.getState().load();
+    const { unmount } = render(<FilesScreen />);
+
+    const legend = await screen.findByRole('note', { name: 'File tree legend' });
+    expect(within(legend).getByText('An agent is changing this file')).toBeTruthy();
+    fireEvent.click(within(legend).getByRole('button', { name: 'Close the legend' }));
+    expect(screen.queryByRole('note', { name: 'File tree legend' })).toBeNull();
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('settings.update', { patch: { ui: { filesLegendHidden: true } } }));
+    expect(useSettings.getState().settings?.ui.filesLegendHidden).toBe(true);
+
+    // Next time the screen opens (or after a restart) the legend does not come back.
+    unmount();
+    render(<FilesScreen />);
+    await screen.findByRole('tree', { name: 'oide (main)' });
+    expect(screen.queryByRole('note', { name: 'File tree legend' })).toBeNull();
   });
 });
