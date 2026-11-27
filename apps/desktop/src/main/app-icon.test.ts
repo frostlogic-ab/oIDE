@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, win32 } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { APP_USER_MODEL_ID, appUserModelId, brandAppShortcuts, DEV_APP_USER_MODEL_ID, releaseForeignShortcuts, resolveAppIcon, type ShortcutInfo } from './app-icon.js';
@@ -109,6 +109,11 @@ describe('appUserModelId', () => {
     expect(appUserModelId(true)).toBe('dev.oide.app');
     expect(appUserModelId(false)).toBe(DEV_APP_USER_MODEL_ID);
     expect(DEV_APP_USER_MODEL_ID).not.toBe(APP_USER_MODEL_ID);
+  });
+
+  it('keeps the installed id equal to electron-builder appId (the installer shortcut names the toasts)', () => {
+    const yml = readFileSync(join(import.meta.dirname, '..', '..', 'electron-builder.yml'), 'utf8');
+    expect(yml.split(/\r?\n/)).toContain(`appId: ${APP_USER_MODEL_ID}`);
   });
 });
 

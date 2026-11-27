@@ -1,6 +1,8 @@
 # oIDE wiki: log
 
-Append-only. Newest at the bottom. Each entry: `## [YYYY-MM-DD] <op> | <title>`.
+Frozen archive of entries up to 2026-11-27. **Do not append here.** New entries go in
+[log/](log/), one file per entry, so parallel pull requests never conflict (see
+[log/README.md](log/README.md)). `pnpm wiki:log` prints this archive and every entry file in order.
 
 ## [2026-11-24] ingest | Build brief and Mission Control design
 Ingested the oIDE architecture and build brief (raw/build-brief.md) and the nine Mission Control
@@ -1056,6 +1058,8 @@ effect, so a late load or a `settingChanged` reload overwrote what the user had 
 saved nothing. The draft now follows the saved value only while the field is unedited (regression
 test added). See [extensions](pages/extensions.md).
 
+## [2026-11-27] decision | Remove the Wall's "Next that needs you" button
+The header button duplicated the "Needs you" filter chip and the N shortcut; removed it. N still jumps to the next tile that needs you. Updated [screen-wall](pages/screen-wall.md).
 ## [2026-11-27] build | Worktree folders no longer held open by oIDE itself
 User report: when an agent finished, deleting its worktree failed; with oIDE open (no agents)
 Explorer could not delete the folder either, and after quitting oIDE it could. oIDE's log showed
@@ -1079,19 +1083,3 @@ notification shortcut `Electron.lnk` carried it too, pointing at a worktree's `e
 through that orphaned shortcut: a blank page. Unpackaged runs now use `dev.oide.app.dev`, and packaged
 Windows runs delete shortcuts with the installed AUMID whose target is gone (or retag live dev ones).
 See [packaging](pages/packaging.md).
-
-## [2026-11-27] build | Work on artifacts with an agent
-The Artifacts open view now puts an **Agent panel** where the editor was, and merges Edit and Preview
-into one pane with a **Preview | Code | Compare** switch. The artifact agent ([ADR 0017](../adr/0017-artifact-agents.md))
-is an ordinary oIDE agent bound to one artifact (`artifacts.startAgent`, `AgentSpec.artifactId`,
-`workIn: 'artifact-folder'`): it works in an empty folder under app data, has its own contract (no git,
-commits or review), and reads and changes only its artifact over MCP (`artifacts_write` gains `edits`,
-exact search and replace). Its writes need no prompt in Edit automatically / Auto / Bypass. The panel
-shows the transcript, permission prompt and composer from Focus, the context ring with Compact, Model
-and Effort (`agents.setModel`, from the next message, for any agent) and Mode. **Point and comment**:
-every HTML page main serves loads `/__oide/picker.js`; with Comment on, a click in the preview (or on a
-block of a rendered doc) opens "What should change here?", and the ticked comments go to the agent as
-one message. Deleting an artifact archives its agent. Telemetry: `artifact_agent_started`,
-`artifact_agent_message`, `agent_model_changed`. Pages: [screen-artifacts](pages/screen-artifacts.md),
-[artifacts](pages/artifacts.md), [mcp-server](pages/mcp-server.md), [agent-supervisor](pages/agent-supervisor.md),
-[protocol](pages/protocol.md), [telemetry](pages/telemetry.md).

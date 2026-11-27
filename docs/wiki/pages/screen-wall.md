@@ -11,7 +11,7 @@ Data: [agent-supervisor](agent-supervisor.md) (statuses, activity, context), [su
 | Part | What it shows | Source |
 | --- | --- | --- |
 | Projects sidebar (248px) | "All projects" + each project with its agent count; agent rows with status dot (click selects the tile); New project (+, opens the [New project](new-project.md) dialog); Legend | `useProjects`, `useAgents`; "All projects" and project headers set the shared scope (`useScope.setScope`), so they double as the project scope switcher for Files and Source control |
-| Header row | "All agents" or the project name; filter chips All / Needs you / Running / Review with counts; "Next that needs you N"; Spawn agent | counts from `filterCounts()` over agents in scope |
+| Header row | "All agents" or the project name; filter chips All / Needs you / Running / Review with counts; Spawn agent | counts from `filterCounts()` over agents in scope |
 | Tile grid | `repeat(auto-fill, minmax(300px, 1fr))`, gap 12 | one `AgentTile` per visible id |
 | Artifacts aside (280px, hidden under 1280px) | three newest artifacts in scope with kind thumbnails, "used by N agents" / "being written now"; Marketplace teaser | `artifacts.list`, `artifacts.uses` (reloads on `artifacts.changed`) |
 | Compact confirm | "Compact this session?" with the 44px ring | opened by a tile's context ring |
@@ -85,8 +85,8 @@ this filter" + Show all.
 ## Decisions
 
 - **N on the Wall focuses the tile** instead of opening Focus (the canvas link goes to Focus): the
-  inline prompt lets Y / D answer without leaving the Wall; Enter opens Focus. The "Next that needs
-  you" button does the same as N.
+  inline prompt lets Y / D answer without leaving the Wall; Enter opens Focus. The header has no
+  "Next that needs you" button (removed 2026-11-27 as redundant with the Needs you chip and N).
 - **Mode badge only when it differs from the default mode**; the canvas draws none, the brief asks
   for one (Bypass must always be visible).
 - **Subagent chip colour = status, letter = model**, as drawn; the letter is grey on the canvas.
@@ -103,7 +103,7 @@ this filter" + Show all.
 - Activity box 108px border-box (= the canvas's 92px content-box + padding, five 1.6-leading lines);
   the prompt, question, review, queued and error boxes are 92px border-box, as drawn.
 - Queued tiles are not dimmed; only the body box is (`opacity-80`); the "Queued" label is `ink-3`.
-- Header stays one row at 1100px: "Next that needs you" shortens to "Next N" below 1280px.
+- Header stays one row at 1100px.
 - With no project open, the header "Spawn agent" is hidden (Spawn needs a project) and the empty
   state offers only "Open project"; the Artifacts aside lists only artifacts of open projects.
 - Plan meters show only from the CLI's `rate_limit_event` utilization (status bar, see [desktop-shell](desktop-shell.md), ADR 0007).
@@ -175,6 +175,18 @@ for untrusted projects; a gh error stops the round and backs off (interval × 2^
 merged PR archives the agent (reason `merged`, process stopped, cleanup as for an in-oIDE merge,
 including the 7-day sweep) and toasts "PR #12 merged · <title> archived". A closed PR only shows its
 badge; Archive stays on the tile.
+
+**CI checks on a PR (2026-11-27).** The same `gh pr view` lookup asks for `statusCheckRollup` (an
+older gh that rejects the field is asked without it from then on) and counts it into
+`summary.pr.checks = { state: pending | success | failure, total, completed, failed }`
+(`summarizeChecks` in `packages/git/src/gh.ts`; check runs finish at `COMPLETED`, commit statuses
+once not `PENDING`/`EXPECTED`; skipped and neutral count as passed). Open and draft PRs only. Next to
+the state badge, `PrChecks` (`components/PrLink.tsx`) shows an amber pulsing dot and "7/9" while
+checks run, a green check and "9/9" when all passed, a red mark and "2 failed" when some failed (the
+dot turns red as soon as one fails, even while others run); clicking opens the PR's Checks tab. While
+any PR has running checks, the git service runs `poll('checks')` every minute for just those PRs (same
+offline / gh / trust / backoff rules); after Open PR or Push to PR the old checks are dropped and the
+PR is watched up to 10 minutes for new ones to start.
 
 **Reload rehydration (bug fixed 2026-11-25).** A live agent vanished from the Wall ("No agents yet",
 "0 sessions") while it kept running in main. Cause: in dev, a Vite hot update that re-ran a store

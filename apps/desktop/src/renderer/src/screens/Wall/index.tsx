@@ -12,8 +12,8 @@
 import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { AgentSummary } from '@oide/protocol';
-import { Button, EmptyState, FilterChip, Kbd, SegmentedControl, TextField, buttonClass, cn } from '@oide/ui';
-import { useKeymapScope, useShortcutLabel } from '../../lib/useKeymap';
+import { Button, EmptyState, FilterChip, SegmentedControl, TextField, cn } from '@oide/ui';
+import { useKeymapScope } from '../../lib/useKeymap';
 import { nextNeedsYou, stepAgent, useAgents } from '../../stores/agents';
 import { useArchive } from '../../stores/archive';
 import { projectName, useProjects } from '../../stores/projects';
@@ -100,7 +100,6 @@ export default function WallScreen() {
     useShallow((s) => filterCounts(s.order.map((id) => s.byId[id]!).filter((a) => a && (scope === 'all' || a.projectId === scope)))),
   );
   const firstHighlighted = useWall((s) => Object.keys(s.highlighted)[0]);
-  const nKey = useShortcutLabel('agent.nextNeedsYou');
 
   useEffect(() => {
     if (firstHighlighted) requestAnimationFrame(() => focusTile(firstHighlighted));
@@ -150,7 +149,7 @@ export default function WallScreen() {
     <>
       <ProjectSidebar />
       <main className="flex-1 min-w-[360px] overflow-y-auto flex flex-col gap-3.5 px-5 py-[18px] box-border" aria-label="Agents">
-        {/* One row down to the 1100px window minimum: "Next that needs you" shortens to "Next". */}
+        {/* One row down to the 1100px window minimum. */}
         <div className="flex items-center gap-3 flex-nowrap min-w-0 min-h-8">
           <h1 className="m-0 min-w-0 truncate text-[18px] font-semibold tracking-[-0.01em]">{title}</h1>
           {!noProjects && <SegmentedControl label="Show agents" options={viewOptions} value={view} onChange={(v) => useWall.getState().setView(v)} size={28} className="shrink-0" />}
@@ -175,19 +174,6 @@ export default function WallScreen() {
             ))}
           </div>
           <div className="flex-1" />
-          <button
-            type="button"
-            className={buttonClass('warn-outline', 32, cn('text-warn! gap-2! shrink-0', (counts.all === 0 || archived) && 'hidden!'))}
-            onClick={() => jumpToNextNeedsYou()}
-            aria-keyshortcuts={nKey}
-            aria-label="Next that needs you"
-            title="Next that needs you"
-          >
-            <span aria-hidden="true">
-              Next<span className="hidden min-[1280px]:inline"> that needs you</span>
-            </span>
-            <Kbd tone="warn">{nKey}</Kbd>
-          </button>
           {/* Spawn needs a project: with none open, the empty state offers the New project options instead. */}
           {!noProjects && (
             <Button variant="primary" size={32} icon="plus" className="text-[13px]! px-3.5! rounded-md! shrink-0" onClick={() => navigate('spawn', scope === 'all' ? {} : { projectId: scope })}>

@@ -1,7 +1,8 @@
 # oIDE wiki: index
 
 The product knowledge base for oIDE, maintained by the agents that build it (see the "wiki" section
-of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in [log.md](log.md).
+of [CLAUDE.md](../../CLAUDE.md)). Sources live in [raw/](raw/); history lives in [log/](log/README.md),
+one file per entry (entries up to 2026-11-27 are in the frozen [log.md](log.md)).
 
 ## Sources (raw, immutable)
 
