@@ -10,7 +10,7 @@ import { NEEDS_YOU, type AgentSummary, type ArtifactMeta, type CommitInfo, type 
 import { HeaderSlot } from '../../components/frame/HeaderSlot';
 import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
 import { keymap } from '../../lib/keymap';
-import { trackMarkdownView } from '../../lib/telemetry';
+import { trackDiffView, trackMarkdownView } from '../../lib/telemetry';
 import { useKeymapScope } from '../../lib/useKeymap';
 import { useAgents } from '../../stores/agents';
 import { useProjects } from '../../stores/projects';
@@ -19,6 +19,8 @@ import { useScope } from '../../stores/scope';
 import { toast } from '../../stores/ui';
 import { useGit, useGitData } from '../SourceControl/gitStore';
 import { C, commitAuthor, shortBranch, timeAgo } from '../SourceControl/model';
+import { useChanges, useCheckoutChanges } from './changesStore';
+import { effectiveDiffView, type DiffView } from './diffView';
 import type { EditorActions, EditorPaneProps, EditorStatus, SelectionInfo } from './EditorPane';
 import { joinPath, tabId, useFiles, type FileTab } from './filesStore';
 import { LspStatusControl } from './LspStatus';
@@ -33,7 +35,13 @@ import { useTerminals } from '../../stores/terminals';
 import { FILES_TERMINALS, TerminalDock, toggleFilesTerminal } from './TerminalDock';
 
 const EditorPane = lazy(() => import('./EditorPane'));
-const SECTION_LABEL = 'text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3';
+/** The changes view buttons of a changed file's tab. */
+const DIFF_VIEWS = [
+  { view: 'off', label: 'File', icon: 'file', title: 'Show the file without its changes' },
+  { view: 'unified', label: 'Unified', icon: 'diff-unified', title: 'Show the changes in one column, removed lines above added ones' },
+  { view: 'split', label: 'Split', icon: 'diff-split', title: 'Show the changes side by side: before on the left, now on the right' },
+] as const;
+const SECTION_LABEL ='text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3';
 
 export default function FilesScreen() {
   const allProjects = useProjects((s) => s.list);
@@ -165,11 +173,27 @@ export default function FilesScreen() {
     void import('./monaco/lsp').then((m) => m.lspRestart(active.root, active.path));
   };
   // Markdown files open on their rendered page; Edit shows the source beside it.
-  const mdView: MarkdownView | undefined = active && isMarkdownPath(active.path) ? (files.mdView[active.id] ?? 'preview') : undefined;
+  // A changed file (git colours of the tree) opens on its changes, unified or side by side; the
+  // active tab's checkout is kept loaded even when the tree shows another one.
+  useCheckoutChanges(active ? [{ projectId: active.projectId, root: active.root }] : []);
+  const activeChanges = useChanges((st) => (active ? st.byRoot[active.root] : undefined));
+  const change = active ? activeChanges?.byPath.get(active.path) : undefined;
+  const diffView: DiffView = active ? effectiveDiffView(files.diffView[active.id], files.diffLayout, change) : 'off';
+  const canDiff = Boolean(active && effectiveDiffView(undefined, files.diffLayout, change) !== 'off');
+  const pickDiffView = (view: DiffView) => {
+    if (!active || view === diffView) return;
+    files.setDiffView(active.id, view);
+    trackDiffView(view);
+  };
+  const markdown = active && isMarkdownPath(active.path) ? (files.mdView[active.id] ?? 'preview') : undefined;
+  // While the changes show, the Markdown view buttons are not pressed; picking one leaves the changes.
+  const mdView: MarkdownView | undefined = diffView === 'off' ? markdown : undefined;
   const toggleMdView = (target: EventTarget | null) => {
     // Ctrl+Shift+V is paste in a terminal: leave it alone there.
-    if (!active || !mdView || (target instanceof Element && target.closest('.xterm'))) return false;
-    const next = mdView === 'preview' ? 'edit' : 'preview';
+    if (!active || !markdown || (target instanceof Element && target.closest('.xterm'))) return false;
+    // From the changes: back to the file's own view; else flip it.
+    const next = diffView !== 'off' ? markdown : markdown === 'preview' ? 'edit' : 'preview';
+    if (diffView !== 'off') pickDiffView('off');
     files.setMdView(active.id, next);
     trackMarkdownView(next, 'shortcut');
   };
@@ -323,7 +347,24 @@ export default function FilesScreen() {
           </div>
           {tabMenu && <ContextMenu at={tabMenu.at} label={`Actions for ${tabMenu.tab.path.split('/').pop()}`} items={tabMenuItems(tabMenu.tab)} onClose={() => setTabMenu(undefined)} />}
           <div className="flex-1" />
-          {active && mdView && (
+          {active && canDiff && (
+            <div role="group" aria-label="Changes view" className="flex items-center gap-0.5 my-auto ml-2 p-[2px] rounded-md border border-line-2 bg-card shrink-0">
+              {DIFF_VIEWS.filter((o) => o.view !== 'off' || !markdown /* Markdown leaves its changes through Preview / Edit */).map((o) => (
+                <button
+                  key={o.view}
+                  type="button"
+                  aria-pressed={diffView === o.view}
+                  title={o.title}
+                  onClick={() => pickDiffView(o.view)}
+                  className={`inline-flex items-center gap-1.5 h-6 px-2 rounded-sm border-0 text-[11.5px] cursor-pointer ${diffView === o.view ? 'bg-selected text-ink' : 'bg-transparent text-ink-3 hover:text-ink-2'}`}
+                >
+                  <Icon name={o.icon} size={13} />
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
+          {active && markdown && (
             <div role="group" aria-label="Markdown view" className="flex items-center gap-0.5 my-auto ml-2 p-[2px] rounded-md border border-line-2 bg-card shrink-0">
               {(
                 [
@@ -339,6 +380,7 @@ export default function FilesScreen() {
                   title={`${o.title}${previewKey ? ` (${previewKey})` : ''}`}
                   onClick={() => {
                     if (mdView === o.view) return;
+                    if (diffView !== 'off') pickDiffView('off');
                     files.setMdView(active.id, o.view);
                     trackMarkdownView(o.view, 'button');
                   }}
@@ -358,6 +400,11 @@ export default function FilesScreen() {
                 {mdView !== 'preview' && `Ln ${status.line}, Col ${status.column}`}
                 {status.language ? `${mdView !== 'preview' ? ' · ' : ''}${active.path.endsWith('.json') ? 'JSON' : status.language}` : ''}
               </span>
+              {diffView !== 'off' && status.against && (
+                <span title={status.against === 'head' ? 'Uncommitted changes, against the last commit' : 'Everything this branch changed, against where it left its base branch'}>
+                  {status.against === 'head' ? 'vs last commit' : 'vs base branch'}
+                </span>
+              )}
               {dirty[active.id] && (
                 <button
                   type="button"
@@ -402,6 +449,7 @@ export default function FilesScreen() {
                 sendTo={sendTo}
                 saveRef={saveRef}
                 mdView={mdView}
+                diff={diffView === 'off' ? undefined : { layout: diffView, ...(change?.oldPath ? { oldPath: change.oldPath } : {}), refresh: activeChanges }}
                 onOpenFile={(path) => files.openFile(active.projectId, active.root, path)}
                 onOpenLocation={openLocation}
                 actionsRef={actionsRef}

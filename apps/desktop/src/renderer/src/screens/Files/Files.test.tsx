@@ -14,8 +14,9 @@ import type { EditorPaneProps } from './EditorPane';
 
 // Monaco does not run in jsdom: a stand-in pane that can "type" into the active tab.
 vi.mock('./EditorPane', () => ({
-  default: ({ active, onDirty, mdView, onOpenFile }: EditorPaneProps) => (
+  default: ({ active, onDirty, mdView, onOpenFile, diff }: EditorPaneProps) => (
     <>
+      <output aria-label="Changes shown">{diff?.layout ?? 'off'}</output>
       <button type="button" onClick={() => onDirty(active.id, true)}>
         Type in {active.path}
       </button>
@@ -29,7 +30,7 @@ vi.mock('./EditorPane', () => ({
 
 afterEach(cleanup);
 beforeEach(() => {
-  useFiles.setState({ openProjects: {}, checkout: {}, expanded: {}, nodes: {}, loading: {}, errors: {}, tabs: [], active: undefined, dirty: {}, mdView: {}, revealed: {}, pending: undefined, revealTarget: undefined });
+  useFiles.setState({ openProjects: {}, checkout: {}, expanded: {}, nodes: {}, loading: {}, errors: {}, tabs: [], active: undefined, dirty: {}, mdView: {}, diffView: {}, diffLayout: 'unified', revealed: {}, pending: undefined, revealTarget: undefined });
   useSearch.setState({ open: false, query: '', replacement: '', replaceOpen: false, isRegex: false, matchCase: false, wholeWord: false, include: '', exclude: '', filtersOpen: false, scope: 'all', status: 'idle', files: [], searchId: undefined, ran: undefined });
 });
 
@@ -284,6 +285,76 @@ describe('Files Markdown preview', () => {
     useFiles.getState().requestOpen({ root: BILLING, path: 'README.md', line: 2 });
     await waitFor(() => expect(useFiles.getState().active).toBe(tabId(BILLING, 'README.md')));
     await waitFor(() => expect(screen.getByLabelText('Pane view').textContent).toBe('edit'));
+  });
+});
+
+describe('Files changes view', () => {
+  const BILLING = '/Users/you/code/billing-api';
+  const group = () => screen.getByRole('group', { name: 'Changes view' });
+  const pressed = (name: string) => within(group()).getByRole('button', { name }).getAttribute('aria-pressed');
+  const shown = () => screen.getByLabelText('Changes shown').textContent;
+  let snapshot: Map<string, string>;
+  beforeEach(() => {
+    snapshot = new Map(mockFiles.get(BILLING));
+    localStorage.removeItem('oide.files.diffLayout');
+  });
+  afterEach(() => {
+    mockFiles.set(BILLING, snapshot);
+  });
+
+  it('opens a changed file on its changes, switches unified / split / file, and remembers the layout', async () => {
+    const tree = mockFiles.get(BILLING)!;
+    tree.set('src/invoices/invoice.ts', `${tree.get('src/invoices/invoice.ts')}// changed
+`);
+    tree.set('src/webhooks/handler.ts', `${tree.get('src/webhooks/handler.ts')}// changed
+`);
+    await setupMockApp({ screen: 'files', params: {} });
+    useFiles.getState().openFile('billing-api', BILLING, 'src/invoices/invoice.ts');
+    render(<FilesScreen />);
+
+    await waitFor(() => expect(shown()).toBe('unified'));
+    expect(pressed('Unified')).toBe('true');
+    expect(pressed('Split')).toBe('false');
+    expect(pressed('File')).toBe('false');
+
+    fireEvent.click(within(group()).getByRole('button', { name: 'Split' }));
+    expect(shown()).toBe('split');
+    expect(localStorage.getItem('oide.files.diffLayout')).toBe('split');
+    fireEvent.click(within(group()).getByRole('button', { name: 'File' }));
+    expect(shown()).toBe('off');
+    expect(pressed('File')).toBe('true');
+
+    // The next changed file opens side by side (the last layout picked); this one keeps its choice.
+    useFiles.getState().openFile('billing-api', BILLING, 'src/webhooks/handler.ts');
+    await waitFor(() => expect(shown()).toBe('split'));
+    useFiles.getState().setActive(tabId(BILLING, 'src/invoices/invoice.ts'));
+    await waitFor(() => expect(shown()).toBe('off'));
+
+    // A file without changes has no changes view.
+    useFiles.getState().openFile('billing-api', BILLING, 'package.json');
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Changes view' })).toBeNull());
+    expect(shown()).toBe('off');
+  });
+
+  it('a changed Markdown file opens on its changes; Preview and Edit leave them', async () => {
+    const tree = mockFiles.get(BILLING)!;
+    tree.set('README.md', `${tree.get('README.md')}
+More.
+`);
+    await setupMockApp({ screen: 'files', params: {} });
+    useFiles.getState().openFile('billing-api', BILLING, 'README.md');
+    render(<FilesScreen />);
+
+    await waitFor(() => expect(shown()).toBe('unified'));
+    expect(within(group()).queryByRole('button', { name: 'File' })).toBeNull();
+    const md = screen.getByRole('group', { name: 'Markdown view' });
+    expect(within(md).getByRole('button', { name: 'Preview' }).getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(within(md).getByRole('button', { name: 'Preview' }));
+    expect(shown()).toBe('off');
+    expect(screen.getByLabelText('Pane view').textContent).toBe('preview');
+    fireEvent.click(within(group()).getByRole('button', { name: 'Split' }));
+    expect(shown()).toBe('split');
   });
 });
 

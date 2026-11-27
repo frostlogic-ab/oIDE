@@ -1,5 +1,5 @@
 import { basename, dirname, extname, join, relative } from 'node:path';
-import { checkoutChanges, discardCheckoutChanges, fileHistory, isInside as gitIsInside, plainFs, samePath } from '@oide/git';
+import { checkoutChanges, discardCheckoutChanges, fileHistory, originalContent, isInside as gitIsInside, plainFs, samePath } from '@oide/git';
 import { buildSearchRegExp, type ArtifactMeta, type FileNode } from '@oide/protocol';
 import type { MainContext } from '../context.js';
 import { IpcError, type IpcRouter } from '../ipc/router.js';
@@ -301,6 +301,23 @@ export function registerFileHandlers(router: IpcRouter, s: Services, ctx: MainCo
       touched(r, r);
     }
     return { reverted: reverted.length, against: base ? ('branch' as const) : ('head' as const) };
+  });
+
+  router.register('files.original', async ({ root, path, oldPath }) => {
+    const r = ctx.roots.assertAllowed(root, ['project', 'worktree']);
+    const { abs } = inRoot(r, oldPath ?? path);
+    const rel = toPosix(relative(r, abs));
+    if (!rel || rel.startsWith('..')) throw new IpcError(`Not a path in this checkout: ${oldPath ?? path}`, 'forbidden_path');
+    const base = changesBase(r);
+    const against = base ? ('branch' as const) : ('head' as const);
+    try {
+      const o = await originalContent(r, rel, base);
+      return { kind: o.kind, content: o.kind === 'text' ? o.content : '', against };
+    } catch (err) {
+      // Not a git repo (or git missing): nothing to compare against.
+      ctx.log.warn('files.original failed', err);
+      return { kind: 'missing' as const, content: '', against };
+    }
   });
 
   router.register('files.history', async ({ root, path }) => {
