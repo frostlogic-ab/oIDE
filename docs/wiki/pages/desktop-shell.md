@@ -15,7 +15,8 @@ apps/desktop/
   electron-builder.yml         installers, fuses, publish config (see packaging.md)
   playwright.config.ts, e2e/   Playwright for Electron smoke tests
   src/main/
-    index.ts                   app start, single-instance lock, BrowserWindow, quit hooks
+    index.ts                   app start, single-instance lock, windows, quit hooks
+    windows.ts                 WindowRegistry (active = focused last), cascadePosition (see windows.md)
     warnings.ts                imported first; silences only the node:sqlite ExperimentalWarning
     window-state.ts            remembers bounds (userData/window-state.json), min 1100×700
     context.ts                 MainContext passed to services and handlers
@@ -39,10 +40,12 @@ apps/desktop/
 
 ## Main process
 
-- **Window**: one `BrowserWindow` with `contextIsolation`, `sandbox`, `nodeIntegration: false`,
+- **Windows**: any number of `BrowserWindow`s on one profile ([windows](windows.md), ADR 0019), each with `contextIsolation`, `sandbox`, `nodeIntegration: false`,
   `webSecurity`, no webview tag; `app.enableSandbox()`; dark `#0E1013` background; bounds restored.
   The `oide-artifact:` scheme is registered as privileged before ready (artifact previews).
-  `OIDE_USER_DATA` overrides userData (tests); the single-instance lock is per userData folder.
+  `OIDE_USER_DATA` overrides userData (tests); the single-instance lock is per userData folder, and a
+  second start on the same profile opens another window in the running process. Events go to every
+  window (`ctx.emit`); `ctx.emitActive` and `ctx.getWindow()` mean the window focused last.
 - **Hardening** (`security/hardening.ts`, applied to every webContents): navigation away from the app
   and `window.open` are refused; allow-listed `https` URLs (`security/external.ts`, extend with
   `allowExternalHost(host)`) open in the system browser; `<webview>` refused; permissions denied except `clipboard-sanitized-write` (every frame) and `clipboard-read` for the app's own top-level page only (`security/permissions.ts`; the editor's right-click Paste reads through `navigator.clipboard`; artifact previews and extension panels are iframes and are refused).
@@ -169,7 +172,7 @@ Behaviour worth knowing:
 - `cli.openSignIn` opens a terminal (in userData) running the detected `claude`.
 
 **Events**: `agents.summary` / `agents.removed` / `agents.batch` (supervisor + sink), `projects.changed`,
-`scope.changed` (also when the scoped project is removed), `git.changed { projectId }` (watchers,
+`git.changed { projectId }` (watchers,
 ~1 s debounce; tile diff refresh, where only the latest refresh started per agent may write, so a
 slow older `git diff` never restores stale counts; background fetch of trusted projects with a remote 15 s after launch,
 every Settings > Agents > fetch interval, and on window focus when the last round is 3+ minutes old
@@ -222,12 +225,12 @@ commands reject with `[not_implemented]` exactly like main.
 | `useRouter` | `route: { screen, params }`, `back`, `forward` | `navigate(screen, params)`, `replace`, `goBack`, `goForward` |
 | `useAgents` | `byId`, `order`, `events[agentId]` (live tail ≤ 2000), `loaded` | `load`, `applySummary`, `applyBatch`, `remove`, `prependHistory`; hooks `useAgent`, `useAgentEvents`, `useAgentsInScope(scope)`, `useAgentCounts`, `useNeedsYou`, `useAgentHistory(agentId)`; pure `agentsInScope`, `countAgents`, `nextNeedsYou`, `stepAgent`, `isNeedsYou`; `loadOlderEvents` |
 | `useProjects` | `list`, `loaded` | `load`, `open(path?)`, `remove`; `projectName(list, id)` |
-| `useScope` | `scope` (`'all'` or project id) | `load`, `setScope` (persists via `scope.set`, follows `scope.changed`) |
+| `useScope` | `scope` (`'all'` or project id) | `load`, `setScope` (saves via `scope.set`; per window, not broadcast; back to `all` when the project is removed) |
 | `useSettings` | `settings` (null until loaded) | `load`, `update(patch)`; `useSetting(select, fallback)`; applies the accent colour |
 | `useCli` | `info`, `detected`, `usage` | `detect`, `refreshUsage` (on agent/project events, see below), `openSignIn`; `cliHealth(info)` |
 | `useUi` | `toasts`, `commandBar`, `headerSlots` | `pushToast` / `toast(msg, level)`, `dismissToast`, `holdToast` / `releaseToast`, `retireStaleToasts(byId)`, `openCommandBar(mode?)`, `closeCommandBar` |
 
-`lib/boot.ts` subscribes every store to its events (`agents.*`, `projects.changed`, `scope.changed`,
+`lib/boot.ts` subscribes every store to its events (`agents.*`, `projects.changed`,
 `settings.changed`, `cli.changed`, `notify` → toasts, `extensions.changed`, `command.invoke`) and
 loads initial state; `not_implemented` answers resolve to empty state without console noise.
 `connectUsage` refreshes `usage.summary` (debounced 2 s) on `agents.summary`, `agents.removed` and
@@ -276,7 +279,7 @@ placeholders marked `PLACEHOLDER` (the Wall placeholder lists agents with the sh
 
 `lib/keymap.ts` holds every shortcut in one rebindable map (`DEFAULT_BINDINGS`): J next agent,
 K previous, N next that needs you, Y allow, D deny, Esc back, Mod+K command bar, Mod+Enter send,
-Shift+Tab switch mode, Alt+←/→ history, Mod+Shift+F search in files and Mod+Shift+V Markdown preview / edit (Files screen scope). `Mod` is Cmd on macOS, Ctrl elsewhere. It listens on the
+Shift+Tab switch mode, Alt+←/→ history, Mod+Shift+N new window, Mod+Shift+F search in files and Mod+Shift+V Markdown preview / edit (Files screen scope). `Mod` is Cmd on macOS, Ctrl elsewhere. It listens on the
 renderer window only (never OS-global). Screens activate a scope while mounted:
 
 ```ts
