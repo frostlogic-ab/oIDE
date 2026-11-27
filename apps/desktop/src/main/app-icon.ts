@@ -1,7 +1,18 @@
 import { join, win32 } from 'node:path';
 
-/** Windows taskbar identity; matches `appId` in electron-builder.yml so dev and installed builds group alike. */
+/** Windows taskbar identity of the installed app; matches `appId` in electron-builder.yml (the NSIS shortcuts carry it). */
 export const APP_USER_MODEL_ID = 'dev.oide.app';
+
+/**
+ * Taskbar identity of unpackaged runs (`pnpm dev`, e2e, `electron .`). It must differ from the installed
+ * app's: Electron writes a Start Menu `Electron.lnk` with the running AUMID for notifications, and Windows
+ * draws every window with that AUMID using the icon of whichever shortcut carries it. When dev runs shared
+ * `dev.oide.app`, an `Electron.lnk` left behind by a since-deleted worktree (icon and target gone) made the
+ * installed oIDE show a blank taskbar icon.
+ */
+export const DEV_APP_USER_MODEL_ID = 'dev.oide.app.dev';
+
+export const appUserModelId = (packaged: boolean): string => (packaged ? APP_USER_MODEL_ID : DEV_APP_USER_MODEL_ID);
 
 export interface AppIconInput {
   packaged: boolean;
@@ -88,4 +99,54 @@ export function brandAppShortcuts(deps: ShortcutIconDeps, o: { execPath: string;
     }
   }
   return updated;
+}
+
+export interface ShortcutClaimDeps {
+  /** Absolute paths of the `.lnk` files in the per-user Start Menu Programs folder. */
+  list: () => string[];
+  /** Throws when the file is not a readable shortcut. */
+  read: (path: string) => ShortcutInfo;
+  exists: (path: string) => boolean;
+  /** Deletes a shortcut file. */
+  remove: (path: string) => void;
+  /** Sets the AppUserModelID on an existing shortcut, keeping `target`; false when Windows refused. */
+  setAppUserModelId: (path: string, appId: string, target: string) => boolean;
+}
+
+/**
+ * Windows, packaged runs only. Earlier unpackaged runs (and branches built before
+ * {@link DEV_APP_USER_MODEL_ID}) left Electron's notification shortcut in the Start Menu with the installed
+ * app's AUMID, pointing at a worktree's `electron.exe` and `build/icon.ico`. Windows may resolve the installed
+ * app's taskbar icon through that shortcut, so once the worktree is gone the taskbar shows a blank page.
+ * Shortcuts with our AUMID whose target is not this exe are released: removed when their target no longer
+ * exists (nothing can launch them), otherwise moved to the dev AUMID. The installer's own shortcuts (target =
+ * this exe) and other apps' shortcuts are never touched.
+ */
+export function releaseForeignShortcuts(
+  deps: ShortcutClaimDeps,
+  o: { execPath: string; appId: string; devAppId: string },
+): { removed: string[]; retagged: string[] } {
+  const removed: string[] = [];
+  const retagged: string[] = [];
+  for (const path of deps.list()) {
+    let info: ShortcutInfo;
+    try {
+      info = deps.read(path);
+    } catch {
+      continue;
+    }
+    if (info.appUserModelId !== o.appId) continue;
+    if (info.target && samePath(info.target, o.execPath)) continue;
+    try {
+      if (!info.target || !deps.exists(info.target)) {
+        deps.remove(path);
+        removed.push(path);
+      } else if (deps.setAppUserModelId(path, o.devAppId, info.target)) {
+        retagged.push(path);
+      }
+    } catch {
+      // Best effort: a locked or read-only shortcut only costs the taskbar icon.
+    }
+  }
+  return { removed, retagged };
 }
