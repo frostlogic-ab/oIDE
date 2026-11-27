@@ -75,8 +75,8 @@ docs/site/               This site
 ## The wiki
 
 `docs/wiki/` is the project's knowledge base: one page per package, screen or concept. When you change
-code, update the page that describes it, add new pages to `docs/wiki/index.md`, and append an entry
-to `docs/wiki/log.md`. Start at the [wiki index](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/index.md).
+code, update the page that describes it, add new pages to `docs/wiki/index.md`, and add a log entry
+as its own file in `docs/wiki/log/` (`pnpm wiki:log new <op> "<title>"`). Start at the [wiki index](https://github.com/frostlogic-ab/oIDE/blob/main/docs/wiki/index.md).
 
 ## Pull requests
 

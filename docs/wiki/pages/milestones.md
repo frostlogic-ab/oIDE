@@ -1,7 +1,7 @@
 # Milestones
 
 From the build brief. Each milestone ends with a gate that is a real user flow. Status is updated as
-work lands (see [../log.md](../log.md)).
+work lands (see [the log](../log/README.md)).
 
 | # | Milestone | Scope | Gate | Status |
 | --- | --- | --- | --- | --- |
