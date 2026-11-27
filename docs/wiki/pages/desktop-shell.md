@@ -247,7 +247,12 @@ when the agent works again. The region is `aria-live="polite"`; errors are `role
 `screens/registry.tsx` describes each screen: `title`, which `rail` item is current, the header kind
 (`command`: command-bar trigger + live counts, Wall/Focus; `title`: screen title), `scopeSwitcher`
 (Files, Source control), `customTitle` (screen fills `<HeaderSlot name="title">`, e.g. the Review
-breadcrumb), `overlay` (Spawn renders as a dialog over the Wall). The status bar shows a plan
+breadcrumb), `overlay` (Spawn renders as a dialog over the Wall). Right of the logo, the header shows
+`UpdateButton` (`components/frame/UpdateButton.tsx`, status from `lib/useUpdateStatus.ts`) only when
+there is an update to act on: downloaded → "Update" opens a confirm (agents stop) and calls
+`updates.install({ consent: true, from: 'header' })`; downloading → disabled "Downloading N%";
+available with Download automatically off → "Update" starts the download; a build that cannot install
+itself → "Update" opens the release page ([packaging](packaging.md#auto-update-m7)). The status bar shows a plan
 meter (`components/frame/PlanUsage.tsx`: `latestPlanUsage(agents)` + `PlanUsageMeter`) only when an
 agent's `planUsage` (the CLI's `rate_limit_event`) carries a utilization; without one it shows only the
 reset time, never a guessed percentage ("Context ring and plan usage" in the

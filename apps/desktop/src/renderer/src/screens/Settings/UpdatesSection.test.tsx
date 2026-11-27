@@ -99,7 +99,24 @@ describe('Settings › Updates', () => {
     expect(calls('updates.install')).toEqual([]);
     expect(screen.getByRole('group', { name: 'Confirm restart' }).textContent).toMatch(/stop running agents/);
     fireEvent.click(screen.getByRole('button', { name: 'Restart now' }));
-    await waitFor(() => expect(calls('updates.install')).toEqual([{ consent: true }]));
+    await waitFor(() => expect(calls('updates.install')).toEqual([{ consent: true, from: 'settings' }]));
+  });
+
+  it('Download automatically and Install when oIDE closes are on by default and save their own keys', async () => {
+    open();
+    const download = (await screen.findByRole('checkbox', { name: 'Download' })) as HTMLInputElement;
+    const install = screen.getByRole('checkbox', { name: 'Install' }) as HTMLInputElement;
+    expect(download.checked).toBe(true);
+    expect(install.checked).toBe(true);
+    fireEvent.click(download);
+    fireEvent.click(install);
+    await waitFor(() => expect(calls('settings.update')).toEqual([{ patch: { updates: { downloadAutomatically: false } } }, { patch: { updates: { installOnQuit: false } } }]));
+  });
+
+  it('a downloaded update says it installs when oIDE closes', async () => {
+    status = { ...status, state: 'downloaded', progress: 1, available: { version: '0.2.0' } };
+    open();
+    await screen.findByText(/installs when you close oIDE/);
   });
 
   it('unsigned builds get the release page instead of Download', async () => {

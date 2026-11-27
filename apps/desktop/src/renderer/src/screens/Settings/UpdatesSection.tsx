@@ -1,11 +1,13 @@
 /**
- * Settings › Updates (M7). Main owns the updater (apps/desktop/src/main/services/updater.ts): a
- * check only finds out whether a newer version exists; Download and Restart to update are separate
- * clicks, and the restart asks once more because it stops running agents.
+ * Settings › Updates (M7). Main owns the updater (apps/desktop/src/main/services/updater.ts). A
+ * found update downloads by itself and installs when oIDE quits, unless Download automatically or
+ * Install when oIDE closes is off (ADR 0018). Restart to update (here or the header's Update button)
+ * asks once more because it stops running agents.
  */
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { Settings, UpdateChannel, UpdateStatus } from '@oide/protocol';
-import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
+import { ipcErrorMessage, oide } from '../../lib/bridge';
+import { restartWarning, useUpdateStatus } from '../../lib/useUpdateStatus';
 import { toast } from '../../stores/ui';
 import { H1, Pills, Rd, Row, Sec, outlineBtn, savePatch } from './ui';
 
@@ -26,7 +28,7 @@ export function formatChecked(at: number | undefined, now = Date.now()): string 
   return `Last checked ${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 }
 
-function stateLine(s: UpdateStatus): string {
+function stateLine(s: UpdateStatus, installOnQuit = false): string {
   switch (s.state) {
     case 'disabled':
       return s.disabledReason ?? 'Updates are off for this build.';
@@ -41,30 +43,16 @@ function stateLine(s: UpdateStatus): string {
     case 'downloading':
       return `Downloading oIDE ${s.available?.version ?? ''}… ${Math.round((s.progress ?? 0) * 100)}%`;
     case 'downloaded':
-      return `oIDE ${s.available?.version ?? ''} is ready to install.`;
+      return `oIDE ${s.available?.version ?? ''} is ready to install${installOnQuit && s.canInstall ? ': it installs when you close oIDE, or restart now' : ''}.`;
     case 'error':
       return `Update failed: ${s.error ?? 'unknown error'}`;
   }
 }
 
 export function UpdatesSection({ settings }: { settings: Settings }) {
-  const [status, setStatus] = useState<UpdateStatus | null>(null);
+  const [status, setStatus] = useUpdateStatus();
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
-
-  useEffect(() => {
-    let live = true;
-    void invokeOr('updates.status', undefined, null)
-      .then((s) => {
-        if (live && s) setStatus(s);
-      })
-      .catch(() => undefined);
-    const off = oide.on('updates.changed', (s) => setStatus(s));
-    return () => {
-      live = false;
-      off();
-    };
-  }, []);
 
   const run = async (command: 'updates.check' | 'updates.download') => {
     setBusy(true);
@@ -79,7 +67,7 @@ export function UpdatesSection({ settings }: { settings: Settings }) {
 
   const install = async () => {
     try {
-      await oide.invoke('updates.install', { consent: true });
+      await oide.invoke('updates.install', { consent: true, from: 'settings' });
     } catch (err) {
       setConfirming(false);
       toast(`Could not install the update: ${ipcErrorMessage(err)}`, 'error');
@@ -95,10 +83,10 @@ export function UpdatesSection({ settings }: { settings: Settings }) {
   return (
     <>
       <H1>Updates</H1>
-      <Rd>oIDE looks for new versions on GitHub Releases. Nothing is downloaded or installed until you click.</Rd>
+      <Rd>oIDE looks for new versions on GitHub Releases. When one is ready, an Update button appears next to the logo.</Rd>
 
       <Sec>Version</Sec>
-      <Row title="Current version" desc={status ? stateLine(status) : 'Loading…'}>
+      <Row title="Current version" desc={status ? stateLine(status, settings.updates.installOnQuit) : 'Loading…'}>
         {() => (
           <span className="font-mono text-[12.5px] text-ink-2" data-testid="current-version">
             {status?.currentVersion ?? '…'}
@@ -117,7 +105,7 @@ export function UpdatesSection({ settings }: { settings: Settings }) {
           />
         )}
       </Row>
-      <Row title="Check automatically" desc="At startup and every 6 hours. Downloading and installing still wait for you.">
+      <Row title="Check automatically" desc="At startup and every 6 hours.">
         {({ titleId }) => (
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -128,6 +116,34 @@ export function UpdatesSection({ settings }: { settings: Settings }) {
               onChange={(e) => void savePatch({ updates: { checkAutomatically: e.target.checked } })}
             />
             Check
+          </label>
+        )}
+      </Row>
+      <Row title="Download automatically" desc="Download a new version in the background as soon as it is found. Off: the Update button downloads it.">
+        {({ titleId }) => (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="accent-accent"
+              aria-describedby={titleId}
+              checked={settings.updates.downloadAutomatically}
+              onChange={(e) => void savePatch({ updates: { downloadAutomatically: e.target.checked } })}
+            />
+            Download
+          </label>
+        )}
+      </Row>
+      <Row title="Install when oIDE closes" desc="Install a downloaded update when you quit oIDE, after agents stop. Off: it waits for Restart to update.">
+        {({ titleId }) => (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="accent-accent"
+              aria-describedby={titleId}
+              checked={settings.updates.installOnQuit}
+              onChange={(e) => void savePatch({ updates: { installOnQuit: e.target.checked } })}
+            />
+            Install
           </label>
         )}
       </Row>
@@ -186,7 +202,7 @@ export function UpdatesSection({ settings }: { settings: Settings }) {
           )}
           {status.state === 'downloaded' && confirming && (
             <div role="group" aria-label="Confirm restart" className="flex items-center gap-2 flex-wrap text-[12.5px]">
-              <span className="text-ink-2 flex-1 min-w-[240px]">oIDE will quit, stop running agents (they resume after the restart) and install {status.available.version}.</span>
+              <span className="text-ink-2 flex-1 min-w-[240px]">{restartWarning(status.available.version)}</span>
               <button type="button" className={outlineBtn} onClick={() => setConfirming(false)}>
                 Cancel
               </button>

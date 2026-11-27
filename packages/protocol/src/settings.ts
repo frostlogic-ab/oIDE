@@ -151,10 +151,14 @@ export const Settings = z.object({
   updates: z
     .object({
       channel: UpdateChannel.default('stable'),
-      /** Look for updates at startup and every few hours. Downloading and installing always need a click. */
+      /** Look for updates at startup and every few hours. */
       checkAutomatically: z.boolean().default(true),
+      /** Download a found update in the background (only when this build can install it itself). */
+      downloadAutomatically: z.boolean().default(true),
+      /** Install a downloaded update when oIDE quits (after agents stop), without asking again. */
+      installOnQuit: z.boolean().default(true),
     })
-    .default({ channel: 'stable', checkAutomatically: true }),
+    .default({ channel: 'stable', checkAutomatically: true, downloadAutomatically: true, installOnQuit: true }),
   /**
    * Settings › Extensions › Marketplace index URL. Empty (the default) means the index bundled with
    * the app is the only one: oIDE fetches no remote index. Setting an https URL needs a native

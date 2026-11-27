@@ -70,7 +70,8 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-function make(over: Partial<UpdaterOptions> = {}, settings = settingsStub()) {
+/** Download automatically is off here so a check stops at 'available'; the tests below cover it on. */
+function make(over: Partial<UpdaterOptions> = {}, settings = settingsStub({ downloadAutomatically: false })) {
   const svc = new UpdaterService({
     currentVersion: '0.1.0',
     platform: 'win32',
@@ -200,7 +201,7 @@ it('is off unless the build was given a release feed (no default org), and never
     expect((await svc.check()).state).toBe('not-available');
   });
 
-  it('never downloads or installs on its own: autoDownload and autoInstallOnAppQuit are off', async () => {
+  it('with Download automatically off, a check only finds the update (electron-updater never downloads by itself)', async () => {
     const { svc } = make();
     updater.checkForUpdates.mockImplementation(async () => {
       updater.emit('update-available', info);
@@ -208,7 +209,6 @@ it('is off unless the build was given a release feed (no default org), and never
     });
     const s = await svc.check();
     expect(updater.autoDownload).toBe(false);
-    expect(updater.autoInstallOnAppQuit).toBe(false);
     expect(s).toMatchObject({ state: 'available', available: { version: '0.2.0', releaseName: 'oIDE 0.2.0' }, releaseUrl: `${RELEASES_URL}/tag/v0.2.0`, canInstall: true });
     expect(s.available?.releaseNotes).toBe('Faster Wall\n- One\n- Two & three');
     expect(updater.downloadUpdate).not.toHaveBeenCalled();
@@ -252,7 +252,7 @@ it('is off unless the build was given a release feed (no default org), and never
   });
 
   it('beta channel: beta, prereleases allowed, still no downgrades; switching resets a found update', async () => {
-    const settings = settingsStub({ channel: 'beta' });
+    const settings = settingsStub({ channel: 'beta', downloadAutomatically: false });
     const { svc } = make({}, settings);
     svc.start();
     updater.checkForUpdates.mockImplementation(async () => (updater.emit('update-available', { version: '0.2.0-beta.1' }), null));
@@ -300,8 +300,8 @@ it('is off unless the build was given a release feed (no default org), and never
     await vi.waitFor(() => expect(svc.getStatus()).toMatchObject({ state: 'error', error: 'sha512 checksum mismatch' }));
   });
 
-  it('unsigned macOS builds can check but not install: no Download, release page instead', async () => {
-    const { svc } = make({ platform: 'darwin', isMacSigned: async () => false });
+  it('unsigned macOS builds can check but not install: no Download (not even automatic), release page instead', async () => {
+    const { svc } = make({ platform: 'darwin', isMacSigned: async () => false }, settingsStub());
     updater.checkForUpdates.mockImplementation(async () => (updater.emit('update-available', info), null));
     expect(await svc.check()).toMatchObject({ state: 'available', canInstall: false, releaseUrl: `${RELEASES_URL}/tag/v0.2.0` });
     expect((await svc.download()).state).toBe('available');
@@ -312,6 +312,90 @@ it('is off unless the build was given a release feed (no default org), and never
     const { svc } = make({ platform: 'darwin', isMacSigned: async () => true });
     updater.checkForUpdates.mockImplementation(async () => (updater.emit('update-available', info), null));
     expect((await svc.check()).canInstall).toBe(true);
+  });
+
+  it('Download automatically (the default): a check that finds an update starts the download', async () => {
+    const { svc } = make({}, settingsStub());
+    updater.checkForUpdates.mockImplementation(async () => (updater.emit('update-available', info), null));
+    expect(await svc.check()).toMatchObject({ state: 'downloading', progress: 0, available: { version: '0.2.0' } });
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1);
+    expect(updater.autoDownload).toBe(false); // oIDE starts it, not electron-updater
+    expect(emitted.map((e) => e.state)).toEqual(expect.arrayContaining(['checking', 'available', 'downloading']));
+  });
+
+  it('turning Download automatically on downloads an update that was found while it was off', async () => {
+    const settings = settingsStub({ downloadAutomatically: false });
+    const { svc } = make({}, settings);
+    svc.start();
+    updater.checkForUpdates.mockImplementation(async () => (updater.emit('update-available', info), null));
+    expect((await svc.check()).state).toBe('available');
+    expect(updater.downloadUpdate).not.toHaveBeenCalled();
+    settings.set({ downloadAutomatically: true });
+    await vi.waitFor(() => expect(svc.getStatus().state).toBe('downloading'));
+    expect(updater.downloadUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  async function downloaded(svc: UpdaterService) {
+    updater.checkForUpdates.mockImplementation(async () => (updater.emit('update-available', info), null));
+    await svc.check();
+    if (svc.getStatus().state === 'available') await svc.download();
+    updater.emit('update-downloaded', info);
+    await Promise.resolve(); // the microtask that follows electron-updater adding its quit handler
+  }
+
+  it('Install when oIDE closes (the default): electron-updater installs on quit, and the quit is reported', async () => {
+    const installs: unknown[] = [];
+    const settings = settingsStub();
+    const { svc } = make({ onInstall: (e) => installs.push(e) }, settings);
+    svc.start();
+    expect(svc.prepareQuit()).toBe(false); // nothing downloaded yet
+    await downloaded(svc);
+    expect(updater.autoInstallOnAppQuit).toBe(true);
+    expect(svc.prepareQuit()).toBe(true);
+    expect(installs).toEqual([{ trigger: 'quit', channel: 'stable' }]);
+    expect(updater.quitAndInstall).not.toHaveBeenCalled(); // electron-updater's own quit handler installs
+  });
+
+  it('Install when oIDE closes off: the flag stays on until electron-updater has its quit handler, then follows the setting', async () => {
+    const installs: unknown[] = [];
+    const settings = settingsStub({ installOnQuit: false });
+    const { svc } = make({ onInstall: (e) => installs.push(e) }, settings);
+    svc.start();
+    updater.checkForUpdates.mockImplementation(async () => (updater.emit('update-available', info), null));
+    await svc.check();
+    // Windows/Linux: electron-updater only adds its quit handler if the flag is on right after the download.
+    expect(updater.autoInstallOnAppQuit).toBe(true);
+    await downloaded(svc);
+    expect(updater.autoInstallOnAppQuit).toBe(false);
+    expect(svc.prepareQuit()).toBe(false);
+    // Turned back on after the download: it applies at quit.
+    settings.set({ installOnQuit: true });
+    expect(updater.autoInstallOnAppQuit).toBe(true);
+    expect(svc.prepareQuit()).toBe(true);
+    settings.set({ installOnQuit: false });
+    expect(svc.prepareQuit()).toBe(false);
+    expect(updater.autoInstallOnAppQuit).toBe(false);
+    expect(installs).toEqual([{ trigger: 'quit', channel: 'stable' }]);
+  });
+
+  it('macOS: autoInstallOnAppQuit follows the setting from the start (it decides the Squirrel.Mac hand-off)', async () => {
+    const settings = settingsStub({ installOnQuit: false });
+    const { svc } = make({ platform: 'darwin', isMacSigned: async () => true }, settings);
+    svc.start();
+    await svc.check();
+    expect(updater.autoInstallOnAppQuit).toBe(false);
+    settings.set({ installOnQuit: true });
+    expect(updater.autoInstallOnAppQuit).toBe(true);
+  });
+
+  it('Restart to update reports where it was clicked, and the quit that follows is not a second install', async () => {
+    const installs: unknown[] = [];
+    const { svc } = make({ onInstall: (e) => installs.push(e) }, settingsStub());
+    await downloaded(svc);
+    svc.install(true, 'header');
+    expect(updater.quitAndInstall).toHaveBeenCalledWith(false, true);
+    expect(svc.prepareQuit()).toBe(false);
+    expect(installs).toEqual([{ trigger: 'header', channel: 'stable' }]);
   });
 
   it('a failing electron-updater load is an error state, not a crash', async () => {

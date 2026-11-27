@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ArchiveReason, Effort, PermissionMode, WorkIn } from './agent.js';
 import { ArtifactKind } from './artifacts.js';
-import { UpdateChannel } from './updates.js';
+import { UpdateChannel, UpdateInstallTrigger } from './updates.js';
 
 /**
  * Opt-in usage analytics and error reports (docs/wiki/pages/telemetry.md, ADR 0011).
@@ -207,6 +207,8 @@ export const TELEMETRY_SETTING_KEYS = [
   'ui.crashReports',
   'updates.channel',
   'updates.checkAutomatically',
+  'updates.downloadAutomatically',
+  'updates.installOnQuit',
   'marketplace.indexUrl',
   'keybindings',
 ] as const;
@@ -313,6 +315,11 @@ export const TELEMETRY_EVENTS = {
     from: 'main',
     question: 'Do people move to new versions, and from which ones?',
     props: z.object({ from_version: AppVersion, to_version: AppVersion }),
+  }),
+  update_install_started: def({
+    from: 'main',
+    question: 'How do people apply updates: from the header Update button, from Settings, or by quitting oIDE?',
+    props: z.object({ trigger: UpdateInstallTrigger, channel: UpdateChannel }),
   }),
   update_checked: def({
     from: 'main',

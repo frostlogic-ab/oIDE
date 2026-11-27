@@ -85,8 +85,8 @@ describe('SettingsService', () => {
   it('updates (M7): defaults to stable with automatic checks, persists the channel, refuses unknown channels', () => {
     const db = openDatabase(':memory:');
     const svc = new SettingsService({ db });
-    expect(svc.get().updates).toEqual({ channel: 'stable', checkAutomatically: true });
-    expect(svc.update({ updates: { channel: 'beta' } }).updates).toEqual({ channel: 'beta', checkAutomatically: true });
+    expect(svc.get().updates).toEqual({ channel: 'stable', checkAutomatically: true, downloadAutomatically: true, installOnQuit: true });
+    expect(svc.update({ updates: { channel: 'beta' } }).updates).toEqual({ channel: 'beta', checkAutomatically: true, downloadAutomatically: true, installOnQuit: true });
     expect(new SettingsService({ db }).get().updates.channel).toBe('beta');
     expect(() => svc.update({ updates: { channel: 'nightly' } })).toThrow();
     // Settings saved before M7 have no `updates` key and still parse.

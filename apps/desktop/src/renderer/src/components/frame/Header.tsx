@@ -7,8 +7,9 @@ import { useScope } from '../../stores/scope';
 import { useUi } from '../../stores/ui';
 import { useShortcutLabel } from '../../lib/useKeymap';
 import type { ScreenDef } from '../../screens/registry';
+import { UpdateButton } from './UpdateButton';
 
-/** 44px title bar: logo (with the "by Frostlogic" subtitle), title/breadcrumb slot or command-bar trigger, scope switcher, counts, actions slot. */
+/** 44px title bar: logo (with the "by Frostlogic" subtitle), the Update button when an update is ready, title/breadcrumb slot or command-bar trigger, scope switcher, counts, actions slot. */
 export function Header({ def }: { def: ScreenDef }) {
   const setSlot = useUi((s) => s.setHeaderSlot);
   const titleRef = useCallback((el: HTMLDivElement | null) => setSlot('title', el), [setSlot]);
@@ -25,6 +26,8 @@ export function Header({ def }: { def: ScreenDef }) {
           </span>
         </div>
       </div>
+
+      <UpdateButton />
 
       <div ref={titleRef} className="flex items-center gap-2 min-w-0 empty:hidden">
         {def.header === 'title' && !def.customTitle && <span className="text-ink text-[12.5px] whitespace-nowrap">{def.title}</span>}

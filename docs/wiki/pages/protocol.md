@@ -48,7 +48,9 @@ Fields added after the first cut (all optional or defaulted):
 - M7 release engineering (2026-11-24): `Settings.updates` (`channel` stable/beta, `checkAutomatically`;
   defaulted as a whole so older settings parse), `updates.ts` (`UpdateChannel`, `UpdateState`, `UpdateStatus`),
   IPC `updates.status/check/download/install` (install needs `{ consent: true }`) and the `updates.changed`
-  event. See [packaging](packaging.md).
+  event. See [packaging](packaging.md). 2026-11-27: `Settings.updates.downloadAutomatically` and
+  `installOnQuit` (default true), `UpdateInstallTrigger`, `updates.install` takes an optional
+  `from: 'header' | 'settings'` ([ADR 0018](../../adr/0018-updates-download-and-install-on-quit-by-default.md)).
 - Conformance UX fixes (2026-11-24): `Settings.keybindings` (action → combos, default `{}`);
   `ReviewComment.side` and `review.addComment { side }` (`old` | `new`, default `new`), `side` on
   `review-feedback` comments; `permission-resolved.reason` (`quit`); `AgentSummary.interruptedPermission`;

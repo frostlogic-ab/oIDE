@@ -3,10 +3,15 @@ import { z } from 'zod';
 /**
  * Auto-update (M7). electron-updater on GitHub Releases, owned by the main process
  * (`apps/desktop/src/main/services/updater.ts`). The renderer only reads this status and asks for a
- * check, a download or an install; nothing is downloaded or installed without the user's click.
+ * check, a download or an install. A found update downloads in the background and installs when
+ * oIDE quits, unless Settings › Updates turns either off (ADR 0018); restarting now is a click.
  */
 export const UpdateChannel = z.enum(['stable', 'beta']);
 export type UpdateChannel = z.infer<typeof UpdateChannel>;
+
+/** What started an install: the header Update button, Settings › Updates, or quitting oIDE (Install when oIDE closes). */
+export const UpdateInstallTrigger = z.enum(['header', 'settings', 'quit']);
+export type UpdateInstallTrigger = z.infer<typeof UpdateInstallTrigger>;
 
 export const UpdateState = z.enum([
   /** Updates are off: development build, Linux deb/rpm (package manager), OIDE_DISABLE_UPDATES. */
@@ -15,10 +20,10 @@ export const UpdateState = z.enum([
   'idle',
   'checking',
   'not-available',
-  /** A newer version exists; waits for the user to click Download. */
+  /** A newer version exists; downloads by itself (Download automatically) or waits for Download. */
   'available',
   'downloading',
-  /** Downloaded and verified; waits for the user to click Restart to update. */
+  /** Downloaded and verified; installs on quit (Install when oIDE closes) or on Restart to update. */
   'downloaded',
   'error',
 ]);
