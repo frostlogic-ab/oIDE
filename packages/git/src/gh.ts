@@ -14,6 +14,19 @@ export interface PrInfo {
   url?: string;
   /** Merge commit sha (merged PRs). */
   mergeCommit?: string;
+  /** CI checks on the head commit, counted; absent when there are none. */
+  checks?: PrChecks;
+}
+
+/** GitHub's status check rollup (check runs + commit statuses), counted. */
+export interface PrChecks {
+  /** `pending` while any check runs; else `failure` when one failed; else `success`. */
+  state: 'pending' | 'success' | 'failure';
+  total: number;
+  /** Checks that finished (passed or failed). */
+  completed: number;
+  /** Finished checks that failed. */
+  failed: number;
 }
 
 /** A lookup that tells "no PR for this branch" (`pr` undefined, no error) from a gh failure (`error`). */
@@ -23,6 +36,10 @@ export interface PrLookup {
   /** gh is missing or signed out. */
   unavailable?: boolean;
 }
+
+const PR_FIELDS = 'state,number,url,isDraft,mergeCommit';
+/** gh's message for a `--json` field it does not know. */
+const UNKNOWN_FIELD = /unknown json field/i;
 
 /** gh's message when a branch has no pull request. */
 const NO_PR = /no (open )?pull requests? found|could not find any pull requests/i;
@@ -37,6 +54,8 @@ export class GhCli {
   private readonly bin: string;
   private readonly timeoutMs: number;
   private availableCache: Promise<boolean> | undefined;
+  /** gh rejected `statusCheckRollup` (older gh): PR lookups go without CI checks. */
+  private noRollup = false;
 
   constructor(opts: { ghBinary?: string; timeoutMs?: number } = {}) {
     this.bin = opts.ghBinary ?? resolveTool('gh');
@@ -98,7 +117,12 @@ export class GhCli {
   /** PR for a branch, telling "none" apart from a failure (for backoff). */
   async prLookup(cwd: string, branch: string): Promise<PrLookup> {
     if (!(await this.available())) return { unavailable: true };
-    const r = await this.run(['pr', 'view', branch, '--json', 'state,number,url,isDraft,mergeCommit'], cwd);
+    let r = await this.run(['pr', 'view', branch, '--json', this.noRollup ? PR_FIELDS : `${PR_FIELDS},statusCheckRollup`], cwd);
+    if (r.code !== 0 && !this.noRollup && UNKNOWN_FIELD.test(r.stderr || r.stdout)) {
+      // A gh too old for statusCheckRollup: ask without it from now on (no CI indicator).
+      this.noRollup = true;
+      r = await this.run(['pr', 'view', branch, '--json', PR_FIELDS], cwd);
+    }
     if (r.code === 0) {
       const pr = parsePrView(r.stdout);
       return pr ? { pr } : { error: 'gh pr view returned no state' };
@@ -124,13 +148,49 @@ export class GhCli {
 
 export function parsePrView(json: string): PrInfo | undefined {
   try {
-    const v = JSON.parse(json) as { state?: string; number?: number; url?: string; isDraft?: boolean; mergeCommit?: { oid?: string } | null };
+    const v = JSON.parse(json) as { state?: string; number?: number; url?: string; isDraft?: boolean; mergeCommit?: { oid?: string } | null; statusCheckRollup?: unknown };
     if (!v.state) return undefined;
     const state = v.isDraft && v.state === 'OPEN' ? 'draft' : v.state.toLowerCase();
-    return { state, number: v.number, url: v.url, ...(v.mergeCommit?.oid ? { mergeCommit: v.mergeCommit.oid } : {}) };
+    const checks = summarizeChecks(v.statusCheckRollup);
+    return { state, number: v.number, url: v.url, ...(v.mergeCommit?.oid ? { mergeCommit: v.mergeCommit.oid } : {}), ...(checks ? { checks } : {}) };
   } catch {
     return undefined;
   }
+}
+
+/** Check run conclusions and commit status states that count as a failed check. */
+const FAILED = new Set(['FAILURE', 'ERROR', 'CANCELLED', 'TIMED_OUT', 'ACTION_REQUIRED', 'STARTUP_FAILURE']);
+
+/**
+ * `statusCheckRollup` from `gh pr view --json` → counts, or undefined when there are no checks.
+ * Items are CheckRuns (`status`, `conclusion`) or StatusContexts (`state`). A check run counts as
+ * finished once its status is COMPLETED; a status context once its state is not PENDING/EXPECTED.
+ */
+export function summarizeChecks(rollup: unknown): PrChecks | undefined {
+  if (!Array.isArray(rollup)) return undefined;
+  let total = 0;
+  let completed = 0;
+  let failed = 0;
+  for (const raw of rollup) {
+    if (!raw || typeof raw !== 'object') continue;
+    const c = raw as { __typename?: unknown; status?: unknown; conclusion?: unknown; state?: unknown };
+    const up = (x: unknown) => (typeof x === 'string' ? x.toUpperCase() : '');
+    if (c.__typename === 'StatusContext' || (c.status === undefined && typeof c.state === 'string')) {
+      const st = up(c.state);
+      total++;
+      if (st === 'PENDING' || st === 'EXPECTED' || !st) continue;
+      completed++;
+      if (FAILED.has(st)) failed++;
+    } else {
+      total++;
+      if (up(c.status) !== 'COMPLETED') continue;
+      completed++;
+      if (FAILED.has(up(c.conclusion))) failed++;
+    }
+  }
+  if (!total) return undefined;
+  const state = completed < total ? 'pending' : failed ? 'failure' : 'success';
+  return { state, total, completed, failed };
 }
 
 export interface GhRepo {

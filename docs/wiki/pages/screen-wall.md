@@ -176,6 +176,18 @@ merged PR archives the agent (reason `merged`, process stopped, cleanup as for a
 including the 7-day sweep) and toasts "PR #12 merged · <title> archived". A closed PR only shows its
 badge; Archive stays on the tile.
 
+**CI checks on a PR (2026-11-27).** The same `gh pr view` lookup asks for `statusCheckRollup` (an
+older gh that rejects the field is asked without it from then on) and counts it into
+`summary.pr.checks = { state: pending | success | failure, total, completed, failed }`
+(`summarizeChecks` in `packages/git/src/gh.ts`; check runs finish at `COMPLETED`, commit statuses
+once not `PENDING`/`EXPECTED`; skipped and neutral count as passed). Open and draft PRs only. Next to
+the state badge, `PrChecks` (`components/PrLink.tsx`) shows an amber pulsing dot and "7/9" while
+checks run, a green check and "9/9" when all passed, a red mark and "2 failed" when some failed (the
+dot turns red as soon as one fails, even while others run); clicking opens the PR's Checks tab. While
+any PR has running checks, the git service runs `poll('checks')` every minute for just those PRs (same
+offline / gh / trust / backoff rules); after Open PR or Push to PR the old checks are dropped and the
+PR is watched up to 10 minutes for new ones to start.
+
 **Reload rehydration (bug fixed 2026-11-25).** A live agent vanished from the Wall ("No agents yet",
 "0 sessions") while it kept running in main. Cause: in dev, a Vite hot update that re-ran a store
 module (any edit to it or to `packages/protocol`, which every store imports) gave the components a
