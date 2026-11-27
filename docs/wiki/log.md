@@ -1056,6 +1056,8 @@ effect, so a late load or a `settingChanged` reload overwrote what the user had 
 saved nothing. The draft now follows the saved value only while the field is unedited (regression
 test added). See [extensions](pages/extensions.md).
 
+## [2026-11-27] decision | Remove the Wall's "Next that needs you" button
+The header button duplicated the "Needs you" filter chip and the N shortcut; removed it. N still jumps to the next tile that needs you. Updated [screen-wall](pages/screen-wall.md).
 ## [2026-11-27] build | Worktree folders no longer held open by oIDE itself
 User report: when an agent finished, deleting its worktree failed; with oIDE open (no agents)
 Explorer could not delete the folder either, and after quitting oIDE it could. oIDE's log showed
