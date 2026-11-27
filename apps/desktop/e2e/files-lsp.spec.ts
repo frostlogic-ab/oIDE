@@ -9,7 +9,7 @@ import { launchApp, type LaunchedApp } from './app';
  * Files language servers in the built app (ADR 0019): the built-in Languages extension starts
  * `typescript-language-server` from PATH, here a shim that runs the fixture server
  * (src/main/services/lsp/fixtures/fake-lsp.mjs). Opening a .ts file shows its diagnostics in the
- * tree and the Problems list, the tab bar shows the server running, and hovering a word shows
+ * tree and the Problems list, the file status bar shows the server running, and hovering a word shows
  * the server's hover.
  */
 
@@ -73,7 +73,7 @@ test('a .ts file gets its language server: diagnostics in the tree and Problems,
   await expect(page.getByRole('tab', { name: /app\.ts/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.monaco-editor .view-lines')).toContainText('greet');
 
-  // The server runs and its diagnostics reach the tab bar, the tree and the Problems list.
+  // The server runs and its diagnostics reach the file status bar, the tree and the Problems list.
   await expect(page.getByRole('button', { name: 'Language server: TypeScript language server' })).toHaveAttribute('data-lsp-state', 'running', { timeout: 20_000 });
   await expect(page.getByRole('button', { name: '1 error. Go to the next problem' })).toBeVisible();
   const tree = page.getByRole('tree', { name: /\(main\)/ });

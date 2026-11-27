@@ -14,8 +14,11 @@ import type { EditorPaneProps } from './EditorPane';
 
 // Monaco does not run in jsdom: a stand-in pane that can "type" into the active tab.
 vi.mock('./EditorPane', () => ({
-  default: ({ active, onDirty, mdView, onOpenFile, diff }: EditorPaneProps) => (
+  default: ({ active, onDirty, onStatus, mdView, onOpenFile, diff }: EditorPaneProps) => (
     <>
+      <button type="button" onClick={() => onStatus({ line: 3, column: 7, language: 'Markdown', dirty: true, saving: false, readOnly: false })}>
+        Report status
+      </button>
       <output aria-label="Changes shown">{diff?.layout ?? 'off'}</output>
       <button type="button" onClick={() => onDirty(active.id, true)}>
         Type in {active.path}
@@ -236,6 +239,29 @@ describe('Files editor tabs', () => {
     } finally {
       confirm.mockRestore();
     }
+  });
+});
+
+describe('Files tab bar', () => {
+  it('holds only the open files; views, position and Save sit in the file status bar', async () => {
+    await setupMockApp({ screen: 'files', params: {} });
+    useFiles.getState().openFile('billing-api', '/Users/you/code/billing-api', 'README.md');
+    render(<FilesScreen />);
+    const tablist = await screen.findByRole('tablist', { name: 'Open files' });
+    fireEvent.click(screen.getByRole('button', { name: 'Type in README.md' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Report status' }));
+
+    // The tab bar row has the tab list (and its menu) only: no toggles, no Ln/Col, no Save.
+    const bar = tablist.parentElement!;
+    expect(within(bar).queryByRole('group')).toBeNull();
+    expect(within(bar).queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(bar.textContent).not.toMatch(/Ln \d|Markdown/);
+
+    const status = screen.getByRole('contentinfo', { name: 'File status' });
+    expect(within(status).getByRole('group', { name: 'Markdown view' })).toBeTruthy();
+    expect(within(status).getByRole('button', { name: 'Save' })).toBeTruthy();
+    fireEvent.click(within(status).getByRole('button', { name: 'Edit' }));
+    expect(status.textContent).toContain('Ln 3, Col 7 · Markdown');
   });
 });
 
