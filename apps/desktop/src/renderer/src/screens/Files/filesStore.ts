@@ -110,6 +110,8 @@ interface FilesState {
   expandMany(root: string, dirs: string[]): void;
   openFile(projectId: string, root: string, path: string): void;
   closeTab(id: string): void;
+  /** Close several tabs at once. The active tab stays if it is kept, else the kept tab nearest its place. */
+  closeTabs(ids: string[]): void;
   setDirty(id: string, dirty: boolean): void;
   setActive(id: string): void;
   markRevealed(key: string): void;
@@ -220,6 +222,19 @@ export const useFiles = create<FilesState>()((set, get) => ({
     const next = tabs.filter((t) => t.id !== id);
     const active = get().active === id ? (next[Math.min(i, next.length - 1)]?.id ?? undefined) : get().active;
     const { [id]: _closed, ...dirty } = get().dirty;
+    set({ tabs: next, active, dirty });
+  },
+  closeTabs: (ids) => {
+    const gone = new Set(ids);
+    const tabs = get().tabs;
+    const next = tabs.filter((t) => !gone.has(t.id));
+    let active = get().active;
+    if (active !== undefined && gone.has(active)) {
+      const i = tabs.findIndex((t) => t.id === active);
+      const kept = tabs.slice(0, i).filter((t) => !gone.has(t.id)).length;
+      active = next[Math.min(kept, next.length - 1)]?.id;
+    }
+    const dirty = Object.fromEntries(Object.entries(get().dirty).filter(([id]) => !gone.has(id)));
     set({ tabs: next, active, dirty });
   },
   setDirty: (id, d) => {

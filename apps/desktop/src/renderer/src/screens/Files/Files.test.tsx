@@ -181,6 +181,53 @@ describe('Files editor tabs', () => {
       confirm.mockRestore();
     }
   });
+
+  it('right-click on a tab offers Close, Close all to the right and Close all; middle click closes', async () => {
+    await setupMockApp({ screen: 'files', params: {} });
+    const root = '/Users/you/code/billing-api';
+    const s = useFiles.getState();
+    for (const p of ['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts']) s.openFile('billing-api', root, p);
+    s.setActive(useFiles.getState().tabs[3]!.id); // d.ts
+    render(<FilesScreen />);
+    const names = () => useFiles.getState().tabs.map((t) => t.path);
+    const activePath = () => useFiles.getState().tabs.find((t) => t.id === useFiles.getState().active)?.path;
+    const menuFor = async (name: RegExp) => {
+      fireEvent.contextMenu(await screen.findByRole('tab', { name }));
+      return screen.getByRole('menu', { name: /^Actions for/ });
+    };
+
+    // Close all to the right of b.ts: the active d.ts goes, b.ts becomes active.
+    fireEvent.click(within(await menuFor(/b\.ts/)).getByRole('menuitem', { name: 'Close all to the right' }));
+    expect(names()).toEqual(['a.ts', 'b.ts']);
+    expect(activePath()).toBe('b.ts');
+
+    // Nothing to the right of the last tab.
+    expect((within(await menuFor(/b\.ts/)).getByRole('menuitem', { name: 'Close all to the right' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Close' }));
+    expect(names()).toEqual(['a.ts']);
+
+    // Middle click closes a tab.
+    s.openFile('billing-api', root, 'c.ts');
+    fireEvent(await screen.findByRole('tab', { name: /c\.ts/ }), new MouseEvent('auxclick', { bubbles: true, cancelable: true, button: 1 }));
+    expect(names()).toEqual(['a.ts']);
+
+    // Close all asks once when files have unsaved changes.
+    s.openFile('billing-api', root, 'c.ts');
+    s.setDirty(useFiles.getState().tabs[0]!.id, true);
+    s.setDirty(useFiles.getState().tabs[1]!.id, true);
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    try {
+      fireEvent.click(within(await menuFor(/a\.ts/)).getByRole('menuitem', { name: 'Close all' }));
+      expect(confirm).toHaveBeenCalledWith('2 files have unsaved changes. Close them anyway?');
+      expect(names()).toEqual(['a.ts', 'c.ts']);
+      confirm.mockReturnValue(true);
+      fireEvent.click(within(await menuFor(/a\.ts/)).getByRole('menuitem', { name: 'Close all' }));
+      expect(names()).toEqual([]);
+      expect(useFiles.getState().dirty).toEqual({});
+    } finally {
+      confirm.mockRestore();
+    }
+  });
 });
 
 describe('Files search and replace', () => {

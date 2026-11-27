@@ -5,7 +5,7 @@
  * Wiki: screen-files.md.
  */
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, EmptyState, Spinner } from '@oide/ui';
+import { Button, ContextMenu, EmptyState, Spinner } from '@oide/ui';
 import { NEEDS_YOU, type AgentSummary, type ArtifactMeta, type CommitInfo, type ContentMatch, type Project } from '@oide/protocol';
 import { HeaderSlot } from '../../components/frame/HeaderSlot';
 import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
@@ -180,9 +180,24 @@ export default function FilesScreen() {
     files.openFile(active.projectId, root, active.path);
   };
 
-  const closeTab = (t: FileTab) => {
-    if (dirty[t.id] && !window.confirm(`${t.path} has unsaved changes. Close it anyway?`)) return;
-    files.closeTab(t.id);
+  // Close one or more tabs, asking once when any of them has unsaved changes.
+  const closeTabs = (list: FileTab[]) => {
+    const unsaved = list.filter((t) => dirty[t.id]);
+    if (unsaved.length === 1 && !window.confirm(`${unsaved[0]!.path} has unsaved changes. Close it anyway?`)) return;
+    if (unsaved.length > 1 && !window.confirm(`${unsaved.length} files have unsaved changes. Close them anyway?`)) return;
+    files.closeTabs(list.map((t) => t.id));
+  };
+  const closeTab = (t: FileTab) => closeTabs([t]);
+
+  // Right-click (or the Menu key / Shift+F10) on a tab: Close, Close all to the right, Close all.
+  const [tabMenu, setTabMenu] = useState<{ at: { x: number; y: number }; tab: FileTab }>();
+  const tabMenuItems = (t: FileTab) => {
+    const right = files.tabs.slice(files.tabs.findIndex((x) => x.id === t.id) + 1);
+    return [
+      { id: 'close', label: 'Close', onSelect: () => closeTab(t) },
+      { id: 'close-right', label: 'Close all to the right', disabled: right.length === 0, onSelect: () => closeTabs(right) },
+      { id: 'close-all', label: 'Close all', onSelect: () => closeTabs(files.tabs) },
+    ];
   };
 
   return (
@@ -210,7 +225,23 @@ export default function FilesScreen() {
               const co = checkoutLabel(t);
               const base = t.path.split('/').pop();
               return (
-                <div key={t.id} className={`group flex items-center shrink-0 border-t-2 ${selected ? 'border-accent bg-ground' : 'border-transparent'}`}>
+                <div
+                  key={t.id}
+                  className={`group flex items-center shrink-0 border-t-2 ${selected ? 'border-accent bg-ground' : 'border-transparent'}`}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setTabMenu({ at: { x: e.clientX, y: e.clientY }, tab: t });
+                  }}
+                  // Middle click closes the tab (mousedown is cancelled so it does not start autoscroll).
+                  onMouseDown={(e) => {
+                    if (e.button === 1) e.preventDefault();
+                  }}
+                  onAuxClick={(e) => {
+                    if (e.button !== 1) return;
+                    e.preventDefault();
+                    closeTab(t);
+                  }}
+                >
                   <button
                     type="button"
                     role="tab"
@@ -219,6 +250,13 @@ export default function FilesScreen() {
                     aria-controls="files-editor"
                     title={`${pName}${co !== 'main' ? ` (${co})` : ''} › ${t.path}`}
                     onClick={() => files.setActive(t.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+                        e.preventDefault();
+                        const b = e.currentTarget.getBoundingClientRect();
+                        setTabMenu({ at: { x: b.left + 12, y: b.bottom }, tab: t });
+                      }
+                    }}
                     className={`h-[34px] pl-3.5 pr-1.5 border-0 bg-transparent font-mono text-[12px] whitespace-nowrap cursor-pointer ${selected ? 'text-ink' : 'text-ink-3 hover:text-ink-2'}`}
                   >
                     <span className={selected ? 'text-ink-3' : undefined}>
@@ -244,6 +282,7 @@ export default function FilesScreen() {
               );
             })}
           </div>
+          {tabMenu && <ContextMenu at={tabMenu.at} label={`Actions for ${tabMenu.tab.path.split('/').pop()}`} items={tabMenuItems(tabMenu.tab)} onClose={() => setTabMenu(undefined)} />}
           <div className="flex-1" />
           {active && status && (
             <div className="flex items-center gap-2.5 px-3 text-[11.5px] text-ink-3 shrink-0">
