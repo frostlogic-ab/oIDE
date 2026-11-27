@@ -181,6 +181,14 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
 - Ctrl/Cmd+S or Save → `files.write`. Files over 5 MB open read only; binary files show a notice.
 - Cut / Copy / Paste work from the keyboard and Monaco's context menu (Paste reads the system
   clipboard, which main allows for the app page only; see [security](security.md)).
+- The context menu is an opaque card (`menu.*` colours in `oide-dark`: `#15181D` card, `#343A44`
+  border, `#1E2430` selection, `#262B33` separators). With `fixedOverflowWidgets` Monaco draws it in
+  a shadow root on the editor's host element, outside `.monaco-editor`, where the theme's
+  `--vscode-*` variables are not defined, so it rendered see-through. `setup.ts` therefore adds
+  `.monaco-component.oide-monaco-host` to every editor and diff editor host
+  (`onDidCreateEditor` / `onDidCreateDiffEditor`), and `monaco/monaco.css` sets the shape variables
+  standalone Monaco leaves undefined (radius `--radius-md`, 1px border, `--shadow-tip`, Inter).
+  E2E: `files-lsp.spec.ts` checks the menu's background and border.
 - Markdown preview (`MarkdownPreview.tsx`, `markdownLinks.ts`, `lib/markdown.ts`): `.md`,
   `.markdown`, `.mdown`, `.mkd` and `.mkdn` files (not `.mdx`, whose JSX the sanitiser would drop) open
   on their rendered page. **Edit** shows the Monaco source on the left half and the live page on the

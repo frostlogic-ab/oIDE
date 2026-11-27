@@ -13,6 +13,7 @@
 import * as monaco from 'monaco-editor/editor';
 import 'monaco-editor/features/register.all';
 import 'monaco-editor/languages/definitions/register.all';
+import './monaco.css';
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker&inline';
 import { language as jsLanguage } from 'monaco-editor/languages/definitions/javascript/javascript';
 import { language as tsLanguage } from 'monaco-editor/languages/definitions/typescript/typescript';
@@ -89,6 +90,14 @@ monaco.editor.defineTheme(THEME, {
     'editorSuggestWidget.background': '#15181D',
     'editorSuggestWidget.border': '#343A44',
     'editorSuggestWidget.selectedBackground': '#1E2430',
+    // Context menu: an opaque card, like every other oIDE menu.
+    'menu.background': '#15181D',
+    'menu.foreground': '#E6E8EB',
+    'menu.border': '#343A44',
+    'menu.selectionBackground': '#1E2430',
+    'menu.selectionForeground': '#E6E8EB',
+    'menu.separatorBackground': '#262B33',
+    'widget.shadow': '#00000066',
     'input.background': '#0B0D10',
     'input.border': '#343A44',
     focusBorder: '#7AA2F7',
@@ -123,6 +132,17 @@ monaco.editor.defineTheme(THEME, {
     'diffEditor.unchangedRegionForeground': '#9AA3AE',
   },
 });
+
+/**
+ * The context menu (with `fixedOverflowWidgets`) lives in a shadow root appended to the host
+ * element, outside `.monaco-editor`, where the theme's `--vscode-*` colours are defined only on
+ * `.monaco-editor, .monaco-diff-editor, .monaco-component`. Without this the menu has no
+ * background or border. Marking every host as a `.monaco-component` lets the colours inherit into
+ * the menu; `monaco.css` adds the shape variables standalone Monaco leaves undefined.
+ */
+const HOST_CLASSES = ['monaco-component', 'oide-monaco-host'] as const;
+monaco.editor.onDidCreateEditor((ed) => ed.getContainerDomNode().classList.add(...HOST_CLASSES));
+monaco.editor.onDidCreateDiffEditor((ed) => ed.getContainerDomNode().classList.add(...HOST_CLASSES));
 
 /** Options shared by every oIDE editor (JetBrains Mono 12.5 / 20, canvas gutter). */
 export const BASE_OPTIONS: monaco.editor.IStandaloneEditorConstructionOptions = {

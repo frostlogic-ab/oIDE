@@ -93,3 +93,16 @@ test('a .ts file gets its language server: diagnostics in the tree and Problems,
   }).toPass({ timeout: 20_000 });
   await page.screenshot({ path: join(shots, 'files-lsp-hover.png') });
 });
+
+test('the editor context menu is an opaque card, not see-through', async () => {
+  const { page } = ctx;
+  await page.keyboard.press('Escape');
+  await page.locator('.monaco-editor .view-lines span', { hasText: /^greet$/ }).first().click({ button: 'right' });
+  // The menu sits in a shadow root on the editor host; Playwright's CSS locators pierce it.
+  const menu = page.locator('.context-view.monaco-menu-container > .monaco-scrollable-element').first();
+  await expect(menu).toBeVisible();
+  await expect(menu).toHaveCSS('background-color', 'rgb(21, 24, 29)');
+  await expect(page.locator('.context-view.monaco-menu-container .monaco-menu').first()).toHaveCSS('border-top-color', 'rgb(52, 58, 68)');
+  await page.screenshot({ path: join(shots, 'files-context-menu.png') });
+  await page.keyboard.press('Escape');
+});

@@ -1,0 +1,13 @@
+/*
+ * Every Monaco host element (the node passed to `monaco.editor.create`) carries
+ * `.monaco-component.oide-monaco-host` (see setup.ts). With `fixedOverflowWidgets`, Monaco puts
+ * the editor context menu in a shadow root appended to that host, outside `.monaco-editor`, so it
+ * only sees the theme's `--vscode-*` colours through the host. Standalone Monaco never defines the
+ * shape variables the menu reads, so they are set here from the design tokens.
+ */
+.oide-monaco-host.monaco-component {
+  font-family: var(--font-sans);
+  --vscode-cornerRadius-large: var(--radius-md);
+  --vscode-strokeThickness: 1px;
+  --vscode-shadow-lg: var(--shadow-tip);
+}
