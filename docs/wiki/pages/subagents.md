@@ -19,6 +19,8 @@ Owner: [agent-supervisor](agent-supervisor.md).
 5. `system/task_progress {last_tool_name, usage.total_tokens}`, `system/task_updated {patch:{status:"completed"}}`,
    `system/task_notification {tool_use_id, status, summary}`, `background_tasks_changed {tasks:[]}`.
 6. The CLI wakes the lead with a new turn (new `init`, assistant text, `result`) without a user message.
+   The reducer puts an idle agent (has-question, ready-for-review) back to running on the lead's first
+   thinking, text or tool call in that turn, so the tile says Running while the lead acts on the report.
 
 ## Mapping
 
