@@ -116,6 +116,8 @@ interface FilesState {
   expandMany(root: string, dirs: string[]): void;
   openFile(projectId: string, root: string, path: string): void;
   closeTab(id: string): void;
+  /** Close several tabs at once. The active tab stays if it is kept, else the kept tab nearest its place. */
+  closeTabs(ids: string[]): void;
   setDirty(id: string, dirty: boolean): void;
   setMdView(id: string, view: MarkdownView): void;
   setActive(id: string): void;
@@ -222,13 +224,20 @@ export const useFiles = create<FilesState>()((set, get) => ({
     saveRecent(recent);
     set({ tabs, active: id, recent });
   },
-  closeTab: (id) => {
+  closeTab: (id) => get().closeTabs([id]),
+  closeTabs: (ids) => {
+    const gone = new Set(ids);
     const tabs = get().tabs;
-    const i = tabs.findIndex((t) => t.id === id);
-    const next = tabs.filter((t) => t.id !== id);
-    const active = get().active === id ? (next[Math.min(i, next.length - 1)]?.id ?? undefined) : get().active;
-    const { [id]: _closed, ...dirty } = get().dirty;
-    const { [id]: _view, ...mdView } = get().mdView;
+    const next = tabs.filter((t) => !gone.has(t.id));
+    let active = get().active;
+    if (active !== undefined && gone.has(active)) {
+      const i = tabs.findIndex((t) => t.id === active);
+      const kept = tabs.slice(0, i).filter((t) => !gone.has(t.id)).length;
+      active = next[Math.min(kept, next.length - 1)]?.id;
+    }
+    // Per-tab state goes with the tab: the unsaved flag and the Markdown view choice.
+    const dirty = Object.fromEntries(Object.entries(get().dirty).filter(([id]) => !gone.has(id)));
+    const mdView = Object.fromEntries(Object.entries(get().mdView).filter(([id]) => !gone.has(id)));
     set({ tabs: next, active, dirty, mdView });
   },
   setDirty: (id, d) => {

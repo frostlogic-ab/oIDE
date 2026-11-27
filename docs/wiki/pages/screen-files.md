@@ -21,6 +21,10 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
 - Middle: open-file tabs (`role="tablist"`, accent top border, close ×, ● when unsaved; right side
   "Ln, Col · Language" and Save; for a Markdown file a "Markdown view" Preview / Edit toggle before
   them), the agent banner, the editor, and under it the terminal panel when shown (`TerminalDock.tsx`).
+- Tab menu: right-click a tab (or Menu key / Shift+F10 on it) for Close, Close all to the right
+  (disabled on the last tab) and Close all. Middle click closes a tab. Closing several tabs asks
+  once when any has unsaved changes; `useFiles.closeTabs` keeps the active tab if it stays, else
+  picks the kept tab nearest its place (Close all to the right makes the clicked tab active).
 - Right ("File activity"): This file's history, Mentioned in, the language-servers note.
 
 ## Tree (`filesStore.ts`)
