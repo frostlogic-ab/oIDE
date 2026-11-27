@@ -1,11 +1,14 @@
-import { existsSync } from 'node:fs';
-import { mkdir, readdir, rm } from 'node:fs/promises';
+import { plainFs, plainFsPromises } from './plain-fs.js';
 import { dirname, join } from 'node:path';
 import { WorktreeInfo } from '@oide/protocol';
 import { diffStat, changedFiles } from './diff.js';
 import { status } from './status.js';
 import { Git, GitError, isSafeRef, runShellCommand, toGit, type Repo, type StreamResult } from './git.js';
 import { fromGitPath, isInside, pathKey, samePath, worktreeRoot } from './paths.js';
+
+// Not node:fs: in Electron it treats `*.asar` files as folders and keeps them open (plain-fs.ts).
+const { existsSync } = plainFs;
+const { mkdir, readdir, rm } = plainFsPromises;
 
 /** Branch prefix for every agent branch. */
 export const BRANCH_PREFIX = 'oide/';
