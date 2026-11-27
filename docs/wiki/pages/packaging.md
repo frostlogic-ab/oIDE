@@ -216,6 +216,11 @@ answers `disabled`). Renderer: Settings › Updates ([screen-settings](screen-se
   otherwise moved to `dev.oide.app.dev`. The installer's own shortcuts and other apps' are never touched.
   A taskbar pin made while the icon was blank may keep Windows' cached image until it is unpinned and
   pinned again.
+- Notifications from "Electron" (same cause): Windows names a toast's sender after the Start Menu
+  shortcut that carries its AUMID. With a dev `Electron.lnk` holding `dev.oide.app` next to the
+  installer's `oIDE.lnk`, the installed app's notifications showed "Electron". The AUMID split and
+  `releaseForeignShortcuts` above fix this too; unpackaged runs still show "Electron" on their own
+  toasts, since Electron names that shortcut after `electron.exe`'s ProductName.
 - Licences: `pnpm licenses:notices` (`tools/licenses/notices.mjs`) writes `THIRD_PARTY_NOTICES.md` for
   everything a packaged build ships (desktop `dependencies`, libraries bundled into `out/`, Electron);
   `pnpm licenses:check` fails on a licence outside the MIT-compatible allow-list or a stale file.
