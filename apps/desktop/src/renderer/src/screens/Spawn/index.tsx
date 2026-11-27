@@ -95,6 +95,8 @@ export default function SpawnScreen() {
   const [techniques, setTechniques] = useState<Technique[]>(settings?.techniques ?? []);
   const [extensions, setExtensions] = useState<InstalledExtension[]>([]);
   const goalRef = useRef<HTMLTextAreaElement>(null);
+  /** A close / navigation waiting on "Discard this agent?" (set when the form holds work the user did). */
+  const [pendingLeave, setPendingLeave] = useState<{ run: () => void } | null>(null);
   /** Screenshots pasted into the goal, files dropped on it or picked: sent with the first message. */
   const atts = useAttachments({ disabled: busy });
 
@@ -194,8 +196,20 @@ export default function SpawnScreen() {
   const toolsSupported = hasFeature(cli, 'mcp-config');
   const offeredExtensions = extensions.filter((e) => e.id in form.extensions);
 
+  // Work the user put in: a goal they typed, context they added, attachments. A goal or context the
+  // route pre-filled (Spawn from an artifact or a retry) is still on its source, so it is not lost.
+  const dirty =
+    (form.goal.trim() !== '' && form.goal.trim() !== (params.goal ?? '').trim()) ||
+    !sameContext(form.context, params.context ?? []) ||
+    atts.attachments.length > 0;
+  /** Runs `action` now, or after the user confirms discarding what they entered. */
+  const leave = (action: () => void) => {
+    if (dirty && !busy) setPendingLeave({ run: action });
+    else action();
+  };
+
   const submit = async () => {
-    if (busy || atts.busy) return;
+    if (busy || atts.busy || pendingLeave) return;
     const res = buildSpec(form, { allowBypass, customModels, techniqueOrder: techniques.map((t) => t.id) });
     if (!res.ok) {
       setErrors(res.errors);
@@ -238,301 +252,332 @@ export default function SpawnScreen() {
   const noProjects = projects.length === 0;
 
   return (
-    <Dialog
-      open
-      onClose={cancel}
-      dismissOnScrim={false}
-      title="Spawn an agent"
-      position="top"
-      width={720}
-      initialFocus={goalRef}
-      className="max-h-[calc(100vh-80px)]!"
-      footer={
-        <div className="-mx-5 -my-4 px-5 py-3.5 flex-1 flex items-center gap-2.5 flex-wrap bg-panel">
-          <span className="text-[12px] text-ink-3 flex items-center gap-1.5">
-            Runs <span className="font-mono text-ink-2">claude</span> CLI in its own terminal
-          </span>
-          <div className="flex-1" />
-          <Button size={36} className="h-[34px]!" onClick={cancel}>
-            Cancel
-          </Button>
-          <button
-            type="button"
-            onClick={() => void submit()}
-            disabled={busy || atts.busy || noProjects}
-            aria-keyshortcuts={isMac() ? 'Meta+Enter' : 'Control+Enter'}
-            className="h-[34px] px-4 rounded-md border-0 bg-accent text-on-accent font-semibold text-[13px] flex items-center gap-2 hover:brightness-110 disabled:opacity-50"
-          >
-            {busy ? 'Spawning…' : atts.busy ? 'Attaching…' : spawnLabel}
-            <Kbd className="text-on-accent! border-[rgba(11,13,16,0.35)]!">{isMac() ? '⌘ ↵' : 'Ctrl ↵'}</Kbd>
-          </button>
-        </div>
-      }
-    >
-      <form
-        className="flex flex-col gap-[18px] px-5 py-[18px]"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void submit();
-        }}
-        noValidate
+    <>
+      <Dialog
+        open
+        onClose={() => leave(cancel)}
+        dismissOnScrim={false}
+        title="Spawn an agent"
+        position="top"
+        width={720}
+        initialFocus={goalRef}
+        className="max-h-[calc(100vh-80px)]!"
+        footer={
+          <div className="-mx-5 -my-4 px-5 py-3.5 flex-1 flex items-center gap-2.5 flex-wrap bg-panel">
+            <span className="text-[12px] text-ink-3 flex items-center gap-1.5">
+              Runs <span className="font-mono text-ink-2">claude</span> CLI in its own terminal
+            </span>
+            <div className="flex-1" />
+            <Button size={36} className="h-[34px]!" onClick={() => leave(cancel)}>
+              Cancel
+            </Button>
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={busy || atts.busy || noProjects}
+              aria-keyshortcuts={isMac() ? 'Meta+Enter' : 'Control+Enter'}
+              className="h-[34px] px-4 rounded-md border-0 bg-accent text-on-accent font-semibold text-[13px] flex items-center gap-2 hover:brightness-110 disabled:opacity-50"
+            >
+              {busy ? 'Spawning…' : atts.busy ? 'Attaching…' : spawnLabel}
+              <Kbd className="text-on-accent! border-[rgba(11,13,16,0.35)]!">{isMac() ? '⌘ ↵' : 'Ctrl ↵'}</Kbd>
+            </button>
+          </div>
+        }
       >
-        {noProjects && (
-          <Notice tone="warn">
-            Open a project first. Agents run in a git worktree of a project.{' '}
-            <button type="button" className="underline bg-transparent border-0 p-0 text-warn" onClick={() => openNewProject('open')}>
-              New project
-            </button>
-          </Notice>
-        )}
-
-        {/* Goal + context */}
-        <div className="flex flex-col gap-2" {...atts.dropProps}>
-          <TextArea
-            ref={goalRef}
-            onPaste={atts.onPaste}
-            id={goalId}
-            label="Goal"
-            rows={3}
-            value={form.goal}
-            placeholder={atts.dragging ? 'Drop to attach' : 'What should the agent do? For example: Add a usage panel that opens from the status bar.'}
-            onChange={(e) => update({ goal: e.target.value })}
-            error={errors.goal}
-          />
-          <ContextChips value={form.context} onChange={(context) => update({ context })} projectId={form.projectId} attachments={atts} />
-        </div>
-
-        {/* Project + Work in */}
-        <div className="grid grid-cols-2 gap-3.5">
-          <Select
-            label="Project"
-            size={36}
-            surface="chrome"
-            value={form.projectId}
-            onChange={(e) => update({ projectId: e.target.value })}
-            options={noProjects ? [{ value: '', label: 'No projects open' }] : projects.map((p) => ({ value: p.id, label: p.name }))}
-            error={errors.projectId}
-          />
-          <Select
-            label="Work in"
-            size={36}
-            surface="chrome"
-            value={form.workIn}
-            onChange={(e) => update({ workIn: e.target.value as SpawnForm['workIn'] })}
-            options={WORK_IN_OPTIONS.map((o) =>
-              o.value === 'project-folder' && form.mode === 'bypassPermissions' ? { ...o, label: `${o.label} (not with Bypass)`, disabled: true } : o,
-            )}
-            error={errors.workIn}
-            hint={projectFolder ? 'Only one agent at a time can work in the project folder.' : undefined}
-          />
-        </div>
-
-        {/* Mode */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-baseline gap-2.5">
-            <span id={modeLbl} className={cn(LBL, 'flex-1')}>
-              Mode
-            </span>
-            <span className="text-[12px] text-ink-3">Shift + Tab switches mode on a running agent</span>
-          </div>
-          <CardRadioGroup
-            labelledBy={modeLbl}
-            value={form.mode}
-            onChange={(mode) => update({ mode })}
-            options={MODE_OPTIONS.filter((m) => modes.includes(m.mode)).map((m) => {
-              const bypass = m.mode === 'bypassPermissions';
-              return {
-                value: m.mode,
-                label: m.label,
-                desc: bypass && projectFolder ? 'Not in the project folder.' : m.desc,
-                danger: bypass,
-                disabled: bypass && projectFolder,
-              };
-            })}
-          />
-          {form.mode === 'bypassPermissions' && (
-            <div role="alert" className="flex gap-2.5 items-start px-3 py-2.5 rounded-lg border border-[#6B3434] bg-[#241517] text-bad-bright text-[12.5px] leading-[1.45]">
-              <Icon name="warning" size={16} className="mt-px" />
-              <span>Claude will not ask before running potentially dangerous commands. Keep this agent in its own worktree and avoid it on projects with production credentials.</span>
-            </div>
+        <form
+          className="flex flex-col gap-[18px] px-5 py-[18px]"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submit();
+          }}
+          noValidate
+        >
+          {noProjects && (
+            <Notice tone="warn">
+              Open a project first. Agents run in a git worktree of a project.{' '}
+              <button type="button" className="underline bg-transparent border-0 p-0 text-warn" onClick={() => openNewProject('open')}>
+                New project
+              </button>
+            </Notice>
           )}
-          {errors.mode && <FieldError>{errors.mode}</FieldError>}
-        </div>
 
-        {/* Models */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-baseline gap-2.5 flex-wrap">
-            <span id={focusLbl} className={LBL}>
-              Models
-            </span>
-            <span className="flex-1 text-right text-[12px] text-ink-3">{strategySummary(form.kind, form.slots, customModels, efforts.length > 0)}</span>
-            <NavLink onClick={() => navigate('settings', { section: 'models' })}>Edit presets</NavLink>
+          {/* Goal + context */}
+          <div className="flex flex-col gap-2" {...atts.dropProps}>
+            <TextArea
+              ref={goalRef}
+              onPaste={atts.onPaste}
+              id={goalId}
+              label="Goal"
+              rows={3}
+              value={form.goal}
+              placeholder={atts.dragging ? 'Drop to attach' : 'What should the agent do? For example: Add a usage panel that opens from the status bar.'}
+              onChange={(e) => update({ goal: e.target.value })}
+              error={errors.goal}
+            />
+            <ContextChips value={form.context} onChange={(context) => update({ context })} projectId={form.projectId} attachments={atts} />
           </div>
-          <CardRadioGroup
-            labelledBy={focusLbl}
-            size="sm"
-            value={focus}
-            onChange={(id) => {
-              if (id === 'custom') {
-                setAdvOpen(true);
-                update({ customPicked: true });
-                return;
-              }
-              const p = presets.find((x) => x.id === id);
-              if (p) update({ kind: p.strategy.kind, slots: applyVersions(slotsFromStrategy(p.strategy, form.slots), versions), customPicked: false });
-            }}
-            options={[
-              ...presets.map((p) => ({ value: p.id, label: p.name, desc: PRESET_HINTS[p.id] ?? p.description, disabled: !strategies.includes(p.strategy.kind) })),
-              { value: 'custom', label: 'Custom', desc: 'Your own mix, set under Advanced.' },
-            ]}
-            columns={Math.min(4, presets.length + 1)}
-          />
 
-          <button
-            type="button"
-            aria-expanded={advOpen}
-            aria-controls="spawn-adv"
-            onClick={() => setAdvOpen((o) => !o)}
-            className="self-start h-[30px] pl-1 pr-2 border-0 rounded-sm bg-transparent text-ink-2 text-[12.5px] flex items-center gap-1.5 hover:bg-raised"
-          >
-            <Icon name="chevron-right" size={16} className={cn('transition-transform', advOpen && 'rotate-90')} />
-            Advanced model settings
-          </button>
-
-          {advOpen && (
-            <div id="spawn-adv" className="flex flex-col gap-3.5 p-3.5 rounded-xl border border-line-2 bg-panel">
-              <div className="flex flex-col gap-2">
-                <span id={stratLbl} className={LBL}>
-                  How agents pick models
-                </span>
-                <CardRadioGroup<StrategyKind>
-                  labelledBy={stratLbl}
-                  value={form.kind}
-                  onChange={(kind) => update({ kind, customPicked: false })}
-                  options={STRATEGY_OPTIONS.filter((s) => strategies.includes(s.kind)).map((s) => ({ value: s.kind, label: s.label, desc: s.desc }))}
-                />
-              </div>
-              <div className="flex flex-col gap-2">
-                {/* One grid for every slot row: the pill groups share a column (sized to the
-                    widest, the orchestrator's with custom models) so the effort selects line up. */}
-                <div className={MODEL_GRID}>
-                {slotRows(form.kind).map((r) => (
-                  <ModelRow
-                    key={r.key}
-                    label={r.label}
-                    slot={form.slots[r.key]}
-                    allowCustom={r.key === 'lead'}
-                    efforts={efforts}
-                    versions={versions}
-                    customModels={customModels}
-                    onChange={(patch) => setSlot(r.key, patch)}
-                  />
-                ))}
-                </div>
-                <VersionsRow slots={form.slots} keys={slotRows(form.kind).map((r) => r.key)} onChange={(slots) => update({ slots })} />
-                {form.kind === 'routed' && (
-                  <span className="text-[12px] text-ink-3 leading-[1.45]">
-                    The orchestrator rates each subagent task as simple, standard or complex, and starts it on the model you picked for that level.
-                  </span>
-                )}
-              </div>
-              <span className="text-[12px] text-ink-3 leading-[1.45] pt-2.5 border-t border-line-6">
-                Picking a focus preset resets these. Changing them so they no longer match a preset switches the focus to Custom.
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Advanced techniques */}
-        {techniques.length > 0 && (
-          <TechniquesSection
-            techniques={techniques}
-            on={form.techniques}
-            open={techOpen}
-            onToggleOpen={() => setTechOpen((o) => !o)}
-            onToggle={(id) => update({ techniques: { ...form.techniques, [id]: !form.techniques[id] } })}
-            systemPromptSupported={hasFeature(cli, 'append-system-prompt')}
-          />
-        )}
-
-        {/* Parallel attempts */}
-        <div className="flex flex-col gap-2">
-          <span id={parLbl} className={LBL}>
-            Parallel attempts
-          </span>
-          <div role="group" aria-labelledby={parLbl} className="flex items-center gap-2">
-            <button
-              type="button"
-              aria-label="Fewer attempts"
-              disabled={form.attempts <= 1}
-              onClick={() => update({ attempts: Math.max(1, form.attempts - 1) })}
-              className="w-9 h-9 rounded-md border border-line-3 bg-transparent text-ink text-[16px] hover:bg-raised disabled:opacity-40"
-            >
-              −
-            </button>
-            <span className="font-mono w-7 text-center text-[15px]" aria-live="polite" aria-label={`${form.attempts} ${form.attempts === 1 ? 'attempt' : 'attempts'}`}>
-              {form.attempts}
-            </span>
-            <button
-              type="button"
-              aria-label="More attempts"
-              disabled={form.attempts >= MAX_ATTEMPTS}
-              onClick={() => update({ attempts: Math.min(MAX_ATTEMPTS, form.attempts + 1) })}
-              className="w-9 h-9 rounded-md border border-line-3 bg-transparent text-ink text-[16px] hover:bg-raised disabled:opacity-40"
-            >
-              +
-            </button>
-            <span className="text-[12px] text-ink-3 leading-[1.4]">{form.attempts === 1 ? 'One agent' : `${form.attempts} agents try the same goal in separate worktrees; keep the best`}</span>
+          {/* Project + Work in */}
+          <div className="grid grid-cols-2 gap-3.5">
+            <Select
+              label="Project"
+              size={36}
+              surface="chrome"
+              value={form.projectId}
+              onChange={(e) => update({ projectId: e.target.value })}
+              options={noProjects ? [{ value: '', label: 'No projects open' }] : projects.map((p) => ({ value: p.id, label: p.name }))}
+              error={errors.projectId}
+            />
+            <Select
+              label="Work in"
+              size={36}
+              surface="chrome"
+              value={form.workIn}
+              onChange={(e) => update({ workIn: e.target.value as SpawnForm['workIn'] })}
+              options={WORK_IN_OPTIONS.map((o) =>
+                o.value === 'project-folder' && form.mode === 'bypassPermissions' ? { ...o, label: `${o.label} (not with Bypass)`, disabled: true } : o,
+              )}
+              error={errors.workIn}
+              hint={projectFolder ? 'Only one agent at a time can work in the project folder.' : undefined}
+            />
           </div>
-          {errors.attempts && <FieldError>{errors.attempts}</FieldError>}
-        </div>
 
-        {/* Tools from extensions */}
-        {toolsSupported && (
+          {/* Mode */}
           <div className="flex flex-col gap-2">
-            <span id={toolsLbl} className={LBL}>
-              Tools from extensions
-            </span>
-            <div className="flex gap-1.5 flex-wrap" role="group" aria-labelledby={toolsLbl}>
-              {offeredExtensions.map((ext) => {
-                const risk = extensionRisk(ext);
-                return (
-                  <Checkbox
-                    key={ext.id}
-                    variant="pill"
-                    checked={form.extensions[ext.id] ?? false}
-                    onChange={(on) => update({ extensions: { ...form.extensions, [ext.id]: on } })}
-                    label={
-                      <span className="inline-flex items-center gap-1.5">
-                        {ext.displayName}
-                        {risk === 'ask' ? <span className="text-[10.5px] text-warn">asks first</span> : risk === 'read' ? <span className="text-[10.5px] text-ink-3">read only</span> : null}
-                      </span>
-                    }
-                  />
-                );
-              })}
-              <a
-                href="#marketplace"
-                onClick={(e) => {
-                  e.preventDefault();
-                  navigate('marketplace', {});
-                }}
-                className="flex items-center h-[30px] px-2.5 rounded-md border border-dashed border-line-hover text-[12.5px] text-ink-2 no-underline box-border hover:text-ink"
-              >
-                + Find more in Marketplace
-              </a>
+            <div className="flex items-baseline gap-2.5">
+              <span id={modeLbl} className={cn(LBL, 'flex-1')}>
+                Mode
+              </span>
+              <span className="text-[12px] text-ink-3">Shift + Tab switches mode on a running agent</span>
             </div>
-            {offeredExtensions.some((e) => form.extensions[e.id] && extensionRisk(e) === 'ask') && (
-              <span className="text-[12px] text-ink-3 leading-[1.45]">Tools marked asks first always ask you before they run, whatever the mode.</span>
+            <CardRadioGroup
+              labelledBy={modeLbl}
+              value={form.mode}
+              onChange={(mode) => update({ mode })}
+              options={MODE_OPTIONS.filter((m) => modes.includes(m.mode)).map((m) => {
+                const bypass = m.mode === 'bypassPermissions';
+                return {
+                  value: m.mode,
+                  label: m.label,
+                  desc: bypass && projectFolder ? 'Not in the project folder.' : m.desc,
+                  danger: bypass,
+                  disabled: bypass && projectFolder,
+                };
+              })}
+            />
+            {form.mode === 'bypassPermissions' && (
+              <div role="alert" className="flex gap-2.5 items-start px-3 py-2.5 rounded-lg border border-[#6B3434] bg-[#241517] text-bad-bright text-[12.5px] leading-[1.45]">
+                <Icon name="warning" size={16} className="mt-px" />
+                <span>Claude will not ask before running potentially dangerous commands. Keep this agent in its own worktree and avoid it on projects with production credentials.</span>
+              </div>
+            )}
+            {errors.mode && <FieldError>{errors.mode}</FieldError>}
+          </div>
+
+          {/* Models */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-baseline gap-2.5 flex-wrap">
+              <span id={focusLbl} className={LBL}>
+                Models
+              </span>
+              <span className="flex-1 text-right text-[12px] text-ink-3">{strategySummary(form.kind, form.slots, customModels, efforts.length > 0)}</span>
+              <NavLink onClick={() => leave(() => navigate('settings', { section: 'models' }))}>Edit presets</NavLink>
+            </div>
+            <CardRadioGroup
+              labelledBy={focusLbl}
+              size="sm"
+              value={focus}
+              onChange={(id) => {
+                if (id === 'custom') {
+                  setAdvOpen(true);
+                  update({ customPicked: true });
+                  return;
+                }
+                const p = presets.find((x) => x.id === id);
+                if (p) update({ kind: p.strategy.kind, slots: applyVersions(slotsFromStrategy(p.strategy, form.slots), versions), customPicked: false });
+              }}
+              options={[
+                ...presets.map((p) => ({ value: p.id, label: p.name, desc: PRESET_HINTS[p.id] ?? p.description, disabled: !strategies.includes(p.strategy.kind) })),
+                { value: 'custom', label: 'Custom', desc: 'Your own mix, set under Advanced.' },
+              ]}
+              columns={Math.min(4, presets.length + 1)}
+            />
+
+            <button
+              type="button"
+              aria-expanded={advOpen}
+              aria-controls="spawn-adv"
+              onClick={() => setAdvOpen((o) => !o)}
+              className="self-start h-[30px] pl-1 pr-2 border-0 rounded-sm bg-transparent text-ink-2 text-[12.5px] flex items-center gap-1.5 hover:bg-raised"
+            >
+              <Icon name="chevron-right" size={16} className={cn('transition-transform', advOpen && 'rotate-90')} />
+              Advanced model settings
+            </button>
+
+            {advOpen && (
+              <div id="spawn-adv" className="flex flex-col gap-3.5 p-3.5 rounded-xl border border-line-2 bg-panel">
+                <div className="flex flex-col gap-2">
+                  <span id={stratLbl} className={LBL}>
+                    How agents pick models
+                  </span>
+                  <CardRadioGroup<StrategyKind>
+                    labelledBy={stratLbl}
+                    value={form.kind}
+                    onChange={(kind) => update({ kind, customPicked: false })}
+                    options={STRATEGY_OPTIONS.filter((s) => strategies.includes(s.kind)).map((s) => ({ value: s.kind, label: s.label, desc: s.desc }))}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  {/* One grid for every slot row: the pill groups share a column (sized to the
+                      widest, the orchestrator's with custom models) so the effort selects line up. */}
+                  <div className={MODEL_GRID}>
+                  {slotRows(form.kind).map((r) => (
+                    <ModelRow
+                      key={r.key}
+                      label={r.label}
+                      slot={form.slots[r.key]}
+                      allowCustom={r.key === 'lead'}
+                      efforts={efforts}
+                      versions={versions}
+                      customModels={customModels}
+                      onChange={(patch) => setSlot(r.key, patch)}
+                    />
+                  ))}
+                  </div>
+                  <VersionsRow slots={form.slots} keys={slotRows(form.kind).map((r) => r.key)} onChange={(slots) => update({ slots })} />
+                  {form.kind === 'routed' && (
+                    <span className="text-[12px] text-ink-3 leading-[1.45]">
+                      The orchestrator rates each subagent task as simple, standard or complex, and starts it on the model you picked for that level.
+                    </span>
+                  )}
+                </div>
+                <span className="text-[12px] text-ink-3 leading-[1.45] pt-2.5 border-t border-line-6">
+                  Picking a focus preset resets these. Changing them so they no longer match a preset switches the focus to Custom.
+                </span>
+              </div>
             )}
           </div>
-        )}
 
-        {errors.form && <Notice tone="bad">{errors.form}</Notice>}
-        {errors.strategy && <Notice tone="bad">{errors.strategy}</Notice>}
-      </form>
-    </Dialog>
+          {/* Advanced techniques */}
+          {techniques.length > 0 && (
+            <TechniquesSection
+              techniques={techniques}
+              on={form.techniques}
+              open={techOpen}
+              onToggleOpen={() => setTechOpen((o) => !o)}
+              onToggle={(id) => update({ techniques: { ...form.techniques, [id]: !form.techniques[id] } })}
+              onEdit={() => leave(() => navigate('settings', { section: 'tech' }))}
+              systemPromptSupported={hasFeature(cli, 'append-system-prompt')}
+            />
+          )}
+
+          {/* Parallel attempts */}
+          <div className="flex flex-col gap-2">
+            <span id={parLbl} className={LBL}>
+              Parallel attempts
+            </span>
+            <div role="group" aria-labelledby={parLbl} className="flex items-center gap-2">
+              <button
+                type="button"
+                aria-label="Fewer attempts"
+                disabled={form.attempts <= 1}
+                onClick={() => update({ attempts: Math.max(1, form.attempts - 1) })}
+                className="w-9 h-9 rounded-md border border-line-3 bg-transparent text-ink text-[16px] hover:bg-raised disabled:opacity-40"
+              >
+                −
+              </button>
+              <span className="font-mono w-7 text-center text-[15px]" aria-live="polite" aria-label={`${form.attempts} ${form.attempts === 1 ? 'attempt' : 'attempts'}`}>
+                {form.attempts}
+              </span>
+              <button
+                type="button"
+                aria-label="More attempts"
+                disabled={form.attempts >= MAX_ATTEMPTS}
+                onClick={() => update({ attempts: Math.min(MAX_ATTEMPTS, form.attempts + 1) })}
+                className="w-9 h-9 rounded-md border border-line-3 bg-transparent text-ink text-[16px] hover:bg-raised disabled:opacity-40"
+              >
+                +
+              </button>
+              <span className="text-[12px] text-ink-3 leading-[1.4]">{form.attempts === 1 ? 'One agent' : `${form.attempts} agents try the same goal in separate worktrees; keep the best`}</span>
+            </div>
+            {errors.attempts && <FieldError>{errors.attempts}</FieldError>}
+          </div>
+
+          {/* Tools from extensions */}
+          {toolsSupported && (
+            <div className="flex flex-col gap-2">
+              <span id={toolsLbl} className={LBL}>
+                Tools from extensions
+              </span>
+              <div className="flex gap-1.5 flex-wrap" role="group" aria-labelledby={toolsLbl}>
+                {offeredExtensions.map((ext) => {
+                  const risk = extensionRisk(ext);
+                  return (
+                    <Checkbox
+                      key={ext.id}
+                      variant="pill"
+                      checked={form.extensions[ext.id] ?? false}
+                      onChange={(on) => update({ extensions: { ...form.extensions, [ext.id]: on } })}
+                      label={
+                        <span className="inline-flex items-center gap-1.5">
+                          {ext.displayName}
+                          {risk === 'ask' ? <span className="text-[10.5px] text-warn">asks first</span> : risk === 'read' ? <span className="text-[10.5px] text-ink-3">read only</span> : null}
+                        </span>
+                      }
+                    />
+                  );
+                })}
+                <a
+                  href="#marketplace"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    leave(() => navigate('marketplace', {}));
+                  }}
+                  className="flex items-center h-[30px] px-2.5 rounded-md border border-dashed border-line-hover text-[12.5px] text-ink-2 no-underline box-border hover:text-ink"
+                >
+                  + Find more in Marketplace
+                </a>
+              </div>
+              {offeredExtensions.some((e) => form.extensions[e.id] && extensionRisk(e) === 'ask') && (
+                <span className="text-[12px] text-ink-3 leading-[1.45]">Tools marked asks first always ask you before they run, whatever the mode.</span>
+              )}
+            </div>
+          )}
+
+          {errors.form && <Notice tone="bad">{errors.form}</Notice>}
+          {errors.strategy && <Notice tone="bad">{errors.strategy}</Notice>}
+        </form>
+      </Dialog>
+      <Dialog
+        open={pendingLeave !== null}
+        onClose={() => setPendingLeave(null)}
+        title="Discard this agent?"
+        description="Your goal, context and attachments will be lost."
+        footer={
+          <>
+            <Button size={32} onClick={() => setPendingLeave(null)}>
+              Keep editing
+            </Button>
+            <Button
+              size={32}
+              variant="danger"
+              onClick={() => {
+                const next = pendingLeave;
+                setPendingLeave(null);
+                next?.run();
+              }}
+            >
+              Discard
+            </Button>
+          </>
+        }
+      />
+    </>
   );
+}
+
+function sameContext(a: SpawnForm['context'], b: SpawnForm['context']): boolean {
+  return a.length === b.length && a.every((c, i) => JSON.stringify(c) === JSON.stringify(b[i]));
 }
 
 function pick(rec: Record<string, boolean>, ids: string[]): Record<string, boolean> {
@@ -678,6 +723,7 @@ function TechniquesSection({
   open,
   onToggleOpen,
   onToggle,
+  onEdit,
   systemPromptSupported,
 }: {
   techniques: Technique[];
@@ -685,6 +731,7 @@ function TechniquesSection({
   open: boolean;
   onToggleOpen: () => void;
   onToggle: (id: string) => void;
+  onEdit: () => void;
   systemPromptSupported: boolean;
 }) {
   const count = techniques.filter((t) => on[t.id]).length;
@@ -728,7 +775,7 @@ function TechniquesSection({
               </div>
             );
           })}
-          <NavLink onClick={() => navigate('settings', { section: 'techniques' })}>Edit the text or add your own techniques in Settings</NavLink>
+          <NavLink onClick={onEdit}>Edit the text or add your own techniques in Settings</NavLink>
         </div>
       )}
     </div>

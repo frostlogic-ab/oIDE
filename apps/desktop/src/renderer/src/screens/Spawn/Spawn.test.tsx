@@ -155,4 +155,90 @@ describe('Spawn', () => {
     fireEvent.click(screen.getByRole('radiogroup', { name: 'Simple subagent tasks: model' }).querySelector('[role="radio"]:nth-child(2)')!);
     expect(screen.getByRole('radio', { name: /Custom/ }).getAttribute('aria-checked')).toBe('true');
   });
+
+  describe('discard guard', () => {
+    const route = () => useRouter.getState().route;
+    it('closes at once when nothing was entered (route-prefilled context is not lost work)', () => {
+      render(<SpawnScreen />);
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('dialog', { name: 'Discard this agent?' })).toBeNull();
+      expect(route().screen).toBe('wall');
+    });
+
+    it('asks before discarding a typed goal; Keep editing stays, Discard closes', () => {
+      render(<SpawnScreen />);
+      fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'Fix the flaky test' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.getByRole('dialog', { name: 'Discard this agent?' })).toBeTruthy();
+      expect(route().screen).toBe('spawn');
+      fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+      expect(screen.queryByRole('dialog', { name: 'Discard this agent?' })).toBeNull();
+      expect((screen.getByLabelText('Goal') as HTMLTextAreaElement).value).toBe('Fix the flaky test');
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+      expect(route().screen).toBe('wall');
+    });
+
+    it('guards the Edit presets link', () => {
+      render(<SpawnScreen />);
+      fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'Something' } });
+      fireEvent.click(screen.getByRole('link', { name: 'Edit presets' }));
+      expect(route().screen).toBe('spawn');
+      fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+      expect(route()).toMatchObject({ screen: 'settings', params: { section: 'models' } });
+    });
+
+    it('the Techniques link opens Settings on the tech section, after the guard', () => {
+      useSettings.setState({
+        settings: {
+          ...settings,
+          claude: { ...settings.claude, allowBypass: true },
+          techniques: [
+            {
+              id: 't1',
+              name: 'Plan first',
+              description: '',
+              text: 'Plan.',
+              placement: 'first-message',
+              builtIn: false,
+              enabledByDefault: false,
+              scope: 'global',
+            },
+          ],
+        },
+      });
+      render(<SpawnScreen />);
+      fireEvent.click(screen.getByRole('button', { name: /Advanced techniques/ }));
+      fireEvent.click(screen.getByRole('link', { name: /Edit the text or add your own techniques/ }));
+      expect(route()).toMatchObject({ screen: 'settings', params: { section: 'tech' } });
+    });
+
+    it('asks before leaving through the Techniques link once a goal is typed', () => {
+      useSettings.setState({
+        settings: {
+          ...settings,
+          claude: { ...settings.claude, allowBypass: true },
+          techniques: [
+            {
+              id: 't1',
+              name: 'Plan first',
+              description: '',
+              text: 'Plan.',
+              placement: 'first-message',
+              builtIn: false,
+              enabledByDefault: false,
+              scope: 'global',
+            },
+          ],
+        },
+      });
+      render(<SpawnScreen />);
+      fireEvent.change(screen.getByLabelText('Goal'), { target: { value: 'Something' } });
+      fireEvent.click(screen.getByRole('button', { name: /Advanced techniques/ }));
+      fireEvent.click(screen.getByRole('link', { name: /Edit the text or add your own techniques/ }));
+      expect(route().screen).toBe('spawn');
+      fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+      expect(route()).toMatchObject({ screen: 'settings', params: { section: 'tech' } });
+    });
+  });
 });
