@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { AgentEvent, AgentSummary, ArtifactMeta, ArtifactUse, FileDiff, InstalledExtension } from '@oide/protocol';
 import { Button, ContextMeter, EmptyState, Icon, Spinner, Tabs, contextFraction, modelFamily, subagentStatusMeta, tabPanelProps } from '@oide/ui';
 import { invokeOr, ipcErrorMessage, oide } from '../../../lib/bridge';
@@ -11,8 +11,7 @@ import { Markdown } from './Markdown';
 import { ResizableAside } from '../../../components/ResizableAside';
 import { PANELS } from '../../../lib/panels';
 
-/** xterm loads only when the Terminal tab is first opened. */
-const TerminalPanel = lazy(() => import('./TerminalPanel').then((m) => ({ default: m.TerminalPanel })));
+import { TerminalTabs } from '../../../components/terminal/TerminalTabs';
 
 /** `ext:<extension>::<panel id>`: an extension panel (`contributes.panels`, location "inspector"). */
 export type InspectorTab = 'plan' | 'subs' | 'changes' | 'artifacts' | 'term' | `ext:${string}`;
@@ -74,9 +73,12 @@ export function Inspector({ agent, events, subEvents, tab, onTab, now, stopReque
       </div>
       {termMounted && (
         <div {...tabPanelProps(ID, 'term')} hidden={tab !== 'term'} className="flex-1 min-h-0 flex flex-col" style={tab !== 'term' ? { display: 'none' } : undefined}>
-          <Suspense fallback={<div className="p-4"><Spinner size={14} /></div>}>
-            <TerminalPanel key={agent.id} cwd={agent.worktreePath} visible={tab === 'term'} />
-          </Suspense>
+          {agent.worktreePath ? (
+            // Several shells per agent, in its worktree (xterm loads with the first one shown).
+            <TerminalTabs key={agent.id} group={`agent:${agent.id}`} label="Terminals in the agent's worktree" newCwd={agent.worktreePath} autoStart visible={tab === 'term'} />
+          ) : (
+            <EmptyState icon="terminal" title="No worktree yet" description="The terminal opens in the agent's worktree once it has one." className="flex-1" />
+          )}
         </div>
       )}
       <InspectorPanelFrames agent={agent} tabs={extTabs} tab={tab} idPrefix={ID} />

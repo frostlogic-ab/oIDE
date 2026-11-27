@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { ContextMenu, Icon, IconButton, Menu, SectionLabel, Spinner, type MenuItem } from '@oide/ui';
-import type { Project, WorktreeInfo } from '@oide/protocol';
+import type { Project, ProjectScript, WorktreeInfo } from '@oide/protocol';
 import { shortBranch } from '../SourceControl/model';
 import { DRAFT_KEY, ancestorDirs, useFiles, visibleRows, type TreeRow } from './filesStore';
 import { DeleteDialog, NameInput, useTreeActions } from './TreeActions';
@@ -8,6 +8,8 @@ import { isUnder } from './treeOps';
 import { FileIcon } from './fileIcons';
 import { ResizableAside } from '../../components/ResizableAside';
 import { PANELS } from '../../lib/panels';
+import { useTerminals } from '../../stores/terminals';
+import { useScripts } from './scriptsStore';
 
 /** Row pitch: 22px, flush rows as in the VS Code explorer. */
 export const ROW_H = 22;
@@ -83,6 +85,33 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
   const activeTab = s.tabs.find((t) => t.id === s.active);
   const all = (fn: (root: string) => void) => () => openRoots.forEach(fn);
 
+  // Files › Run: the scripts of every shown checkout (package.json, Makefile, Cargo…).
+  const shownRoots = trees.map((t) => ({ project: t.project, root: s.checkout[t.project.id] ?? t.project.path, label: checkoutLabel(t, s.checkout[t.project.id] ?? t.project.path) }));
+  const rootsKey = JSON.stringify(shownRoots.map((r) => r.root));
+  const scriptsByRoot = useScripts((st) => st.byRoot);
+  useEffect(() => {
+    const load = () => (JSON.parse(rootsKey) as string[]).forEach((r) => void useScripts.getState().load(r));
+    load();
+    const onFocus = () => load();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [rootsKey]);
+  const runItems: MenuItem[] = shownRoots.flatMap(({ project, root, label }) =>
+    (scriptsByRoot[root] ?? []).map((sc) => ({
+      id: `${root}::${sc.id}`,
+      label: (
+        <span className="font-mono text-[12px]">
+          {trees.length > 1 && <span className="text-ink-3">{project.name} › </span>}
+          {sc.name}
+        </span>
+      ),
+      hint: sc.file === 'package.json' ? sc.runner : sc.file,
+      title: `${sc.command}${label !== 'main' ? ` (in ${label})` : ''}`,
+      icon: 'play' as const,
+      onSelect: () => runScript(project, root, label, sc),
+    })),
+  );
+
   return (
     <ResizableAside panel={PANELS.filesTree} aria-label="File tree" className="flex flex-col px-2 pt-1.5 pb-3 bg-panel border-r border-line box-border min-h-0">
       <div role="toolbar" aria-label="File tree actions" className="flex items-center gap-0.5 h-8 pl-1.5 mb-1 shrink-0">
@@ -90,6 +119,19 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
           Files
         </SectionLabel>
         {onSearch && <IconButton icon="search" aria-label="Search in files" title={`Search in files${searchHint ? ` (${searchHint})` : ''}`} onClick={onSearch} />}
+        {runItems.length > 0 && (
+          <span className="inline-flex" onPointerEnter={() => shownRoots.forEach((r) => void useScripts.getState().load(r.root))}>
+            <Menu
+              label="Run a script"
+              triggerTitle={`Run a script (${runItems.length} found)`}
+              align="end"
+              portal
+              triggerClassName="w-7 h-7 px-0 flex items-center justify-center rounded-sm border-0 bg-transparent text-ink-3 cursor-pointer hover:bg-raised hover:text-ok"
+              trigger={<Icon name="play" size={15} />}
+              items={runItems}
+            />
+          </span>
+        )}
         <IconButton icon="locate" aria-label="Reveal active file" title="Reveal active file" disabled={!activeTab} onClick={() => activeTab && revealTab(activeTab)} />
         <IconButton icon="expand-all" aria-label="Expand loaded folders" title="Expand loaded folders" disabled={!openRoots.length} onClick={all((r) => s.expandLoaded(r))} />
         <Menu
@@ -145,6 +187,24 @@ export function TreePanel({ trees, scoped, onSearch, searchHint }: { trees: Proj
       </div>
     </ResizableAside>
   );
+}
+
+/** "main", or the agent worktree's branch, for the checkout a project's tree shows. */
+function checkoutLabel(t: ProjectTreeInfo, root: string): string {
+  const w = t.worktrees.find((x) => x.path === root);
+  return w ? shortBranch(w.branch) : 'main';
+}
+
+const terminalContext = (p: Project, label: string) => `${p.name}${label !== 'main' ? `·${label}` : ''}`;
+
+/** Files › Run › a script: a new terminal in the Files panel that runs it (VS Code's Run Script). */
+export function runScript(p: Project, root: string, label: string, sc: ProjectScript): void {
+  useTerminals.getState().runScript('files', root, sc, { context: terminalContext(p, label) });
+}
+
+/** A new shell in the Files terminal panel, in this project's shown checkout. */
+export function openTerminalIn(p: Project, root: string, label: string): void {
+  useTerminals.getState().openShell('files', root, { context: terminalContext(p, label) });
 }
 
 /** Open the tab's project and checkout in the tree, expand down to the file and scroll to it. */
@@ -326,6 +386,7 @@ function ProjectTree({
       },
     })),
     { id: 'reveal', label: 'Reveal active file', disabled: !tabHere, onSelect: () => tabHere && revealTab(tabHere) },
+    { id: 'terminal', label: 'Open terminal here', icon: 'terminal', onSelect: () => openTerminalIn(p, root, checkoutLabel(info, root)) },
   ];
 
   return (

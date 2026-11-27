@@ -30,7 +30,7 @@ Route: `focus { agentId, subagentId? }`. Code: `apps/desktop/src/renderer/src/sc
 | `components/Composer.tsx` | Enter or Ctrl/Cmd+Enter sends, Shift+Enter newline, Shift+Tab switches mode (as in the CLI); `/` menu (shared `components/SlashMenu.tsx`); pasted screenshots, dropped files and Attach file (paperclip) as removable chips (shared `components/Attachments.tsx`); Attach artifact picker (`artifacts.list`); disabled while queued. Unsent text is a per-agent draft (`composerDrafts.ts`, module-level, in memory only): switching agents or leaving Focus keeps it and coming back restores it; a successful `agents.send` removes the sent text and keeps only what was typed after it while the send was in flight (`afterSent`, so Enter can't send it twice; a composer mounted again for that agent meanwhile is told through `onDraftChange`), a failed one keeps it, and removing or archiving the agent drops it. The picked artifact and attachments are still cleared on agent change |
 | `components/CompactDialog.tsx` | "Compact this session?" → `agents.compact`; modal keymap scope |
 | `components/Inspector.tsx` | Tabs Plan (todos, plan text, changed files, artifacts in use, as drawn), Subagents (counts, routing, timeline, cards with Open/Stop, token share), Changes (`git.diff` → Review), Artifacts (`artifacts.list` + `artifacts.uses` filtered to this agent, plus its `mcp__oide__artifacts_*` calls), Terminal; Agent tools footer (`extensions.installed`) |
-| `components/TerminalPanel.tsx` | xterm.js + fit addon on `terminal.create({ cwd: worktreePath })`; lazy-loaded on first open, kept mounted while switching tabs, killed and disposed on unmount |
+| `components/terminal/TerminalTabs.tsx` (shared with Files) | Terminal tab: several shells in the agent's worktree (group `agent:<id>` in `stores/terminals.ts`), a tab per shell with close ×, New terminal; the first shell opens by itself. xterm (`TerminalView.tsx`) is lazy-loaded with the first one shown. Shells keep running when you switch agents or screens and close when the agent is archived or removed. See [Files › Run scripts and terminals](screen-files.md#run-scripts-and-terminals) |
 | `components/frame/PlanUsage.tsx` (frame) | Status-bar plan meter, see [desktop-shell](desktop-shell.md) |
 
 ## Transcript mapping
@@ -144,7 +144,7 @@ echoes text messages (with attachments) into the transcript; `dialog.pickFiles` 
 `a-bridge` reproduces the canvas (lead, three subagents with tagged events, todos, pending prompt with
 `toolUseId`, plan usage 38% weekly); `a-shell` has ~5,000 generated events for virtualization and
 paging, and streams a demo reply every 20 s; `a-invoice` and `a-webhook` cover question and review.
-A pretend shell answers `terminal.*`.
+A pretend shell answers `terminal.*`; `scripts.list` returns six pnpm scripts and `terminal.runScript` echoes the command.
 
 ## Header and composer details
 - **Pause and Resume.** Pause shows only while the agent is running, starting, waiting on a permission

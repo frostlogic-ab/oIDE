@@ -1,0 +1,3 @@
+/* Terminal sessions (TerminalView.tsx): xterm fills its host, on the chrome colour. */
+.oide-term .xterm { height: 100%; padding: 8px 0 0 10px; }
+.oide-term .xterm-viewport { background-color: var(--color-chrome) !important; }

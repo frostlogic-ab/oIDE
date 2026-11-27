@@ -129,7 +129,8 @@ export function Menu({ trigger, label, triggerTitle, items, align = 'start', tri
       onKeyDown={onMenuKey}
       style={portal ? pos : undefined}
       className={cn(
-        'z-40 min-w-[180px] py-1 rounded-md border border-line-3 bg-card shadow-dialog',
+        // Long menus (a project's run scripts) scroll instead of running off the window.
+        'z-40 min-w-[180px] max-h-[min(70vh,480px)] overflow-y-auto py-1 rounded-md border border-line-3 bg-card shadow-dialog',
         portal ? 'fixed' : cn('absolute top-[calc(100%+4px)]', align === 'end' ? 'right-0' : 'left-0'),
       )}
     >

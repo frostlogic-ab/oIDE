@@ -63,6 +63,11 @@ rules in [constraints](constraints.md). Where things live: [desktop-shell](deskt
   is refused before it is resolved, since resolving it would connect to that host (SEC-39).
 - `terminal.create` takes no command (interactive shell only) and only a `project` or `worktree`
   root as cwd. The sign-in terminal (`cli.openSignIn`) is started by main itself.
+- `terminal.runScript` (Files › Run) takes a script **id**, not a command: main re-reads the
+  checkout's manifests (`services/scripts.ts`), finds the script, and builds the command line from
+  its own fixed templates (`pnpm run <name>`, `make <target>`…); names that are not plain words are
+  never listed. Same cwd rule as `terminal.create`. Running a script is the user's click, like
+  typing it in a terminal, so it is not gated by workspace trust.
 - Paths that would be dangerous to take from the renderer are only accepted when the user picked
   them in a native dialog this session (`services.picked`): `artifacts.import({ filePath })`,
   `extensions.addFromFolder({ path })`, and `projects.open({ path })`, which also accepts an already
