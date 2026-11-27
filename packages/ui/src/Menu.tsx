@@ -152,8 +152,8 @@ export function Menu({ trigger, label, triggerTitle, items, align = 'start', tri
             it.onSelect();
           }}
           className={cn(
-            'w-full flex items-center gap-2 h-8 px-3 border-0 text-left text-[12.5px] bg-transparent disabled:opacity-50',
-            i === active ? 'bg-selected' : '',
+            'w-full flex items-center gap-2 h-8 px-3 border-0 text-left text-[12.5px] disabled:opacity-50',
+            i === active ? 'bg-selected' : 'bg-transparent',
             it.danger ? 'text-bad' : 'text-ink',
           )}
         >
