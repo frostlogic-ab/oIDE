@@ -1,10 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { ContextMenu, type ContextMenuEntry } from '@oide/ui';
 import '@xterm/xterm/css/xterm.css';
 import './terminal.css';
 import { FitAddon } from '@xterm/addon-fit';
 import { Terminal } from '@xterm/xterm';
-import { ipcErrorMessage, isNotImplemented, oide } from '../../lib/bridge';
+import { ipcErrorMessage, isMac, isNotImplemented, oide } from '../../lib/bridge';
 import { onSessionDisposed, useTerminals, type TermSession } from '../../stores/terminals';
+import { terminalKeyAction } from './clipboardKeys';
 
 /**
  * One terminal session drawn with xterm.js (loaded lazily with this module). Each session keeps its
@@ -12,6 +14,11 @@ import { onSessionDisposed, useTerminals, type TermSession } from '../../stores/
  * its host, so switching tabs, agents or screens keeps the scrollback and the running process.
  * The pty is started here, once xterm has measured the host (`terminal.create` for a shell,
  * `terminal.runScript` for a script).
+ *
+ * Copy and paste: the keys in `clipboardKeys.ts` (Ctrl+C with a selection, Ctrl+Shift+C, Ctrl+V,
+ * Ctrl+Shift+V, Ctrl+Insert, Shift+Insert; Cmd+C / Cmd+V on macOS through the Edit menu), plus a
+ * right-click menu (Copy, Paste, Select all, Clear). Paste goes through `term.paste`, so programs
+ * that ask for bracketed paste get it and line endings become carriage returns.
  */
 
 const THEME = {
@@ -38,6 +45,24 @@ interface Instance {
   opened: boolean;
   started: boolean;
   terminalId?: string;
+  /** Set while a view shows this session: opens its right-click menu (the context-menu key). */
+  openMenu?: (at: { x: number; y: number }) => void;
+}
+
+function copySelection(term: Terminal): void {
+  const text = term.getSelection();
+  if (!text) return;
+  void navigator.clipboard?.writeText(text).catch(() => {});
+  term.clearSelection();
+}
+
+function pasteClipboard(term: Terminal): void {
+  void navigator.clipboard
+    ?.readText()
+    .then((text) => {
+      if (text) term.paste(text);
+    })
+    .catch(() => {});
 }
 
 const instances = new Map<string, Instance>();
@@ -88,6 +113,20 @@ function instanceFor(session: TermSession): Instance {
   const el = document.createElement('div');
   el.className = 'h-full w-full';
   const inst: Instance = { term, fit, el, opened: false, started: false };
+  term.attachCustomKeyEventHandler((e) => {
+    const action = terminalKeyAction(e, { hasSelection: term.hasSelection(), isMac: isMac() });
+    if (!action) return true;
+    if (e.type === 'keydown') {
+      e.preventDefault();
+      if (action === 'copy') copySelection(term);
+      else if (action === 'paste') pasteClipboard(term);
+      else {
+        const r = el.getBoundingClientRect();
+        inst.openMenu?.({ x: r.left + 16, y: r.top + 16 });
+      }
+    }
+    return false;
+  });
   term.onData((data) => {
     if (inst.terminalId) void oide.invoke('terminal.write', { terminalId: inst.terminalId, data }).catch(() => {});
   });
@@ -149,6 +188,7 @@ function start(session: TermSession, inst: Instance): void {
 export function TerminalView({ session, visible, label }: { session: TermSession; visible: boolean; label: string }) {
   const host = useRef<HTMLDivElement>(null);
   const instRef = useRef<Instance | null>(null);
+  const [menu, setMenu] = useState<{ at: { x: number; y: number }; hasSelection: boolean } | null>(null);
 
   useEffect(() => {
     const el = host.current;
@@ -157,6 +197,7 @@ export function TerminalView({ session, visible, label }: { session: TermSession
     const inst = instanceFor(session);
     instRef.current = inst;
     el.appendChild(inst.el);
+    inst.openMenu = (at) => setMenu({ at, hasSelection: inst.term.hasSelection() });
     if (!inst.opened) {
       inst.term.open(inst.el);
       inst.opened = true;
@@ -169,7 +210,9 @@ export function TerminalView({ session, visible, label }: { session: TermSession
       ro?.disconnect();
       // Detach only: the session (and its xterm) lives on until its tab is closed.
       if (inst.el.parentElement === el) inst.el.remove();
+      inst.openMenu = undefined;
       instRef.current = null;
+      setMenu(null);
     };
     // The session object changes on every status update; the view follows the session key.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -186,7 +229,37 @@ export function TerminalView({ session, visible, label }: { session: TermSession
     return () => clearTimeout(t);
   }, [visible, session.key]);
 
-  return <div ref={host} className="oide-term flex-1 min-h-0 bg-chrome" aria-label={label} />;
+  const mac = isMac();
+  const act = (fn: (term: Terminal) => void) => () => {
+    const term = instRef.current?.term;
+    if (!term) return;
+    fn(term);
+    term.focus();
+  };
+  const items: ContextMenuEntry[] = [
+    { id: 'copy', label: 'Copy', icon: 'copy', hint: mac ? '⌘C' : 'Ctrl+C', disabled: !menu?.hasSelection, onSelect: act(copySelection) },
+    { id: 'paste', label: 'Paste', icon: 'clipboard', hint: mac ? '⌘V' : 'Ctrl+V', onSelect: act(pasteClipboard) },
+    { id: 'sep', separator: true },
+    { id: 'selectAll', label: 'Select all', onSelect: act((t) => t.selectAll()) },
+    { id: 'clear', label: 'Clear', onSelect: act((t) => t.clear()) },
+  ];
+
+  return (
+    <>
+      <div
+        ref={host}
+        className="oide-term flex-1 min-h-0 bg-chrome"
+        aria-label={label}
+        onContextMenu={(e) => {
+          const inst = instRef.current;
+          if (!inst) return;
+          e.preventDefault();
+          setMenu({ at: { x: e.clientX, y: e.clientY }, hasSelection: inst.term.hasSelection() });
+        }}
+      />
+      {menu && <ContextMenu at={menu.at} label="Terminal actions" items={items} onClose={() => setMenu(null)} />}
+    </>
+  );
 }
 
 export default TerminalView;
