@@ -8,7 +8,8 @@ import { launchApp, type LaunchedApp } from './app';
 /**
  * Files quick open and search in the built app (main's git ls-files index and git grep, the real
  * path guard): Ctrl/Cmd+K finds a file by name and opens it in Files, revealed in the tree;
- * Ctrl/Cmd+Shift+F finds text and replaces one match after the preview.
+ * Ctrl/Cmd+Shift+F finds text and replaces one match after the preview; the editor's minimap
+ * scrolls the file when its slider is dragged.
  */
 
 let ctx: LaunchedApp;
@@ -44,6 +45,7 @@ test.beforeAll(async () => {
     'src/invoices/invoice.ts': 'export const dueDay = 15;\n',
     'build/out.js': 'MAX_ATTEMPTS\n',
     '.gitignore': 'build/\n',
+    'src/long.ts': Array.from({ length: 400 }, (_, i) => `export const line${i + 1} = ${i + 1};`).join('\n') + '\n',
   };
   for (const [p, c] of Object.entries(files)) {
     mkdirSync(join(repo, p, '..'), { recursive: true });
@@ -126,6 +128,29 @@ test('Ctrl+Shift+F finds text in files and replaces one match after the preview'
   // Clicking a result opens the file at that line.
   await panel.getByRole('list', { name: 'Matches in README.md' }).getByRole('button', { name: /^Line 3/ }).click();
   await expect(page.getByRole('tab', { name: /README\.md/ })).toHaveAttribute('aria-selected', 'true');
+});
+
+test('the minimap shows the file and scrolls the editor when its slider is dragged', async () => {
+  const { page } = ctx;
+  await page.locator('body').click({ position: { x: 700, y: 400 } });
+  await page.keyboard.press(`${mod}+K`);
+  await page.keyboard.type('long.ts');
+  await page.getByRole('dialog', { name: 'Command bar' }).getByRole('option', { name: /long\.ts/ }).click();
+  await expect(page.getByRole('tab', { name: /long\.ts/ })).toHaveAttribute('aria-selected', 'true');
+  const editor = page.locator('[data-testid="monaco-host"] .monaco-editor');
+  await expect(editor.locator('.view-lines')).toContainText('line1 =');
+
+  const minimap = editor.locator('.minimap');
+  await expect(minimap).toBeVisible();
+  const slider = minimap.locator('.minimap-slider');
+  await expect(slider).toBeVisible();
+  const box = (await slider.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + 5);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + 5 + 400, { steps: 10 });
+  await page.mouse.up();
+  await expect(editor.locator('.view-lines')).not.toContainText('line1 =');
+  await page.screenshot({ path: join(shots, 'files-minimap.png') });
 });
 
 test('no console errors', async () => {

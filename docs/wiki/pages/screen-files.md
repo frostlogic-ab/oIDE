@@ -149,6 +149,10 @@ Like the VS Code explorer's git decorations, each shown checkout marks what it c
   works under `file://`).
 - Theme `oide-dark` from the tokens (ground background, `#5E6774` line numbers, `#1B2333`
   selection, keywords `#C4A7E7`, strings `#A8E0C6`, types `#9DBBFA`, comments `#7A8494`).
+- Minimap on the right of the Files editor (`FILE_MINIMAP` in `monaco/setup.ts`): the whole file in
+  miniature with the slider always shown over the lines in view; click to jump, drag the slider to
+  scroll. Themed from the tokens (editor ground, soft `#9AA3AE` slider, accent selection, amber find
+  matches). Diff editors and artifact source editors keep `BASE_OPTIONS`' minimap off.
 - At most one live editor; one model per tab with saved view state; models of closed tabs are disposed.
 - Ctrl/Cmd+S or Save → `files.write`. Files over 5 MB open read only; binary files show a notice.
 - Cut / Copy / Paste work from the keyboard and Monaco's context menu (Paste reads the system
