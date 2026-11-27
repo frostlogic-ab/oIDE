@@ -172,7 +172,8 @@ export const Commands = {
   // Git / source control
   'git.sync': cmd(z.object({ projectId: Id }), SyncState),
   'git.fetch': cmd(z.object({ projectId: Id }), SyncState),
-  'git.pull': cmd(z.object({ projectId: Id }), SyncState),
+  /** `git pull --ff-only` in the main checkout. `from` says where it was clicked (telemetry only). */
+  'git.pull': cmd(z.object({ projectId: Id, from: z.enum(['sidebar', 'source-control']).optional() }), SyncState),
   'git.push': cmd(z.object({ projectId: Id }), SyncState),
   'git.commit': cmd(z.object({ projectId: Id, message: z.string().min(1), files: z.array(z.string()).optional() }), CommitInfo),
   /**

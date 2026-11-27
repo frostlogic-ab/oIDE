@@ -5,13 +5,20 @@ import { toast } from '../../stores/ui';
 import type { SyncAction } from './model';
 import { useGit } from './gitStore';
 
-/** Pull / Push / Fetch for a project's main checkout. These are the only remote git commands. */
-export async function runSync(projectId: string, action: SyncAction): Promise<void> {
-  const command = action === 'Pull' ? 'git.pull' : action === 'Push' ? 'git.push' : 'git.fetch';
+/**
+ * Pull / Push / Fetch for a project's main checkout. These are the only remote git commands.
+ * `from` tells main where Pull was clicked (Projects sidebar or Source control, telemetry only).
+ */
+export async function runSync(projectId: string, action: SyncAction, from: 'sidebar' | 'source-control' = 'source-control'): Promise<void> {
   try {
-    const sync = await oide.invoke(command, { projectId });
+    const before = useGit.getState().byProject[projectId]?.sync?.behind ?? 0;
+    const sync =
+      action === 'Pull'
+        ? await oide.invoke('git.pull', { projectId, from })
+        : await oide.invoke(action === 'Push' ? 'git.push' : 'git.fetch', { projectId });
     useGit.getState().patch(projectId, { sync });
     if (action === 'Fetch') toast(sync.behind ? `Fetched: ${sync.behind} new on ${sync.upstream ?? 'origin'}` : 'Fetched: up to date', 'info');
+    if (action === 'Pull' && from === 'sidebar') toast(before > 0 ? `Pulled ${before} ${before === 1 ? 'commit' : 'commits'} on ${sync.branch}` : `Up to date on ${sync.branch}`, 'success');
     void useGit.getState().load(projectId);
   } catch (err) {
     toast(`${action} failed: ${ipcErrorMessage(err)}`, 'error');

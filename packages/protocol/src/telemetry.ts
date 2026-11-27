@@ -444,6 +444,11 @@ export const TELEMETRY_EVENTS = {
     question: 'Do people throw away uncommitted changes in the main checkout from Source control (Revert…), how many files, and all of them or a pick?',
     props: z.object({ files: CountBucket, all: z.boolean() }),
   }),
+  project_pulled: def({
+    from: 'main',
+    question: 'Do people bring a project up to date from the Pull button in the Projects sidebar (after a background fetch) or from Source control?',
+    props: z.object({ from: z.enum(['sidebar', 'source_control']) }),
+  }),
   pr_view_opened: def({
     from: 'main',
     question: 'Do people follow the pull request of an agent from oIDE (View PR)?',

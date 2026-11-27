@@ -1,7 +1,7 @@
-import { memo } from 'react';
+import { memo, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import type { Project } from '@oide/protocol';
-import { Icon, IconButton, SectionLabel, StatusDot, cn } from '@oide/ui';
+import { Icon, IconButton, SectionLabel, Spinner, StatusDot, cn } from '@oide/ui';
 import { useAgents } from '../../../stores/agents';
 import { useProjects } from '../../../stores/projects';
 import { openNewProject } from '../../../stores/newProject';
@@ -10,6 +10,8 @@ import { useWall } from '../wallState';
 import { tileDomId } from './AgentTile';
 import { ResizableAside } from '../../../components/ResizableAside';
 import { PANELS } from '../../../lib/panels';
+import { useGit, useSyncStates } from '../../SourceControl/gitStore';
+import { runSync } from '../../SourceControl/actions';
 
 /** Opens the New project dialog (open a folder, clone a repository, or create one). */
 export function openProject(): void {
@@ -25,6 +27,8 @@ export function ProjectSidebar() {
   const projects = useProjects((s) => s.list);
   const scope = useScope((s) => s.scope);
   const total = useAgents((s) => s.order.length);
+  // main fetches every project in the background; `behind` from git.sync drives each Pull button.
+  useSyncStates(projects.map((p) => p.id));
   return (
     <ResizableAside panel={PANELS.wallProjects} aria-label="Projects" className="flex flex-col gap-1 px-2.5 py-3.5 bg-panel border-r border-line box-border overflow-y-auto">
       <div className="flex items-center justify-between px-1.5 pb-2">
@@ -79,24 +83,59 @@ function ProjectGroup({ project, selected, first }: { project: Project; selected
   const ids = useAgents(useShallow((s) => s.order.filter((id) => s.byId[id]?.projectId === project.id)));
   return (
     <div className={cn('flex flex-col gap-0.5', !first && 'mt-1.5')} role="group" aria-label={project.name}>
-      <button
-        type="button"
-        aria-pressed={selected}
-        title={`Show only ${project.name}`}
-        onClick={() => void useScope.getState().setScope(selected ? 'all' : project.id)}
-        className={cn(
-          'flex items-center gap-2 p-1.5 rounded-sm border-0 font-semibold text-[13px] text-left',
-          selected ? 'bg-selected text-ink' : 'bg-transparent text-ink hover:bg-raised',
-        )}
-      >
-        <Icon name="folder" className="text-ink-3" />
-        <span className="flex-1 truncate">{project.name}</span>
-        <span className="text-ink-3 text-[12px] font-normal">{ids.length}</span>
-      </button>
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          aria-pressed={selected}
+          title={`Show only ${project.name}`}
+          onClick={() => void useScope.getState().setScope(selected ? 'all' : project.id)}
+          className={cn(
+            'flex flex-1 min-w-0 items-center gap-2 p-1.5 rounded-sm border-0 font-semibold text-[13px] text-left',
+            selected ? 'bg-selected text-ink' : 'bg-transparent text-ink hover:bg-raised',
+          )}
+        >
+          <Icon name="folder" className="text-ink-3" />
+          <span className="flex-1 truncate">{project.name}</span>
+          <span className="text-ink-3 text-[12px] font-normal">{ids.length}</span>
+        </button>
+        <PullButton project={project} />
+      </div>
       {ids.map((id) => (
         <SidebarAgent key={id} agentId={id} />
       ))}
     </div>
+  );
+}
+
+/**
+ * "Pull N" next to a project whose main checkout is behind its upstream (after the background
+ * fetch). Runs `git pull --ff-only`; failures (diverged, local changes in the way) toast git's reason.
+ */
+function PullButton({ project }: { project: Project }) {
+  const behind = useGit((s) => s.byProject[project.id]?.sync?.behind ?? 0);
+  const upstream = useGit((s) => s.byProject[project.id]?.sync?.upstream);
+  const branch = useGit((s) => s.byProject[project.id]?.sync?.branch);
+  const [busy, setBusy] = useState(false);
+  if (behind <= 0 && !busy) return null;
+  const commits = `${behind} new ${behind === 1 ? 'commit' : 'commits'}`;
+  const pull = async () => {
+    setBusy(true);
+    await runSync(project.id, 'Pull', 'sidebar');
+    setBusy(false);
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void pull()}
+      disabled={busy}
+      aria-label={`Pull ${commits} into ${project.name}`}
+      title={`${branch ?? 'This branch'} is ${behind} behind ${upstream ?? 'its upstream'}. Pull ${commits} (fast-forward only).`}
+      className="shrink-0 inline-flex items-center gap-1 h-[22px] px-1.5 rounded-sm border border-warn-line bg-transparent text-warn text-[11.5px] font-semibold hover:bg-warn-bg-2 disabled:opacity-60"
+    >
+      {busy ? <Spinner size={12} label={`Pulling ${project.name}`} /> : <Icon name="arrow-down" size={12} />}
+      <span>Pull</span>
+      {!busy && <span className="font-normal tabular-nums">{behind}</span>}
+    </button>
   );
 }
 
