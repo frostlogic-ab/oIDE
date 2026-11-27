@@ -1058,3 +1058,10 @@ test added). See [extensions](pages/extensions.md).
 
 ## [2026-11-27] decision | Remove the Wall's "Next that needs you" button
 The header button duplicated the "Needs you" filter chip and the N shortcut; removed it. N still jumps to the next tile that needs you. Updated [screen-wall](pages/screen-wall.md).
+## [2026-11-27] build | Windows: installed oIDE showed a blank taskbar icon
+Dev runs set the same AppUserModelID as the installed app (`dev.oide.app`), so Electron's
+notification shortcut `Electron.lnk` carried it too, pointing at a worktree's `electron.exe` and
+`build/icon.ico`. After the worktree was deleted, Windows drew the installed oIDE's taskbar button
+through that orphaned shortcut: a blank page. Unpackaged runs now use `dev.oide.app.dev`, and packaged
+Windows runs delete shortcuts with the installed AUMID whose target is gone (or retag live dev ones).
+See [packaging](pages/packaging.md).
