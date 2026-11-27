@@ -82,10 +82,14 @@ test('a .ts file gets its language server: diagnostics in the tree and Problems,
   await expect(problems).toContainText('ERR on line 2');
 
   // Hover: the fixture answers with the word under the pointer, in bold.
-  const word = await page.locator('.monaco-editor .view-lines span', { hasText: /^greet$/ }).first().boundingBox();
-  if (!word) throw new Error('greet is not on screen');
-  await page.mouse.move(word.x - 30, word.y + word.height / 2);
-  await page.mouse.move(word.x + word.width / 2, word.y + word.height / 2, { steps: 8 });
-  await expect(page.locator('.monaco-hover:not(.hidden)').first()).toContainText('greet', { timeout: 10_000 });
+  // Monaco shows a hover after the pointer rests on a word; under load one move can be missed, so
+  // move off and back on until it shows.
+  await expect(async () => {
+    const word = await page.locator('.monaco-editor .view-lines span', { hasText: /^greet$/ }).first().boundingBox();
+    if (!word) throw new Error('greet is not on screen');
+    await page.mouse.move(word.x - 40, word.y + 60);
+    await page.mouse.move(word.x + word.width / 2, word.y + word.height / 2, { steps: 8 });
+    await expect(page.locator('.monaco-hover:not(.hidden)').first()).toContainText('greet', { timeout: 3_000 });
+  }).toPass({ timeout: 20_000 });
   await page.screenshot({ path: join(shots, 'files-lsp-hover.png') });
 });

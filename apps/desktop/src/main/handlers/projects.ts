@@ -5,7 +5,7 @@ import type { Services } from '../services/index.js';
 const OK = { ok: true as const };
 
 /** projects.* and scope.* */
-export function registerProjectHandlers(router: IpcRouter, s: Services, ctx: MainContext): void {
+export function registerProjectHandlers(router: IpcRouter, s: Services, _ctx: MainContext): void {
   router.register('projects.list', () => s.projects.list());
   // No path: native folder picker. First open asks for trust with a native dialog (see security.md).
   router.register('projects.open', ({ path }) => s.projects.open(path));
@@ -25,11 +25,11 @@ export function registerProjectHandlers(router: IpcRouter, s: Services, ctx: Mai
   router.register('projects.githubRepos', () => s.projects.githubRepos());
 
   router.register('scope.get', () => s.store.ui.scope());
+  // Each window keeps its own scope (docs/wiki/pages/windows.md): the last choice is saved, so new
+  // windows and the next launch start on it, but it is not pushed into the other open windows.
   router.register('scope.set', ({ scope }) => {
     if (scope !== 'all' && !s.projects.get(scope)) throw new IpcError(`Unknown project ${scope}`, 'not_found');
-    const next = s.store.ui.setScope(scope);
-    ctx.emit('scope.changed', next);
-    return next;
+    return s.store.ui.setScope(scope);
   });
 }
 
