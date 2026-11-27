@@ -810,6 +810,24 @@ export function createScmHandlers({ agents, emit, fallbackDiffs = {}, artifacts 
     },
     'review.viewed': ({ agentId }) => state.viewed[agentId] ?? [],
 
+    // No language servers in the browser mock: every document reports `none`.
+    'lsp.open': () => ({ state: 'none' as const }),
+    'lsp.change': () => ({ ok: true as const }),
+    'lsp.close': () => ({ ok: true as const }),
+    'lsp.status': () => ({ state: 'none' as const }),
+    'lsp.restart': () => ({ state: 'none' as const }),
+    'lsp.hover': () => null,
+    'lsp.completion': () => null,
+    'lsp.resolveCompletion': () => null,
+    'lsp.signatureHelp': () => null,
+    'lsp.definition': () => [],
+    'lsp.typeDefinition': () => [],
+    'lsp.implementation': () => [],
+    'lsp.references': () => [],
+    'lsp.highlights': () => [],
+    'lsp.symbols': () => [],
+    'lsp.format': () => [],
+
     'files.tree': ({ root, dir }) => listDir(root, dir ?? ''),
     'files.read': ({ root, path }) => {
       const content = files.get(root)?.get(path);
