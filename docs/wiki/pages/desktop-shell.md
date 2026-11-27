@@ -250,7 +250,7 @@ when the agent works again. The region is `aria-live="polite"`; errors are `role
 
 `AppFrame` = 44px `Header`, 56px `Rail`, the screen, 26px `StatusBar`, plus `CommandBar` and `Toasts`.
 `screens/registry.tsx` describes each screen: `title`, which `rail` item is current, the header kind
-(`command`: command-bar trigger + live counts, Wall/Focus; `title`: screen title), `scopeSwitcher`
+(`command`: command-bar trigger, Wall/Focus; no agent counters, the Wall shows those; `title`: screen title), `scopeSwitcher`
 (Files, Source control), `customTitle` (screen fills `<HeaderSlot name="title">`, e.g. the Review
 breadcrumb), `overlay` (Spawn renders as a dialog over the Wall). Right of the logo, the header shows
 `UpdateButton` (`components/frame/UpdateButton.tsx`, status from `lib/useUpdateStatus.ts`) only when
