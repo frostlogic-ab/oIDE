@@ -13,7 +13,8 @@ Source design: the "oIDE Website" artifact, copied to [raw/design/website/](../r
 | --- | --- |
 | `docs/site/index.md` | Only frontmatter: `layout: landing`, title and description. The copy lives in `Landing.vue`. |
 | `.vitepress/theme/index.ts` | Extends the default theme, swaps in `Layout.vue`, imports the self-hosted fonts and `custom.css`. |
-| `.vitepress/theme/Layout.vue` | `layout: landing` gets `Landing.vue`; every other page gets `DefaultTheme.Layout`. |
+| `.vitepress/theme/Layout.vue` | `layout: landing` gets `Landing.vue`; every other page gets `DefaultTheme.Layout`, with the brand lockup in its `nav-bar-title-after` slot (`siteTitle: false` in `config.ts`). |
+| `.vitepress/theme/FrostlogicLogo.vue` | The Frostlogic wordmark for the site, the same paths as `@oide/ui`'s `FrostlogicLogo` (roof `#2491EB`, word in `currentColor`). |
 | `.vitepress/theme/Landing.vue` | The home page from the design: nav, hero with the four numbered claims pinned on the wall screenshot, Direct, Review, Extend, How it works, Compare, Download, Open source, FAQ, close, footer. |
 | `.vitepress/theme/site.css` | The design's `site.css`, loaded as `<style scoped>` by `Landing.vue` so its generic class names (`.link`, `.btn`, `.wrap`) cannot reach VitePress's own components. |
 | `.vitepress/theme/custom.css` | Global: VitePress variables restyled to the design's tokens for doc pages, Archivo headings, the home page's light tokens and the `on-dark` / `on-light` switch. |
@@ -22,7 +23,9 @@ Source design: the "oIDE Website" artifact, copied to [raw/design/website/](../r
 ## Decisions
 
 - **Logo.** The app's own mark (`public/logo-mark.svg`, `logo-mark-light.svg`, from
-  [design-system](design-system.md) and `tools/brand/`) replaces the design's outlined square in the nav and footer.
+  [design-system](design-system.md) and `tools/brand/`) replaces the design's outlined square in the nav and footer. Both headers (home page nav and docs nav) use
+  the app header lockup: the 28px mark beside "oIDE" with a "by [Frostlogic wordmark]" subtitle underneath
+  (`FrostlogicLogo.vue`, 11px high, word in the secondary text colour); the footer keeps mark + "oIDE".
 - **Light and dark** follow VitePress's `<html class="dark">` (set by an inline script before
   hydration, default dark, toggled by the sun/moon button or the docs' switch). The home page never
   derives a class from `isDark`, and theme-dependent bits (logo, toggle icon) are drawn twice and

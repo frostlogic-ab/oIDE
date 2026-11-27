@@ -23,7 +23,8 @@ export default defineConfig({
     ['meta', { property: 'og:description', content: 'Run many Claude Code CLI agents in parallel, in one window. Open source, MIT.' }],
   ],
   themeConfig: {
-    siteTitle: 'oIDE',
+    // The title text is drawn by Layout.vue ("oIDE" over "by Frostlogic"), like the app header.
+    siteTitle: false,
     logo: { light: '/logo-mark-light.svg', dark: '/logo-mark.svg', alt: '' },
     nav: [
       { text: 'Guide', link: '/guide/getting-started', activeMatch: '/guide/' },

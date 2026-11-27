@@ -1,8 +1,10 @@
 <script setup lang="ts">
 // Picks the page shell: `layout: landing` (the home page) gets the design's own page, every other
-// page gets the default VitePress layout with oIDE's styles (custom.css).
+// page gets the default VitePress layout with oIDE's styles (custom.css). The docs nav title is the
+// app header lockup: "oIDE" over "by <Frostlogic wordmark>" (config.ts sets `siteTitle: false`).
 import DefaultTheme from 'vitepress/theme';
 import { useData } from 'vitepress';
+import FrostlogicLogo from './FrostlogicLogo.vue';
 import Landing from './Landing.vue';
 
 const { frontmatter } = useData();
@@ -10,5 +12,12 @@ const { frontmatter } = useData();
 
 <template>
   <Landing v-if="frontmatter.layout === 'landing'" />
-  <DefaultTheme.Layout v-else />
+  <DefaultTheme.Layout v-else>
+    <template #nav-bar-title-after>
+      <span class="oide-brand-text">
+        <span>oIDE</span>
+        <span class="oide-brand-by">by <FrostlogicLogo :height="11" /></span>
+      </span>
+    </template>
+  </DefaultTheme.Layout>
 </template>
