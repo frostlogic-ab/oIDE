@@ -54,6 +54,16 @@ describe('New project dialog', () => {
     expect(screen.getByLabelText('Repository')).toBeTruthy();
   });
 
+  it('new repository: the Name field keeps focus (not the header ×), and the disabled Create says why', async () => {
+    show('create');
+    const name = await screen.findByLabelText('Name');
+    await new Promise((r) => setTimeout(r, 10));
+    expect(document.activeElement).toBe(name);
+    expect(button('Create repository').title).toBe('Enter a folder name.');
+    fireEvent.change(name, { target: { value: 'fresh' } });
+    expect(button('Create repository').title).toBe('Choose a location first.');
+  });
+
   it('clone: owner/repo expands to a GitHub URL, fills the folder name, and a resolved clone closes the dialog', async () => {
     localStorage.setItem('oide.newProject.parent', PARENT);
     handlers['projects.clone'] = () => project('repo');
