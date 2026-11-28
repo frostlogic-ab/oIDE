@@ -49,6 +49,9 @@ export function TerminalTabs({ group, label, newCwd, newContext, autoStart, visi
   const closeTab = (i: number) => {
     const closing = list[i];
     if (!closing) return;
+    // A running script or install (a dev server, a long build) dies with its tab: one stray click or
+    // Delete must not cost its output. An idle shell closes without asking, as in VS Code.
+    if (closing.kind !== 'shell' && closing.status === 'running' && !window.confirm(`${closing.title} is still running. Stop it and close the tab?`)) return;
     const neighbour = list[i + 1] ?? list[i - 1];
     // Closing a background tab leaves the active one alone; closing the active one hands over to its neighbour.
     const target = closing.key === active?.key ? neighbour : active;
