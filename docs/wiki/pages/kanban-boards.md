@@ -36,7 +36,13 @@ nothing (`BoardOpError` with a reason a person or agent can act on).
 | Comments | `add_comment { cardId, text }`, `delete_comment { cardId, commentId }` (agents: only their own) |
 | Agents | `link_agent` / `unlink_agent { cardId, agentId }` (the user only; refused for agents) |
 | Columns | `add_column { name, color?, index? }`, `update_column`, `move_column { column, index }`, `delete_column { column, moveCardsTo? }` (refused with cards and no target, or for the last column) |
-| Properties | `add_property { name, type, options?, showOnCard?, index? }`, `update_property`, `move_property`, `delete_property` (clears its values), `add_option`, `update_option`, `delete_option` (clears it on cards) |
+| Properties | `add_property { name, type, options?, showOnCard?, index? }`, `update_property { property, name?, type?, showOnCard? }` (a new type converts values, below), `move_property`, `delete_property` (clears its values), `add_option`, `update_option`, `delete_option` (clears it on cards) |
+
+Changing a property's type (`convertProperty`): select ↔ multi-select keep their options (multi →
+select keeps the first); text, numbers and links become options of the new select (one per distinct
+value); a select becomes text as its option names; numbers, dates and links keep values that still
+fit; anything else is cleared. Ids are 1 to 64 letters, digits, `-` or `_`, never `__proto__`,
+`constructor` or `prototype` (values live in plain objects keyed by id).
 
 Columns and properties are named by name or id, cards by id. `props` values: a select option name or
 id (a new name adds the option), a list for multi-select, `null` clears. `index` counts the other cards
@@ -49,8 +55,13 @@ of the column (0 = top; past the end = bottom). `describeBoardOps` writes the ve
   entry, apply, commit one version with the note; records an agent's write in the uses log. A refusal
   is `ArtifactError` `invalid_input` and writes nothing. `readBoard(id)` parses and checks.
 - Writes of board content through `save` / `writeFiles` / `create` are checked with `parseBoard`.
-- Boards keep the newest `BOARD_KEEP_VERSIONS` (200) snapshots: older `.versions/<n>` folders and their
-  `versions.json` entries are removed after each board commit (`pruneVersions`).
+- Boards keep the newest `BOARD_KEEP_VERSIONS` (200) snapshots: older `.versions/<n>` folders are
+  deleted after each board commit, then their `versions.json` entries (`pruneVersions`; a folder that
+  can't be deleted stays listed and is tried again next time). Restoring a version no longer kept
+  says so ("boards keep their newest 200 versions").
+- Importing files: a `board.json` makes a board only when its content is an oIDE board
+  (`isBoardContent`); an Excalidraw scene under that name stays a whiteboard. The New artifact
+  dialog leaves the kind of a `board.json` to main ("Detect").
 - IPC `artifacts.boardApply { id, ops } → { meta, board, results }` (the user's changes, author `user`).
 - MCP (`mcpArtifacts` in `services/core.ts`): `readBoard` / `updateBoard` keep SEC-26 visibility and the
   artifact agent's own-artifact rule; author `agent:<id>` with the agent's title on comments.

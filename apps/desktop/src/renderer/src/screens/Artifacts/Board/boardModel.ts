@@ -5,8 +5,10 @@
 import { displayValue, type BoardCard, type BoardColor, type BoardColumn, type BoardProperty, type KanbanBoard } from '@oide/protocol';
 
 /**
- * Base hues on the oIDE palette (status and accent colours where they exist). Chips and column
- * headers use the hue as text on a ~20% tint of itself over the dark surface (at least 4.5:1).
+ * Base hues on the oIDE palette: gray, yellow, green, blue, purple and red are design tokens (ink-3,
+ * warn, ok, accent, the violet accent option, bad); brown, orange and pink are board-only hues of the
+ * same lightness (design-system.md › Board colours). Chips and column headers use the hue as text on a
+ * ~15% tint of itself over the dark surface (at least 4.5:1).
  */
 export const BOARD_HUE: Record<BoardColor, string> = {
   gray: '#9AA3AE',
@@ -45,7 +47,7 @@ export function laneStyle(color: BoardColor): { background: string } {
 
 /** A card in a column: the card surface with a little of the column's colour. */
 export function cardStyle(color: BoardColor): { background: string } {
-  return { background: `color-mix(in srgb, ${BOARD_HUE[color]} 7%, #15181D)` };
+  return { background: `color-mix(in srgb, ${BOARD_HUE[color]} 7%, var(--color-card))` };
 }
 
 export const PROPERTY_TYPE_LABEL: Record<BoardProperty['type'], string> = {

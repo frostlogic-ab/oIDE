@@ -131,6 +131,29 @@ describe('BoardViewer (ADR 0022)', () => {
     expect(params.goal).toContain('Users are logged out.');
   });
 
+  it('switching cards with a comment typed asks before dropping it', async () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'Fix login' }));
+    const panel = screen.getByRole('complementary', { name: 'Card' });
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Add a comment' }), { target: { value: 'half a thought' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
+    const ask = await screen.findByRole('dialog', { name: 'Discard what you typed?' });
+    fireEvent.click(within(ask).getByRole('button', { name: 'Keep editing' }));
+    expect((within(screen.getByRole('complementary', { name: 'Card' })).getByRole('textbox', { name: 'Add a comment' }) as HTMLTextAreaElement).value).toBe('half a thought');
+    fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Discard what you typed?' })).getByRole('button', { name: 'Discard' }));
+    await waitFor(() => expect((within(screen.getByRole('complementary', { name: 'Card' })).getByRole('textbox', { name: 'Title' }) as HTMLTextAreaElement).value).toBe('Dark mode'));
+  });
+
+  it('while searching, a card menu offers no Move up / down (its place counts hidden cards)', async () => {
+    render(<Harness />);
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search cards' }), { target: { value: 'dark' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Actions for Dark mode' }));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).queryByRole('menuitem', { name: /Move up/ })).toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: 'Move to Shipped' })).toBeTruthy();
+  });
+
   it('Columns and properties adds a property', async () => {
     render(<Harness />);
     fireEvent.click(screen.getByRole('button', { name: 'Columns and properties' }));

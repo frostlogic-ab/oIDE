@@ -107,7 +107,8 @@ export function applyTextEdits(path: string, text: string, edits: ReadonlyArray<
 }
 const CreateInput = z
   .object({ title: z.string().min(1), kind: ArtifactKind, content: z.string().optional(), files: FileInputs.optional(), entry: ArtifactPath.optional(), shared: z.boolean().optional() })
-  .refine((c) => c.content !== undefined || !!c.files?.length, 'Give content or files');
+  // A board without content starts from the default backlog (ADR 0022).
+  .refine((c) => c.content !== undefined || !!c.files?.length || c.kind === 'board', 'Give content or files');
 const BoardReadInput = z.object({ id: z.string().min(1), cardId: z.string().min(1).max(64).optional(), column: z.string().min(1).max(200).optional() });
 const BoardUpdateInput = z.object({ id: z.string().min(1), ops: BoardOps });
 const AddFilesInput = z.object({ id: z.string().min(1), files: FileInputs.min(1) });
@@ -271,7 +272,7 @@ const TOOLS = {
       'Cards: {op:"add_card", title, column?, index?, props?, body?} (returns its cardId); {op:"update_card", cardId, title?, body?, props?}; {op:"move_card", cardId, column, index?} (index 0 = top); {op:"delete_card", cardId}; {op:"add_comment", cardId, text}; {op:"delete_comment", cardId, commentId} (your own).',
       'props is an object of property name to value: select = an option name (a new name adds the option), multi_select = a list of option names, text/url = a string, number, date = "YYYY-MM-DD", checkbox = true/false, null clears it. body is Markdown.',
       'Columns: {op:"add_column", name, color?, index?}; {op:"update_column", column, name?, color?}; {op:"move_column", column, index}; {op:"delete_column", column, moveCardsTo?}.',
-      'Properties: {op:"add_property", name, type: select|multi_select|text|number|date|checkbox|url, options?: [{name, color?}], showOnCard?}; {op:"update_property", property, name?, showOnCard?}; {op:"move_property", property, index}; {op:"delete_property", property}; {op:"add_option", property, name, color?}; {op:"update_option", property, option, name?, color?}; {op:"delete_option", property, option}.',
+      'Properties: {op:"add_property", name, type: select|multi_select|text|number|date|checkbox|url, options?: [{name, color?}], showOnCard?}; {op:"update_property", property, name?, type?, showOnCard?} (a new type converts the values that fit); {op:"move_property", property, index}; {op:"delete_property", property}; {op:"add_option", property, name, color?}; {op:"update_option", property, option, name?, color?}; {op:"delete_option", property, option}.',
       "Colors: gray, brown, orange, yellow, green, blue, purple, pink, red. To close a ticket, move it to the column that means done (or won't do); delete only what should not exist.",
     ].join(' '),
     inputSchema: {

@@ -21,11 +21,18 @@ export interface CardPanelProps {
   apply: (ops: BoardOp[]) => Promise<BoardOpResult[] | null>;
   announce: (message: string) => void;
   onClose: () => void;
+  /** Whether the panel holds typed text not saved yet (the description being edited, a comment). */
+  onDirtyChange: (dirty: boolean) => void;
   onEditProperties: () => void;
 }
 
-export function CardPanel({ meta, board, card, agents, apply, announce, onClose, onEditProperties }: CardPanelProps) {
+export function CardPanel({ meta, board, card, agents, apply, announce, onClose, onDirtyChange, onEditProperties }: CardPanelProps) {
   const headingId = useId();
+  const [descDirty, setDescDirty] = useState(false);
+  const [commentDirty, setCommentDirty] = useState(false);
+  useEffect(() => onDirtyChange(descDirty || commentDirty), [descDirty, commentDirty, onDirtyChange]);
+  // Closing the panel leaves nothing typed behind.
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const update = (patch: Omit<Extract<BoardOp, { op: 'update_card' }>, 'op' | 'cardId'>) => apply([{ op: 'update_card', cardId: card.id, ...patch }]);
   const setProp = (p: BoardProperty, v: BoardValueInput) => update({ props: { [p.id]: v } });
@@ -121,9 +128,9 @@ export function CardPanel({ meta, board, card, agents, apply, announce, onClose,
           <p className="m-0 text-[11.5px] text-ink-3 leading-[1.5]">The agent gets the card as its task and keeps it up to date on the board.</p>
         </section>
 
-        <DescriptionField key={`body-${card.id}`} body={card.body} onSave={(body) => update({ body })} />
+        <DescriptionField key={`body-${card.id}`} body={card.body} onSave={(body) => update({ body })} onDirty={setDescDirty} />
 
-        <Comments card={card} agents={agents} apply={apply} />
+        <Comments card={card} agents={agents} apply={apply} onDirty={setCommentDirty} />
       </div>
       {confirmDelete && (
         <Dialog
@@ -318,9 +325,10 @@ function MultiSelect({ id, property: p, value, onChange }: { id: string; propert
 }
 
 /** The card's Markdown description: rendered, with Edit (Ctrl/Cmd+Enter saves, Esc cancels). */
-function DescriptionField({ body, onSave }: { body: string; onSave: (body: string) => Promise<BoardOpResult[] | null> }) {
+function DescriptionField({ body, onSave, onDirty }: { body: string; onSave: (body: string) => Promise<BoardOpResult[] | null>; onDirty: (dirty: boolean) => void }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(body);
+  useEffect(() => onDirty(editing && draft !== startedFrom.current), [editing, draft, onDirty]);
   const [busy, setBusy] = useState(false);
   const startedFrom = useRef(body);
   /** An agent saved another text while you were editing (yours stays in the box until you save or cancel). */
@@ -392,8 +400,19 @@ function DescriptionField({ body, onSave }: { body: string; onSave: (body: strin
   );
 }
 
-function Comments({ card, agents, apply }: { card: BoardCard; agents: Record<string, AgentSummary | undefined>; apply: (ops: BoardOp[]) => Promise<BoardOpResult[] | null> }) {
+function Comments({
+  card,
+  agents,
+  apply,
+  onDirty,
+}: {
+  card: BoardCard;
+  agents: Record<string, AgentSummary | undefined>;
+  apply: (ops: BoardOp[]) => Promise<BoardOpResult[] | null>;
+  onDirty: (dirty: boolean) => void;
+}) {
   const [text, setText] = useState('');
+  useEffect(() => onDirty(text.trim() !== ''), [text, onDirty]);
   const [busy, setBusy] = useState(false);
   const send = async () => {
     const t = text.trim();

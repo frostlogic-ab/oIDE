@@ -110,6 +110,26 @@ describe('ArtifactStore: kanban boards (ADR 0022)', () => {
     expect((await store.versions(doc.id)).map((v) => v.version)).toEqual([5, 4, 3, 2, 1]);
   });
 
+  it('restoring a version that is no longer kept says so', async () => {
+    const { store } = setup(2);
+    const meta = await store.create({ title: 'Backlog', kind: 'board' });
+    for (let i = 0; i < 3; i++) await store.updateBoard(meta.id, [{ op: 'add_card', title: `Card ${i}` }], { author: 'user' });
+    await expect(store.restore(meta.id, 1)).rejects.toThrow(/no longer kept: boards keep their newest 2 versions/);
+  });
+
+  it('a picked board.json is a board only when it holds one (an Excalidraw scene stays a whiteboard)', async () => {
+    const { store } = setup();
+    const { writeFileSync } = await import('node:fs');
+    const a = tempDir('oide-import-');
+    writeFileSync(join(a, 'board.json'), serializeBoard(defaultBoard()));
+    writeFileSync(join(a, 'notes.md'), '# Notes');
+    expect((await store.importFiles({ folderPath: a })).kind).toBe('board');
+    const b = tempDir('oide-import-');
+    writeFileSync(join(b, 'board.json'), JSON.stringify({ type: 'excalidraw', version: 2, elements: [] }));
+    writeFileSync(join(b, 'notes.txt'), 'x');
+    expect((await store.importFiles({ folderPath: b })).kind).not.toBe('board');
+  });
+
   it('a board.json file imports as a board', async () => {
     const { store } = setup();
     const dir = tempDir('oide-import-');

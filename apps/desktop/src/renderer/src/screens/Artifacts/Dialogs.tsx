@@ -186,7 +186,8 @@ export function NewArtifactDialog({ open, onClose, projects, defaultProjectId, o
     projectId === (defaultProjectId ?? '');
 
   const names = useMemo(() => [...chosen.files.map((f) => f.name), ...chosen.images.map((i) => i.name)], [chosen]);
-  const detected = names.length ? kindFromFiles(names) : undefined;
+  // A board.json may be a kanban board or an Excalidraw scene: main decides from its content.
+  const detected = names.length && !names.some((n) => n.toLowerCase() === 'board.json') ? kindFromFiles(names) : undefined;
   const filesKind = kind || detected;
   const pages = useMemo(() => (filesKind === 'design' && !chosen.folder ? entryCandidates(names) : []), [filesKind, chosen.folder, names]);
   const opensOn = pages.includes(entry) ? entry : (pages[0] ?? '');

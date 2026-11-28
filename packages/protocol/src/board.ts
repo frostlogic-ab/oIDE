@@ -39,7 +39,12 @@ export const BOARD_PROPERTY_TYPES = ['select', 'multi_select', 'text', 'number',
 export const BoardPropertyType = z.enum(BOARD_PROPERTY_TYPES);
 export type BoardPropertyType = z.infer<typeof BoardPropertyType>;
 
-const BoardId = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/, 'Ids are 1 to 64 letters, digits, - or _');
+/** Names an object's own machinery: never an id (values are stored in plain objects keyed by id). */
+const RESERVED_IDS = new Set(['__proto__', 'constructor', 'prototype']);
+const BoardId = z
+  .string()
+  .regex(/^[A-Za-z0-9_-]{1,64}$/, 'Ids are 1 to 64 letters, digits, - or _')
+  .refine((s) => !RESERVED_IDS.has(s), 'This id is reserved');
 const Name = z.string().trim().min(1).max(BOARD_LIMITS.name);
 /** A calendar date, `YYYY-MM-DD`. */
 const DateValue = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Dates are YYYY-MM-DD');
@@ -158,7 +163,8 @@ export const BoardOp = z.discriminatedUnion('op', [
     showOnCard: z.boolean().optional(),
     index: Index.optional(),
   }),
-  z.object({ op: z.literal('update_property'), property: PropertyRef, name: Name.optional(), showOnCard: z.boolean().optional() }),
+  /** A new `type` converts every card's value (see `convertProperty`); values that can't convert are cleared. */
+  z.object({ op: z.literal('update_property'), property: PropertyRef, name: Name.optional(), type: BoardPropertyType.optional(), showOnCard: z.boolean().optional() }),
   z.object({ op: z.literal('move_property'), property: PropertyRef, index: Index }),
   /** Removes the property and its value on every card. */
   z.object({ op: z.literal('delete_property'), property: PropertyRef }),
@@ -310,6 +316,51 @@ function moveIn<T>(list: T[], item: T, index: number): T[] {
   return rest;
 }
 
+const isSelect = (t: BoardPropertyType) => t === 'select' || t === 'multi_select';
+
+/**
+ * Change a property's type and convert every card's value: select ↔ multi-select keep their options
+ * (multi → select keeps the first); text values become options of a new select (one per distinct text);
+ * a select becomes text as its option names; numbers, dates and links keep values that still fit.
+ * Anything else is cleared.
+ */
+function convertProperty(b: KanbanBoard, p: BoardProperty, to: BoardPropertyType, newId: (prefix: string) => string): void {
+  const from = p.type;
+  const old = new Map(b.cards.map((c) => [c, c.props[p.id]] as const));
+  // The options as they were: a select becoming text needs their names after they are gone.
+  const options = p.options;
+  const names = (v: BoardValue): string[] => (Array.isArray(v) ? v : [String(v)]).map((id) => options?.find((o) => o.id === id)?.name ?? '').filter(Boolean);
+  p.type = to;
+  if (isSelect(to)) p.options = isSelect(from) ? (options ?? []) : [];
+  else delete p.options;
+  for (const [card, v] of old) {
+    delete card.props[p.id];
+    if (v === undefined) continue;
+    let next: BoardValue | undefined;
+    if (isSelect(from) && isSelect(to)) {
+      const ids = Array.isArray(v) ? v : [String(v)];
+      next = to === 'select' ? ids[0] : ids;
+    } else if (isSelect(to)) {
+      const text = typeof v === 'boolean' ? (v ? 'Yes' : '') : String(v).trim().slice(0, BOARD_LIMITS.name);
+      if (text) {
+        try {
+          const id = optionFor(p, text, newId);
+          next = to === 'select' ? id : [id];
+        } catch {
+          next = undefined;
+        }
+      }
+    } else {
+      const text = isSelect(from) ? names(v).join(', ') : typeof v === 'boolean' ? (v ? 'Yes' : '') : String(v);
+      if (to === 'text' || to === 'url') next = text.slice(0, BOARD_LIMITS.text) || undefined;
+      else if (to === 'number') next = text.trim() !== '' && Number.isFinite(Number(text)) ? Number(text) : undefined;
+      else if (to === 'date') next = DateValue.safeParse(text.trim()).success ? text.trim() : undefined;
+      else if (to === 'checkbox') next = v === true || undefined;
+    }
+    if (next !== undefined && !(Array.isArray(next) && !next.length)) card.props[p.id] = next;
+  }
+}
+
 /**
  * Apply operations in order to a copy of `board`. All or nothing: the first operation that cannot
  * apply throws `BoardOpError` (with a message the user or agent can act on) and nothing changes.
@@ -448,6 +499,7 @@ export function applyBoardOps(board: KanbanBoard, ops: readonly BoardOp[], ctx: 
         if (op.name !== undefined && fold(op.name) !== fold(p.name)) uniqueName(b.properties, op.name, 'property');
         if (op.name !== undefined) p.name = op.name;
         if (op.showOnCard !== undefined) p.showOnCard = op.showOnCard;
+        if (op.type !== undefined && op.type !== p.type) convertProperty(b, p, op.type, newId);
         results.push({ op: op.op, propertyId: p.id });
         break;
       }

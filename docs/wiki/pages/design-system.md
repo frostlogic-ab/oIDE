@@ -49,6 +49,16 @@ wordmark traced from Frostlogic's vector logo (roof in Frostlogic blue `#2491EB`
 
 Buttons on accent use text `#0B0D10`, weight 600.
 
+### Board colours
+
+Kanban boards ([kanban-boards.md](kanban-boards.md)) colour columns and select options with nine
+named colours. Six are the palette's own hues: gray `#9AA3AE` (ink-3), yellow `#F2C078` (warn),
+green `#7FC8A9` (ok), blue `#7AA2F7` (accent), purple `#C4A7E7` (the violet accent option), red
+`#F08A8A` (bad). Three are board-only, at the same lightness: brown `#C4A484`, orange `#EDA86A`,
+pink `#E79AC0`. A chip or column label is the hue as text on a 15% tint of itself with a 25% border;
+a lane is a 5% tint; a card mixes 7% of its column's hue into `card`. Code: `Board/boardModel.ts`
+(`BOARD_HUE`, `chipStyle`, `laneStyle`, `cardStyle`).
+
 ## Type
 
 - UI: Inter 400/500/600/700, base 13px. Common sizes 9.5, 10.5, 11, 11.5, 12, 12.5, 13, 14, 16, 18, 20px.

@@ -18,6 +18,8 @@ export interface BoardViewProps {
   /** Cards to show (a search narrows them); drag and drop is off while searching. */
   cards: readonly BoardCard[];
   searching: boolean;
+  /** Cards added here that main has not confirmed yet (their ids are stand-ins): not movable yet. */
+  pendingIds: ReadonlySet<string>;
   selectedCardId: string | null;
   agents: Record<string, AgentSummary | undefined>;
   onOpenCard: (id: string) => void;
@@ -28,7 +30,7 @@ export interface BoardViewProps {
 
 type Drag = { kind: 'card'; id: string } | { kind: 'column'; id: string } | null;
 
-export function BoardView({ board, cards, searching, selectedCardId, agents, onOpenCard, apply, announce }: BoardViewProps) {
+export function BoardView({ board, cards, searching, pendingIds, selectedCardId, agents, onOpenCard, apply, announce }: BoardViewProps) {
   const [drag, setDrag] = useState<Drag>(null);
   /** Where a dragged card would land: column and index among the other cards. */
   const [target, setTarget] = useState<{ column: string; index: number } | null>(null);
@@ -63,7 +65,7 @@ export function BoardView({ board, cards, searching, selectedCardId, agents, onO
 
   /** Alt+arrows on a card: left / right to the next column (at the bottom), up / down within the column. */
   const onCardKey = (e: KeyboardEvent, card: BoardCard) => {
-    if (!e.altKey || e.ctrlKey || e.metaKey || searching) return;
+    if (!e.altKey || e.ctrlKey || e.metaKey || searching || pendingIds.has(card.id)) return;
     const ci = board.columns.findIndex((c) => c.id === card.column);
     const list = allByColumn.get(card.column) ?? [];
     const i = list.indexOf(card);
@@ -166,7 +168,7 @@ export function BoardView({ board, cards, searching, selectedCardId, agents, onO
               />
               <ol aria-label={`${col.name} cards`} className="list-none m-0 px-2 pb-2 flex-1 min-h-[40px] overflow-y-auto flex flex-col gap-2">
                 {list.map((card, i) => (
-                  <li key={card.id} data-card-id={card.id} className="relative">
+                  <li key={card.id} data-card-id={card.id} className="relative" aria-busy={pendingIds.has(card.id) || undefined}>
                     {dropHere && target.index === i && drag.id !== card.id && <DropLine />}
                     <CardTile
                       board={board}
@@ -174,7 +176,8 @@ export function BoardView({ board, cards, searching, selectedCardId, agents, onO
                       column={col}
                       selected={selectedCardId === card.id}
                       dragging={drag?.kind === 'card' && drag.id === card.id}
-                      draggable={!searching}
+                      draggable={!searching && !pendingIds.has(card.id)}
+                      pending={pendingIds.has(card.id)}
                       agents={agents}
                       onOpen={() => onOpenCard(card.id)}
                       onKeyDown={(e) => onCardKey(e, card)}
@@ -184,7 +187,7 @@ export function BoardView({ board, cards, searching, selectedCardId, agents, onO
                         setDrag({ kind: 'card', id: card.id });
                       }}
                       onDragEnd={endDrag}
-                      menu={cardMenu(board, card, i, allByColumn.get(col.id)?.length ?? 0, {
+                      menu={cardMenu(board, card, (allByColumn.get(col.id) ?? []).indexOf(card), allByColumn.get(col.id)?.length ?? 0, searching, {
                         open: () => onOpenCard(card.id),
                         move: (column, index) => void move(card, column, index, true),
                         remove: () => void apply([{ op: 'delete_card', cardId: card.id }]).then((r) => r && announce(`Deleted ${card.title}.`)),
@@ -288,17 +291,19 @@ function DropLine() {
   return <span aria-hidden="true" className="absolute -top-[5px] left-0 right-0 h-[2px] rounded bg-accent" />;
 }
 
+/** `index` is the card's place among all the column's cards (not only the ones a search shows). */
 function cardMenu(
   board: KanbanBoard,
   card: BoardCard,
   index: number,
   count: number,
+  searching: boolean,
   act: { open: () => void; move: (column: string, index?: number) => void; remove: () => void },
 ): MenuItem[] {
   return [
     { id: 'open', label: 'Open', onSelect: act.open },
-    ...(index > 0 ? [{ id: 'up', label: 'Move up', hint: 'Alt+↑', onSelect: () => act.move(card.column, index - 1) }] : []),
-    ...(index < count - 1 ? [{ id: 'down', label: 'Move down', hint: 'Alt+↓', onSelect: () => act.move(card.column, index + 1) }] : []),
+    ...(index > 0 && !searching ? [{ id: 'up', label: 'Move up', hint: 'Alt+↑', onSelect: () => act.move(card.column, index - 1) }] : []),
+    ...(index < count - 1 && !searching ? [{ id: 'down', label: 'Move down', hint: 'Alt+↓', onSelect: () => act.move(card.column, index + 1) }] : []),
     ...board.columns.filter((c) => c.id !== card.column).map((c) => ({ id: `to-${c.id}`, label: `Move to ${c.name}`, onSelect: () => act.move(c.id) })),
     { id: 'delete', label: 'Delete card', icon: 'trash' as const, danger: true, onSelect: act.remove },
   ];
@@ -311,6 +316,8 @@ interface CardTileProps {
   selected: boolean;
   dragging: boolean;
   draggable: boolean;
+  /** Being saved: shown, but opened and moved only once main has answered. */
+  pending: boolean;
   agents: Record<string, AgentSummary | undefined>;
   menu: MenuItem[];
   onOpen: () => void;
@@ -319,7 +326,7 @@ interface CardTileProps {
   onDragEnd: () => void;
 }
 
-function CardTile({ board, card, column, selected, dragging, draggable, agents, menu, onOpen, onKeyDown, onDragStart, onDragEnd }: CardTileProps) {
+function CardTile({ board, card, column, selected, dragging, draggable, pending, agents, menu, onOpen, onKeyDown, onDragStart, onDragEnd }: CardTileProps) {
   const chips = cardChips(board, card);
   const linked = card.agents.map((id) => agents[id]).filter((a): a is AgentSummary => !!a);
   return (
@@ -331,11 +338,12 @@ function CardTile({ board, card, column, selected, dragging, draggable, agents, 
         'group relative rounded-lg border px-3 py-2.5 flex flex-col gap-2 cursor-pointer',
         selected ? 'border-accent' : 'border-line-2 hover:border-line-hover',
         dragging && 'opacity-40',
+        pending && 'opacity-70 cursor-progress',
       )}
       style={cardStyle(column.color)}
       onClick={(e) => {
         // The menu and its items handle their own clicks.
-        if ((e.target as HTMLElement).closest('[data-card-menu]')) return;
+        if (pending || (e.target as HTMLElement).closest('[data-card-menu]')) return;
         onOpen();
       }}
     >
@@ -346,8 +354,9 @@ function CardTile({ board, card, column, selected, dragging, draggable, agents, 
           data-card-open={card.id}
           onClick={(e) => {
             e.stopPropagation();
-            onOpen();
+            if (!pending) onOpen();
           }}
+          aria-disabled={pending || undefined}
           onKeyDown={onKeyDown}
           aria-keyshortcuts="Alt+ArrowLeft Alt+ArrowRight Alt+ArrowUp Alt+ArrowDown"
           aria-current={selected ? 'true' : undefined}
@@ -355,7 +364,7 @@ function CardTile({ board, card, column, selected, dragging, draggable, agents, 
         >
           {card.title}
         </button>
-        <span data-card-menu className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 -mr-1 -mt-0.5">
+        {!pending && <span data-card-menu className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 -mr-1 -mt-0.5">
           <Menu
             label={`Actions for ${card.title}`}
             align="end"
@@ -364,7 +373,7 @@ function CardTile({ board, card, column, selected, dragging, draggable, agents, 
             triggerClassName="h-6 w-6 rounded-md text-ink-3 hover:bg-raised hover:text-ink"
             items={menu}
           />
-        </span>
+        </span>}
       </div>
       {chips.length > 0 && (
         <ul aria-label="Properties" className="list-none m-0 p-0 flex flex-wrap gap-1">

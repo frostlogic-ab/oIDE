@@ -292,7 +292,6 @@ export function baseName(path: string): string {
 export function kindFromFiles(names: readonly string[]): ArtifactKind {
   if (names.some((n) => DESIGN_FILE.test(n))) return 'design';
   if (names.some((n) => /\.excalidraw$/i.test(n))) return 'whiteboard';
-  if (names.some((n) => n.toLowerCase() === 'board.json')) return 'board';
   if (names.length && names.every((n) => IMAGE_FILE.test(n))) return 'design';
   return 'doc';
 }

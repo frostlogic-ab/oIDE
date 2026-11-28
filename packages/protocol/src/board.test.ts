@@ -208,7 +208,39 @@ describe('kanban boards: columns and properties', () => {
   });
 });
 
+describe('kanban boards: changing a property type', () => {
+  it('select ↔ multi-select keep options; text becomes options; select becomes text; what cannot convert is cleared', () => {
+    const { board, run } = setup();
+    let b = run(board, [
+      { op: 'add_property', name: 'Owner', type: 'text' },
+      { op: 'add_card', title: 'A', props: { Priority: 'P1', Owner: 'Ana' } },
+      { op: 'add_card', title: 'B', props: { Owner: 'Ben' } },
+    ]).board;
+    b = run(b, [{ op: 'update_property', property: 'Priority', type: 'multi_select' }]).board;
+    const pri = prop(b, 'Priority');
+    expect(pri.type).toBe('multi_select');
+    expect(b.cards[0]!.props[pri.id]).toEqual([pri.options!.find((o) => o.name === 'P1')!.id]);
+    b = run(b, [{ op: 'update_property', property: 'Owner', type: 'select' }]).board;
+    const owner = prop(b, 'Owner');
+    expect(owner.options!.map((o) => o.name)).toEqual(['Ana', 'Ben']);
+    expect(b.cards[1]!.props[owner.id]).toBe(owner.options![1]!.id);
+    b = run(b, [{ op: 'update_property', property: 'Priority', type: 'text' }]).board;
+    expect(prop(b, 'Priority').options).toBeUndefined();
+    expect(b.cards[0]!.props[pri.id]).toBe('P1');
+    b = run(b, [{ op: 'update_property', property: 'Priority', type: 'number' }]).board;
+    expect(b.cards[0]!.props[pri.id]).toBeUndefined();
+    expect(() => checkBoard(b)).not.toThrow();
+  });
+});
+
 describe('kanban boards: parsing and integrity', () => {
+  it('refuses ids that name object machinery (__proto__, constructor, prototype)', () => {
+    const b = defaultBoard();
+    const evil = { ...b, properties: [...b.properties, { id: '__proto__', name: 'Evil', type: 'text', showOnCard: true }] };
+    expect(() => parseBoard(JSON.stringify(evil))).toThrow(/reserved/);
+    expect(BoardOps.safeParse([{ op: 'move_card', cardId: 'constructor', column: 'x' }]).success).toBe(false);
+  });
+
   it('refuses files that are not oIDE boards, with a reason', () => {
     expect(() => parseBoard('not json')).toThrow(/must be JSON/);
     expect(() => parseBoard('{"type":"excalidraw"}')).toThrow(/Not an oIDE board/);

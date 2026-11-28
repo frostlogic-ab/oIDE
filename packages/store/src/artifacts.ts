@@ -4,6 +4,7 @@ import { basename, dirname, extname, join } from 'node:path';
 import {
   applyBoardOps,
   ARTIFACT_LIMITS,
+  isBoardContent,
   ArtifactMeta,
   defaultBoard,
   describeBoardOps,
@@ -892,6 +893,10 @@ export class ArtifactStore {
         throw new ArtifactError(`${cur.title} has no v${version}.`, 'invalid_input', 'no_content');
       }
       const dir = this.dirOf(id);
+      // Boards keep only their newest versions (ADR 0022): say so instead of a missing-folder error.
+      if (cur.kind === 'board' && !(await this.storedVersions(id)).some((v) => v.version === version)) {
+        throw new ArtifactError(`v${version} of ${cur.title} is no longer kept: boards keep their newest ${this.boardKeep} versions.`, 'invalid_input', 'no_content');
+      }
       const snap = await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(version)], { reservedTop: VERSIONS_DIR }));
       const files = await this.guard(() => walkFolder(snap, { unsafe: 'throw', max: ARTIFACT_LIMITS.files + 1 })).catch((e: Error) => {
         throw new ArtifactError(e.message, 'invalid_input', 'bad_path');
@@ -1032,11 +1037,18 @@ export class ArtifactStore {
     if (upTo < 1) return;
     const old = versions.filter((v) => v.version <= upTo);
     if (!old.length) return;
-    await writeAtomic(join(versionsDir, 'versions.json'), JSON.stringify(versions.filter((v) => v.version > upTo), null, 2) + '\n');
+    // Folders first: a snapshot that can't be deleted stays listed, so the next prune tries it again.
+    const gone = new Set<number>();
     for (const v of old) {
-      const snap = await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(v.version)], { reservedTop: VERSIONS_DIR }));
-      await rm(snap, { recursive: true, force: true });
+      try {
+        const snap = await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(v.version)], { reservedTop: VERSIONS_DIR }));
+        await rm(snap, { recursive: true, force: true });
+        gone.add(v.version);
+      } catch {
+        // kept in versions.json
+      }
     }
+    if (gone.size) await writeAtomic(join(versionsDir, 'versions.json'), JSON.stringify(versions.filter((v) => !gone.has(v.version)), null, 2) + '\n');
   }
 
   /**
@@ -1199,7 +1211,13 @@ export class ArtifactStore {
     checkPlan(plan);
     const paths = files.map((f) => f.path);
     let kind = input.kind ?? (input.entry ? kindOfEntry(input.entry) : undefined);
-    if (!kind) kind = (['design', 'doc', 'board', 'whiteboard'] as const).find((k) => pickEntry(k, paths));
+    // A board.json is a board only when it holds one; an Excalidraw scene saved under that name stays a whiteboard.
+    if (!kind) {
+      const boardFile = pickEntry('board', paths);
+      const f = boardFile ? plan.get(foldPath(boardFile)) : undefined;
+      if (f && f.size <= ARTIFACT_LIMITS.fileBytes && isBoardContent((await bytesOf(f)).toString('utf8'))) kind = 'board';
+    }
+    if (!kind) kind = (['design', 'doc', 'whiteboard'] as const).find((k) => pickEntry(k, paths));
     if (!kind) throw new ArtifactError('None of the files can open as an artifact: add an HTML page, a React component, a Markdown file or an Excalidraw file.', 'invalid_input', 'wrong_kind');
     const entry = input.entry ?? pickEntry(kind, paths);
     if (!entry) throw new ArtifactError(`None of the files can open the ${kind}.`, 'invalid_input', 'wrong_kind');

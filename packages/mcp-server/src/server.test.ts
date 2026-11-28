@@ -461,6 +461,13 @@ describe('board tools (ADR 0022)', () => {
     expect(uses.map((u) => u.op)).toEqual(['write', 'read', 'read']);
   });
 
+  it('artifacts_create makes a default board without content (and still wants content for other kinds)', async () => {
+    const { reg } = await setup({ artifacts: true });
+    const client = await connect(reg.url, reg.secret);
+    expect(JSON.parse(textOf(await client.callTool({ name: 'artifacts_create', arguments: { title: 'Backlog', kind: 'board' } })))).toMatchObject({ ok: true });
+    expect((await client.callTool({ name: 'artifacts_create', arguments: { title: 'Notes', kind: 'doc' } })).isError).toBe(true);
+  });
+
   it('the board tools are offered only when main can work with boards', async () => {
     const { reg } = await setup({ artifacts: true });
     const client = await connect(reg.url, reg.secret);

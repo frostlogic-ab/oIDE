@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { applyBoardOps, parseBoard, serializeBoard, type ArtifactMeta, type BoardOp, type BoardOpResult, type CommandOutput, type KanbanBoard } from '@oide/protocol';
-import { Button, Icon, Menu } from '@oide/ui';
+import { Button, Dialog, Icon, Menu } from '@oide/ui';
 import { ipcErrorMessage, oide } from '../../../lib/bridge';
 import { plural } from '../../../lib/format';
 import { useKeymapScope } from '../../../lib/useKeymap';
@@ -29,15 +29,13 @@ type Detail = CommandOutput<'artifacts.get'>;
 export interface BoardViewerProps {
   detail: Detail;
   projectName: string;
-  /** Open on this card (a link from an agent's goal, the route). */
-  initialCardId?: string;
   onClose: () => void;
   onSaved: (meta: ArtifactMeta, content: string) => void;
   onRename: () => void;
   onDelete: () => void;
 }
 
-export function BoardViewer({ detail, projectName, initialCardId, onClose, onSaved, onRename, onDelete }: BoardViewerProps) {
+export function BoardViewer({ detail, projectName, onClose, onSaved, onRename, onDelete }: BoardViewerProps) {
   const { meta } = detail;
   const agents = useAgents((s) => s.byId);
   const agentTitle = (id: string) => agents[id]?.title;
@@ -59,7 +57,20 @@ export function BoardViewer({ detail, projectName, initialCardId, onClose, onSav
   latest.current = board;
 
   const [query, setQuery] = useState('');
-  const [openCard, setOpenCard] = useState<string | null>(initialCardId ?? null);
+  const [openCard, setOpenCard] = useState<string | null>(null);
+  /** The open card has text typed and not saved (description or comment). */
+  const cardDirty = useRef(false);
+  const setCardDirty = useCallback((d: boolean) => {
+    cardDirty.current = d;
+  }, []);
+  /** Where to go once the user agreed to drop that text: another card, no card, or out of the board. */
+  const [leaving, setLeaving] = useState<{ to: string | null } | { close: true } | null>(null);
+  const goTo = (to: string | null) => {
+    if (to === openCard) return;
+    if (cardDirty.current) return setLeaving({ to });
+    setOpenCard(to);
+  };
+  const close = () => (cardDirty.current ? setLeaving({ close: true }) : onClose());
   const [settings, setSettings] = useState(false);
   const [message, setMessage] = useState('');
   const announce = useCallback((m: string) => setMessage(m), []);
@@ -103,9 +114,9 @@ export function BoardViewer({ detail, projectName, initialCardId, onClose, onSav
 
   useKeymapScope('artifact-viewer', {
     'view.back': () => {
-      if (settings) return;
-      if (openCard) setOpenCard(null);
-      else onClose();
+      if (settings || leaving) return;
+      if (openCard) goTo(null);
+      else close();
     },
   });
 
@@ -114,19 +125,25 @@ export function BoardViewer({ detail, projectName, initialCardId, onClose, onSav
     const res = await apply([{ op: 'add_card', title: 'Untitled', column: board.columns[0]!.id, index: 0 }]);
     const id = res?.[0]?.cardId;
     if (id) {
-      setOpenCard(id);
+      goTo(id);
       announce(`Added a card to ${board.columns[0]!.name}. Its details are open.`);
     }
   };
 
   const cards = useMemo(() => (board ? filterCards(board, query) : []), [board, query]);
+  // Cards shown but not saved yet (added here, waiting for main): their ids are stand-ins.
+  const pendingIds = useMemo(() => {
+    if (!local || !('board' in saved)) return new Set<string>();
+    const known = new Set(saved.board.cards.map((c) => c.id));
+    return new Set(local.cards.filter((c) => !known.has(c.id)).map((c) => c.id));
+  }, [local, saved]);
   const card = board && openCard ? board.cards.find((c) => c.id === openCard) : undefined;
   const last = detail.versions[0];
 
   return (
     <section aria-label={`${meta.title} (open)`} className="flex-1 min-w-0 flex flex-col">
       <div className="flex items-center gap-3 px-5 py-3 border-b border-line bg-panel flex-wrap">
-        <Button size={32} icon="chevron-left" onClick={onClose}>
+        <Button size={32} icon="chevron-left" onClick={close}>
           Artifacts
         </Button>
         <div className="flex flex-col gap-0.5 min-w-0">
@@ -183,9 +200,10 @@ export function BoardViewer({ detail, projectName, initialCardId, onClose, onSav
               board={board}
               cards={cards}
               searching={query.trim() !== ''}
+              pendingIds={pendingIds}
               selectedCardId={openCard}
               agents={agents}
-              onOpenCard={setOpenCard}
+              onOpenCard={goTo}
               apply={apply}
               announce={announce}
             />
@@ -205,11 +223,41 @@ export function BoardViewer({ detail, projectName, initialCardId, onClose, onSav
             agents={agents}
             apply={apply}
             announce={announce}
-            onClose={() => setOpenCard(null)}
+            onClose={() => goTo(null)}
+            onDirtyChange={setCardDirty}
             onEditProperties={() => setSettings(true)}
           />
         )}
       </div>
+      {leaving && (
+        <Dialog
+          open
+          onClose={() => setLeaving(null)}
+          title="Discard what you typed?"
+          width={420}
+          description="The card has a description or comment you have not saved."
+          footer={
+            <>
+              <Button size={32} variant="ghost" onClick={() => setLeaving(null)}>
+                Keep editing
+              </Button>
+              <Button
+                size={32}
+                variant="danger"
+                onClick={() => {
+                  const l = leaving;
+                  setLeaving(null);
+                  cardDirty.current = false;
+                  if ('close' in l) onClose();
+                  else setOpenCard(l.to);
+                }}
+              >
+                Discard
+              </Button>
+            </>
+          }
+        />
+      )}
       {settings && board && <BoardSettings board={board} apply={apply} onClose={() => setSettings(false)} />}
     </section>
   );

@@ -228,6 +228,9 @@ Model, operations and agent tools: [kanban-boards.md](kanban-boards.md). Code: `
   shows the drop point; a drop where it was saves nothing). **Keyboard**: Alt+←/→ move the card to
   the previous / next column (bottom), Alt+↑/↓ within the column; focus follows the card.
   **+ New card** at the bottom of each column takes titles one after another (Enter adds, Esc ends).
+  A card added here and not yet saved by main shows dimmed (`aria-busy`) and can't be opened, dragged
+  or moved until main answers (its id is a stand-in until then). While searching, the card menu has
+  no Move up / down (the place counts cards the search hides).
 - **Card panel**: the title (saved on blur or Enter; an agent's new title shows unless you are
   typing), **Column** select, one row per property (select: a select with Empty; multi-select:
   toggle chips with `aria-pressed` and "Add an option…"; checkbox; text, number, date and link
@@ -236,9 +239,12 @@ Model, operations and agent tools: [kanban-boards.md](kanban-boards.md). Code: `
   **Start an agent** (Spawn with the ticket, see [kanban-boards.md](kanban-boards.md)),
   **Description** (rendered Markdown with **Edit**: a textarea, Ctrl/Cmd+Enter saves, Esc cancels; a
   note when the description changed meanwhile), **Comments** (author, time, text; delete on hover;
-  Ctrl/Cmd+Enter posts) and Delete card (asks first).
+  Ctrl/Cmd+Enter posts) and Delete card (asks first). Opening another card, closing the card or
+  leaving the board with a description being edited or a comment typed asks **Discard what you
+  typed?** (Keep editing / Discard).
 - **Columns and properties** (`BoardSettings.tsx`): a dialog with Properties and Columns tabs.
-  Properties: name (saved on blur / Enter), type, "On cards", move up / down, delete (says how many
+  Properties: name (saved on blur / Enter), type (a select: changing it converts the values that
+  fit), "On cards", move up / down, delete (says how many
   cards lose a value); select options with colour, name and delete, and "New option". Columns: colour,
   name, card count, move, delete (with "Move its N cards to"). Add property (name + type) and Add
   column at the bottom.

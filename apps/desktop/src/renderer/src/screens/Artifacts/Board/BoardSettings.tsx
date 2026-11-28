@@ -206,7 +206,15 @@ function PropertyRow({ board, property: p, index: i, apply }: { board: KanbanBoa
     <li className="flex flex-col gap-2 rounded-lg border border-line-2 bg-card p-2">
       <div className="flex items-center gap-2 flex-wrap">
         <NameField label={`Name of property ${p.name}`} value={p.name} onSave={(n) => void apply([{ op: 'update_property', property: p.id, name: n }])} />
-        <span className="text-[12px] text-ink-3 w-[84px] shrink-0">{PROPERTY_TYPE_LABEL[p.type]}</span>
+        <Select
+          label={`Type of ${p.name}`}
+          hideLabel
+          size={28}
+          value={p.type}
+          onChange={(e) => void apply([{ op: 'update_property', property: p.id, type: e.target.value as BoardPropertyType }])}
+          options={BOARD_PROPERTY_TYPES.map((t) => ({ value: t, label: PROPERTY_TYPE_LABEL[t] }))}
+          className="w-[120px]"
+        />
         <Checkbox checked={p.showOnCard} onChange={(on) => void apply([{ op: 'update_property', property: p.id, showOnCard: on }])} label={<span className="text-[12px] text-ink-2">On cards</span>} />
         <IconButton icon="arrow-up" aria-label={`Move ${p.name} up`} title="Move up" disabled={i === 0} onClick={() => void apply([{ op: 'move_property', property: p.id, index: i - 1 }])} />
         <IconButton icon="arrow-down" aria-label={`Move ${p.name} down`} title="Move down" disabled={i === board.properties.length - 1} onClick={() => void apply([{ op: 'move_property', property: p.id, index: i + 1 }])} />
