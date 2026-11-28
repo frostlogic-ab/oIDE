@@ -109,6 +109,32 @@ describe('GitService diff refresh', () => {
     expect(diffs.at(-1)).toEqual({ files: 3, additions: 3, deletions: 0 });
     await svc.dispose();
   });
+
+  it('settleDiff recounts now: a torn in-flight refresh is dropped and a debounced one cancelled', async () => {
+    // Merge commits pending work: a refresh that started before the commit reads a torn state
+    // (seen on Windows CI as 1 file instead of 2) and must not be what the archive keeps.
+    const answers = [
+      { ms: 120, stat: { files: 1, additions: 1, deletions: 0 } }, // in flight across the commit
+      { ms: 0, stat: { files: 2, additions: 2, deletions: 0 } }, // settleDiff, after the commit
+    ];
+    let calls = 0;
+    const { svc, diffs } = service({
+      diffStat: () => {
+        calls++;
+        const { ms, stat } = answers.shift() ?? { ms: 0, stat: { files: 9, additions: 9, deletions: 0 } };
+        return new Promise((r) => setTimeout(() => r(stat), ms));
+      },
+    });
+    const torn = svc.refreshDiff('a1');
+    svc.scheduleDiff('a1', 30);
+    await svc.settleDiff('a1');
+    expect(diffs).toEqual([{ files: 2, additions: 2, deletions: 0 }]);
+    await torn;
+    await new Promise((r) => setTimeout(r, 60));
+    expect(diffs).toEqual([{ files: 2, additions: 2, deletions: 0 }]);
+    expect(calls).toBe(2); // the debounced refresh never ran
+    await svc.dispose();
+  });
 });
 
 describe('GitService background fetch', () => {

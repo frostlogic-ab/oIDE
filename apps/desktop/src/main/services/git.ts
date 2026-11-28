@@ -495,6 +495,9 @@ export class GitService {
     } catch (err) {
       throw new IpcError(`Could not commit the worktree's uncommitted changes before ${before}: ${(err as Error).message}`, 'git_failed');
     }
+    // A background refresh that read the worktree mid-commit (tracked diff before, untracked list after)
+    // counts the just-committed files as gone. Recount now, so the archive and Review see the whole change.
+    await this.settleDiff(a.id);
     return true;
   }
 
@@ -701,6 +704,15 @@ export class GitService {
         void this.refreshDiff(agentId);
       }, delayMs),
     );
+  }
+
+  /** Cancel a debounced refresh and recount now; any refresh still in flight is dropped (`latestDiff`). */
+  async settleDiff(agentId: string): Promise<void> {
+    const key = `agent:${agentId}`;
+    const t = this.timers.get(key);
+    if (t) clearTimeout(t);
+    this.timers.delete(key);
+    await this.refreshDiff(agentId);
   }
 
   /** Latest diff refresh started per agent (from `diffSeq`), so an older one finishing late is dropped. */
