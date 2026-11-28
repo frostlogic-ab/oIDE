@@ -216,6 +216,7 @@ export const TELEMETRY_SETTING_KEYS = [
   'ui.accent',
   'ui.crashReports',
   'ui.filesLegendHidden',
+  'editor.npmVersions',
   'updates.channel',
   'updates.checkAutomatically',
   'updates.downloadAutomatically',
@@ -559,6 +560,15 @@ export const TELEMETRY_EVENTS = {
     from: 'renderer',
     question: 'When a changed file opens on its changes in Files, do people read them unified, side by side, or switch to the plain editor?',
     props: z.object({ view: z.enum(['off', 'unified', 'split']) }),
+  }),
+  files_dependency_upgrade: def({
+    from: 'renderer',
+    question: 'Do people use the newer-version hints in package.json to start an upgrade agent, and for which size of upgrade?',
+    props: z.object({
+      /** How far the latest version is ahead of the one package.json asks for. */
+      bump: z.enum(['major', 'minor', 'patch', 'prerelease']),
+      via: z.enum(['click', 'menu']),
+    }),
   }),
   file_managed: def({
     from: 'main',

@@ -152,6 +152,16 @@ export const Settings = z.object({
       consentPromptsShown: z.number().int().min(0).max(1000).default(0),
     })
     .default({ usageAnalytics: false, errorReports: false, consentAnswered: false, consentPromptsShown: 0 }),
+  /** The Files editor. Defaulted as a whole so older settings files parse. */
+  editor: z
+    .object({
+      /**
+       * Settings › Privacy › Show newer npm versions: an open package.json asks the public npm
+       * registry for each dependency's latest version (package names only).
+       */
+      npmVersions: z.boolean().default(true),
+    })
+    .default({ npmVersions: true }),
   /** Settings › Updates (M7). Defaulted as a whole so settings saved before M7 still parse. */
   updates: z
     .object({

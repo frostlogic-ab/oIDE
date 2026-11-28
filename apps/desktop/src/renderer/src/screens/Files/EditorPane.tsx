@@ -12,9 +12,11 @@ import { ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
 import type { DiffLayout } from './diffView';
 import { onTabsMoved, onTabsReloaded, useFiles, type FileTab } from './filesStore';
+import type { UpgradeRequest } from './dependencies';
 import { MarkdownPreview } from './MarkdownPreview';
 import type { MarkdownView } from './markdownLinks';
 import { adoptPeekModel, lspAttach, lspDetach, modelUri, setLspOpenHandler } from './monaco/lsp';
+import { attachNpmVersions } from './monaco/npmVersions';
 import { BASE_OPTIONS, FILE_MINIMAP, languageFor, languageLabel, monaco } from './monaco/setup';
 
 export interface SelectionInfo {
@@ -129,6 +131,8 @@ export interface EditorPaneProps {
   onOpenLocation?(root: string, path: string, line: number, column: number): void;
   /** Imperative hooks for the tab bar's problem counts. */
   actionsRef?: { current: EditorActions | null };
+  /** package.json: the user asked to upgrade a dependency (its `↑` hint, or the context menu). */
+  onUpgradeDependency?(u: UpgradeRequest, via: 'click' | 'menu'): void;
 }
 
 export interface EditorActions {
@@ -139,7 +143,7 @@ export interface EditorActions {
 /** Re-render the preview this long after the last keystroke. */
 const PREVIEW_DEBOUNCE_MS = 150;
 
-export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, onAsk, sendTo, saveRef, mdView, onOpenFile, diff, onOpenLocation, actionsRef }: EditorPaneProps) {
+export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, onAsk, sendTo, saveRef, mdView, onOpenFile, diff, onOpenLocation, actionsRef, onUpgradeDependency }: EditorPaneProps) {
   const host = useRef<HTMLDivElement>(null);
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const diffHost = useRef<HTMLDivElement>(null);
@@ -154,8 +158,8 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
   const [load, setLoad] = useState<LoadState>({ state: 'loading' });
   const [selection, setSelection] = useState<(SelectionInfo & { top: number; left: number }) | null>(null);
   const [saving, setSaving] = useState(false);
-  const cb = useRef({ onStatus, onDirty, onAsk, onOpenLocation });
-  cb.current = { onStatus, onDirty, onAsk, onOpenLocation };
+  const cb = useRef({ onStatus, onDirty, onAsk, onOpenLocation, onUpgradeDependency });
+  cb.current = { onStatus, onDirty, onAsk, onOpenLocation, onUpgradeDependency };
   const mdRef = useRef(mdView);
   mdRef.current = mdView;
   const previewRef = useRef<HTMLDivElement>(null);
@@ -242,6 +246,8 @@ export default function EditorPane({ tabs, active, reveal, onStatus, onDirty, on
       },
     });
     const subs = [
+      // package.json: newer npm versions inline; a click asks to start an upgrade agent.
+      attachNpmVersions(ed, (u, via) => cb.current.onUpgradeDependency?.(u, via)),
       ed.onDidChangeCursorPosition(() => status()),
       ed.onDidChangeCursorSelection(() => {
         const sel = currentSelection(ed, activeRef.current.path);

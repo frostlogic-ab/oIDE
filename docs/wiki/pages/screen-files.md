@@ -303,6 +303,45 @@ ADR [0019](../../adr/0019-language-servers-in-main-with-a-monaco-bridge.md). Mai
 - Telemetry: `language_server_started { language, outcome }` per start attempt;
   `language_server_install { choice, via }` for Install / No (toast) and Install (menu).
 
+## Dependency versions
+
+Main: `services/npm-registry.ts`, `handlers/deps.ts`. Renderer: `dependencies.ts` (pure: parse,
+compare, goal) and `monaco/npmVersions.ts` (hints, hover, click). Contract: `deps.latest` in
+`packages/protocol/src/dependencies.ts`.
+
+- An open `package.json` (not under `node_modules`) gets an inline hint after each version in
+  `dependencies`, `devDependencies`, `peerDependencies` and `optionalDependencies`: `↑ 5.4.0` in the
+  link blue when the public npm registry has a newer `latest` (amber for a major upgrade; a 0.x
+  minor counts as major), a dim `latest` when the spec already names it, nothing when the registry
+  does not have the package (private or unpublished). A spec on a prerelease ahead of `latest`
+  (`2.0.0-alpha.21` while latest is 1.6.4) follows its channel: the newest dist-tag above it.
+- Only plain registry specs are compared (`^1.2.3`, `~5.9`, `1.2.3`, `>=18`, `5.x`, `npm:pkg@^1`
+  aliases by their target); `workspace:`, `file:`, `link:`, `catalog:`, git / URL specs, tags,
+  `*`, unions and upper bounds get no hint. The scanner keeps positions and tolerates a file being
+  edited (missing commas, comments, an unterminated string). Hints follow edits and are recomputed
+  600 ms after the last keystroke.
+- Hovering a version shows the package, the latest version and an "Open on npm" link.
+- Clicking an `↑` hint (or the editor context menu's "Upgrade this dependency with an agent" on its
+  line, which also works from the keyboard) opens Spawn with the package.json as a context chip and
+  a goal to read the changelog, release notes and migration guides between the two versions, update
+  the version (keeping its range style) and the lockfile, fix breaking changes, adopt the
+  improvements that make the code simpler, faster or safer, run typecheck / tests / lint, and
+  summarise what changed. The user reviews or edits the goal and starts the agent from Spawn.
+- Lookups run in main: one `GET https://registry.npmjs.org/-/package/<name>/dist-tags` per
+  package (only the name leaves the computer), cached 30 minutes (2 minutes after a failure, no
+  retry loop), at most 8 in flight, 10 s timeout, 64 KB body cap, versions validated before use.
+- `.npmrc`: main reads the `registry` and `@scope:registry` keys of the `.npmrc` files from the
+  package.json's folder up to the checkout root (nothing else, never auth lines, never the home
+  `.npmrc`). A default registry that is not the public one turns the lookups off for that file
+  (`status: 'private-registry'`); a scope sent to another registry is never asked about.
+- Settings › Privacy › Package versions › Show newer npm versions (`editor.npmVersions`, on by
+  default) turns all lookups off; switching it redraws open editors at once. `OIDE_NPM_REGISTRY=off`
+  does the same for e2e, so tests never reach the network.
+- Only project and agent-worktree checkouts; the path must be a `package.json` inside the checkout
+  (path guard as for `lsp.*`).
+- Telemetry: `files_dependency_upgrade { bump, via }` when a hint opens Spawn;
+  `setting_changed { key: 'editor.npmVersions' }`.
+
 ## Search
 
 `SearchPanel.tsx`, `searchStore.ts`, `searchModel.ts`, `ReplaceDialog.tsx`; main:
@@ -414,6 +453,12 @@ Git colours: `changesStore.test.ts` (folder tints, deleted entries per folder, g
 modified, a new and a deleted file), `packages/git/test/changes.test.ts` (against HEAD and against a
 base branch with real repos, before the first commit, discard of each kind; `originalContent`
 against HEAD and the merge-base, binary, missing, before the first commit).
+
+Dependency versions: `dependencies.test.ts` (positions, half-edited files, spec forms and skips,
+semver precedence, bump size, prerelease channels, the goal), `main/services/npm-registry.test.ts`
+(`.npmrc` parsing and merging, dist-tags validation, cache and failure TTL, off switch, private
+registry and scopes, concurrency), `Files.test.tsx` (a hint click opens Spawn with the goal),
+`test/integration/deps.test.ts` (IPC validation, path guard, package.json only, off switch).
 
 ## Deviations
 
