@@ -107,7 +107,7 @@ export default function ArtifactsScreen() {
   const setScope = useScope((s) => s.setScope);
   const projects = useProjects((s) => s.list);
   const agents = useAgents((s) => s.byId);
-  const { list, loaded, uses } = useLibrary();
+  const { list, loaded, uses, error: listError, reload: reloadList } = useLibrary();
   const [kind, setKind] = useState<KindTab>('all');
   const [query, setQuery] = useState('');
   const [dialog, setDialog] = useState<'new' | 'rename' | 'delete' | null>(null);
@@ -293,6 +293,20 @@ export default function ArtifactsScreen() {
           <div className="flex-1 flex items-center justify-center">
             <Spinner />
           </div>
+        ) : listError && !loaded ? (
+          // A failed first load is not an empty library: say so, and offer a retry.
+          <EmptyState
+            icon="artifacts"
+            role="alert"
+            title="Couldn't load your artifacts"
+            description={listError}
+            action={
+              <Button size={32} onClick={() => void reloadList()}>
+                Try again
+              </Button>
+            }
+            className="flex-1"
+          />
         ) : visible.length === 0 ? (
           <EmptyState
             icon="artifacts"
@@ -320,7 +334,7 @@ export default function ArtifactsScreen() {
                   <ArtifactThumbnail meta={a} placeholder={<KindThumb kind={a.kind} />} className="h-[120px] w-full bg-raised box-border" />
                   <div className="flex flex-col gap-[3px] px-3 py-2.5 w-full box-border">
                     <span className="flex items-center gap-1.5 min-w-0">
-                      <span className="font-semibold truncate">{a.title}</span>
+                      <span className="font-semibold truncate" title={a.title}>{a.title}</span>
                       {hasDraft.has(a.id) && <Badge tone="warn">Unsaved</Badge>}
                     </span>
                     <span className="text-[12px] text-ink-3">

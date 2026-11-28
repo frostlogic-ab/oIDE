@@ -79,7 +79,7 @@ function TileView({ agent, projectName, focused, highlighted }: TileViewProps) {
         {statusAnnouncement(agent, statusLabel)}
       </span>
       <div className="flex items-center gap-2 px-3 pt-2.5 min-w-0">
-        <span className={cn('font-mono text-[11px] truncate min-w-0', needsTone ? 'text-warn-ink' : 'text-ink-3')}>
+        <span className={cn('font-mono text-[11px] truncate min-w-0', needsTone ? 'text-warn-ink' : 'text-ink-3')} title={`${projectName} · ${agent.branch ?? branchLabel(agent)}`}>
           {projectName} · {branchLabel(agent)}
         </span>
         <div className="flex-1" />

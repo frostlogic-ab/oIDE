@@ -3,7 +3,7 @@ import type { Project, Settings } from '@oide/protocol';
 import { cn } from '@oide/ui';
 import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
-import { H1, Rd, Row, Sec, inp, inpSm, inpInvalid, savePatch } from './ui';
+import { H1, LoadFailed, Rd, Row, Sec, inp, inpSm, inpInvalid, savePatch } from './ui';
 
 type Rules = { allow: string[]; ask: string[]; deny: string[] };
 
@@ -25,6 +25,9 @@ export function PermissionsSection({ settings, projects }: { settings: Settings;
   const d = settings.permissions.defaults;
   const [projectId, setProjectId] = useState(projects[0]?.id ?? '');
   const [rules, setRules] = useState<Rules | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  /** Bumped by Try again to reload the rules. */
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!projectId && projects[0]) setProjectId(projects[0].id);
   }, [projects, projectId]);
@@ -33,11 +36,15 @@ export function PermissionsSection({ settings, projects }: { settings: Settings;
     if (!projectId) return;
     let live = true;
     setRules(null);
-    void invokeOr('settings.projectPermissions', { projectId }, { allow: [], ask: [], deny: [] }).then((r) => live && setRules(r));
+    setLoadError(null);
+    void invokeOr('settings.projectPermissions', { projectId }, { allow: [], ask: [], deny: [] }).then(
+      (r) => live && setRules(r),
+      (err: unknown) => live && setLoadError(ipcErrorMessage(err)),
+    );
     return () => {
       live = false;
     };
-  }, [projectId]);
+  }, [projectId, attempt]);
 
   const project = projects.find((p) => p.id === projectId);
   const save = async (next: Rules) => {
@@ -104,7 +111,9 @@ export function PermissionsSection({ settings, projects }: { settings: Settings;
               </select>
             )}
           </Row>
-          {rules === null ? (
+          {rules === null && loadError ? (
+            <LoadFailed className="mt-3" what="this project's rules" error={loadError} onRetry={() => setAttempt((n) => n + 1)} />
+          ) : rules === null ? (
             <Rd className="mt-3">Loading…</Rd>
           ) : (
             <>

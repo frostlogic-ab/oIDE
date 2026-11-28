@@ -150,6 +150,8 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
   /* ------------------------------------------------------------------ URL */
 
   const connect = async () => {
+    // Enter in the URL field reaches here too: the disabled Connect button alone does not stop a second probe.
+    if (probing) return;
     setError(null);
     let parsed: URL;
     try {
@@ -304,6 +306,8 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
   };
 
   const loadGit = async () => {
+    // As in connect: Enter must not start a second clone, which would replace the extension twice.
+    if (busy) return;
     setError(null);
     try {
       new URL(gitUrl.trim());
@@ -549,7 +553,7 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
                     )}
                     <span className="flex gap-2 items-center">
                       <Icon name="check" size={14} className="text-ok" />
-                      {urlTools.length} tools found · {urlTools.filter((t) => t.enabled).length} turned on
+                      {urlTools.length} {urlTools.length === 1 ? 'tool' : 'tools'} found · {urlTools.filter((t) => t.enabled).length} turned on
                     </span>
                   </div>
                   <ToolRows tools={urlTools} onChange={setUrlTools} />
@@ -797,7 +801,7 @@ export function AddCustomDialog({ onClose, projects, onSaved, editing, initialTa
                     }}
                   />
                   <Button size={36} className="h-[34px]" onClick={() => void loadGit()} disabled={busy || !gitUrl.trim()}>
-                    Fetch
+                    {busy ? 'Fetching…' : 'Fetch'}
                   </Button>
                 </div>
               </div>

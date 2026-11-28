@@ -110,7 +110,7 @@ export function TileBody({ agent }: { agent: AgentSummary }) {
           <span className="text-bad">
             {agent.exitCode != null ? `The claude process exited with code ${agent.exitCode}.` : 'The agent stopped with an error.'}
           </span>
-          {agent.error && <span className="font-mono text-[11.5px] text-ink-3 line-clamp-3 break-all">{agent.error}</span>}
+          {agent.error && <span className="font-mono text-[11.5px] text-ink-3 line-clamp-3 break-all" title={agent.error}>{agent.error}</span>}
         </div>
       );
     case 'activity':

@@ -88,6 +88,13 @@ they are not told apart by colour alone. Every screen works at the 1100×700 win
 clipped labels, no mid-phrase wraps, no status-bar item past the edge (container queries narrow the
 Focus header, prompt and inspector).
 
+A disabled `Button` / `IconButton` keeps pointer events (not-allowed cursor, no hover style), so its
+`title` shows on hover: give a disabled button a `title` that says why ("Choose a location first.").
+Text cut off with `truncate` / `line-clamp` carries the full value as its `title`. A `Dialog` leaves
+focus on a field that took it with `autoFocus`; otherwise it focuses `initialFocus` or the first
+focusable element. A list that fails to load says so with a Try again, never an empty state or an
+endless "Loading…".
+
 ## Tokens in code
 
 `packages/ui/src/tokens.css` is a Tailwind v4 `@theme`. Default Tailwind colours are removed

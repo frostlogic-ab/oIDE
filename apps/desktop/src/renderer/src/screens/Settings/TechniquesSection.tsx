@@ -3,7 +3,7 @@ import type { Project, Technique } from '@oide/protocol';
 import { Button, Dialog, Icon, Toggle, cn } from '@oide/ui';
 import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
 import { toast } from '../../stores/ui';
-import { H1, Rd, Row, inp, inpSm } from './ui';
+import { H1, LoadFailed, Rd, Row, inp, inpSm } from './ui';
 import { ExtensionTechniques } from '../../extensions/ExtensionTechniques';
 
 const EDIT_FIELDS = ['name', 'description', 'text', 'placement', 'enabledByDefault'] as const;
@@ -17,6 +17,9 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
   const [scope, setScope] = useState<string>('all');
   const projectId = scope === 'all' ? undefined : scope;
   const [list, setList] = useState<Technique[] | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  /** Bumped by Try again to reload the list. */
+  const [attempt, setAttempt] = useState(0);
   const [fromExtensions, setFromExtensions] = useState<Technique[]>([]);
   const [open, setOpen] = useState<string>('');
   const [confirmDelete, setConfirmDelete] = useState<Technique | null>(null);
@@ -27,6 +30,7 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
   useEffect(() => {
     let live = true;
     setList(null);
+    setLoadError(null);
     void invokeOr('settings.techniques', { projectId }, []).then((all) => {
       if (!live) return;
       // "All projects" edits the global list; a project shows the techniques stored in its .oide/techniques.json.
@@ -37,11 +41,11 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
       setList(next);
       // As on the canvas, the first technique opens expanded so its editor is visible.
       setOpen(next[0]?.id ?? '');
-    });
+    }, (err: unknown) => live && setLoadError(ipcErrorMessage(err)));
     return () => {
       live = false;
     };
-  }, [projectId]);
+  }, [projectId, attempt]);
 
   const persist = useCallback(
     async (t: Technique) => {
@@ -155,7 +159,7 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
 
       <div className="flex items-center gap-2.5 mt-[22px]">
         <h2 className="m-0 flex-1 text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3">
-          {techs.length} techniques · {onT.length} on by default
+          {techs.length} {techs.length === 1 ? 'technique' : 'techniques'} · {onT.length} on by default
         </h2>
         <button type="button" onClick={() => void add()} className="h-[30px] px-3 rounded-[7px] border border-line-3 bg-transparent text-ink text-[12.5px] hover:bg-raised">
           + Add technique
@@ -163,8 +167,15 @@ export function TechniquesSection({ projects, builtIns }: { projects: Project[];
       </div>
 
       <div className="flex flex-col gap-2 mt-2.5">
-        {list === null && <Rd>Loading…</Rd>}
-        {list !== null && techs.length === 0 && <Rd>No techniques for this project yet. Add one and it is saved to the project's .oide/techniques.json.</Rd>}
+        {list === null && !loadError && <Rd>Loading…</Rd>}
+        {list === null && loadError && <LoadFailed what="techniques" error={loadError} onRetry={() => setAttempt((n) => n + 1)} />}
+        {list !== null && techs.length === 0 && (
+          <Rd>
+            {projectId
+              ? "No techniques for this project yet. Add one and it is saved to the project's .oide/techniques.json."
+              : 'No global techniques yet. Add one and it is offered in every project.'}
+          </Rd>
+        )}
         {techs.map((t) => {
           const isOpen = open === t.id;
           const edited = isTechniqueEdited(t, builtIns);

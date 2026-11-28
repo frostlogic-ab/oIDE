@@ -138,7 +138,7 @@ export function LeadHeader({ agent, project, now, warnAt, dangerAt, modeShortcut
           </Button>
         </Tooltip>
       ) : PAUSABLE.has(agent.status) ? (
-        <Button size={28} className={ACTION} icon="pause" onClick={onPause} disabled={agent.status === 'queued'} title="Pause">
+        <Button size={28} className={ACTION} icon="pause" onClick={onPause} disabled={agent.status === 'queued'} title={agent.status === 'queued' ? 'Queued: nothing to pause until it starts' : 'Pause'}>
           <span className={NARROW_LABEL}>Pause</span>
         </Button>
       ) : null}
@@ -148,7 +148,7 @@ export function LeadHeader({ agent, project, now, warnAt, dangerAt, modeShortcut
           <span className={NARROW_LABEL}>Archive</span>
         </Button>
       )}
-      <Button size={28} variant="danger" className={ACTION} onClick={onStop} disabled={!STOPPABLE.has(agent.status)}>
+      <Button size={28} variant="danger" className={ACTION} onClick={onStop} disabled={!STOPPABLE.has(agent.status)} title={STOPPABLE.has(agent.status) ? 'Stop this agent' : 'Nothing to stop: the agent is not running'}>
         Stop
       </Button>
     </div>
@@ -174,7 +174,7 @@ function ArchivedHeader({ agent, project, worktree, onUnarchive, onDelete }: { a
           {worktree && (
             <>
               {SEP}
-              <span className="font-mono truncate min-w-[3ch]">{worktree}</span>
+              <span className="font-mono truncate min-w-[3ch]" title={`worktree ${worktree}`}>{worktree}</span>
             </>
           )}
           {SEP}
@@ -197,7 +197,7 @@ function ArchivedHeader({ agent, project, worktree, onUnarchive, onDelete }: { a
       <Button size={28} className={ACTION} icon="archive" onClick={onUnarchive}>
         Unarchive
       </Button>
-      <Button size={28} variant="danger" className={ACTION} icon="trash" onClick={onDelete}>
+      <Button size={28} variant="danger" className={ACTION} icon="trash" onClick={onDelete} title="Delete permanently">
         <span className={NARROW_LABEL}>Delete permanently</span>
       </Button>
     </div>
