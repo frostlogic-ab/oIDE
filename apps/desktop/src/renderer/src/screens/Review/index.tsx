@@ -338,8 +338,10 @@ export default function ReviewScreen() {
                 getDraft={getDraft}
                 onDraftChange={setDraft}
                 draftKeys={draftKeys}
+                // Esc only closes the box: the typed comment stays as a draft, so a reflexive Esc loses nothing.
+                onCloseComposer={() => setComposer(null)}
                 onCancelComposer={() => {
-                  // Cancel / Esc is an explicit discard.
+                  // Cancel is an explicit discard.
                   if (composer) setDraft(draftKey(composer.path, composer.removed, composer.line), '');
                   setComposer(null);
                 }}

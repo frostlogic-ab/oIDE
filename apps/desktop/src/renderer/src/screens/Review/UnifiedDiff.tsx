@@ -37,7 +37,10 @@ export interface UnifiedDiffProps {
   comments: ReviewComment[];
   composer: Composer | null;
   onOpenComposer(c: Composer): void;
+  /** Cancel: closes the composer and discards its draft. */
   onCancelComposer(): void;
+  /** Esc: closes the composer but keeps its draft (the line shows a draft marker). Defaults to cancel. */
+  onCloseComposer?(): void;
   /** Unsent text for a composer location (see `draftKey`); seeds the composer when it reopens. */
   getDraft?(key: string): string;
   /** Called on every edit of the composer text so the parent can keep it across line and file switches. */
@@ -56,7 +59,7 @@ export interface UnifiedDiffProps {
  * comment threads inline. Long diffs are virtualized.
  */
 export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(function UnifiedDiff(
-  { file, comments, composer, onOpenComposer, onCancelComposer, getDraft, onDraftChange, draftKeys, onAddComment, onDeleteComment, onHunkInView },
+  { file, comments, composer, onOpenComposer, onCancelComposer, onCloseComposer, getDraft, onDraftChange, draftKeys, onAddComment, onDeleteComment, onHunkInView },
   ref,
 ) {
   const rows = useMemo(() => toRows(parseHunks(file.patch)), [file.patch]);
@@ -173,6 +176,7 @@ export const UnifiedDiff = forwardRef<UnifiedDiffHandle, UnifiedDiffProps>(funct
                 initialBody={getDraft?.(draftKey(composer.path, composer.removed, composer.line)) ?? ''}
                 onDraftChange={(body) => onDraftChange?.(draftKey(composer.path, composer.removed, composer.line), body)}
                 onCancel={onCancelComposer}
+                onClose={onCloseComposer ?? onCancelComposer}
                 onAdd={onAddComment}
               />
             )}
@@ -236,12 +240,14 @@ function CommentComposer({
   initialBody,
   onDraftChange,
   onCancel,
+  onClose,
   onAdd,
 }: {
   composer: Composer;
   initialBody: string;
   onDraftChange(body: string): void;
   onCancel(): void;
+  onClose(): void;
   onAdd(body: string): Promise<void> | void;
 }) {
   const [body, setBody] = useState(initialBody);
@@ -279,7 +285,7 @@ function CommentComposer({
           if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
-            onCancel();
+            onClose();
           } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
             void submit();
