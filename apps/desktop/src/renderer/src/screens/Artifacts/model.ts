@@ -24,7 +24,7 @@ export const KIND_TABS: ReadonlyArray<{ id: KindTab; label: string }> = [
   { id: 'whiteboard', label: 'Whiteboards' },
 ];
 
-export const KIND_LABEL: Record<ArtifactKind, string> = { design: 'Design', doc: 'Doc', whiteboard: 'Whiteboard' };
+export const KIND_LABEL: Record<ArtifactKind, string> = { design: 'Design', doc: 'Doc', whiteboard: 'Whiteboard', board: 'Board' };
 
 export interface ArtifactFilter {
   kind: KindTab;

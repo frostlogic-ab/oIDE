@@ -1,4 +1,5 @@
 import {
+  boardOpsArea,
   CliEventType,
   countBucket,
   durationBucket,
@@ -10,6 +11,7 @@ import {
   MarketplaceExtensionId,
   type AgentEvent,
   type ArchiveReason,
+  type BoardOp,
   type AgentSpec,
   type CommandName,
   type EventName,
@@ -316,14 +318,21 @@ export class TelemetryObservers {
         const i = input as { url?: string; content?: string; filePath?: string };
         const out = output as { kind?: unknown; entry?: unknown };
         const kind = out.kind;
-        if (kind !== 'design' && kind !== 'doc' && kind !== 'whiteboard') return;
+        if (kind !== 'design' && kind !== 'doc' && kind !== 'whiteboard' && kind !== 'board') return;
         if (!i.filePath && !i.content?.trim()) return; // refused by main; never created
         const source = i.filePath ? 'file' : 'link_content';
         const svg = i.filePath
           ? /\.svg$/i.test(i.filePath)
           : /^\s*(?:<\?xml[^>]{0,200}>\s*)?(?:<!doctype\s+svg[^>]{0,400}>\s*)?<svg[\s>]/i.test(i.content?.slice(0, 4096) ?? '');
-        const format = kind === 'doc' ? 'markdown' : kind === 'whiteboard' ? 'excalidraw' : out.entry === 'App.jsx' ? 'react' : svg ? 'svg' : 'html';
+        const format = kind === 'doc' ? 'markdown' : kind === 'whiteboard' ? 'excalidraw' : kind === 'board' ? 'kanban' : out.entry === 'App.jsx' ? 'react' : svg ? 'svg' : 'html';
         this.sink.track('artifact_imported', { source, kind, linked: !!i.url, format });
+        return;
+      }
+      case 'artifacts.boardApply': {
+        // Never the board, card text or names: who, what kind of change, how many at once.
+        const ops = (input as { ops?: BoardOp[] }).ops ?? [];
+        if (!ops.length) return;
+        this.sink.track('board_changed', { by: 'user', area: boardOpsArea(ops), ops: countBucket(ops.length) });
         return;
       }
       case 'artifacts.importFiles': {
@@ -331,9 +340,9 @@ export class TelemetryObservers {
         const i = input as { filePaths?: string[]; folderPath?: string; url?: string };
         const out = output as { kind?: unknown; entry?: unknown; fileCount?: unknown };
         const kind = out.kind;
-        if (kind !== 'design' && kind !== 'doc' && kind !== 'whiteboard') return;
+        if (kind !== 'design' && kind !== 'doc' && kind !== 'whiteboard' && kind !== 'board') return;
         const entry = typeof out.entry === 'string' ? out.entry : '';
-        const format = kind === 'doc' ? 'markdown' : kind === 'whiteboard' ? 'excalidraw' : /\.(?:jsx|tsx)$/i.test(entry) ? 'react' : /\.svg$/i.test(entry) ? 'svg' : 'html';
+        const format = kind === 'doc' ? 'markdown' : kind === 'whiteboard' ? 'excalidraw' : kind === 'board' ? 'kanban' : /\.(?:jsx|tsx)$/i.test(entry) ? 'react' : /\.svg$/i.test(entry) ? 'svg' : 'html';
         this.sink.track('artifact_imported', {
           source: i.folderPath ? 'folder' : 'files',
           kind,

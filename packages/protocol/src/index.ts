@@ -6,6 +6,7 @@ export * from './newProject.js';
 export * from './settings.js';
 export * from './extensions.js';
 export * from './artifacts.js';
+export * from './board.js';
 export * from './updates.js';
 export * from './distribution.js';
 export * from './search.js';

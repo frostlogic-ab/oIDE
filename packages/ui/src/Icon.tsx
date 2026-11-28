@@ -23,6 +23,13 @@ const P = {
       <path d="M3 13l9 5 9-5" />
     </>
   ),
+  /** Kanban board (artifact kind `board`): three columns. */
+  board: (
+    <>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <path d="M9 4v16M15 4v16" />
+    </>
+  ),
   /** Rail: Files; also file rows and file context chips. */
   file: (
     <>

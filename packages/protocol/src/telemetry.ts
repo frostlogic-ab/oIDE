@@ -600,7 +600,7 @@ export const TELEMETRY_EVENTS = {
       source: z.enum(['link_content', 'file', 'files', 'folder']),
       kind: ArtifactKind,
       linked: z.boolean(),
-      format: z.enum(['html', 'react', 'svg', 'markdown', 'excalidraw']),
+      format: z.enum(['html', 'react', 'svg', 'markdown', 'excalidraw', 'kanban']),
       /** Files in the new artifact (multi-file imports, ADR 0014). */
       files: CountBucket.optional(),
     }),
@@ -624,6 +624,16 @@ export const TELEMETRY_EVENTS = {
       outcome: z.enum(['ready', 'failed', 'cancelled', 'agent_stopped']),
       kind: ArtifactKind,
       files: CountBucket,
+    }),
+  }),
+  board_changed: def({
+    from: 'main',
+    question:
+      'Do people and agents work kanban boards together: who changes a board (the user or an agent), what they change (cards, comments, columns, properties, agents started from a card) and how many changes go at once?',
+    props: z.object({
+      by: z.enum(['user', 'agent']),
+      area: z.enum(['cards', 'comments', 'columns', 'properties', 'agent_link', 'mixed']),
+      ops: CountBucket,
     }),
   }),
   artifact_agent_started: def({

@@ -6,7 +6,7 @@ import { isAbsolute, join } from 'node:path';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { AgentArtifactFileInput, ARTIFACT_LIMITS, ArtifactKind, ArtifactPath, PermissionAnswer, type ArtifactMeta, type ArtifactUse, type CheckResult, type PermissionRequest } from '@oide/protocol';
+import { AgentArtifactFileInput, ARTIFACT_LIMITS, ArtifactKind, ArtifactPath, boardForAgent, BoardOps, PermissionAnswer, type ArtifactMeta, type ArtifactUse, type CheckResult, type PermissionRequest } from '@oide/protocol';
 import { z } from 'zod';
 import { AGENT_SECRET_ENV, LAUNCHER_FILE, LAUNCHER_SOURCE, expandPlaceholders, placeholders } from './launcher.js';
 import { suggestRule, summarizeTool } from './rules.js';
@@ -108,6 +108,8 @@ export function applyTextEdits(path: string, text: string, edits: ReadonlyArray<
 const CreateInput = z
   .object({ title: z.string().min(1), kind: ArtifactKind, content: z.string().optional(), files: FileInputs.optional(), entry: ArtifactPath.optional(), shared: z.boolean().optional() })
   .refine((c) => c.content !== undefined || !!c.files?.length, 'Give content or files');
+const BoardReadInput = z.object({ id: z.string().min(1), cardId: z.string().min(1).max(64).optional(), column: z.string().min(1).max(200).optional() });
+const BoardUpdateInput = z.object({ id: z.string().min(1), ops: BoardOps });
 const AddFilesInput = z.object({ id: z.string().min(1), files: FileInputs.min(1) });
 const FinishInput = z.object({
   id: z.string().min(1),
@@ -187,8 +189,8 @@ const TOOLS = {
   },
   artifacts_list: {
     name: 'artifacts_list',
-    description: 'List oIDE artifacts (designs, docs, whiteboards) available to this project.',
-    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['design', 'doc', 'whiteboard'] }, query: { type: 'string' } } },
+    description: 'List oIDE artifacts (designs, docs, whiteboards, kanban boards) available to this project.',
+    inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: ['design', 'doc', 'whiteboard', 'board'] }, query: { type: 'string' } } },
     annotations: { readOnlyHint: true },
   },
   artifacts_read: {
@@ -232,18 +234,66 @@ const TOOLS = {
   artifacts_create: {
     name: 'artifacts_create',
     description:
-      'Create a new oIDE artifact. kind: design (HTML, or React component source with export default), doc (Markdown) or whiteboard (Excalidraw JSON). Give `content` for one file, or `files` (and `entry`, the file it opens on) for several. shared=true stores it in the repo.',
+      'Create a new oIDE artifact. kind: design (HTML, or React component source with export default), doc (Markdown), whiteboard (Excalidraw JSON) or board (a kanban board: leave content out to start from the default backlog columns and properties, then add cards and change columns with board_update). Give `content` for one file, or `files` (and `entry`, the file it opens on) for several. shared=true stores it in the repo.',
     inputSchema: {
       type: 'object',
       properties: {
         title: { type: 'string' },
-        kind: { type: 'string', enum: ['design', 'doc', 'whiteboard'] },
+        kind: { type: 'string', enum: ['design', 'doc', 'whiteboard', 'board'] },
         content: { type: 'string' },
         files: { type: 'array', items: FILE_SCHEMA },
         entry: { type: 'string' },
         shared: { type: 'boolean' },
       },
       required: ['title', 'kind'],
+    },
+  },
+  board_read: {
+    name: 'board_read',
+    description:
+      "Read an oIDE kanban board (an artifact of kind board): its columns, properties (with their options) and cards (id, title, column, property values by name). Give cardId to read one card in full (its Markdown body, comments and linked agents), or column to list only that column's cards.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'The board artifact id.' },
+        cardId: { type: 'string', description: 'Read this card in full.' },
+        column: { type: 'string', description: 'Only the cards of this column (name or id).' },
+      },
+      required: ['id'],
+    },
+    annotations: { readOnlyHint: true },
+  },
+  board_update: {
+    name: 'board_update',
+    description: [
+      'Change an oIDE kanban board with a list of operations, applied in order as one new version (all or nothing; the user sees it at once and can restore older versions). Columns and properties are named by name or id, cards by id (from board_read or add_card).',
+      'Cards: {op:"add_card", title, column?, index?, props?, body?} (returns its cardId); {op:"update_card", cardId, title?, body?, props?}; {op:"move_card", cardId, column, index?} (index 0 = top); {op:"delete_card", cardId}; {op:"add_comment", cardId, text}; {op:"delete_comment", cardId, commentId} (your own).',
+      'props is an object of property name to value: select = an option name (a new name adds the option), multi_select = a list of option names, text/url = a string, number, date = "YYYY-MM-DD", checkbox = true/false, null clears it. body is Markdown.',
+      'Columns: {op:"add_column", name, color?, index?}; {op:"update_column", column, name?, color?}; {op:"move_column", column, index}; {op:"delete_column", column, moveCardsTo?}.',
+      'Properties: {op:"add_property", name, type: select|multi_select|text|number|date|checkbox|url, options?: [{name, color?}], showOnCard?}; {op:"update_property", property, name?, showOnCard?}; {op:"move_property", property, index}; {op:"delete_property", property}; {op:"add_option", property, name, color?}; {op:"update_option", property, option, name?, color?}; {op:"delete_option", property, option}.',
+      "Colors: gray, brown, orange, yellow, green, blue, purple, pink, red. To close a ticket, move it to the column that means done (or won't do); delete only what should not exist.",
+    ].join(' '),
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'The board artifact id.' },
+        ops: {
+          type: 'array',
+          description: 'Operations, applied in order (at most 200).',
+          items: {
+            type: 'object',
+            properties: {
+              op: {
+                type: 'string',
+                enum: ['add_card', 'update_card', 'move_card', 'delete_card', 'add_comment', 'delete_comment', 'add_column', 'update_column', 'move_column', 'delete_column', 'add_property', 'update_property', 'move_property', 'delete_property', 'add_option', 'update_option', 'delete_option'],
+              },
+            },
+            required: ['op'],
+            additionalProperties: true,
+          },
+        },
+      },
+      required: ['id', 'ops'],
     },
   },
   artifact_retrieval_add_files: {
@@ -570,6 +620,7 @@ export class OideMcpServer {
         TOOLS.submit_for_review,
         TOOLS.set_title,
         ...(backend ? [TOOLS.artifacts_list, TOOLS.artifacts_read, TOOLS.artifacts_write, TOOLS.artifacts_create] : []),
+        ...(backend?.readBoard && backend.updateBoard ? [TOOLS.board_read, TOOLS.board_update] : []),
         ...(backend?.retrievalAddFiles && backend.isRetrievalAgent?.(agent.agentId) ? [TOOLS.artifact_retrieval_add_files, TOOLS.artifact_retrieval_finish] : []),
       ],
     }));
@@ -598,6 +649,10 @@ export class OideMcpServer {
           case 'artifacts_create':
             if (!backend) return text('Artifacts are not available', true);
             return await this.artifactTool(agent, req.params.name, args);
+          case 'board_read':
+          case 'board_update':
+            if (!backend?.readBoard || !backend.updateBoard) return text('Boards are not available', true);
+            return await this.boardTool(agent, req.params.name, args);
           case 'artifact_retrieval_add_files':
           case 'artifact_retrieval_finish':
             if (!backend?.retrievalAddFiles || !backend.retrievalFinish) return text('Artifact retrieval is not available', true);
@@ -732,6 +787,26 @@ export class OideMcpServer {
         return text(JSON.stringify({ ok: true, id: meta.id, version: meta.version, entry: meta.entry }));
       }
     }
+  }
+
+  /** `board_read` and `board_update` (ADR 0022): main checks the agent may see (and write) the board. */
+  private async boardTool(agent: AgentEntry, name: string, args: unknown): Promise<ToolResult> {
+    const backend = this.opts.artifacts!;
+    const ctx = this.ctx(agent);
+    if (name === 'board_read') {
+      const r = BoardReadInput.safeParse(args);
+      if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
+      const { meta, board } = await backend.readBoard!(ctx, r.data.id);
+      this.logUse(agent, r.data.id, 'read');
+      const view = boardForAgent(board, { ...(r.data.cardId ? { cardId: r.data.cardId } : {}), ...(r.data.column ? { column: r.data.column } : {}) });
+      const head = { id: meta.id, title: meta.title, version: meta.version };
+      return text(JSON.stringify(r.data.cardId ? { board: head, card: view } : { ...head, ...(view as object) }));
+    }
+    const r = BoardUpdateInput.safeParse(args);
+    if (!r.success) return text(`Invalid input: ${r.error.message}`, true);
+    const out = await backend.updateBoard!(ctx, r.data.id, r.data.ops);
+    this.logUse(agent, r.data.id, 'write');
+    return text(JSON.stringify({ ok: true, id: out.meta.id, version: out.meta.version, results: out.results }));
   }
 
   /** The two tools of an artifact retrieval (ADR 0014); main refuses any agent but the retrieval's own. */

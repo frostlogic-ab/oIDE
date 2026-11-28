@@ -436,6 +436,8 @@ export class AgentsService {
         }
         // A linked artifact still waiting for its first retrieval (ADR 0014) has no files to point at.
         if (stored.version === 0) return { id, title: `${r.title} (not retrieved from claude.ai yet: it has no files)` };
+        // A board is read and changed through the board tools, never by editing its JSON file.
+        if (r.kind === 'board') return { id, title: r.title, kind: 'board' };
         const kind = ENTRY_FILES[r.kind as ArtifactKind] ? (r.kind as ArtifactKind) : undefined;
         const entry = kind ? (typeof stored.entry === 'string' && isSafeArtifactPath(stored.entry) ? stored.entry : entryFileOf(kind)) : undefined;
         const path = entry ? resolve(r.dir, ...entry.split('/')) : undefined;

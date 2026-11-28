@@ -2,8 +2,17 @@ import { constants, existsSync } from 'node:fs';
 import { copyFile, lstat, mkdir, open, readdir, readFile, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, join } from 'node:path';
 import {
+  applyBoardOps,
   ARTIFACT_LIMITS,
   ArtifactMeta,
+  defaultBoard,
+  describeBoardOps,
+  parseBoard,
+  serializeBoard,
+  type BoardOp,
+  type BoardOpContext,
+  type BoardOpResult,
+  type KanbanBoard,
   ArtifactUse,
   ArtifactVersion,
   classifyClaudeLink,
@@ -45,7 +54,12 @@ import { newId, num, pathKey, type Row } from './util.js';
  * and the uses log); the folder is the source of truth for content and meta.
  */
 
-export const ENTRY_FILES: Record<ArtifactKind, string> = { design: 'index.html', doc: 'doc.md', whiteboard: 'board.excalidraw' };
+export const ENTRY_FILES: Record<ArtifactKind, string> = { design: 'index.html', doc: 'doc.md', whiteboard: 'board.excalidraw', board: 'board.json' };
+/**
+ * Boards save a version for every change (a drag is a version), so only the newest snapshots are kept
+ * (ADR 0022); older ones are removed after each board commit. Other kinds keep every version (ADR 0004).
+ */
+export const BOARD_KEEP_VERSIONS = 200;
 const MAX_IMPORT_BYTES = ARTIFACT_LIMITS.fileBytes;
 const VERSIONS_DIR = '.versions' as const;
 /** Written while the folder's root is being brought in line with a new snapshot; rescan finishes the job. */
@@ -190,7 +204,9 @@ export function inferKind(fileName: string, content?: string): ArtifactKind | un
   if (ext === '.excalidraw') return 'whiteboard';
   if (ext === '.json' && content) {
     try {
-      if ((JSON.parse(content) as { type?: unknown }).type === 'excalidraw') return 'whiteboard';
+      const type = (JSON.parse(content) as { type?: unknown }).type;
+      if (type === 'oide-board') return 'board';
+      if (type === 'excalidraw') return 'whiteboard';
     } catch {
       return undefined;
     }
@@ -206,6 +222,8 @@ function defaultContent(kind: ArtifactKind, title: string): string {
       return '';
     case 'whiteboard':
       return JSON.stringify({ type: 'excalidraw', version: 2, source: 'oide', elements: [], appState: {}, files: {} }, null, 2) + '\n';
+    case 'board':
+      return serializeBoard(defaultBoard());
   }
 }
 
@@ -223,6 +241,14 @@ function withFrontMatter(content: string, meta: { title: string; importedFrom?: 
 }
 
 function validateContent(kind: ArtifactKind, content: string): void {
+  if (kind === 'board') {
+    try {
+      parseBoard(content);
+    } catch (e) {
+      throw new ArtifactError((e as Error).message, 'invalid_input', 'wrong_kind');
+    }
+    return;
+  }
   if (kind === 'whiteboard') {
     let v: unknown;
     try {
@@ -273,7 +299,7 @@ function checkImportContent(kind: ArtifactKind, content: string): void {
       'wrong_kind',
     );
   }
-  if (kind === 'whiteboard') {
+  if (kind === 'whiteboard' || kind === 'board') {
     try {
       validateContent(kind, content);
     } catch (e) {
@@ -382,9 +408,9 @@ async function checkEntry(kind: ArtifactKind, entry: string, plan: Plan): Promis
   }
   const bytes = await bytesOf(f);
   if (!isTextBytes(bytes)) throw new ArtifactError(`${f.path} is not a text file, so it can't be the ${kind}'s entry.`, 'invalid_input', 'wrong_kind');
-  if (kind === 'whiteboard') {
+  if (kind === 'whiteboard' || kind === 'board') {
     try {
-      validateContent('whiteboard', bytes.toString('utf8'));
+      validateContent(kind, bytes.toString('utf8'));
     } catch (e) {
       throw new ArtifactError(`${f.path}: ${(e as Error).message}`, 'invalid_input', 'wrong_kind');
     }
@@ -893,7 +919,7 @@ export class ArtifactStore {
       const plan = this.planOf(files);
       const paths = files.map((f) => f.path);
       let kind = cur.kind;
-      if (internal.autoKind) kind = o.kind ?? (o.entry ? kindOfEntry(o.entry) : undefined) ?? (pickEntry(cur.kind, paths) ? cur.kind : (['design', 'doc', 'whiteboard'] as const).find((k) => pickEntry(k, paths))) ?? cur.kind;
+      if (internal.autoKind) kind = o.kind ?? (o.entry ? kindOfEntry(o.entry) : undefined) ?? (pickEntry(cur.kind, paths) ? cur.kind : (['design', 'doc', 'board', 'whiteboard'] as const).find((k) => pickEntry(k, paths))) ?? cur.kind;
       const entry = o.entry ?? pickEntry(kind, paths);
       if (!entry) throw new ArtifactError(`None of the files can open the ${kind}: ${kind === 'design' ? 'no HTML page or React component' : kind === 'doc' ? 'no Markdown file' : 'no Excalidraw file'}.`, 'invalid_input', 'wrong_kind');
       const title = internal.autoTitle ? (cleanTitle(o.title) ?? cur.title) : cur.title;
@@ -986,8 +1012,24 @@ export class ArtifactStore {
     this.index(meta, dir);
     await this.syncRoot(dir, version, plan);
     await rm(join(versionsDir, SYNC_MARKER), { force: true });
+    if (kind === 'board') await this.pruneVersions(dir, versionsDir, versions, version - BOARD_KEEP_VERSIONS).catch(() => undefined);
     this.onChange?.(id, { change: o.change ?? 'saved', version, author: o.author });
     return meta;
+  }
+
+  /**
+   * Boards (ADR 0022): drop the snapshots of versions at or below `upTo`, then their entries in
+   * versions.json. A failure leaves extra snapshots behind, never a missing current one.
+   */
+  private async pruneVersions(dir: string, versionsDir: string, versions: StoredVersion[], upTo: number): Promise<void> {
+    if (upTo < 1) return;
+    const old = versions.filter((v) => v.version <= upTo);
+    if (!old.length) return;
+    await writeAtomic(join(versionsDir, 'versions.json'), JSON.stringify(versions.filter((v) => v.version > upTo), null, 2) + '\n');
+    for (const v of old) {
+      const snap = await this.guard(() => resolveInside(dir, [VERSIONS_DIR, String(v.version)], { reservedTop: VERSIONS_DIR }));
+      await rm(snap, { recursive: true, force: true });
+    }
   }
 
   /**
@@ -1150,7 +1192,7 @@ export class ArtifactStore {
     checkPlan(plan);
     const paths = files.map((f) => f.path);
     let kind = input.kind ?? (input.entry ? kindOfEntry(input.entry) : undefined);
-    if (!kind) kind = (['design', 'doc', 'whiteboard'] as const).find((k) => pickEntry(k, paths));
+    if (!kind) kind = (['design', 'doc', 'board', 'whiteboard'] as const).find((k) => pickEntry(k, paths));
     if (!kind) throw new ArtifactError('None of the files can open as an artifact: add an HTML page, a React component, a Markdown file or an Excalidraw file.', 'invalid_input', 'wrong_kind');
     const entry = input.entry ?? pickEntry(kind, paths);
     if (!entry) throw new ArtifactError(`None of the files can open the ${kind}.`, 'invalid_input', 'wrong_kind');
@@ -1183,6 +1225,51 @@ export class ArtifactStore {
     return (this.d.db.prepare('SELECT * FROM artifact_uses WHERE agent_id = ? ORDER BY ts DESC, id DESC').all(agentId) as Row[]).map((r) =>
       ArtifactUse.parse({ artifactId: r.artifact_id, agentId: r.agent_id, op: r.op, ts: num(r.ts) }),
     );
+  }
+
+  /* ------------------------------------------------- boards (ADR 0022) */
+
+  /**
+   * Apply board operations as one new version, under the artifact's lock: the current board is read,
+   * changed and written in one step, so a user's drag and an agent's update never overwrite each
+   * other. All or nothing: an operation that cannot apply refuses the batch (`invalid_input`, with the
+   * reason) and nothing is written. The version note says what changed ("Moved "X" to In review").
+   */
+  async updateBoard(id: string, ops: readonly BoardOp[], ctx: BoardOpContext): Promise<{ meta: ArtifactMeta; board: KanbanBoard; results: BoardOpResult[] }> {
+    return this.withLock(id, async () => {
+      const cur = this.metaFromIndex(id);
+      if (cur.kind !== 'board') throw new ArtifactError(`${cur.title} is a ${cur.kind}, not a board.`, 'invalid_input', 'wrong_kind');
+      if (cur.version === 0) throw new ArtifactError(`${cur.title} has no files yet.`, 'invalid_input', 'no_content');
+      const entry = safeEntry(cur);
+      let before: KanbanBoard;
+      let after: { board: KanbanBoard; results: BoardOpResult[] };
+      try {
+        before = parseBoard(await readFile(await this.filePath(id, entry), 'utf8'));
+        after = applyBoardOps(before, ops, { ...ctx, now: ctx.now ?? this.now });
+      } catch (e) {
+        if (e instanceof ArtifactError || (e as NodeJS.ErrnoException).code) throw e;
+        throw new ArtifactError((e as Error).message, 'invalid_input', 'wrong_kind');
+      }
+      const plan = await this.currentPlan(cur);
+      const bytes = Buffer.from(serializeBoard(after.board), 'utf8');
+      plan.set(foldPath(entry), { path: entry, size: bytes.length, bytes });
+      const note = describeBoardOps(before, after.board, ops, after.results);
+      const meta = await this.commit(cur, plan, { entry, author: ctx.author, ...(note ? { note } : {}) });
+      if (ctx.author.startsWith('agent:')) this.recordUse(id, ctx.author.slice('agent:'.length), 'write');
+      return { meta, board: after.board, results: after.results };
+    });
+  }
+
+  /** The board of a board artifact (parsed and checked). */
+  async readBoard(id: string): Promise<{ meta: ArtifactMeta; board: KanbanBoard }> {
+    const { meta, content } = await this.read(id);
+    if (meta.kind !== 'board') throw new ArtifactError(`${meta.title} is a ${meta.kind}, not a board.`, 'invalid_input', 'wrong_kind');
+    if (meta.version === 0) throw new ArtifactError(`${meta.title} has no files yet.`, 'invalid_input', 'no_content');
+    try {
+      return { meta, board: parseBoard(content) };
+    } catch (e) {
+      throw new ArtifactError((e as Error).message, 'invalid_input', 'wrong_kind');
+    }
   }
 
   /* ------------------------------------------------- ArtifactsBackend (MCP) */

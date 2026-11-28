@@ -3,7 +3,7 @@ import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { AgentDriver } from '@oide/agent-core';
 import { WorktreeManager, isInside, resolveTool, samePath, setRepoTrustResolver, type GhCli } from '@oide/git';
 import { OideMcpServer, type ArtifactsBackend as McpArtifactsBackend } from '@oide/mcp-server';
-import { countBucket, resolveModel, type AgentArtifactFileInput, type ArtifactMeta, type ModelStrategy, type PermissionMode } from '@oide/protocol';
+import { boardOpsArea, countBucket, resolveModel, type AgentArtifactFileInput, type ArtifactMeta, type BoardOp, type ModelStrategy, type PermissionMode } from '@oide/protocol';
 import { ArtifactStore, SqliteSecretStore, openStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { CleanupQueue, CleanupScheduler, folderName } from '../reliability/cleanup-queue.js';
@@ -95,6 +95,10 @@ export interface McpArtifactsExtras {
   retrieval?: () => ArtifactRetrievalService | undefined;
   /** The artifact an artifact agent edits (its spec's `artifactId`): it may write only that one, and create none. */
   artifactOf?: (agentId: string) => string | undefined;
+  /** The agent's title, kept on the board comments it writes. */
+  agentTitle?: (agentId: string) => string | undefined;
+  /** An agent changed a board (telemetry: the operations' kinds only). */
+  onBoardChange?: (ops: BoardOp[]) => void;
 }
 
 export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) => boolean, extras: McpArtifactsExtras = {}): McpArtifactsBackend {
@@ -159,6 +163,22 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
       if (!visible(ctx, (await store.read(id)).meta)) throw new Error(hidden(id));
       return store.write(id, content, ctx.agentId);
     },
+    readBoard: async (ctx, id) => {
+      requireVisible(ctx, id);
+      const out = await store.readBoard(id);
+      store.recordUse(id, ctx.agentId, 'read');
+      return out;
+    },
+    updateBoard: async (ctx, id, ops) => {
+      requireWritable(ctx.agentId, id);
+      requireVisible(ctx, id);
+      const name = extras.agentTitle?.(ctx.agentId);
+      // An agent can't pin itself (or another agent) to a card: the user starts agents from a card.
+      if (ops.some((o) => o.op === 'link_agent' || o.op === 'unlink_agent')) throw new Error('Agents are linked to cards when the user starts them from a card.');
+      const out = await store.updateBoard(id, ops, { author: `agent:${ctx.agentId}`, ...(name ? { authorName: name } : {}) });
+      extras.onBoardChange?.(ops);
+      return out;
+    },
     create: async (ctx, input) => {
       const own = extras.artifactOf?.(ctx.agentId);
       if (own !== undefined) throw new Error(`You are the artifact agent of ${own}: you change only that artifact and cannot create others. Add files to it with artifacts_write instead.`);
@@ -213,6 +233,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
       worktreeOf: (agentId) => late.agents?.supervisor.get(agentId)?.worktreePath,
       retrieval: () => late.retrieval,
       artifactOf: (agentId) => late.agents?.supervisor.spec(agentId)?.artifactId,
+      agentTitle: (agentId) => late.agents?.supervisor.get(agentId)?.title,
+      onBoardChange: (ops) => ctx.telemetry?.service.track('board_changed', { by: 'agent', area: boardOpsArea(ops), ops: countBucket(ops.length) }),
     }),
     onArtifactUse: (u) => ctx.emit('artifacts.changed', u.artifactId && u.artifactId !== '*' ? { id: u.artifactId, change: 'used' } : {}),
     log: (m, d) => ctx.log.debug('[mcp]', m, d ?? ''),

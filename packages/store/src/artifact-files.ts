@@ -168,7 +168,8 @@ const first = (paths: string[], test: (p: string) => boolean) => paths.filter(te
 /**
  * The default entry for a kind: a design opens on `index.html` or `App.jsx` at the root, else the
  * shallowest HTML page, else the shallowest JSX/TSX; a doc on `doc.md`, else the first Markdown (then
- * text) file; a whiteboard on the first `.excalidraw`, else the first `.json`. Undefined when none fits.
+ * text) file; a whiteboard on the first `.excalidraw`, else the first `.json`; a board on `board.json`
+ * only (another `.json` is a whiteboard's). Undefined when none fits.
  */
 export function pickEntry(kind: ArtifactKind, paths: string[]): string | undefined {
   const has = (name: string) => paths.find((p) => p === name) ?? paths.find((p) => foldPath(p) === foldPath(name));
@@ -180,6 +181,8 @@ export function pickEntry(kind: ArtifactKind, paths: string[]): string | undefin
       return has('doc.md') ?? first(paths, (p) => ext(p) === '.md' || ext(p) === '.markdown') ?? first(paths, (p) => ext(p) === '.txt');
     case 'whiteboard':
       return first(paths, (p) => ext(p) === '.excalidraw') ?? first(paths, (p) => ext(p) === '.json');
+    case 'board':
+      return has('board.json');
   }
 }
 
