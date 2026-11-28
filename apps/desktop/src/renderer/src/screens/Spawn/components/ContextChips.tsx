@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ArtifactMeta, ContextChip } from '@oide/protocol';
 import { Button, Chip, SegmentedControl, fieldClass } from '@oide/ui';
-import { AttachFileButton, type AttachmentsState } from '../../../components/Attachments';
+import { AttachFileButton, useImagePreview, type AttachmentsState } from '../../../components/Attachments';
 import { attachmentBytes, attachmentName, formatSize, imageSrc } from '../../../lib/attachments';
 import { invokeOr } from '../../../lib/bridge';
 
@@ -20,10 +20,11 @@ function chipKey(c: ContextChip): string {
 /**
  * "Context: [Main window v2] [src/shell/StatusBar.tsx] [+ Artifact, file or URL]" under the goal.
  * `attachments`: screenshots and files pasted, dropped or picked for the goal, as chips in the same row
- * (images with a thumbnail), plus the Attach file button; they go with the first message.
+ * (images with a thumbnail; click one to preview it), plus the Attach file button; they go with the first message.
  */
 export function ContextChips({ value, onChange, projectId, attachments }: { value: ContextChip[]; onChange: (next: ContextChip[]) => void; projectId: string; attachments?: AttachmentsState }) {
   const [adding, setAdding] = useState(false);
+  const preview = useImagePreview(attachments);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const add = (c: ContextChip) => {
     if (!value.some((v) => chipKey(v) === chipKey(c))) onChange([...value, c]);
@@ -54,8 +55,14 @@ export function ContextChips({ value, onChange, projectId, attachments }: { valu
           const name = attachmentName(a);
           return (
             <Chip key={key} icon={a.kind === 'file' ? 'file' : undefined} onRemove={() => attachments.remove(key)} removeLabel={`Remove ${name}`} title={a.kind === 'file' ? a.path : name} className="max-w-[240px]">
-              {a.kind === 'image' && <img src={imageSrc(a)} alt="" className="w-4 h-4 rounded-[3px] object-cover" />}
-              <span className="truncate">{name}</span>
+              {a.kind === 'image' ? (
+                <button type="button" aria-label={`Preview ${name}`} onClick={() => preview.open(key)} className="inline-flex items-center gap-1.5 min-w-0 p-0 border-0 bg-transparent text-inherit cursor-zoom-in hover:text-link">
+                  <img src={imageSrc(a)} alt="" className="w-4 h-4 rounded-[3px] object-cover" />
+                  <span className="truncate">{name}</span>
+                </button>
+              ) : (
+                <span className="truncate">{name}</span>
+              )}
               <span className="font-mono text-[11px] text-ink-3">{formatSize(attachmentBytes(a))}</span>
             </Chip>
           );
@@ -77,6 +84,7 @@ export function ContextChips({ value, onChange, projectId, attachments }: { valu
         </span>
       )}
       {adding && <AddContext projectId={projectId} onAdd={add} onCancel={cancelAdding} />}
+      {preview.dialog}
     </div>
   );
 }
