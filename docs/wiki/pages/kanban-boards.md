@@ -44,7 +44,9 @@ value); a select becomes text as its option names; numbers, dates and links keep
 fit; anything else is cleared. Ids are 1 to 64 letters, digits, `-` or `_`, never `__proto__`,
 `constructor` or `prototype` (values live in plain objects keyed by id).
 
-Columns and properties are named by name or id, cards by id. `props` values: a select option name or
+Columns and properties are named by name or id, cards by id. An option ref shaped like an id oIDE
+makes (`o_` + 10 characters) that is not on the property is refused, never added as a name (a stale
+or stand-in id from the screen's preview). `props` values: a select option name or
 id (a new name adds the option), a list for multi-select, `null` clears. `index` counts the other cards
 of the column (0 = top; past the end = bottom). `describeBoardOps` writes the version note,
 `boardForAgent` the agent's view (names, not ids), `boardOpsArea` the telemetry area.
