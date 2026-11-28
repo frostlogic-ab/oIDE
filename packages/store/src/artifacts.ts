@@ -87,6 +87,8 @@ export interface ArtifactStoreOptions {
   /** Main checkout of a project, for repo artifacts. */
   projectPath: (projectId: string) => string | undefined;
   now?: () => number;
+  /** Board snapshots kept (default `BOARD_KEEP_VERSIONS`; tests use a small number). */
+  boardKeepVersions?: number;
   /** Called after any change (main forwards it as the `artifacts.changed` event). */
   onChange?: (id?: string, info?: ArtifactChange) => void;
 }
@@ -425,6 +427,7 @@ export class ArtifactStore {
   private readonly now: () => number;
   private readonly onChange: ((id?: string, info?: ArtifactChange) => void) | undefined;
   private readonly locks = new Map<string, Promise<unknown>>();
+  private readonly boardKeep: number;
 
   constructor(opts: ArtifactStoreOptions) {
     this.d = opts.db;
@@ -432,6 +435,7 @@ export class ArtifactStore {
     this.projectPath = opts.projectPath;
     this.now = opts.now ?? Date.now;
     this.onChange = opts.onChange;
+    this.boardKeep = Math.max(1, opts.boardKeepVersions ?? BOARD_KEEP_VERSIONS);
   }
 
   /* ---------------------------------------------------------- locations */
@@ -1015,7 +1019,7 @@ export class ArtifactStore {
     this.index(meta, dir);
     await this.syncRoot(dir, version, plan);
     await rm(join(versionsDir, SYNC_MARKER), { force: true });
-    if (kind === 'board') await this.pruneVersions(dir, versionsDir, versions, version - BOARD_KEEP_VERSIONS).catch(() => undefined);
+    if (kind === 'board') await this.pruneVersions(dir, versionsDir, versions, version - this.boardKeep).catch(() => undefined);
     this.onChange?.(id, { change: o.change ?? 'saved', version, author: o.author });
     return meta;
   }

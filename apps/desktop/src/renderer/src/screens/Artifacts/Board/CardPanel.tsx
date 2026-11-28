@@ -202,8 +202,9 @@ function PropertyRow({ property: p, value, onChange }: { property: BoardProperty
   const id = useId();
   return (
     <>
+      {/* Each editor carries the property's name as its own label. */}
       <dt className="text-ink-3 truncate" title={p.name}>
-        <label htmlFor={id}>{p.name}</label>
+        {p.name}
       </dt>
       <dd className="m-0 min-w-0">
         {p.type === 'select' ? (
@@ -244,6 +245,7 @@ function TextValue({ id, property: p, value, onChange }: { id: string; property:
   return (
     <input
       id={id}
+      aria-label={p.name}
       type={type}
       value={draft}
       placeholder="Empty"

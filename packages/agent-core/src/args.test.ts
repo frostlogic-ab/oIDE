@@ -476,4 +476,25 @@ describe('artifact agent contract', () => {
     expect(p).toContain('do not call submit_for_review');
     expect(p).not.toMatch(/Oide-Agent:|git merge|Commit your work/);
   });
+
+  it("a board's artifact agent gets the board contract: board_read / board_update, never a raw write (ADR 0022)", () => {
+    const launch = buildLaunch(spec({ artifactId: 'art-b', workIn: 'artifact-folder' }), ctx({ branch: undefined, baseRef: undefined, resolveArtifact: (id) => ({ id, title: 'Backlog', kind: 'board' }) }));
+    const p = flagValue(launch.args, '--append-system-prompt')!;
+    expect(p).toContain('kanban board');
+    expect(p).toContain('mcp__oide__board_read { id: "art-b" }');
+    expect(p).toContain('mcp__oide__board_update { id: "art-b", ops: [...] }');
+    expect(p).toContain('Never rewrite the board file with artifacts_write');
+    expect(p).toContain('do not call submit_for_review');
+    // Reading a board never asks; changing one is a write like artifacts_write.
+    const allowed = flagValue(launch.args, '--allowedTools')!.split(',');
+    expect(allowed).toContain('mcp__oide__board_read');
+    expect(allowed).not.toContain('mcp__oide__board_update');
+  });
+
+  it('a board as a context chip is described with the board tools, not a file path', () => {
+    const p = buildLaunch(spec({ context: [{ kind: 'artifact', id: 'art-b', title: 'Backlog' }] }), ctx({ resolveArtifact: (id) => ({ id, title: 'Backlog', kind: 'board' }) }));
+    const text = (p.firstMessage!.message.content as Array<{ text: string }>)[0]!.text;
+    expect(text).toMatch(/kanban board "Backlog" \(id art-b\).*mcp__oide__board_read.*mcp__oide__board_update/);
+    expect(p.appendSystemPrompt).toMatch(/kanban boards\) are available.*mcp__oide__board_update/);
+  });
 });

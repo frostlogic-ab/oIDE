@@ -416,3 +416,56 @@ describe('applyTextEdits', () => {
     expect(() => applyTextEdits('a.html', 'aa', [{ oldString: 'a', newString: 'b' }])).toThrow(/occurs 2 times/);
   });
 });
+
+describe('board tools (ADR 0022)', () => {
+  it('board_read shows names; board_update validates operations and passes them to main; both are logged', async () => {
+    const { applyBoardOps, defaultBoard } = await import('@oide/protocol');
+    let board = defaultBoard();
+    const meta: ArtifactMeta = { id: 'art-b', slug: 'backlog', title: 'Backlog', kind: 'board', location: 'app-data', version: 1, entry: 'board.json', createdAt: 1, updatedAt: 1 };
+    const seen: unknown[] = [];
+    const backend: ArtifactsBackend = {
+      ...memoryArtifacts(),
+      readBoard: async () => ({ meta, board }),
+      updateBoard: async (_c, _id, ops) => {
+        seen.push(ops);
+        const out = applyBoardOps(board, ops, { author: 'agent:agent-1' });
+        board = out.board;
+        meta.version++;
+        return { meta, results: out.results };
+      },
+    };
+    const uses: ArtifactUse[] = [];
+    const server = new OideMcpServer({ appDataDir: mkdtempSync(join(tmpdir(), 'oide-mcp-')), artifacts: backend, onArtifactUse: (u) => uses.push(u) });
+    servers.push(server);
+    await server.start();
+    const reg = await server.registerAgent('agent-1', recorder().handlers);
+    const client = await connect(reg.url, reg.secret);
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    expect(names).toEqual(expect.arrayContaining(['board_read', 'board_update']));
+
+    const up = JSON.parse(textOf(await client.callTool({ name: 'board_update', arguments: { id: 'art-b', ops: [{ op: 'add_card', title: 'Fix login', column: 'Approved', props: { Priority: 'P1' } }] } })));
+    expect(up).toMatchObject({ ok: true, version: 2, results: [{ op: 'add_card', cardId: expect.any(String) }] });
+    const read = JSON.parse(textOf(await client.callTool({ name: 'board_read', arguments: { id: 'art-b' } })));
+    expect(read).toMatchObject({ id: 'art-b', title: 'Backlog', cards: [{ title: 'Fix login', column: 'Approved', props: { Priority: 'P1' } }] });
+    const one = JSON.parse(textOf(await client.callTool({ name: 'board_read', arguments: { id: 'art-b', cardId: up.results[0].cardId } })));
+    expect(one.card).toMatchObject({ title: 'Fix login', body: '', comments: [] });
+
+    // Malformed operations never reach main.
+    expect((await client.callTool({ name: 'board_update', arguments: { id: 'art-b', ops: [{ op: 'drop_everything' }] } })).isError).toBe(true);
+    expect((await client.callTool({ name: 'board_update', arguments: { id: 'art-b', ops: [] } })).isError).toBe(true);
+    expect(seen).toHaveLength(1);
+    // A refusal from main is an error result with its reason.
+    const bad = await client.callTool({ name: 'board_update', arguments: { id: 'art-b', ops: [{ op: 'move_card', cardId: 'c_nope', column: 'Shipped' }] } });
+    expect(bad.isError).toBe(true);
+    expect(textOf(bad)).toMatch(/No card with id c_nope/);
+    expect(uses.map((u) => u.op)).toEqual(['write', 'read', 'read']);
+  });
+
+  it('the board tools are offered only when main can work with boards', async () => {
+    const { reg } = await setup({ artifacts: true });
+    const client = await connect(reg.url, reg.secret);
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    // The in-memory backend has no board methods: the tools are not offered.
+    expect(names).not.toContain('board_update');
+  });
+});
