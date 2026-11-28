@@ -9,6 +9,31 @@ Conventional Commit titles of merged pull requests, in the release pull request 
 `main`. Do not add entries by hand; give your pull request a good title instead. The pipeline is
 described in [docs/wiki/pages/release-pipeline.md](docs/wiki/pages/release-pipeline.md).
 
+## [0.8.0](https://github.com/frostlogic-ab/oIDE/compare/v0.7.0...v0.8.0) (2026-11-28)
+
+
+### Added
+
+* **accounts:** run agents on several Claude Code accounts, with per-account usage in the status bar ([#71](https://github.com/frostlogic-ab/oIDE/issues/71)) ([a2b1ff6](https://github.com/frostlogic-ab/oIDE/commit/a2b1ff6f272709b468d27a1c1d7fd9877d1b426a))
+* **artifacts:** kanban boards that people and agents work together ([#76](https://github.com/frostlogic-ab/oIDE/issues/76)) ([810e57a](https://github.com/frostlogic-ab/oIDE/commit/810e57ad12c014413b82e531e04990296dc302dc))
+* **attachments:** click a pending image's thumbnail to preview it ([#79](https://github.com/frostlogic-ab/oIDE/issues/79)) ([4ea0b1c](https://github.com/frostlogic-ab/oIDE/commit/4ea0b1cc7c0795c6f65829a43c4a32baf21500fb))
+* **files:** grey out git-ignored files and folders in the tree ([#70](https://github.com/frostlogic-ab/oIDE/issues/70)) ([ba758ef](https://github.com/frostlogic-ab/oIDE/commit/ba758ef7b0426a288a4b6efd879d2100acca6ded))
+* **files:** offer to install missing language servers, and ship the common ones ([#68](https://github.com/frostlogic-ab/oIDE/issues/68)) ([42592ff](https://github.com/frostlogic-ab/oIDE/commit/42592ff4c8f643887f8100cdbea00f075a2f70de))
+* **files:** show newer npm versions inline in package.json, click to start an upgrade agent ([#75](https://github.com/frostlogic-ab/oIDE/issues/75)) ([3084dd6](https://github.com/frostlogic-ab/oIDE/commit/3084dd6e1382ea74655de39c1795b8a81337a536))
+* **files:** show the command-bar trigger in the Files header for quick file search ([#81](https://github.com/frostlogic-ab/oIDE/issues/81)) ([06f1902](https://github.com/frostlogic-ab/oIDE/commit/06f19028b0b450f8167c9baa489174eaa9f97818))
+* **shell:** native macOS menu bar with File, Edit, View, Agent, Window and Help ([#73](https://github.com/frostlogic-ab/oIDE/issues/73)) ([45aedf0](https://github.com/frostlogic-ab/oIDE/commit/45aedf0af26474859ff32edf03af66db6fdb7f43))
+* **ui:** restyle toasts as dark cards that match the app's design ([#80](https://github.com/frostlogic-ab/oIDE/issues/80)) ([b544521](https://github.com/frostlogic-ab/oIDE/commit/b544521651612fe74226ae8b850691a75617fe9d))
+* **usage:** open a Usage screen from Tokens today ([#65](https://github.com/frostlogic-ab/oIDE/issues/65)) ([1f4ad78](https://github.com/frostlogic-ab/oIDE/commit/1f4ad78649809ca38db155dc238f766b452a70c5))
+
+
+### Fixed
+
+* **files:** make the editor context menu opaque ([#66](https://github.com/frostlogic-ab/oIDE/issues/66)) ([f2bf1c3](https://github.com/frostlogic-ab/oIDE/commit/f2bf1c3c19106750072540d61bf98a7bb2f1199e))
+* **git:** ignore EPIPE when git exits before reading stdin ([#72](https://github.com/frostlogic-ab/oIDE/issues/72)) ([59113e7](https://github.com/frostlogic-ab/oIDE/commit/59113e7ece0bb5341347e27fdf650c926dcad763))
+* **git:** recount an agent's diff right after committing its pending work ([#74](https://github.com/frostlogic-ab/oIDE/issues/74)) ([0a67a5e](https://github.com/frostlogic-ab/oIDE/commit/0a67a5e4a2b0ab51644c20ff5614bface2c22e11))
+* **source-control:** open a worktree row's ··· menu outside the project card ([#78](https://github.com/frostlogic-ab/oIDE/issues/78)) ([ff1f49b](https://github.com/frostlogic-ab/oIDE/commit/ff1f49b7e6b77d2c9355ecddf99de955faaf11e6))
+* ten usability fixes across the renderer ([#77](https://github.com/frostlogic-ab/oIDE/issues/77)) ([4ea40a5](https://github.com/frostlogic-ab/oIDE/commit/4ea40a5425b2abd810abac191f7c71a0effabea3))
+
 ## [0.7.0](https://github.com/frostlogic-ab/oIDE/compare/v0.6.0...v0.7.0) (2026-11-27)
 
 
