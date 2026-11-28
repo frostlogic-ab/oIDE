@@ -287,7 +287,7 @@ function WorktreeRow({
             Review
           </button>
         )}
-        <Menu label={`More actions for ${name}`} trigger={<span aria-hidden="true">···</span>} items={items} align="end" />
+        <Menu label={`More actions for ${name}`} trigger={<span aria-hidden="true">···</span>} items={items} align="end" portal />
       </div>
       <Dialog
         open={confirm}
