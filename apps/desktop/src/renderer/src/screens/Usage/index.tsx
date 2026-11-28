@@ -19,9 +19,11 @@ const RANGES: Array<{ value: UsageRange; label: string }> = [
 
 function useUsageStats(range: UsageRange) {
   const [state, setState] = useState<{ stats?: UsageStats; loading: boolean; error?: string }>({ loading: true });
+  /** Bumped by Try again to rerun the load for the same range. */
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let live = true;
-    setState((s) => ({ ...s, loading: true }));
+    setState((s) => ({ stats: s.stats, loading: true }));
     oide
       .invoke('usage.stats', { range })
       .then((stats) => live && setState({ stats, loading: false }))
@@ -29,15 +31,18 @@ function useUsageStats(range: UsageRange) {
     return () => {
       live = false;
     };
-  }, [range]);
-  return state;
+  }, [range, attempt]);
+  return { ...state, retry: () => setAttempt((n) => n + 1) };
 }
 
 export default function UsageScreen() {
   // The range is a route param, so Back returns to it; switching replaces the route (no history).
   const range = useRouter((s) => (s.route.screen === 'usage' ? s.route.params.range : undefined)) ?? '7d';
   const setRange = (r: UsageRange) => useRouter.getState().replace('usage', { range: r });
-  const { stats, loading, error } = useUsageStats(range);
+  const { stats, loading, error, retry } = useUsageStats(range);
+  // After a failed switch the previous range's numbers stay on screen: keep them dimmed so they are
+  // not read as the range the selector shows.
+  const stale = loading || (!!stats && stats.range !== range);
 
   return (
     <div className="flex-1 min-w-0 h-full overflow-y-auto bg-ground">
@@ -49,14 +54,37 @@ export default function UsageScreen() {
           <span className="text-[11.5px] text-ink-3">Measured on this computer by oIDE, from what the Claude Code CLI reports.</span>
         </div>
 
-        {error && !stats && <EmptyState icon="alert-circle" title="Usage could not be loaded" description={error} />}
+        {error && !stats && (
+          <EmptyState
+            icon="alert-circle"
+            role="alert"
+            title="Usage could not be loaded"
+            description={error}
+            action={
+              <Button size={32} onClick={retry}>
+                Try again
+              </Button>
+            }
+          />
+        )}
+        {error && stats && (
+          <div role="alert" className="flex items-center gap-3 px-3 py-2 rounded-lg border border-bad-line bg-bad-bg text-[12.5px] text-ink">
+            <span className="flex-1 min-w-0">
+              Couldn't load {RANGE_LABEL[range].toLowerCase()}: {error}
+              {stats.range !== range ? ` Showing ${RANGE_LABEL[stats.range].toLowerCase()}.` : ''}
+            </span>
+            <Button size={28} onClick={retry}>
+              Try again
+            </Button>
+          </div>
+        )}
         {!stats && !error && (
           <div className="flex justify-center py-16">
             <Spinner size={20} label="Loading usage" />
           </div>
         )}
         {/* Refetch keeps the frame: the previous range stays, dimmed, until the new one arrives. */}
-        {stats && <Stats stats={stats} stale={loading} />}
+        {stats && <Stats stats={stats} stale={stale} />}
       </div>
     </div>
   );
