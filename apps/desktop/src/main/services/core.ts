@@ -18,6 +18,7 @@ import { ExtensionsService } from './extensions.js';
 import { LanguageServerService, lspLanguageBucket, type LanguageServerDef } from './lsp/language-servers.js';
 import { GitService, parcelWatch, type WatchFn } from './git.js';
 import { bundledServerScript } from '@oide/language-servers';
+import { NpmRegistryService } from './npm-registry.js';
 import type { Platform } from './platform.js';
 import { ProjectsService } from './projects.js';
 import type { TerminalService } from './terminals.js';
@@ -40,6 +41,8 @@ export interface Services {
   extensions: ExtensionsService;
   /** Language servers for the Files editor (ADR 0019). */
   lsp: LanguageServerService;
+  /** Latest npm versions for an open package.json (Files › Dependency versions). */
+  npm: NpmRegistryService;
   /** Agent retrieval of linked claude.ai artifacts (ADR 0014). */
   retrieval: ArtifactRetrievalService;
   /** Artifact agents: an agent that edits one artifact from its open view. */
@@ -493,6 +496,7 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
     git,
     extensions,
     lsp,
+    npm: new NpmRegistryService({ ...(platform.fetch ? { fetch: platform.fetch } : {}), enabled: () => store.settings.get().editor.npmVersions, log: ctx.log }),
     retrieval,
     artifactAgents,
     cleanup: cleanupScheduler,

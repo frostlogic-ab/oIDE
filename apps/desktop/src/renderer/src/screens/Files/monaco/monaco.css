@@ -11,3 +11,25 @@
   --vscode-strokeThickness: 1px;
   --vscode-shadow-lg: var(--shadow-tip);
 }
+
+/*
+ * Files › package.json dependency versions (npmVersions.ts): the hint after a version. `↑ x.y.z`
+ * in the link blue (a major upgrade in amber) is clickable; `latest` stays quiet (5.0:1 on #0E1013).
+ */
+.monaco-editor .oide-dep-hint {
+  font-style: normal;
+}
+.monaco-editor .oide-dep-hint-update {
+  color: #9dbbfa;
+  cursor: pointer;
+}
+.monaco-editor .oide-dep-hint-major {
+  color: #f2c078;
+}
+.monaco-editor .oide-dep-hint-update:hover {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.monaco-editor .oide-dep-hint-latest {
+  color: #7a8494;
+}

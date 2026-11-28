@@ -28,6 +28,8 @@ export async function launchApp(extraEnv: Record<string, string> = {}, opts: { u
   env.OIDE_USER_DATA = userData;
   // Telemetry is always off in e2e (no first-run question, no network) unless a test opts in with a file sink.
   env.OIDE_TELEMETRY = '0';
+  // No npm registry lookups from an open package.json (tests never reach the network).
+  env.OIDE_NPM_REGISTRY = 'off';
   Object.assign(env, extraEnv);
   const app = await electron.launch({
     args: [join(appDir, 'out/main/index.js'), ...(process.platform === 'linux' ? ['--no-sandbox'] : [])],
