@@ -363,7 +363,8 @@ export function Viewer({
         if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 's' || e.defaultPrevented) return;
         if ((e.target as Element | null)?.closest?.('.monaco-editor, .excalidraw')) return;
         e.preventDefault();
-        void save();
+        // Same target as the Save button: the open file when one is, else the entry.
+        void (fileMode ? file.save() : save());
       }}
     >
       <div className="flex items-center gap-3 px-5 py-3 border-b border-line bg-panel flex-wrap">
@@ -371,7 +372,7 @@ export function Viewer({
           Artifacts
         </Button>
         <div className="flex flex-col gap-0.5 min-w-0">
-          <h2 ref={headingRef} tabIndex={-1} className="m-0 text-[16px] font-semibold outline-none truncate">
+          <h2 ref={headingRef} tabIndex={-1} className="m-0 text-[16px] font-semibold outline-none truncate" title={meta.title}>
             {meta.title}
           </h2>
           <span className="text-[12px] text-ink-3">
