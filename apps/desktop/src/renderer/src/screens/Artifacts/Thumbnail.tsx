@@ -11,6 +11,7 @@ import type { ArtifactMeta } from '@oide/protocol';
 import { cn } from '@oide/ui';
 import { invokeOr } from '../../lib/bridge';
 import { DesignFrame, MarkdownView } from './Preview';
+import { BoardMini } from './Board/BoardMini';
 import { WhiteboardSvg } from './Whiteboard';
 import './artifacts.css';
 
@@ -54,7 +55,7 @@ export function ArtifactThumbnail({ meta, placeholder, className }: { meta: Thum
   );
 }
 
-/** Docs and whiteboards: render the current content (read once per version). */
+/** Docs, whiteboards and boards: render the current content (read once per version). */
 function ContentThumb({ meta, placeholder }: { meta: ThumbMeta; placeholder: ReactNode }) {
   const [content, setContent] = useState<string | null>(null);
   useEffect(() => {
@@ -74,5 +75,6 @@ function ContentThumb({ meta, placeholder }: { meta: ThumbMeta; placeholder: Rea
         <div className="oide-md-fade" />
       </div>
     );
+  if (meta.kind === 'board') return <BoardMini json={content} title={meta.title} decorative className="absolute inset-0 w-full h-full" />;
   return <WhiteboardSvg json={content} title={meta.title} className="absolute inset-0 w-full h-full" />;
 }

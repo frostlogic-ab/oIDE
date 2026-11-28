@@ -26,16 +26,16 @@ export type ButtonVariant =
 export type ButtonSize = 28 | 32 | 36;
 
 const VARIANT: Record<ButtonVariant, string> = {
-  primary: 'bg-accent text-on-accent font-semibold border border-transparent hover:brightness-110',
-  accent: 'bg-accent text-on-accent font-semibold border border-transparent hover:brightness-110',
-  secondary: 'bg-transparent text-ink border border-line-3 hover:bg-raised',
-  outline: 'bg-transparent text-ink border border-line-3 hover:bg-raised',
-  ghost: 'bg-transparent text-ink-3 border border-transparent hover:bg-raised hover:text-ink',
-  warn: 'bg-warn text-warn-bg font-semibold border border-transparent hover:brightness-110',
-  'warn-outline': 'bg-transparent text-ink border border-warn-line hover:bg-warn-bg-2',
-  danger: 'bg-transparent text-bad border border-bad-line hover:bg-bad-bg',
-  review: 'bg-review text-on-accent font-semibold border border-transparent hover:brightness-110',
-  'review-outline': 'bg-transparent text-ink border border-review-line hover:bg-review-bg',
+  primary: 'bg-accent text-on-accent font-semibold border border-transparent not-disabled:hover:brightness-110',
+  accent: 'bg-accent text-on-accent font-semibold border border-transparent not-disabled:hover:brightness-110',
+  secondary: 'bg-transparent text-ink border border-line-3 not-disabled:hover:bg-raised',
+  outline: 'bg-transparent text-ink border border-line-3 not-disabled:hover:bg-raised',
+  ghost: 'bg-transparent text-ink-3 border border-transparent not-disabled:hover:bg-raised not-disabled:hover:text-ink',
+  warn: 'bg-warn text-warn-bg font-semibold border border-transparent not-disabled:hover:brightness-110',
+  'warn-outline': 'bg-transparent text-ink border border-warn-line not-disabled:hover:bg-warn-bg-2',
+  danger: 'bg-transparent text-bad border border-bad-line not-disabled:hover:bg-bad-bg',
+  review: 'bg-review text-on-accent font-semibold border border-transparent not-disabled:hover:brightness-110',
+  'review-outline': 'bg-transparent text-ink border border-review-line not-disabled:hover:bg-review-bg',
 };
 
 const SIZE: Record<ButtonSize, string> = {
@@ -67,7 +67,7 @@ export function buttonClass(
   return cn(
     'inline-flex items-center justify-center whitespace-nowrap box-border select-none',
     underline ? 'underline underline-offset-2' : 'no-underline',
-    'disabled:opacity-50 disabled:pointer-events-none transition-[background-color,filter,border-color]',
+    'disabled:opacity-50 disabled:cursor-not-allowed transition-[background-color,filter,border-color]',
     VARIANT[variant],
     SIZE[size],
     className,
@@ -125,9 +125,9 @@ export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>
 }
 
 const ICON_VARIANT = {
-  ghost: 'bg-transparent text-ink-3 hover:bg-raised hover:text-ink border border-transparent',
-  outline: 'bg-transparent text-ink-2 border border-line-3 hover:bg-raised',
-  accent: 'bg-accent text-on-accent border border-transparent hover:brightness-110',
+  ghost: 'bg-transparent text-ink-3 not-disabled:hover:bg-raised not-disabled:hover:text-ink border border-transparent',
+  outline: 'bg-transparent text-ink-2 border border-line-3 not-disabled:hover:bg-raised',
+  accent: 'bg-accent text-on-accent border border-transparent not-disabled:hover:brightness-110',
 };
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
@@ -140,7 +140,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       ref={ref}
       type={type}
       className={cn(
-        'inline-flex items-center justify-center shrink-0 disabled:opacity-50 disabled:pointer-events-none',
+        'inline-flex items-center justify-center shrink-0 disabled:opacity-50 disabled:cursor-not-allowed',
         ICON_VARIANT[variant],
         radius,
         className,

@@ -185,13 +185,15 @@ describe('Review screen', () => {
       expect(textbox().value).toBe('');
     });
 
-    it('Esc discards the draft', async () => {
+    it('Esc closes the box but keeps the draft', async () => {
       await draftOnLine7ThenOpenAnother();
       fireEvent.click(screen.getByRole('button', { name: 'Comment on line 7 (draft)' }));
+      const typed = textbox().value;
+      expect(typed).not.toBe('');
       fireEvent.keyDown(textbox(), { key: 'Escape' });
-      expect(screen.queryByRole('button', { name: 'Comment on line 7 (draft)' })).toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: 'Comment on line 7' }));
-      expect(textbox().value).toBe('');
+      expect(screen.queryByLabelText('Comment for the agent')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Comment on line 7 (draft)' }));
+      expect(textbox().value).toBe(typed);
     });
 
     it('a successful add clears the draft', async () => {

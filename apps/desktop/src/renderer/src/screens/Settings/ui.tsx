@@ -32,6 +32,20 @@ export function Rd({ children, className, id }: { children: ReactNode; className
   );
 }
 
+/** A list that failed to load: the reason and a Try again, in place of a "Loading…" that would never end. */
+export function LoadFailed({ what, error, onRetry, className }: { what: string; error: string; onRetry(): void; className?: string }) {
+  return (
+    <div role="alert" className={cn('flex items-center gap-3 text-[12.5px] text-bad leading-[1.45]', className)}>
+      <span className="flex-1 min-w-0">
+        Couldn't load {what}: {error}
+      </span>
+      <button type="button" className={outlineBtn} onClick={onRetry}>
+        Try again
+      </button>
+    </div>
+  );
+}
+
 export function Sec({ children, className }: { children: ReactNode; className?: string }) {
   return <h2 className={cn('m-0 mt-[22px] text-[11px] font-semibold tracking-[0.08em] uppercase text-ink-3', className)}>{children}</h2>;
 }

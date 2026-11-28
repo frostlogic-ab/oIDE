@@ -29,8 +29,8 @@ Design: [../raw/design/Review.dc.html](../raw/design/Review.dc.html). Route `rev
   { agentId, path, line, body }`. Removed lines comment with their old number ("removed line N").
 - A half-written comment is a draft kept per file, side and line (`index.tsx`): clicking another
   line or switching file keeps it, and reopening that line restores the text. A line with an unsent
-  draft shows a small accent dot and its button reads "Comment on line N (draft)". Cancel / Esc
-  discard the draft, a successful add clears it; drafts reset when the agent changes and are not
+  draft shows a small accent dot and its button reads "Comment on line N (draft)". Esc closes the
+  box and keeps the draft (a reflexive Esc loses nothing); Cancel discards it, a successful add clears it; drafts reset when the agent changes and are not
   kept after leaving Review.
 - Existing comments render inline under their line (sent / not sent yet, delete while unsent →
   `review.deleteComment`).
@@ -169,7 +169,7 @@ fails, both sides are rebuilt from the hunks with blank padding so line numbers 
 ## Tests
 
 `Review.test.tsx`: hunk numbering, reverse-apply, rendered numbers and colours, click-to-comment,
-comment drafts (kept across lines, cleared by Cancel / Esc / add), an archived agent's "was merged
+comment drafts (kept across lines and by Esc, cleared by Cancel / add), an archived agent's "was merged
 and archived" state with Open in Focus versus "gone" for an unknown one; `MergeDialog.test.tsx`: a
 successful merge goes to Source control once the agent is archived and stays when it is still live,
 `review.addComment` arguments (with `side`), removed-line threads, Send feedback, Viewed toggle.

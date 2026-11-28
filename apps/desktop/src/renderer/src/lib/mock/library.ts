@@ -20,7 +20,12 @@ import {
   MarketplaceEntry,
   Technique,
   IMPORT_NEEDS_CONTENT,
+  applyBoardOps,
+  BoardOpError,
   classifyClaudeLink,
+  defaultBoard,
+  parseBoard,
+  serializeBoard,
   designEntryFor,
   inferKindFromContent,
   isDesignContent,
@@ -180,7 +185,30 @@ function filesAt(a: MockArtifact, v: number): Record<string, ArtifactFileContent
 const fileSize = (c: ArtifactFileContent) => (c.encoding === 'utf8' ? new TextEncoder().encode(c.data).length : Math.floor((c.data.length * 3) / 4));
 
 /** The entry file for `content`: a design is index.html or, for React, App.jsx (as main stores it). */
-const entryFor = (kind: ArtifactKind, content: string) => (kind === 'design' ? designEntryFor(content) : kind === 'doc' ? 'doc.md' : 'board.excalidraw');
+const entryFor = (kind: ArtifactKind, content: string) => (kind === 'design' ? designEntryFor(content) : kind === 'doc' ? 'doc.md' : kind === 'board' ? 'board.json' : 'board.excalidraw');
+
+/** A product backlog for dev:web (a kanban board, ADR 0022), with fixed ids. */
+const BACKLOG_BOARD = (() => {
+  let n = 0;
+  const id = (p: string) => `${p}_seed${String(++n).padStart(4, '0')}`;
+  const ops = [
+    { op: 'add_card', title: 'Database backups with point-in-time restore', column: 'Proposed', props: { Priority: 'P0', Effort: 'M', Type: 'Build' } },
+    { op: 'add_card', title: 'Envelope auto-approval fails open on three failed reads', column: 'Proposed', props: { Priority: 'P1', Effort: 'S', Type: 'Fix' } },
+    { op: 'add_card', title: 'Create virtual metric dialog: label Formula and Sampling rate', column: 'Approved', props: { Priority: 'P2', Effort: 'S', Type: 'Fix' }, body: '## Why\n\nThe dialog mixes two fields.\n\n## Acceptance criteria\n\n- [ ] Labels read Formula and Sampling rate\n- [ ] Tab leaves Formula' },
+    { op: 'add_card', title: 'Split oversized files and merge copy-pasted UI code', column: 'In progress', props: { Priority: 'P2', Effort: 'L', Type: 'Tech debt' } },
+    { op: 'add_card', title: 'Tenant language and data storage live only on the Tenants page', column: 'In review', props: { Priority: 'P2', Effort: 'S', Type: 'Improve' } },
+    { op: 'add_card', title: 'Signed-in users get 502 Bad Gateway: proxy header limit too small', column: 'Shipped', props: { Priority: 'P0', Effort: 'M', Type: 'Fix' } },
+    { op: 'add_card', title: 'Data warehouse: tariff still listed twice', column: "Won't do", props: { Priority: 'P2', Effort: 'S', Type: 'Fix' } },
+  ] as const;
+  const { board } = applyBoardOps(defaultBoard(id), ops as unknown as Parameters<typeof applyBoardOps>[1], { author: 'user', now: () => ago(600), newId: id });
+  const withComment = applyBoardOps(board, [{ op: 'add_comment', cardId: board.cards[3]!.id, text: 'Wave 1 is off the write path; wave 2 waits for the write-safety gate.' }], {
+    author: 'agent:a-shell',
+    authorName: 'Window shell layout',
+    now: () => ago(30),
+    newId: id,
+  }).board;
+  return serializeBoard(withComment);
+})();
 
 /** Like main: a link-only import made by an older oIDE (its content is the notice) is `brokenImport`. */
 const isBroken = (importedFrom: string | undefined, content: string) => Boolean(importedFrom) && isImportStubContent(content);
@@ -290,6 +318,10 @@ const artifactSeed: MockArtifact[] = [
   art({ id: 'art-invoice', title: 'Invoice page', kind: 'design', projectId: 'billing-api', location: 'app-data', version: 1, updatedAt: 0 }, INVOICE_HTML, [['user', 2000]]),
   // A link-only import made before oIDE refused to create one without content: shows the fix panel.
   art({ id: 'art-legacy-import', title: 'Pricing page (imported)', kind: 'doc', projectId: 'oide', location: 'app-data', importedFrom: 'https://claude.ai/artifact/MyEmjmATV3mpUv6SZmFj4T', version: 1, updatedAt: 0 }, LEGACY_IMPORT_STUB, [['user', 4000, 'Imported from claude.ai']]),
+  art({ id: 'art-backlog', title: 'Product Backlog', kind: 'board', projectId: 'oide', location: 'repo', version: 1, updatedAt: 0 }, BACKLOG_BOARD, [
+    ['user', 600, 'Created'],
+    ['agent:a-shell', 30, 'Commented on "Split oversized files and merge copy-pasted UI code"'],
+  ]),
   art({ id: 'art-docs-ia', title: 'Docs IA sketch', kind: 'whiteboard', projectId: 'docs-site', location: 'repo', version: 1, updatedAt: 0 }, IA_BOARD, [['user', 3000]]),
   // A multi-file design an agent retrieved from a claude.ai/design link: the Files panel, Update.
   (() => {
@@ -793,6 +825,23 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
       ctx.emit('artifacts.changed', { id, change: 'renamed', version: a.meta.version });
       return a.meta;
     },
+    'artifacts.boardApply': ({ id, ops }) => {
+      const a = getArt(id);
+      if (a.meta.kind !== 'board') fail('invalid_input', `${a.meta.title} is not a board.`);
+      let out: ReturnType<typeof applyBoardOps>;
+      try {
+        out = applyBoardOps(parseBoard(a.content), ops, { author: 'user' });
+      } catch (err) {
+        fail('invalid_input', err instanceof BoardOpError ? err.message : String(err));
+      }
+      const next = a.meta.version + 1;
+      a.content = serializeBoard(out!.board);
+      a.snapshots[next] = a.content;
+      a.versions = [ArtifactVersion.parse({ version: next, ts: Date.now(), author: 'user', note: 'Edited the board' }), ...a.versions];
+      a.meta = { ...a.meta, version: next, updatedAt: Date.now() };
+      ctx.emit('artifacts.changed', { id, change: 'saved', version: next, author: 'user' });
+      return { meta: a.meta, board: out!.board, results: out!.results };
+    },
     'artifacts.create': ({ title, kind, projectId, location, content }) => {
       if (location === 'repo' && !projectId) fail('invalid_input', 'A repo artifact needs a project');
       const initial =
@@ -801,7 +850,9 @@ function createHandlers(ctx: LibraryMockContext): ParsedHandlers {
           ? `<!doctype html>\n<html><head><meta charset="utf-8"><title>${title}</title></head><body><h1>${title}</h1></body></html>`
           : kind === 'doc'
             ? `---\ntitle: ${title}\nkind: doc\n---\n\n# ${title}\n`
-            : board([]));
+            : kind === 'board'
+              ? serializeBoard(defaultBoard())
+              : board([]));
       const a = art({ id: newId('art'), title, kind, projectId, location: location ?? 'app-data', version: 1, updatedAt: 0 }, initial, [['user', 0, 'Created']]);
       artifacts.set(a.meta.id, a);
       ctx.emit('artifacts.changed', { id: a.meta.id });

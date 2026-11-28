@@ -554,7 +554,11 @@ function StartAgent({ meta, version, onCollapse }: { meta: ArtifactMeta; version
       <div className="flex-1 min-h-0 overflow-auto px-4 py-4 flex flex-col gap-3">
         <p className="m-0 text-[12.5px] text-ink-2 leading-[1.55]">{AGENT_INTRO}</p>
         <p className="m-0 text-[12px] text-ink-3 leading-[1.5]">
-          {meta.kind === 'whiteboard' ? 'Describe the change in words.' : 'Turn on Comment above the preview to point at what should change.'}
+          {meta.kind === 'board'
+            ? 'Ask it to add, edit, sort or close tickets, or to change the columns and properties.'
+            : meta.kind === 'whiteboard'
+              ? 'Describe the change in words.'
+              : 'Turn on Comment above the preview to point at what should change.'}
         </p>
       </div>
       <div className="flex flex-col gap-2 px-3 pb-3 pt-1 shrink-0">

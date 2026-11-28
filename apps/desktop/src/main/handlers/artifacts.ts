@@ -56,6 +56,12 @@ export function registerArtifactHandlers(router: IpcRouter, s: Services, ctx: Ma
     }
     return OK;
   });
+  // Boards (ADR 0022): the user's changes are the same operations agents send through board_update,
+  // applied by the store under the artifact's lock (all or nothing, one version per call).
+  router.register('artifacts.boardApply', async ({ id, ops }) => {
+    const out = await wrap(a.updateBoard(id, ops, { author: 'user' }));
+    return { meta: out.meta, board: out.board, results: out.results };
+  });
   router.register('artifacts.restore', ({ id, version, baseVersion }) => wrap(a.restore(id, version, { author: 'user', ...(baseVersion !== undefined ? { baseVersion } : {}) })));
   router.register('artifacts.readVersion', async ({ id, version }) => ({ content: await wrap(a.readVersion(id, version)) }));
   // A file import must be a file the user picked with dialog.pickFile or dropped (never an arbitrary

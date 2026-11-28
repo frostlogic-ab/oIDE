@@ -61,6 +61,8 @@ export function Dialog({
     if (!open) return;
     const opener = document.activeElement as HTMLElement | null;
     const t = setTimeout(() => {
+      // A field that took focus itself (`autoFocus`) keeps it: moving on would land on the header's ×.
+      if (ref.current?.contains(document.activeElement) && !initialFocus?.current) return;
       const target = initialFocus?.current ?? ref.current?.querySelector<HTMLElement>(FOCUSABLE) ?? ref.current;
       target?.focus();
     }, 0);

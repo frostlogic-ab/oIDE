@@ -132,8 +132,8 @@ function specFromSaved(spec: AgentSpec, s: AgentSummary): AgentSpec {
   return parsed;
 }
 
-/** Writes that only touch an artifact agent's own artifact, from the artifact tools. */
-const ARTIFACT_WRITE_TOOL = 'mcp__oide__artifacts_write';
+/** Writes that only touch an artifact agent's own artifact, from the artifact tools (and the board tool, ADR 0022). */
+const ARTIFACT_WRITE_TOOLS: ReadonlySet<string> = new Set(['mcp__oide__artifacts_write', 'mcp__oide__board_update']);
 /** Modes in which an artifact agent's writes to its own artifact go without a prompt (they are its edits). */
 const ARTIFACT_EDIT_MODES: ReadonlySet<PermissionMode> = new Set(['acceptEdits', 'auto', 'bypassPermissions']);
 
@@ -143,7 +143,7 @@ const ARTIFACT_EDIT_MODES: ReadonlySet<PermissionMode> = new Set(['acceptEdits',
  */
 export function ownArtifactWrite(rec: { spec: Pick<AgentSpec, 'artifactId'>; reducer: { summary: Pick<AgentSummary, 'mode'> } }, req: Pick<PermissionRequest, 'toolName' | 'input' | 'subagentId'>): boolean {
   const id = rec.spec.artifactId;
-  if (!id || req.toolName !== ARTIFACT_WRITE_TOOL || !ARTIFACT_EDIT_MODES.has(rec.reducer.summary.mode)) return false;
+  if (!id || !ARTIFACT_WRITE_TOOLS.has(req.toolName) || !ARTIFACT_EDIT_MODES.has(rec.reducer.summary.mode)) return false;
   const input = req.input && typeof req.input === 'object' ? (req.input as Record<string, unknown>) : {};
   return input.id === id;
 }

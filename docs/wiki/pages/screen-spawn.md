@@ -11,7 +11,7 @@ A 720px dialog over the Wall (`overlay: true` in `screens/registry.tsx`). Design
 | Control | Spec field | Notes |
 | --- | --- | --- |
 | Goal (textarea) | `goal`, `title`, `autoTitle` | title = first sentence of the goal, max 80 chars (`titleFromGoal`), a stand-in: `autoTitle: true` asks the agent to name the task with `set_title` once it starts ([agent-supervisor](agent-supervisor.md#agent-named-titles)) |
-| Attachments (paste into the goal, drop on it, or the "Attach file" pill) | `attachments[]` | images and files as chips in the Context row (thumbnail, name, size); sent with the first message (see [screen-focus](screen-focus.md#attachments)); kept in memory by the supervisor, not in the stored spec |
+| Attachments (paste into the goal, drop on it, or the "Attach file" pill) | `attachments[]` | images and files as chips in the Context row (thumbnail, name, size; click an image to preview it); sent with the first message (see [screen-focus](screen-focus.md#attachments)); kept in memory by the supervisor, not in the stored spec |
 | Context chips + "Artifact, file or URL" | `context[]` | artifact (from `artifacts.list` for the project), file (relative path, no `..`), http(s) URL. Pre-filled from route `params.context` (Artifacts › Give to an agent, Files › Ask an agent) |
 | Project | `projectId` | default: route `params.projectId`, else the scoped project, else the first |
 | Work in | `workIn` | new worktree from main / from current branch / project folder |

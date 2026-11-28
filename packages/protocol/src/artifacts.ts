@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { Id } from './agent.js';
 
-export const ArtifactKind = z.enum(['design', 'doc', 'whiteboard']);
+export const ArtifactKind = z.enum(['design', 'doc', 'whiteboard', 'board']);
 export type ArtifactKind = z.infer<typeof ArtifactKind>;
 
 /* ---------------------------------------------------------------- multi-file artifacts (ADR 0014) */

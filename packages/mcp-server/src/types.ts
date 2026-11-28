@@ -1,4 +1,4 @@
-import type { AgentArtifactFileInput, ArtifactFile, ArtifactFileContent, ArtifactKind, ArtifactMeta, ArtifactUse, CheckResult, PermissionRequest } from '@oide/protocol';
+import type { AgentArtifactFileInput, ArtifactFile, ArtifactFileContent, ArtifactKind, ArtifactMeta, ArtifactUse, BoardOp, BoardOpResult, CheckResult, KanbanBoard, PermissionRequest } from '@oide/protocol';
 
 /**
  * Types shared with @oide/agent-core. They are declared here structurally (no dependency on
@@ -60,6 +60,10 @@ export interface ArtifactsBackend {
     id: string,
     change: { content?: string; files?: AgentArtifactFileInput[]; deletes?: string[]; entry?: string; note?: string },
   ): Promise<ArtifactMeta>;
+  /** A board artifact, parsed (ADR 0022). Refused when the agent may not see it. */
+  readBoard?(ctx: ArtifactContext, id: string): Promise<{ meta: ArtifactMeta; board: KanbanBoard }>;
+  /** Apply board operations as one new version (all or nothing). Refused when the agent may not write it. */
+  updateBoard?(ctx: ArtifactContext, id: string, ops: BoardOp[]): Promise<{ meta: ArtifactMeta; results: BoardOpResult[] }>;
   /** True when this agent was started by oIDE to retrieve an artifact (it then sees the retrieval tools). */
   isRetrievalAgent?(agentId: string): boolean;
   /** Stage files of a running retrieval. Refused unless `ctx.agentId` is that retrieval's agent. */

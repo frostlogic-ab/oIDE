@@ -9,7 +9,7 @@ import { ResizableAside } from '../../../components/ResizableAside';
 import { PANELS } from '../../../lib/panels';
 import { ArtifactThumbnail } from '../../Artifacts/Thumbnail';
 
-const KIND_LABEL: Record<ArtifactKind, string> = { design: 'Design', doc: 'Doc', whiteboard: 'Whiteboard' };
+const KIND_LABEL: Record<ArtifactKind, string> = { design: 'Design', doc: 'Doc', whiteboard: 'Whiteboard', board: 'Board' };
 
 /** Right aside on the Wall: the three most recent artifacts in scope, and the Marketplace teaser. */
 export function ArtifactsAside() {

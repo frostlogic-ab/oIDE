@@ -222,6 +222,7 @@ function WorktreeRow({
           <a
             href={`#focus/${agent.id}`}
             className="text-ink no-underline font-medium hover:text-link-hover truncate"
+            title={name}
             onClick={(e) => {
               e.preventDefault();
               navigate('focus', { agentId: agent.id });
@@ -230,7 +231,7 @@ function WorktreeRow({
             {name}
           </a>
         ) : (
-          <span className="text-ink font-medium truncate">{name}</span>
+          <span className="text-ink font-medium truncate" title={name}>{name}</span>
         )}
         <span className="font-mono text-[11px] text-ink-3 truncate" title={`${w.branch} · ${baseLabel(w)}`}>
           {w.branch} · {baseLabel(w)}
@@ -287,7 +288,7 @@ function WorktreeRow({
             Review
           </button>
         )}
-        <Menu label={`More actions for ${name}`} trigger={<span aria-hidden="true">···</span>} items={items} align="end" />
+        <Menu label={`More actions for ${name}`} trigger={<span aria-hidden="true">···</span>} items={items} align="end" portal />
       </div>
       <Dialog
         open={confirm}

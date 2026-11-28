@@ -49,6 +49,16 @@ wordmark traced from Frostlogic's vector logo (roof in Frostlogic blue `#2491EB`
 
 Buttons on accent use text `#0B0D10`, weight 600.
 
+### Board colours
+
+Kanban boards ([kanban-boards.md](kanban-boards.md)) colour columns and select options with nine
+named colours. Six are the palette's own hues: gray `#9AA3AE` (ink-3), yellow `#F2C078` (warn),
+green `#7FC8A9` (ok), blue `#7AA2F7` (accent), purple `#C4A7E7` (the violet accent option), red
+`#F08A8A` (bad). Three are board-only, at the same lightness: brown `#C4A484`, orange `#EDA86A`,
+pink `#E79AC0`. A chip or column label is the hue as text on a 15% tint of itself with a 25% border;
+a lane is a 5% tint; a card mixes 7% of its column's hue into `card`. Code: `Board/boardModel.ts`
+(`BOARD_HUE`, `chipStyle`, `laneStyle`, `cardStyle`).
+
 ## Type
 
 - UI: Inter 400/500/600/700, base 13px. Common sizes 9.5, 10.5, 11, 11.5, 12, 12.5, 13, 14, 16, 18, 20px.
@@ -87,6 +97,13 @@ Every small text pair is ≥ 4.5:1: the smallest-contrast grey for text is `ink-
 they are not told apart by colour alone. Every screen works at the 1100×700 window minimum: no
 clipped labels, no mid-phrase wraps, no status-bar item past the edge (container queries narrow the
 Focus header, prompt and inspector).
+
+A disabled `Button` / `IconButton` keeps pointer events (not-allowed cursor, no hover style), so its
+`title` shows on hover: give a disabled button a `title` that says why ("Choose a location first.").
+Text cut off with `truncate` / `line-clamp` carries the full value as its `title`. A `Dialog` leaves
+focus on a field that took it with `autoFocus`; otherwise it focuses `initialFocus` or the first
+focusable element. A list that fails to load says so with a Try again, never an empty state or an
+endless "Loading…".
 
 ## Tokens in code
 

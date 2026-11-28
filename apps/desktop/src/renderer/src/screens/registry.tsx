@@ -24,6 +24,8 @@ export interface ScreenDef {
   header: 'command' | 'title';
   /** Show the shared project-scope switcher in the header (Files, Source control). */
   scopeSwitcher?: boolean;
+  /** A `title` header that also shows the command-bar trigger, with this placeholder (Files: quick open). */
+  commandTrigger?: string;
   /** The screen provides its own header title through <HeaderSlot name="title">. */
   customTitle?: boolean;
   /** Rendered as a modal over the Wall (Spawn). */
@@ -44,7 +46,7 @@ export const SCREENS: Record<ScreenId, ScreenDef> = {
     component: lazy(() => import('./SourceControl')),
   },
   review: { id: 'review', title: 'Review changes', rail: 'source-control', header: 'title', customTitle: true, component: lazy(() => import('./Review')) },
-  files: { id: 'files', title: 'Files', rail: 'files', header: 'title', scopeSwitcher: true, component: lazy(() => import('./Files')) },
+  files: { id: 'files', title: 'Files', rail: 'files', header: 'title', scopeSwitcher: true, commandTrigger: 'Search files, run a command, or jump to a session', component: lazy(() => import('./Files')) },
   artifacts: { id: 'artifacts', title: 'Artifacts', rail: 'artifacts', header: 'title', component: lazy(() => import('./Artifacts')) },
   marketplace: { id: 'marketplace', title: 'Marketplace', rail: 'marketplace', header: 'title', component: lazy(() => import('./Marketplace')) },
   settings: { id: 'settings', title: 'Settings', rail: 'settings', header: 'title', component: lazy(() => import('./Settings')) },

@@ -18,6 +18,7 @@ import { openNewProject } from '../../stores/newProject';
 import { navigate, useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useSettings } from '../../stores/settings';
+import { toast } from '../../stores/ui';
 import { highlightTiles } from '../Wall/wallState';
 import { CardRadioGroup } from './components/CardRadioGroup';
 import { useAttachments } from '../../components/Attachments';
@@ -207,7 +208,10 @@ export default function SpawnScreen() {
     atts.attachments.length > 0;
   /** Runs `action` now, or after the user confirms discarding what they entered. */
   const leave = (action: () => void) => {
-    if (dirty && !busy) setPendingLeave({ run: action });
+    // Mid-spawn there is nothing to cancel: `agents.spawn` runs on in main, so closing would only hide
+    // the agents that still appear, and any error with them. Stay until it settles.
+    if (busy) return;
+    if (dirty) setPendingLeave({ run: action });
     else action();
   };
 
@@ -224,6 +228,13 @@ export default function SpawnScreen() {
       const created = await oide.invoke('agents.spawn', atts.attachments.length ? { ...res.spec, attachments: atts.attachments } : res.spec);
       const agents = useAgents.getState();
       for (const a of created) agents.applySummary(a);
+      // Started from a board card (Start an agent): the card shows its agents and their status.
+      if (params.card && created.length) {
+        const { boardId, cardId } = params.card;
+        void oide
+          .invoke('artifacts.boardApply', { id: boardId, ops: created.map((a) => ({ op: 'link_agent' as const, cardId, agentId: a.id })) })
+          .catch((err) => toast(`The agent started, but the card could not be linked to it: ${ipcErrorMessage(err)}`, 'warning'));
+      }
       void useSettings
         .getState()
         .update({
@@ -272,7 +283,7 @@ export default function SpawnScreen() {
               Runs <span className="font-mono text-ink-2">claude</span> CLI in its own terminal
             </span>
             <div className="flex-1" />
-            <Button size={36} className="h-[34px]!" onClick={() => leave(cancel)}>
+            <Button size={36} className="h-[34px]!" onClick={() => leave(cancel)} disabled={busy} title={busy ? 'The agent is being spawned' : undefined}>
               Cancel
             </Button>
             <button
@@ -417,7 +428,11 @@ export default function SpawnScreen() {
                 if (p) update({ kind: p.strategy.kind, slots: applyVersions(slotsFromStrategy(p.strategy, form.slots), versions), customPicked: false });
               }}
               options={[
-                ...presets.map((p) => ({ value: p.id, label: p.name, desc: PRESET_HINTS[p.id] ?? p.description, disabled: !strategies.includes(p.strategy.kind) })),
+                ...presets.map((p) => {
+                  // Greyed out without a reason reads as broken: say what is missing.
+                  const off = !strategies.includes(p.strategy.kind);
+                  return { value: p.id, label: p.name, desc: off ? 'Needs a newer claude CLI (subagents).' : (PRESET_HINTS[p.id] ?? p.description), disabled: off };
+                }),
                 { value: 'custom', label: 'Custom', desc: 'Your own mix, set under Advanced.' },
               ]}
               columns={Math.min(4, presets.length + 1)}

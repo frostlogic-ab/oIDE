@@ -26,6 +26,7 @@ import { ArtifactPreview, KindThumb } from './Preview';
 import { ArtifactThumbnail } from './Thumbnail';
 import { ProjectPrompt, RetrievalCardLine, RetrievalStatus, useRetrieval } from './Retrieval';
 import { Viewer, type CompareSide, type ViewerMode } from './Viewer';
+import { BoardViewer } from './Board/BoardViewer';
 import {
   KIND_LABEL,
   KIND_TABS,
@@ -107,7 +108,7 @@ export default function ArtifactsScreen() {
   const setScope = useScope((s) => s.setScope);
   const projects = useProjects((s) => s.list);
   const agents = useAgents((s) => s.byId);
-  const { list, loaded, uses } = useLibrary();
+  const { list, loaded, uses, error: listError, reload: reloadList } = useLibrary();
   const [kind, setKind] = useState<KindTab>('all');
   const [query, setQuery] = useState('');
   const [dialog, setDialog] = useState<'new' | 'rename' | 'delete' | null>(null);
@@ -225,6 +226,23 @@ export default function ArtifactsScreen() {
     setDialog('new');
   }, dialog !== null);
 
+  if (opened && shown && shown.meta.kind === 'board' && shown.meta.version > 0) {
+    return (
+      <>
+        <BoardViewer
+          key={shown.meta.id}
+          detail={shown}
+          projectName={shown.meta.projectId ? projectName(shown.meta.projectId) : ''}
+          onClose={closeViewer}
+          onSaved={(meta, content) => setDetail((d) => (d && d.meta.id === meta.id ? withSaved(d, meta, content) : d))}
+          onRename={() => setDialog('rename')}
+          onDelete={() => setDialog('delete')}
+        />
+        {actionDialogs}
+      </>
+    );
+  }
+
   if (opened && shown) {
     return (
       <>
@@ -293,11 +311,25 @@ export default function ArtifactsScreen() {
           <div className="flex-1 flex items-center justify-center">
             <Spinner />
           </div>
+        ) : listError && !loaded ? (
+          // A failed first load is not an empty library: say so, and offer a retry.
+          <EmptyState
+            icon="artifacts"
+            role="alert"
+            title="Couldn't load your artifacts"
+            description={listError}
+            action={
+              <Button size={32} onClick={() => void reloadList()}>
+                Try again
+              </Button>
+            }
+            className="flex-1"
+          />
         ) : visible.length === 0 ? (
           <EmptyState
             icon="artifacts"
             title={list.length ? 'No artifacts match' : 'No artifacts yet'}
-            description={list.length ? 'Try another type, project or search.' : 'Start a design, doc or whiteboard from a claude.ai link, from files, or blank. Agents read and write them through oIDE.'}
+            description={list.length ? 'Try another type, project or search.' : 'Start a design, doc, whiteboard or kanban board from a claude.ai link, from files, or blank. Agents read and write them through oIDE.'}
             className="flex-1"
           />
         ) : (
@@ -320,7 +352,7 @@ export default function ArtifactsScreen() {
                   <ArtifactThumbnail meta={a} placeholder={<KindThumb kind={a.kind} />} className="h-[120px] w-full bg-raised box-border" />
                   <div className="flex flex-col gap-[3px] px-3 py-2.5 w-full box-border">
                     <span className="flex items-center gap-1.5 min-w-0">
-                      <span className="font-semibold truncate">{a.title}</span>
+                      <span className="font-semibold truncate" title={a.title}>{a.title}</span>
                       {hasDraft.has(a.id) && <Badge tone="warn">Unsaved</Badge>}
                     </span>
                     <span className="text-[12px] text-ink-3">

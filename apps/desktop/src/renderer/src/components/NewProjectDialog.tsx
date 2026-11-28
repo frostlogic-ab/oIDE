@@ -233,6 +233,8 @@ function CloneRepo({ busy, setBusy, onDone, onCancel }: PaneProps) {
   const finalName = nameTouched ? name : repoNameFromUrl(url);
   const nameProblem = finalName ? folderNameProblem(finalName) : 'Enter a folder name.';
   const ready = !urlProblem && !nameProblem && !!parent;
+  /** Why Clone is greyed out, shown as its tooltip. */
+  const blocker = urlProblem ?? nameProblem ?? (parent ? undefined : 'Choose a location first.');
 
   useEffect(() => {
     if (!busy) return;
@@ -330,7 +332,7 @@ function CloneRepo({ busy, setBusy, onDone, onCancel }: PaneProps) {
             Cancel
           </Button>
         )}
-        <Button type="submit" variant="primary" size={32} icon="branch" disabled={busy || !ready}>
+        <Button type="submit" variant="primary" size={32} icon="branch" disabled={busy || !ready} title={busy ? undefined : blocker}>
           {busy ? 'Cloning…' : 'Clone'}
         </Button>
       </Footer>
@@ -432,6 +434,7 @@ function CreateRepo({ busy, setBusy, onDone, onCancel }: PaneProps) {
   const { parent, choose } = useLocation();
   const problem = folderNameProblem(name);
   const ready = !problem && !!parent;
+  const blocker = problem ?? (parent ? undefined : 'Choose a location first.');
 
   const create = async () => {
     setTouched(true);
@@ -483,7 +486,7 @@ function CreateRepo({ busy, setBusy, onDone, onCancel }: PaneProps) {
         <Button variant="secondary" size={32} onClick={onCancel} disabled={busy}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" size={32} icon="plus" disabled={busy || !ready}>
+        <Button type="submit" variant="primary" size={32} icon="plus" disabled={busy || !ready} title={busy ? undefined : blocker}>
           {busy ? 'Creating…' : 'Create repository'}
         </Button>
       </Footer>

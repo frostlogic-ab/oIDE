@@ -583,4 +583,10 @@ describe('ownArtifactWrite', () => {
     expect(ownArtifactWrite(rec('acceptEdits'), { toolName: 'mcp__oide__artifacts_create', input: { id: 'a1' } })).toBe(false);
     expect(ownArtifactWrite({ spec: {}, reducer: { summary: { mode: 'acceptEdits' } } }, write('a1'))).toBe(false);
   });
+  it("covers a board's own agent changing it with board_update (ADR 0022), not another board", () => {
+    const update = (id: string) => ({ toolName: 'mcp__oide__board_update', input: { id, ops: [{ op: 'add_card', title: 'x' }] } });
+    expect(ownArtifactWrite(rec('auto'), update('a1'))).toBe(true);
+    expect(ownArtifactWrite(rec('auto'), update('a2'))).toBe(false);
+    expect(ownArtifactWrite(rec('default'), update('a1'))).toBe(false);
+  });
 });

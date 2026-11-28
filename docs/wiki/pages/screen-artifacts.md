@@ -200,6 +200,59 @@ Code: `apps/desktop/src/renderer/src/screens/Artifacts/`.
   read-only Monaco diff (`VersionDiff.tsx`, same theme as the Review split view) with a "+N −M
   lines" count. Whiteboard JSON is pretty-printed first so the diff is per property.
 
+### Boards (kanban, [ADR 0022](../../adr/0022-kanban-boards.md))
+
+Model, operations and agent tools: [kanban-boards.md](kanban-boards.md). Code: `Board/`.
+
+- **Grid and detail pane**: a **Boards** kind tab; the thumbnail and the 190px preview are
+  `BoardMini` (each column's coloured label and count over its first cards; the preview is a
+  `role="img"` "Board: <title>, N columns, M cards"); `KindThumb` draws four lanes for version 0.
+  New artifact › Blank offers **Board** (and Files detects a `board.json`); a claude.ai link never
+  makes a board.
+- **Open (`BoardViewer.tsx`)** in place of the Viewer: back button, title, "Board · project · vN ·
+  N cards · last change by <you / agent> <time>", **Search cards** (title, description and property
+  values; drag and drop is off while searching), **Columns and properties**, **New card** (adds
+  "Untitled" at the top of the first column and opens it), and More actions (Rename, Delete). Below:
+  the Agent panel (the board's artifact agent; its hint says what it can do with tickets), the
+  columns (`BoardView.tsx`) and, when a card is open, the card panel (`CardPanel.tsx`, a
+  `ResizableAside`, panel `artifacts.board-card`, 420px, 320 to 760). Esc closes the card, then the
+  board. A `role="status"` live region says what moved.
+- **Columns**: 280px lanes tinted with the column colour, a header with the coloured name chip and
+  count (an `h3`), **+** (new card) and a menu (Rename inline, New card, Move left / right, the nine
+  colours as a pick-one list, Delete column; delete asks where its cards go). Headers drag to
+  reorder; an accent bar shows where the column lands. **Add column** at the end.
+- **Cards**: the column's tint over the card surface, the title as a `<button>` (opens the card), the
+  chips of the properties shown on cards (option colours; text, numbers and dates plain), the
+  comment count and up to two linked agents with their status dot. A hover / focus menu: Open, Move
+  up / down, Move to <column>, Delete card. Cards drag within and between columns (an accent line
+  shows the drop point; a drop where it was saves nothing). **Keyboard**: Alt+←/→ move the card to
+  the previous / next column (bottom), Alt+↑/↓ within the column; focus follows the card.
+  **+ New card** at the bottom of each column takes titles one after another (Enter adds, Esc ends).
+  A card added here and not yet saved by main shows dimmed (`aria-busy`) and can't be opened, dragged
+  or moved until main answers (its id is a stand-in until then). While searching, the card menu has
+  no Move up / down (the place counts cards the search hides).
+- **Card panel**: the title (saved on blur or Enter; an agent's new title shows unless you are
+  typing), **Column** select, one row per property (select: a select with Empty; multi-select:
+  toggle chips with `aria-pressed` and "Add an option…"; checkbox; text, number, date and link
+  fields saved on blur / Enter, Esc puts the value back), **Edit properties**, **Agents** (each
+  linked agent with its status and a link to Focus; one no longer on the Wall can be removed),
+  **Start an agent** (Spawn with the ticket, see [kanban-boards.md](kanban-boards.md)),
+  **Description** (rendered Markdown with **Edit**: a textarea, Ctrl/Cmd+Enter saves, Esc cancels; a
+  note when the description changed meanwhile), **Comments** (author, time, text; delete on hover;
+  Ctrl/Cmd+Enter posts) and Delete card (asks first). Opening another card, closing the card,
+  Start an agent or leaving the board with a description being edited or a comment typed asks **Discard what you
+  typed?** (Keep editing / Discard).
+- **Columns and properties** (`BoardSettings.tsx`): a dialog with Properties and Columns tabs.
+  Properties: name (saved on blur / Enter), type (a select: changing it converts the values that
+  fit; when some cards would lose a value it says how many first, with Change type / Cancel), "On cards", move up / down, delete (says how many
+  cards lose a value); select options with colour, name and delete, and "New option". Columns: colour,
+  name, card count, move, delete (with "Move its N cards to"). Add property (name + type) and Add
+  column at the bottom.
+- **Saving**: every change is a board operation sent with `artifacts.boardApply`, applied locally at
+  once and replaced by main's answer; calls go in order; a refusal puts the board back with an error
+  toast. An agent's change reloads the board through `artifacts.changed`. History and restore work
+  as for every artifact.
+
 ## Data flow
 
 | What | IPC |

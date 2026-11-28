@@ -9,8 +9,11 @@ import type { ContextChip, UsageRange } from '@oide/protocol';
 export interface ScreenParams {
   wall: Record<string, never>;
   focus: { agentId: string; subagentId?: string };
-  /** `context`: chips to pre-fill (Artifacts › Give to an agent passes the artifact). */
-  spawn: { projectId?: string; goal?: string; context?: ContextChip[] };
+  /**
+   * `context`: chips to pre-fill (Artifacts › Give to an agent passes the artifact). `card`: the board
+   * card the agent is started from (Start an agent): the new agents are linked to it on the board.
+   */
+  spawn: { projectId?: string; goal?: string; context?: ContextChip[]; card?: { boardId: string; cardId: string } };
   'source-control': Record<string, never>;
   /** `path`: a changed file to open on (Focus > Inspector rows); falls back to the first file if it is not in the diff. */
   review: { agentId: string; path?: string };

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AgentSpec, AgentStatus, AgentSummary, Effort, GitRef, Id, MessageAttachments, ModelSlot, PermissionAnswer, PermissionMode, UserMessage } from './agent.js';
 import { ArtifactFile, ArtifactFileContent, ArtifactKind, ArtifactMeta, ArtifactPath, ArtifactUse, ArtifactVersion, ARTIFACT_LIMITS, IMPORT_NEEDS_CONTENT } from './artifacts.js';
+import { BoardOps, KanbanBoard } from './board.js';
 import { AgentEvent } from './events.js';
 import { CustomServer, ExtensionSettingField, ExtensionSettingValue, ExtensionUpdate, InstalledExtension, MarketplaceEntry } from './extensions.js';
 import { CloneProgress, CloneUrl, FolderName, GithubRepo } from './newProject.js';
@@ -514,6 +515,19 @@ export const Commands = {
    * refuses with code `conflict` when the artifact has moved on, like `artifacts.save`.
    */
   'artifacts.restore': cmd(z.object({ id: Id, version: z.number().int().positive(), baseVersion: z.number().int().nonnegative().optional() }), ArtifactMeta),
+  /**
+   * Kanban boards (ADR 0022): apply operations (the ones agents send with `board_update`) as one new
+   * version, under the artifact's lock. All or nothing: `invalid_input` with the reason when one can't
+   * apply. Returns the new board and what each operation made (new card ids).
+   */
+  'artifacts.boardApply': cmd(
+    z.object({ id: Id, ops: BoardOps }),
+    z.object({
+      meta: ArtifactMeta,
+      board: KanbanBoard,
+      results: z.array(z.object({ op: z.string(), cardId: z.string().optional(), columnId: z.string().optional(), propertyId: z.string().optional(), optionId: z.string().optional(), commentId: z.string().optional() })),
+    }),
+  ),
   'artifacts.previewUrl': cmd(z.object({ id: Id }), z.object({ url: z.string() })),
   /**
    * New artifact from a link (ADR 0014). Main never downloads it: it creates the artifact at version 0

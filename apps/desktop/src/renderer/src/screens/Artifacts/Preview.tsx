@@ -13,6 +13,7 @@ import { looksLikeReact, type ArtifactKind } from '@oide/protocol';
 import { cn } from '@oide/ui';
 import { invokeOr, oide } from '../../lib/bridge';
 import { renderMarkdown } from '../../lib/markdown';
+import { BoardMini } from './Board/BoardMini';
 import { WhiteboardSvg } from './Whiteboard';
 
 export function MarkdownView({ source, className, viewRef, onClickCapture }: { source: string; className?: string; viewRef?: Ref<HTMLDivElement>; onClickCapture?: (e: React.MouseEvent<HTMLDivElement>) => void }) {
@@ -159,6 +160,7 @@ export function ArtifactPreview({ artifactId, title, kind, content, forceInline,
         {compact && <div aria-hidden="true" className="oide-md-fade" />}
       </div>
     );
+  if (kind === 'board') return <BoardMini json={content} title={title} className={cn('w-full h-full', className)} />;
   return <WhiteboardSvg json={content} title={title} className={cn('w-full h-full', className)} />;
 }
 
@@ -181,6 +183,18 @@ export function KindThumb({ kind }: { kind: ArtifactKind }) {
         <div className="w-[55%] h-[9px] bg-line-3 rounded-xs" />
         {[92, 86, 90, 60].map((w) => (
           <div key={w} className="h-[5px] bg-line-5 rounded-xs" style={{ width: `${w}%` }} />
+        ))}
+      </div>
+    );
+  if (kind === 'board')
+    return (
+      <div className="absolute inset-x-4 inset-y-4 flex gap-1.5" aria-hidden="true">
+        {[3, 2, 4, 1].map((n, i) => (
+          <div key={i} className="flex-1 flex flex-col gap-1 rounded-[4px] bg-line-2 p-1">
+            {Array.from({ length: n }, (_, j) => (
+              <div key={j} className="h-[10px] bg-line-5 rounded-xs" />
+            ))}
+          </div>
         ))}
       </div>
     );

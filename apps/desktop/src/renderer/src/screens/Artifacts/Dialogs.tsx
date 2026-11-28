@@ -29,7 +29,9 @@ const START_OPTIONS: ReadonlyArray<{ value: StartFrom; label: string }> = [
   { value: 'files', label: 'Files' },
   { value: 'blank', label: 'Blank' },
 ];
-const KIND_OPTIONS = (['design', 'doc', 'whiteboard'] as const).map((k) => ({ value: k, label: KIND_LABEL[k] }));
+const KIND_OPTIONS = (['design', 'doc', 'whiteboard', 'board'] as const).map((k) => ({ value: k, label: KIND_LABEL[k] }));
+/** A claude.ai link is never a kanban board (boards are oIDE's own, ADR 0022). */
+const LINK_KIND_OPTIONS = KIND_OPTIONS.filter((o) => o.value !== 'board');
 
 /** Where a new artifact lives unless the user picks: a blank one in the project's repo, others personal. */
 const defaultLocation = (from: StartFrom, projectId: string): Location => (from === 'blank' && projectId ? 'repo' : 'app-data');
@@ -184,7 +186,10 @@ export function NewArtifactDialog({ open, onClose, projects, defaultProjectId, o
     projectId === (defaultProjectId ?? '');
 
   const names = useMemo(() => [...chosen.files.map((f) => f.name), ...chosen.images.map((i) => i.name)], [chosen]);
-  const detected = names.length ? kindFromFiles(names) : undefined;
+  // A board.json may be a kanban board or an Excalidraw scene: unless a page makes it a design, main
+  // decides from its content.
+  const guess = names.length ? kindFromFiles(names) : undefined;
+  const detected = guess !== 'design' && names.some((n) => n.toLowerCase() === 'board.json') ? undefined : guess;
   const filesKind = kind || detected;
   const pages = useMemo(() => (filesKind === 'design' && !chosen.folder ? entryCandidates(names) : []), [filesKind, chosen.folder, names]);
   const opensOn = pages.includes(entry) ? entry : (pages[0] ?? '');
@@ -329,7 +334,7 @@ export function NewArtifactDialog({ open, onClose, projects, defaultProjectId, o
       open={open}
       onClose={close}
       title="New artifact"
-      description="A design, doc or whiteboard that you and your agents can read and edit."
+      description="A design, doc, whiteboard or kanban board that you and your agents can read and edit."
       width={560}
       showClose
       dismissOnScrim={pristine && !busy}
@@ -388,7 +393,7 @@ export function NewArtifactDialog({ open, onClose, projects, defaultProjectId, o
             />
             <div className="grid grid-cols-2 gap-3">
               <TextField label="Title (optional)" value={title} maxLength={200} onChange={(e) => setTitle(e.target.value)} placeholder="Uses the artifact's own title" />
-              <Select label="Kind" options={[{ value: '', label: 'Detect' }, ...KIND_OPTIONS]} value={kind} onChange={(e) => setKind(e.target.value as ArtifactKind | '')} />
+              <Select label="Kind" options={[{ value: '', label: 'Detect' }, ...LINK_KIND_OPTIONS]} value={kind} onChange={(e) => setKind(e.target.value as ArtifactKind | '')} />
             </div>
           </>
         )}
