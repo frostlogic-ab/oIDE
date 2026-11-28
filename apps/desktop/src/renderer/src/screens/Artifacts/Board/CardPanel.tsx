@@ -338,6 +338,11 @@ function DescriptionField({ body, onSave, onDirty }: { body: string; onSave: (bo
   const startedFrom = useRef(body);
   /** An agent saved another text while you were editing (yours stays in the box until you save or cancel). */
   const changedMeanwhile = editing && body !== draft && body !== startedFrom.current;
+  /** Leave editing; says "nothing typed" at once (the effect below would say it only after the next render). */
+  const stop = () => {
+    setEditing(false);
+    onDirty(false);
+  };
   const edit = () => {
     startedFrom.current = body;
     setDraft(body);
@@ -347,7 +352,7 @@ function DescriptionField({ body, onSave, onDirty }: { body: string; onSave: (bo
     setBusy(true);
     const res = draft === body ? [] : await onSave(draft);
     setBusy(false);
-    if (res) setEditing(false);
+    if (res) stop();
   };
   return (
     <section aria-label="Description" className="flex flex-col gap-2">
@@ -380,7 +385,7 @@ function DescriptionField({ body, onSave, onDirty }: { body: string; onSave: (bo
                 void save();
               } else if (e.key === 'Escape') {
                 e.stopPropagation();
-                setEditing(false);
+                stop();
               }
             }}
             className="w-full resize-y rounded-md border border-line-3 bg-card px-2.5 py-2 font-mono text-[12.5px] leading-[1.55] text-ink outline-none focus:border-accent"
@@ -389,7 +394,7 @@ function DescriptionField({ body, onSave, onDirty }: { body: string; onSave: (bo
             <Button size={28} variant="primary" onClick={() => void save()} disabled={busy}>
               {busy ? 'Saving…' : 'Save'}
             </Button>
-            <Button size={28} variant="ghost" onClick={() => setEditing(false)}>
+            <Button size={28} variant="ghost" onClick={stop}>
               Cancel
             </Button>
           </div>
@@ -425,7 +430,10 @@ function Comments({
     setBusy(true);
     const res = await apply([{ op: 'add_comment', cardId: card.id, text: t }]);
     setBusy(false);
-    if (res) setText('');
+    if (res) {
+      setText('');
+      onDirty(false);
+    }
   };
   const who = (author: string, name: string | undefined) => {
     if (author === 'user') return 'You';
