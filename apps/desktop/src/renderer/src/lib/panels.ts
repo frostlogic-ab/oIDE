@@ -31,6 +31,7 @@ export const PANELS = {
   sourceControlSide: panel('scm.side', 'right', 'source control sidebar', 320, 260, 560),
   artifactsDetails: panel('artifacts.details', 'right', 'artifact details', 380, 300, 720),
   artifactsAgent: panel('artifacts.agent', 'left', 'agent panel', 400, 320, 720),
+  boardCard: panel('artifacts.board-card', 'right', 'card details', 420, 320, 760),
   marketplaceCategories: panel('marketplace.categories', 'left', 'categories sidebar', 220, 180, 420),
   marketplaceDetails: panel('marketplace.details', 'right', 'extension details', 380, 300, 720),
   settingsSections: panel('settings.sections', 'left', 'settings sections', 230, 190, 420),

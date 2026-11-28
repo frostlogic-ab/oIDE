@@ -22,6 +22,8 @@ export interface ArtifactRef {
   title?: string;
   /** Absolute path of the artifact's entry file, when it lives on disk. */
   path?: string;
+  /** The artifact's kind: a kanban board is read and changed with the board tools. */
+  kind?: string;
 }
 
 export type ArtifactResolver = (id: string) => ArtifactRef | undefined;
@@ -70,6 +72,9 @@ export function commandMessage(command: string): StreamJsonUserMessage {
 
 export function describeArtifact(ref: ArtifactRef): string {
   const title = ref.title ? `"${ref.title}" ` : '';
+  if (ref.kind === 'board') {
+    return `oIDE kanban board ${title}(id ${ref.id}): read it with the mcp__oide__board_read tool using {"id":"${ref.id}"} (add "cardId" for one card in full) and change it (add, edit, move or comment on cards) with mcp__oide__board_update.`;
+  }
   const where = ref.path ? ` It is stored at ${ref.path}.` : '';
   return `oIDE artifact ${title}(id ${ref.id}): read it with the mcp__oide__artifacts_read tool using {"id":"${ref.id}"} and update it with mcp__oide__artifacts_write.${where}`;
 }

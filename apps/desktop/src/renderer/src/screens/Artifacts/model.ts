@@ -5,6 +5,7 @@
  */
 import {
   REACT_DESIGN_ENTRY,
+  parseBoard,
   classifyClaudeLink,
   type AgentStatus,
   type AgentSummary,
@@ -22,9 +23,10 @@ export const KIND_TABS: ReadonlyArray<{ id: KindTab; label: string }> = [
   { id: 'design', label: 'Designs' },
   { id: 'doc', label: 'Docs' },
   { id: 'whiteboard', label: 'Whiteboards' },
+  { id: 'board', label: 'Boards' },
 ];
 
-export const KIND_LABEL: Record<ArtifactKind, string> = { design: 'Design', doc: 'Doc', whiteboard: 'Whiteboard' };
+export const KIND_LABEL: Record<ArtifactKind, string> = { design: 'Design', doc: 'Doc', whiteboard: 'Whiteboard', board: 'Board' };
 
 export interface ArtifactFilter {
   kind: KindTab;
@@ -140,8 +142,16 @@ export function importLinkError(raw: string): string | undefined {
 /** Removes a leading `---` front-matter block from Markdown (shared with the Files preview). */
 export { stripFrontMatter } from '../../lib/markdown';
 
-/** Whiteboards must be a JSON object; returns an error message or null. */
+/** Whiteboards must be a JSON object, boards an oIDE board; returns an error message or null. */
 export function validateContent(kind: ArtifactKind, content: string): string | null {
+  if (kind === 'board') {
+    try {
+      parseBoard(content);
+      return null;
+    } catch (err) {
+      return (err as Error).message;
+    }
+  }
   if (kind !== 'whiteboard') return null;
   try {
     const v: unknown = JSON.parse(content);

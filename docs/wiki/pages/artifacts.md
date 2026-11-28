@@ -34,6 +34,7 @@ waiting for its first retrieval: no files, `versions.json` is `[]`, `fileCount` 
 | design | `index.html` (HTML, SVG), `App.jsx` (React), or any HTML / JSX / TSX / SVG file of a multi-file design | minimal HTML5 page with the title |
 | doc | `doc.md` (or any text file, usually Markdown) | Markdown with front matter (`title`, `kind`, `importedFrom`) added when missing |
 | whiteboard | `board.excalidraw` (or any Excalidraw JSON object) | empty Excalidraw scene; the entry must be a JSON object |
+| board | `board.json` (an oIDE kanban board, `parseBoard`) | the default product backlog (`defaultBoard`); changed through board operations ([kanban-boards.md](kanban-boards.md), [ADR 0022](../../adr/0022-kanban-boards.md)); only the newest 200 versions are kept |
 
 `ArtifactMeta.entry` is any `isSafeArtifactPath` file of the current version; `fileCount` is derived on
 every write and rescan. `artifact.json` may also hold `oideInternal: { autoTitle?, autoKind? }`: the

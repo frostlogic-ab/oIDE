@@ -3,7 +3,7 @@ import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { AgentDriver } from '@oide/agent-core';
 import { WorktreeManager, isInside, resolveTool, samePath, setRepoTrustResolver, type GhCli } from '@oide/git';
 import { OideMcpServer, type ArtifactsBackend as McpArtifactsBackend } from '@oide/mcp-server';
-import { countBucket, resolveModel, type AgentArtifactFileInput, type ArtifactMeta, type ModelStrategy, type PermissionMode } from '@oide/protocol';
+import { boardOpsArea, countBucket, parseBoard, resolveModel, serializeBoard, type AgentArtifactFileInput, type ArtifactMeta, type BoardOp, type ModelStrategy, type PermissionMode } from '@oide/protocol';
 import { ArtifactStore, SqliteSecretStore, openStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { CleanupQueue, CleanupScheduler, folderName } from '../reliability/cleanup-queue.js';
@@ -98,6 +98,10 @@ export interface McpArtifactsExtras {
   retrieval?: () => ArtifactRetrievalService | undefined;
   /** The artifact an artifact agent edits (its spec's `artifactId`): it may write only that one, and create none. */
   artifactOf?: (agentId: string) => string | undefined;
+  /** The agent's title, kept on the board comments it writes. */
+  agentTitle?: (agentId: string) => string | undefined;
+  /** An agent changed a board (telemetry: the operations' kinds only). */
+  onBoardChange?: (ops: BoardOp[]) => void;
 }
 
 export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) => boolean, extras: McpArtifactsExtras = {}): McpArtifactsBackend {
@@ -127,6 +131,31 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
     if (!r) throw new Error('Artifact retrieval is not available.');
     return r;
   };
+  /**
+   * Boards change only through board_update (ADR 0022): a raw write of board.json could sign a comment
+   * as the user or another agent, or link agents to cards.
+   */
+  const refuseBoardWrite = (m: ArtifactMeta) => {
+    if (m.kind === 'board') throw new Error(`${m.title} is a kanban board: change it with board_update (read it with board_read), not by writing its file.`);
+  };
+  /**
+   * A board an agent creates is attributed to that agent, whatever its JSON says: every card and
+   * comment is the agent's (author, name), and no card links an agent. Returns the content to store.
+   */
+  const ownNewBoard = (agentId: string, input: { kind: string; content?: string; files?: unknown[] }): string | undefined => {
+    if (input.kind !== 'board') return input.content;
+    if (input.files?.length) throw new Error('A board is one file: give its JSON as content, or leave content out for the default board.');
+    if (input.content === undefined) return undefined;
+    const board = parseBoard(input.content);
+    const author = `agent:${agentId}`;
+    const name = extras.agentTitle?.(agentId);
+    for (const c of board.cards) {
+      c.agents = [];
+      c.createdBy = author;
+      c.comments = c.comments.map(({ authorName: _drop, ...m }) => ({ ...m, author, ...(name ? { authorName: name } : {}) }));
+    }
+    return serializeBoard(board);
+  };
   return {
     files: async (ctx, id) => {
       requireVisible(ctx, id);
@@ -139,6 +168,7 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
     writeFiles: async (ctx, id, change) => {
       requireWritable(ctx.agentId, id);
       const m = requireVisible(ctx, id);
+      refuseBoardWrite(m);
       const files = await decode(ctx.agentId, change.files);
       if (change.content !== undefined) files.push({ path: change.entry ?? m.entry, encoding: 'base64', data: Buffer.from(change.content, 'utf8').toString('base64') });
       return store.writeFilesForAgent(id, { files, ...(change.deletes ? { deletes: change.deletes } : {}), ...(change.entry ? { entry: change.entry } : {}), ...(change.note ? { note: change.note } : {}) }, ctx.agentId);
@@ -159,17 +189,36 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
     },
     write: async (ctx, id, content) => {
       requireWritable(ctx.agentId, id);
-      if (!visible(ctx, (await store.read(id)).meta)) throw new Error(hidden(id));
+      const m = (await store.read(id)).meta;
+      if (!visible(ctx, m)) throw new Error(hidden(id));
+      refuseBoardWrite(m);
       return store.write(id, content, ctx.agentId);
+    },
+    readBoard: async (ctx, id) => {
+      requireVisible(ctx, id);
+      const out = await store.readBoard(id);
+      store.recordUse(id, ctx.agentId, 'read');
+      return out;
+    },
+    updateBoard: async (ctx, id, ops) => {
+      requireWritable(ctx.agentId, id);
+      requireVisible(ctx, id);
+      const name = extras.agentTitle?.(ctx.agentId);
+      // An agent can't pin itself (or another agent) to a card: the user starts agents from a card.
+      if (ops.some((o) => o.op === 'link_agent' || o.op === 'unlink_agent')) throw new Error('Agents are linked to cards when the user starts them from a card.');
+      const out = await store.updateBoard(id, ops, { author: `agent:${ctx.agentId}`, ...(name ? { authorName: name } : {}) });
+      extras.onBoardChange?.(ops);
+      return out;
     },
     create: async (ctx, input) => {
       const own = extras.artifactOf?.(ctx.agentId);
       if (own !== undefined) throw new Error(`You are the artifact agent of ${own}: you change only that artifact and cannot create others. Add files to it with artifacts_write instead.`);
+      const content = ownNewBoard(ctx.agentId, input);
       return store.createForAgent(
         {
           title: input.title,
           kind: input.kind,
-          ...(input.content !== undefined ? { content: input.content } : {}),
+          ...(content !== undefined ? { content } : {}),
           ...(input.files?.length ? { files: await decode(ctx.agentId, input.files) } : {}),
           ...(input.entry ? { entry: input.entry } : {}),
           ...(ctx.projectId ? { projectId: ctx.projectId } : {}),
@@ -216,6 +265,8 @@ export async function createCoreServices(opts: CoreOptions): Promise<Services> {
       worktreeOf: (agentId) => late.agents?.supervisor.get(agentId)?.worktreePath,
       retrieval: () => late.retrieval,
       artifactOf: (agentId) => late.agents?.supervisor.spec(agentId)?.artifactId,
+      agentTitle: (agentId) => late.agents?.supervisor.get(agentId)?.title,
+      onBoardChange: (ops) => ctx.telemetry?.service.track('board_changed', { by: 'agent', area: boardOpsArea(ops), ops: countBucket(ops.length) }),
     }),
     onArtifactUse: (u) => ctx.emit('artifacts.changed', u.artifactId && u.artifactId !== '*' ? { id: u.artifactId, change: 'used' } : {}),
     log: (m, d) => ctx.log.debug('[mcp]', m, d ?? ''),

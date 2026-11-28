@@ -18,6 +18,7 @@ import { openNewProject } from '../../stores/newProject';
 import { navigate, useRouter } from '../../stores/router';
 import { useScope } from '../../stores/scope';
 import { useSettings } from '../../stores/settings';
+import { toast } from '../../stores/ui';
 import { highlightTiles } from '../Wall/wallState';
 import { CardRadioGroup } from './components/CardRadioGroup';
 import { useAttachments } from '../../components/Attachments';
@@ -227,6 +228,13 @@ export default function SpawnScreen() {
       const created = await oide.invoke('agents.spawn', atts.attachments.length ? { ...res.spec, attachments: atts.attachments } : res.spec);
       const agents = useAgents.getState();
       for (const a of created) agents.applySummary(a);
+      // Started from a board card (Start an agent): the card shows its agents and their status.
+      if (params.card && created.length) {
+        const { boardId, cardId } = params.card;
+        void oide
+          .invoke('artifacts.boardApply', { id: boardId, ops: created.map((a) => ({ op: 'link_agent' as const, cardId, agentId: a.id })) })
+          .catch((err) => toast(`The agent started, but the card could not be linked to it: ${ipcErrorMessage(err)}`, 'warning'));
+      }
       void useSettings
         .getState()
         .update({
