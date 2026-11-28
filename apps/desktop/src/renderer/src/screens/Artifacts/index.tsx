@@ -26,6 +26,7 @@ import { ArtifactPreview, KindThumb } from './Preview';
 import { ArtifactThumbnail } from './Thumbnail';
 import { ProjectPrompt, RetrievalCardLine, RetrievalStatus, useRetrieval } from './Retrieval';
 import { Viewer, type CompareSide, type ViewerMode } from './Viewer';
+import { BoardViewer } from './Board/BoardViewer';
 import {
   KIND_LABEL,
   KIND_TABS,
@@ -225,6 +226,23 @@ export default function ArtifactsScreen() {
     setDialog('new');
   }, dialog !== null);
 
+  if (opened && shown && shown.meta.kind === 'board' && shown.meta.version > 0) {
+    return (
+      <>
+        <BoardViewer
+          key={shown.meta.id}
+          detail={shown}
+          projectName={shown.meta.projectId ? projectName(shown.meta.projectId) : ''}
+          onClose={closeViewer}
+          onSaved={(meta, content) => setDetail((d) => (d && d.meta.id === meta.id ? withSaved(d, meta, content) : d))}
+          onRename={() => setDialog('rename')}
+          onDelete={() => setDialog('delete')}
+        />
+        {actionDialogs}
+      </>
+    );
+  }
+
   if (opened && shown) {
     return (
       <>
@@ -297,7 +315,7 @@ export default function ArtifactsScreen() {
           <EmptyState
             icon="artifacts"
             title={list.length ? 'No artifacts match' : 'No artifacts yet'}
-            description={list.length ? 'Try another type, project or search.' : 'Start a design, doc or whiteboard from a claude.ai link, from files, or blank. Agents read and write them through oIDE.'}
+            description={list.length ? 'Try another type, project or search.' : 'Start a design, doc, whiteboard or kanban board from a claude.ai link, from files, or blank. Agents read and write them through oIDE.'}
             className="flex-1"
           />
         ) : (
