@@ -28,6 +28,7 @@ import {
   LspSync,
   LspTextEdit,
 } from './lsp.js';
+import { DependencyVersions, DependencyVersionsInput } from './dependencies.js';
 import { TelemetryConsentInput, TelemetryStatus, TelemetryTrackInput } from './telemetry.js';
 import { UsageRange, UsageStats } from './usage.js';
 import { WindowOpenTrigger } from './windows.js';
@@ -375,6 +376,13 @@ export const Commands = {
   'lsp.highlights': cmd(LspAt, z.array(LspHighlight)),
   'lsp.symbols': cmd(LspDocument, z.array(LspSymbol)),
   'lsp.format': cmd(LspFormatInput, z.array(LspTextEdit)),
+
+  /**
+   * Files › package.json: the latest published version of each named dependency, from the public
+   * npm registry (cached in main). Only project / worktree checkouts; off when Settings › Privacy ›
+   * Show newer npm versions is off; scopes the checkout's `.npmrc` sends elsewhere are never asked.
+   */
+  'deps.latest': cmd(DependencyVersionsInput, DependencyVersions),
 
   // Terminals
   // No `command` (SEC-05): renderers get interactive shells only; the sign-in terminal runs in main.

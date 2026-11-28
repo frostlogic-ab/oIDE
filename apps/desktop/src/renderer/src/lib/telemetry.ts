@@ -121,6 +121,12 @@ export function trackDiffView(view: 'off' | 'unified' | 'split'): void {
   send({ type: 'event', name: 'files_diff_view', props: { view } });
 }
 
+/** Files › package.json: a newer-version hint opened Spawn with an upgrade goal. */
+export function trackDependencyUpgrade(bump: 'major' | 'minor' | 'patch' | 'prerelease', via: 'click' | 'menu'): void {
+  if (!usageOn()) return;
+  send({ type: 'event', name: 'files_dependency_upgrade', props: { bump, via } });
+}
+
 // ----------------------------------------------------------------------------- vitals
 
 interface Visit {

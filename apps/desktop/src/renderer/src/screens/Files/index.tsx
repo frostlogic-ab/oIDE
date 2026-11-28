@@ -10,7 +10,7 @@ import { NEEDS_YOU, type AgentSummary, type ArtifactMeta, type CommitInfo, type 
 import { HeaderSlot } from '../../components/frame/HeaderSlot';
 import { invokeOr, ipcErrorMessage, oide } from '../../lib/bridge';
 import { keymap } from '../../lib/keymap';
-import { trackDiffView, trackMarkdownView } from '../../lib/telemetry';
+import { trackDependencyUpgrade, trackDiffView, trackMarkdownView } from '../../lib/telemetry';
 import { useKeymapScope } from '../../lib/useKeymap';
 import { useAgents } from '../../stores/agents';
 import { useProjects } from '../../stores/projects';
@@ -20,6 +20,7 @@ import { toast } from '../../stores/ui';
 import { useGit, useGitData } from '../SourceControl/gitStore';
 import { C, commitAuthor, shortBranch, timeAgo } from '../SourceControl/model';
 import { useChanges, useCheckoutChanges } from './changesStore';
+import { upgradeGoal, type UpgradeRequest } from './dependencies';
 import { effectiveDiffView, type DiffView } from './diffView';
 import type { EditorActions, EditorPaneProps, EditorStatus, SelectionInfo } from './EditorPane';
 import { joinPath, tabId, useFiles, type FileTab } from './filesStore';
@@ -229,6 +230,17 @@ export default function FilesScreen() {
     });
   };
 
+  // package.json › a newer version's hint: Spawn opens with the upgrade goal, to start or edit first.
+  const upgradeDependency = (u: UpgradeRequest, via: 'click' | 'menu') => {
+    if (!active) return;
+    trackDependencyUpgrade(u.bump, via);
+    navigate('spawn', {
+      projectId: active.projectId,
+      goal: upgradeGoal(u),
+      context: [{ kind: 'file', path: u.path, title: `${u.path.split('/').pop() ?? u.path} · ${u.name}` }],
+    });
+  };
+
   const sendTo = editor
     ? {
         label: `Send to ${editor.title}`,
@@ -395,6 +407,7 @@ export default function FilesScreen() {
                 onOpenFile={(path) => files.openFile(active.projectId, active.root, path)}
                 onOpenLocation={openLocation}
                 actionsRef={actionsRef}
+                onUpgradeDependency={upgradeDependency}
               />
             </Suspense>
           ) : (

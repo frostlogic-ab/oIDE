@@ -12,6 +12,7 @@ export * from './distribution.js';
 export * from './search.js';
 export * from './scripts.js';
 export * from './lsp.js';
+export * from './dependencies.js';
 export * from './windows.js';
 export * from './menu.js';
 export * from './telemetry.js';

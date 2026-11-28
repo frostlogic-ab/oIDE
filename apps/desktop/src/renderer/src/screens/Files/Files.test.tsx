@@ -5,6 +5,7 @@ import { files as mockFiles, mockHash } from '../../lib/mock/scm';
 import { keymap } from '../../lib/keymap';
 import { useScope } from '../../stores/scope';
 import { useUi } from '../../stores/ui';
+import { useRouter } from '../../stores/router';
 import { useSettings } from '../../stores/settings';
 import { setupMockApp } from '../SourceControl/testing';
 import { ancestorDirs, tabId, useFiles, visibleRows } from './filesStore';
@@ -14,8 +15,14 @@ import type { EditorPaneProps } from './EditorPane';
 
 // Monaco does not run in jsdom: a stand-in pane that can "type" into the active tab.
 vi.mock('./EditorPane', () => ({
-  default: ({ active, onDirty, onStatus, mdView, onOpenFile, diff }: EditorPaneProps) => (
+  default: ({ active, onDirty, onStatus, mdView, onOpenFile, diff, onUpgradeDependency }: EditorPaneProps) => (
     <>
+      <button
+        type="button"
+        onClick={() => onUpgradeDependency?.({ path: active.path, name: 'eslint', lookup: 'eslint', section: 'devDependencies', spec: '^9.0.0', to: '10.15.0', bump: 'major' }, 'click')}
+      >
+        Click a newer version
+      </button>
       <button type="button" onClick={() => onStatus({ line: 3, column: 7, language: 'Markdown', dirty: true, saving: false, readOnly: false })}>
         Report status
       </button>
@@ -262,6 +269,22 @@ describe('Files tab bar', () => {
     expect(within(status).getByRole('button', { name: 'Save' })).toBeTruthy();
     fireEvent.click(within(status).getByRole('button', { name: 'Edit' }));
     expect(status.textContent).toContain('Ln 3, Col 7 · Markdown');
+  });
+});
+
+describe('Files package.json dependency versions', () => {
+  it('a newer version hint opens Spawn with an upgrade goal for the package', async () => {
+    await setupMockApp({ screen: 'files', params: {} });
+    useFiles.getState().openFile('billing-api', '/Users/you/code/billing-api', 'package.json');
+    render(<FilesScreen />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Click a newer version' }));
+    const route = useRouter.getState().route;
+    expect(route.screen).toBe('spawn');
+    const params = route.params as { projectId?: string; goal?: string; context?: unknown[] };
+    expect(params.projectId).toBe('billing-api');
+    expect(params.goal).toContain('Upgrade the npm package `eslint` in package.json (devDependencies) from `^9.0.0` to 10.15.0.');
+    expect(params.goal).toMatch(/changelog/i);
+    expect(params.context).toEqual([{ kind: 'file', path: 'package.json', title: 'package.json · eslint' }]);
   });
 });
 

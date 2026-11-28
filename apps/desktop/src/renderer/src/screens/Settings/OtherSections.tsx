@@ -241,6 +241,21 @@ export function PrivacySection({ settings }: { settings: Settings }) {
         </button>
         {showSent && <WhatIsSent />}
       </div>
+      <Sec>Package versions</Sec>
+      <Row
+        title="Show newer npm versions"
+        desc="When a package.json is open in Files, oIDE asks the public npm registry for the latest version of each dependency it lists. Only package names are sent. Scopes your project's .npmrc sends to another registry are never asked about."
+      >
+        {({ titleId, descId }) => (
+          <Toggle
+            aria-labelledby={titleId}
+            aria-describedby={descId}
+            disabled={busy}
+            checked={settings.editor.npmVersions}
+            onChange={(on) => void save({ editor: { npmVersions: on } })}
+          />
+        )}
+      </Row>
       <Sec>On this computer</Sec>
       <Row
         title="Save crash reports on this computer"
