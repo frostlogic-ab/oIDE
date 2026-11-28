@@ -231,6 +231,13 @@ describe('kanban boards: changing a property type', () => {
     expect(b.cards[0]!.props[pri.id]).toBeUndefined();
     expect(() => checkBoard(b)).not.toThrow();
   });
+
+  it('a stale or stand-in option id is refused, never turned into an option name', () => {
+    const { board, run } = setup();
+    const b = run(board, [{ op: 'add_card', title: 'A' }]).board;
+    expect(() => run(b, [{ op: 'update_card', cardId: b.cards[0]!.id, props: { Type: 'o_k3j9x0a2mq' } }])).toThrow(/no option o_k3j9x0a2mq/);
+    expect(prop(b, 'Type').options!.map((o) => o.name)).not.toContain('o_k3j9x0a2mq');
+  });
 });
 
 describe('kanban boards: parsing and integrity', () => {

@@ -2,7 +2,7 @@
  * Pure helpers for kanban boards (artifact kind `board`, ADR 0022): colours on the dark UI, the chips a
  * card shows, search, and the goal an agent started from a card gets. No React, no bridge.
  */
-import { displayValue, type BoardCard, type BoardColor, type BoardColumn, type BoardProperty, type KanbanBoard } from '@oide/protocol';
+import { applyBoardOps, displayValue, type BoardCard, type BoardPropertyType, type BoardColor, type BoardColumn, type BoardProperty, type KanbanBoard } from '@oide/protocol';
 
 /**
  * Base hues on the oIDE palette: gray, yellow, green, blue, purple and red are design tokens (ink-3,
@@ -143,6 +143,27 @@ export function goalForCard(board: KanbanBoard, card: BoardCard, ids: { boardId:
   ];
   const text = `${ticket}\n\n---\n${steps.join('\n')}`;
   return text.length > MAX_GOAL ? `${ticket.slice(0, MAX_GOAL - 2000)}\n\n[…the card is longer: read it with board_read]\n\n---\n${steps.join('\n')}` : text;
+}
+
+/**
+ * How many cards would lose all or part of their value if `property` became `to` (a dry run of the
+ * same conversion main does). 0 when nothing is lost or the change can't apply.
+ */
+export function typeChangeLoss(board: KanbanBoard, propertyId: string, to: BoardPropertyType): number {
+  let after: KanbanBoard;
+  try {
+    after = applyBoardOps(board, [{ op: 'update_property', property: propertyId, type: to }], { author: 'user' }).board;
+  } catch {
+    return 0;
+  }
+  let lost = 0;
+  board.cards.forEach((c, i) => {
+    const was = c.props[propertyId];
+    const now = after.cards[i]?.props[propertyId];
+    if (was === undefined) return;
+    if (now === undefined || (Array.isArray(was) && (Array.isArray(now) ? now.length : 1) < was.length)) lost++;
+  });
+  return lost;
 }
 
 /** The index a dragged card lands at in a column, from the pointer's Y and the cards' boxes. */

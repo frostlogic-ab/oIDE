@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyBoardOps, defaultBoard } from '@oide/protocol';
-import { cardChips, cardsByColumn, dropIndex, filterCards, goalForCard } from './boardModel';
+import { cardChips, cardsByColumn, dropIndex, filterCards, goalForCard, typeChangeLoss } from './boardModel';
 
 function sample() {
   let n = 0;
@@ -45,6 +45,14 @@ describe('board helpers', () => {
     expect(goal).toContain('board id art-b, card id');
     expect(goal).toContain('move the card to "In progress"');
     expect(goal).toContain('move it to "In review"');
+  });
+
+  it('typeChangeLoss counts the cards a type change would clear', () => {
+    const b = sample();
+    const priority = b.properties.find((p) => p.name === 'Priority')!;
+    expect(typeChangeLoss(b, priority.id, 'multi_select')).toBe(0);
+    expect(typeChangeLoss(b, priority.id, 'text')).toBe(0);
+    expect(typeChangeLoss(b, priority.id, 'checkbox')).toBe(2);
   });
 
   it('dropIndex: before the first card whose middle is below the pointer', () => {

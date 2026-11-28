@@ -21,12 +21,14 @@ export interface CardPanelProps {
   apply: (ops: BoardOp[]) => Promise<BoardOpResult[] | null>;
   announce: (message: string) => void;
   onClose: () => void;
+  /** Runs `action` now, or after the user agreed to drop what they typed in the card. */
+  guard: (action: () => void) => void;
   /** Whether the panel holds typed text not saved yet (the description being edited, a comment). */
   onDirtyChange: (dirty: boolean) => void;
   onEditProperties: () => void;
 }
 
-export function CardPanel({ meta, board, card, agents, apply, announce, onClose, onDirtyChange, onEditProperties }: CardPanelProps) {
+export function CardPanel({ meta, board, card, agents, apply, announce, onClose, guard, onDirtyChange, onEditProperties }: CardPanelProps) {
   const headingId = useId();
   const [descDirty, setDescDirty] = useState(false);
   const [commentDirty, setCommentDirty] = useState(false);
@@ -37,14 +39,15 @@ export function CardPanel({ meta, board, card, agents, apply, announce, onClose,
   const update = (patch: Omit<Extract<BoardOp, { op: 'update_card' }>, 'op' | 'cardId'>) => apply([{ op: 'update_card', cardId: card.id, ...patch }]);
   const setProp = (p: BoardProperty, v: BoardValueInput) => update({ props: { [p.id]: v } });
 
-  const startAgent = () => {
+  const startAgent = () =>
+    guard(() =>
     useRouter.getState().navigate('spawn', {
       ...(meta.projectId ? { projectId: meta.projectId } : {}),
       goal: goalForCard(board, card, { boardId: meta.id, boardTitle: meta.title }),
       context: [{ kind: 'artifact', id: meta.id, title: meta.title }],
       card: { boardId: meta.id, cardId: card.id },
-    });
-  };
+    }),
+    );
 
   return (
     <ResizableAside panel={PANELS.boardCard} aria-labelledby={headingId} className="min-h-0 flex flex-col bg-panel border-l border-line box-border">
@@ -152,6 +155,8 @@ export function CardPanel({ meta, board, card, agents, apply, announce, onClose,
                   void apply([{ op: 'delete_card', cardId: card.id }]).then((r) => {
                     if (!r) return;
                     announce(`Deleted ${card.title}.`);
+                    // The card is gone: nothing typed in it is left to keep.
+                    onDirtyChange(false);
                     onClose();
                   });
                 }}

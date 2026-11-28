@@ -8,7 +8,7 @@ import { useEffect, useId, useState } from 'react';
 import { BOARD_COLORS, BOARD_PROPERTY_TYPES, type BoardColor, type BoardColumn, type BoardOp, type BoardOpResult, type BoardProperty, type BoardPropertyType, type KanbanBoard } from '@oide/protocol';
 import { Button, Checkbox, Dialog, IconButton, Select, Tabs, tabPanelProps } from '@oide/ui';
 import { plural } from '../../../lib/format';
-import { chipStyle, COLOR_LABEL, PROPERTY_TYPE_LABEL } from './boardModel';
+import { chipStyle, COLOR_LABEL, PROPERTY_TYPE_LABEL, typeChangeLoss } from './boardModel';
 
 type Apply = (ops: BoardOp[]) => Promise<BoardOpResult[] | null>;
 const COLOR_OPTIONS = BOARD_COLORS.map((c) => ({ value: c, label: COLOR_LABEL[c] }));
@@ -200,7 +200,15 @@ function PropertiesTab({ board, apply }: { board: KanbanBoard; apply: Apply }) {
 function PropertyRow({ board, property: p, index: i, apply }: { board: KanbanBoard; property: BoardProperty; index: number; apply: Apply }) {
   const [deleting, setDeleting] = useState(false);
   const [option, setOption] = useState('');
+  /** A type change that would lose values, waiting for the user to confirm it. */
+  const [retype, setRetype] = useState<{ to: BoardPropertyType; lost: number } | null>(null);
   const used = board.cards.filter((c) => c.props[p.id] !== undefined).length;
+  const changeType = (to: BoardPropertyType) => {
+    if (to === p.type) return;
+    const lost = typeChangeLoss(board, p.id, to);
+    if (lost > 0) setRetype({ to, lost });
+    else void apply([{ op: 'update_property', property: p.id, type: to }]);
+  };
   const hasOptions = p.type === 'select' || p.type === 'multi_select';
   return (
     <li className="flex flex-col gap-2 rounded-lg border border-line-2 bg-card p-2">
@@ -211,7 +219,7 @@ function PropertyRow({ board, property: p, index: i, apply }: { board: KanbanBoa
           hideLabel
           size={28}
           value={p.type}
-          onChange={(e) => void apply([{ op: 'update_property', property: p.id, type: e.target.value as BoardPropertyType }])}
+          onChange={(e) => changeType(e.target.value as BoardPropertyType)}
           options={BOARD_PROPERTY_TYPES.map((t) => ({ value: t, label: PROPERTY_TYPE_LABEL[t] }))}
           className="w-[120px]"
         />
@@ -220,6 +228,27 @@ function PropertyRow({ board, property: p, index: i, apply }: { board: KanbanBoa
         <IconButton icon="arrow-down" aria-label={`Move ${p.name} down`} title="Move down" disabled={i === board.properties.length - 1} onClick={() => void apply([{ op: 'move_property', property: p.id, index: i + 1 }])} />
         <IconButton icon="trash" aria-label={`Delete property ${p.name}`} title="Delete property" onClick={() => setDeleting((d) => !d)} />
       </div>
+      {retype && (
+        <div role="group" aria-label={`Change the type of ${p.name}`} className="flex items-center gap-2 flex-wrap rounded-md bg-bad-bg border border-bad-line p-2">
+          <span className="text-[12.5px] text-ink-2 flex-1">
+            As {PROPERTY_TYPE_LABEL[retype.to]}, {plural(retype.lost, 'card')} lose{retype.lost === 1 ? 's' : ''} {retype.lost === 1 ? 'its value' : 'their values'} (or part of {retype.lost === 1 ? 'it' : 'them'}).
+          </span>
+          <Button
+            size={28}
+            variant="danger"
+            onClick={() => {
+              const to = retype.to;
+              setRetype(null);
+              void apply([{ op: 'update_property', property: p.id, type: to }]);
+            }}
+          >
+            Change type
+          </Button>
+          <Button size={28} variant="ghost" onClick={() => setRetype(null)}>
+            Cancel
+          </Button>
+        </div>
+      )}
       {deleting && (
         <div role="group" aria-label={`Delete property ${p.name}`} className="flex items-center gap-2 flex-wrap rounded-md bg-bad-bg border border-bad-line p-2">
           <span className="text-[12.5px] text-ink-2 flex-1">{used ? `Its value on ${plural(used, 'card')} goes too.` : 'No card has a value for it.'}</span>

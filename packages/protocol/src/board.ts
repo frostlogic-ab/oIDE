@@ -204,6 +204,8 @@ export interface BoardOpContext {
 }
 
 const ID_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
+/** The shape of an option id `boardId('o')` makes. */
+const GENERATED_OPTION_ID = /^o_[a-z0-9]{10}$/;
 /** A short random id (`c_k3j9x0a2mq`); `crypto.getRandomValues` exists in main and the renderer. */
 export function boardId(prefix: string): string {
   const bytes = new Uint8Array(10);
@@ -249,6 +251,9 @@ function uniqueName(existing: Array<{ name: string }>, name: string, what: strin
 function optionFor(p: BoardProperty, ref: string, newId: (prefix: string) => string): string {
   const hit = findOption(p, ref);
   if (hit) return hit.id;
+  // An id oIDE made (`o_` + 10 characters) that is not there is a stale or stand-in id, never a new
+  // name: refuse it instead of creating an option called "o_k3j9x0a2mq".
+  if (GENERATED_OPTION_ID.test(ref)) throw new BoardOpError(`${p.name} has no option ${ref}. Read the board again: it may have changed.`);
   const name = ref.trim();
   if (!name || name.length > BOARD_LIMITS.name) throw new BoardOpError(`"${ref}" is not a valid option of ${p.name}.`);
   const options = (p.options ??= []);

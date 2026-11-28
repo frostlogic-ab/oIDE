@@ -120,6 +120,8 @@ describe('BoardViewer (ADR 0022)', () => {
     fireEvent.change(within(panel).getByRole('textbox', { name: 'Add a comment' }), { target: { value: 'Please add a test' } });
     fireEvent.click(within(panel).getByRole('button', { name: 'Comment' }));
     await waitFor(() => expect(within(panel).getByText('Please add a test')).toBeTruthy());
+    // Saved: the composer is empty again, so nothing typed is left to lose.
+    await waitFor(() => expect((within(panel).getByRole('textbox', { name: 'Add a comment' }) as HTMLTextAreaElement).value).toBe(''));
     expect(parseBoard(serializeBoard(board)).cards[0]!.comments[0]).toMatchObject({ author: 'user', text: 'Please add a test' });
 
     fireEvent.click(within(panel).getByRole('button', { name: 'Start an agent' }));
@@ -143,6 +145,12 @@ describe('BoardViewer (ADR 0022)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
     fireEvent.click(within(await screen.findByRole('dialog', { name: 'Discard what you typed?' })).getByRole('button', { name: 'Discard' }));
     await waitFor(() => expect((within(screen.getByRole('complementary', { name: 'Card' })).getByRole('textbox', { name: 'Title' }) as HTMLTextAreaElement).value).toBe('Dark mode'));
+    // Start an agent asks too.
+    const panel2 = screen.getByRole('complementary', { name: 'Card' });
+    fireEvent.change(within(panel2).getByRole('textbox', { name: 'Add a comment' }), { target: { value: 'more' } });
+    fireEvent.click(within(panel2).getByRole('button', { name: 'Start an agent' }));
+    expect(await screen.findByRole('dialog', { name: 'Discard what you typed?' })).toBeTruthy();
+    expect(useRouter.getState().route.screen).toBe('artifacts');
   });
 
   it('while searching, a card menu offers no Move up / down (its place counts hidden cards)', async () => {

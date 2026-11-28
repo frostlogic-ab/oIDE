@@ -1212,6 +1212,8 @@ export class ArtifactStore {
     const paths = files.map((f) => f.path);
     let kind = input.kind ?? (input.entry ? kindOfEntry(input.entry) : undefined);
     // A board.json is a board only when it holds one; an Excalidraw scene saved under that name stays a whiteboard.
+    // A page or component wins (a design folder may carry a board.json); then a real board; then the rest.
+    if (!kind && pickEntry('design', paths)) kind = 'design';
     if (!kind) {
       const boardFile = pickEntry('board', paths);
       const f = boardFile ? plan.get(foldPath(boardFile)) : undefined;

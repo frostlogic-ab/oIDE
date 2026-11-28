@@ -128,6 +128,11 @@ describe('ArtifactStore: kanban boards (ADR 0022)', () => {
     writeFileSync(join(b, 'board.json'), JSON.stringify({ type: 'excalidraw', version: 2, elements: [] }));
     writeFileSync(join(b, 'notes.txt'), 'x');
     expect((await store.importFiles({ folderPath: b })).kind).not.toBe('board');
+    // A design folder that carries a board.json stays a design.
+    const c = tempDir('oide-import-');
+    writeFileSync(join(c, 'board.json'), serializeBoard(defaultBoard()));
+    writeFileSync(join(c, 'index.html'), '<!doctype html><title>Site</title>');
+    expect((await store.importFiles({ folderPath: c })).kind).toBe('design');
   });
 
   it('a board.json file imports as a board', async () => {

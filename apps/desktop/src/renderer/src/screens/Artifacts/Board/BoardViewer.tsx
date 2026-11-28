@@ -63,14 +63,13 @@ export function BoardViewer({ detail, projectName, onClose, onSaved, onRename, o
   const setCardDirty = useCallback((d: boolean) => {
     cardDirty.current = d;
   }, []);
-  /** Where to go once the user agreed to drop that text: another card, no card, or out of the board. */
-  const [leaving, setLeaving] = useState<{ to: string | null } | { close: true } | null>(null);
+  /** What to do once the user agreed to drop that text: open another card, close it, leave the board, start an agent. */
+  const [leaving, setLeaving] = useState<{ run: () => void } | null>(null);
+  const guard = (run: () => void) => (cardDirty.current ? setLeaving({ run }) : run());
   const goTo = (to: string | null) => {
-    if (to === openCard) return;
-    if (cardDirty.current) return setLeaving({ to });
-    setOpenCard(to);
+    if (to !== openCard) guard(() => setOpenCard(to));
   };
-  const close = () => (cardDirty.current ? setLeaving({ close: true }) : onClose());
+  const close = () => guard(onClose);
   const [settings, setSettings] = useState(false);
   const [message, setMessage] = useState('');
   const announce = useCallback((m: string) => setMessage(m), []);
@@ -224,6 +223,7 @@ export function BoardViewer({ detail, projectName, onClose, onSaved, onRename, o
             apply={apply}
             announce={announce}
             onClose={() => goTo(null)}
+            guard={guard}
             onDirtyChange={setCardDirty}
             onEditProperties={() => setSettings(true)}
           />
@@ -248,8 +248,7 @@ export function BoardViewer({ detail, projectName, onClose, onSaved, onRename, o
                   const l = leaving;
                   setLeaving(null);
                   cardDirty.current = false;
-                  if ('close' in l) onClose();
-                  else setOpenCard(l.to);
+                  l.run();
                 }}
               >
                 Discard
