@@ -162,3 +162,5 @@ colours come from `agentStatusMeta(status)` / `subagentStatusMeta(status)` (`lab
 
 The app frame (header, rail, status bar, command bar, toasts) lives in the desktop renderer, not in
 the kit; see [desktop-shell](desktop-shell.md).
+Toasts are dark raised cards (status icon and border per level, kit buttons), not the canvas's light pill:
+[ADR 0022](../../adr/0022-dark-toasts.md). Only tooltips use the light `--color-toast` bubble.
