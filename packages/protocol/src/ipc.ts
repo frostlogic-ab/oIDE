@@ -30,6 +30,7 @@ import {
 import { TelemetryConsentInput, TelemetryStatus, TelemetryTrackInput } from './telemetry.js';
 import { UsageRange, UsageStats } from './usage.js';
 import { WindowOpenTrigger } from './windows.js';
+import { AppMenuWindowItem } from './menu.js';
 
 /**
  * The IPC contract. Every renderer → main command is a request/response pair, validated with Zod
@@ -666,6 +667,8 @@ export const Events = {
     requestId: z.string().optional(),
   }),
   'command.invoke': z.object({ commandId: z.string() }),
+  /** A macOS menu bar item was chosen; sent to the window the user used last (main/app-menu.ts). */
+  'menu.run': z.object({ item: AppMenuWindowItem }),
   /** A batch of `files.searchContent` results (the last one has `done: true`). */
   'files.searchResults': SearchResultsEvent,
   'updates.changed': UpdateStatus,

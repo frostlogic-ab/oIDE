@@ -3,13 +3,14 @@ import './security/early-env.js';
 // Must stay before the rest: silences the node:sqlite ExperimentalWarning before anything loads it.
 import './warnings.js';
 
-import { existsSync, readdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
 import { hostname, release, userInfo } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app, BrowserWindow, crashReporter, dialog, ipcMain, Menu, Notification, screen, shell } from 'electron';
 import { openStore, type Store } from '@oide/store';
 import { AppVersion, appVersionValue, cliVersionBucket, countBucket, screenBucket, telemetryTarget, type AgentEvent, type WindowOpenTrigger } from '@oide/protocol';
+import { buildAppMenuTemplate, type AppMenuDeps } from './app-menu.js';
 import type { MainContext } from './context.js';
 import { createAgentEventBatcher, createEmitter } from './ipc/emit.js';
 import { attachRouter, IpcRouter, type Logger } from './ipc/router.js';
@@ -17,6 +18,7 @@ import { attachDropChannel } from './handlers/dialog.js';
 import { registerAllHandlers } from './handlers/index.js';
 import { createServices } from './services/index.js';
 import { registerArtifactScheme } from './services/electron-platform.js';
+import { isAllowedExternalUrl } from './security/external.js';
 import { hardenApp } from './security/hardening.js';
 import { AllowedRoots } from './security/roots.js';
 import { loadWindowState, MIN_HEIGHT, MIN_WIDTH, trackWindowState } from './window-state.js';
@@ -247,7 +249,6 @@ async function start(): Promise<void> {
   if (process.platform === 'win32' && app.isPackaged) releaseDevShortcuts();
 
   await hardenApp({ isAppUrl, dev: Boolean(devServerUrl) });
-  setMenu(() => openAnotherWindow?.('menu'));
 
   const userDataDir = app.getPath('userData');
   roots.add(userDataDir, 'app-data');
@@ -352,6 +353,23 @@ async function start(): Promise<void> {
     syncCrashPref(s.ui.crashReports);
   });
   registerAllHandlers(router, services, ctx);
+  installAppMenu(
+    {
+      appName: app.name,
+      dev: !app.isPackaged,
+      send: (item) => emitActive('menu.run', { item }),
+      newWindow: () => openAnotherWindow?.('menu'),
+      openExternal: (url) => {
+        if (isAllowedExternalUrl(url)) void shell.openExternal(url);
+      },
+      openLogsFolder: () => {
+        mkdirSync(logs.dir, { recursive: true });
+        void shell.openPath(logs.dir);
+      },
+      track: (item) => telemetry.track('app_menu_used', { item }),
+    },
+    services.store.settings,
+  );
   attachRouter(router, ipcMain, isAppUrl);
   // Paths of files dropped or pasted on a prompt input, sent only by preload (webUtils.getPathForFile).
   attachDropChannel(ipcMain, services, isAppUrl);
@@ -539,19 +557,23 @@ function createWindow(userDataDir: string, from?: BrowserWindow): BrowserWindow 
   return win;
 }
 
-function setMenu(newWindow: () => void): void {
-  if (process.platform === 'darwin') {
-    Menu.setApplicationMenu(
-      Menu.buildFromTemplate([
-        { role: 'appMenu' },
-        // The window's own keymap handles Cmd+Shift+N (app.newWindow); the menu only shows the shortcut.
-        { label: 'File', submenu: [{ label: 'New Window', accelerator: 'CmdOrCtrl+Shift+N', registerAccelerator: false, click: newWindow }] },
-        { role: 'editMenu' },
-        { role: 'viewMenu' },
-        { role: 'windowMenu' },
-      ]),
-    );
-  } else if (app.isPackaged) {
-    Menu.setApplicationMenu(null);
+/**
+ * macOS: the native menu bar (main/app-menu.ts), rebuilt when the user rebinds a key so the shown
+ * shortcuts follow Settings › Keys. Windows and Linux: no menu bar (packaged builds remove
+ * Electron's default; the command bar has every item).
+ */
+function installAppMenu(deps: Omit<AppMenuDeps, 'keybindings'>, settings: Store['settings']): void {
+  if (process.platform !== 'darwin') {
+    if (app.isPackaged) Menu.setApplicationMenu(null);
+    return;
   }
+  let shown = '';
+  const apply = (keybindings: AppMenuDeps['keybindings']) => {
+    const key = JSON.stringify(keybindings);
+    if (key === shown) return;
+    shown = key;
+    Menu.setApplicationMenu(Menu.buildFromTemplate(buildAppMenuTemplate({ ...deps, keybindings })));
+  };
+  apply(settings.get().keybindings);
+  settings.onChange((s) => apply(s.keybindings));
 }
