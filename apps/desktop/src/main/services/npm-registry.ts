@@ -89,8 +89,11 @@ export async function npmrcFor(root: string, file: string, read: (p: string) => 
   return merged;
 }
 
-/** `@scope/name` → `@scope%2fname`, the form the registry's own clients use. */
-const registryPath = (name: string) => name.replace('/', '%2f');
+/**
+ * A package name as one URL path segment: every reserved character encoded (`@scope/name` →
+ * `@scope%2Fname`), the leading `@` of a scope kept as the registry's own clients send it.
+ */
+export const registryPath = (name: string) => encodeURIComponent(name).replace(/^%40/, '@');
 
 /** The dist-tags body (`{ latest: "1.2.3", next: "2.0.0-rc.1" }`) → validated versions, or null. */
 export function toPackageVersions(body: unknown): PackageVersions | null {

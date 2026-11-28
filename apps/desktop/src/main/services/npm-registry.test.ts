@@ -1,6 +1,6 @@
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { isPublicRegistry, npmrcFor, NpmRegistryService, parseNpmrc, toPackageVersions } from './npm-registry.js';
+import { isPublicRegistry, npmrcFor, NpmRegistryService, parseNpmrc, registryPath, toPackageVersions } from './npm-registry.js';
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
@@ -41,6 +41,16 @@ describe('npmrcFor', () => {
   });
 });
 
+describe('registryPath', () => {
+  it('encodes the whole name as one path segment, keeping the scope @', () => {
+    expect(registryPath('react')).toBe('react');
+    expect(registryPath('@types/node')).toBe('@types%2Fnode');
+    // Names are Zod-validated before this, but nothing can still split the path.
+    expect(registryPath('@a/b/c')).toBe('@a%2Fb%2Fc');
+    expect(registryPath('a?b#c')).toBe('a%3Fb%23c');
+  });
+});
+
 describe('toPackageVersions', () => {
   it('validates the dist-tags', () => {
     expect(toPackageVersions({ latest: '1.2.3', next: '2.0.0-rc.1', bad: 'nope', n: 5 })).toEqual({ latest: '1.2.3', tags: { latest: '1.2.3', next: '2.0.0-rc.1' } });
@@ -63,7 +73,7 @@ describe('NpmRegistryService', () => {
     const fetchFn = vi.fn(async (url: string | URL | Request) => {
       const u = String(url);
       if (u.endsWith('/-/package/react/dist-tags')) return json({ latest: '19.1.0' });
-      if (u.endsWith('/-/package/@types%2fnode/dist-tags')) return json({ latest: '24.0.0', next: '25.0.0-beta.1' });
+      if (u.endsWith('/-/package/@types%2Fnode/dist-tags')) return json({ latest: '24.0.0', next: '25.0.0-beta.1' });
       return json({ error: 'not found' }, 404);
     });
     const svc = new NpmRegistryService({ fetch: fetchFn as typeof fetch, enabled: () => true, read: noRc });
