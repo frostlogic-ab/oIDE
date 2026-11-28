@@ -305,7 +305,10 @@ export default function ReviewScreen() {
         {file ? (
           <>
             <div className="flex items-center gap-2.5 px-5 py-3 border-b border-line flex-wrap">
-              <h2 className="m-0 font-mono font-normal text-[12.5px] flex-1 min-w-0 truncate">
+              <h2
+                className="m-0 font-mono font-normal text-[12.5px] flex-1 min-w-0 truncate"
+                title={file.status === 'renamed' && file.oldPath ? `${file.oldPath} → ${file.path}` : file.path}
+              >
                 {file.status === 'renamed' && file.oldPath ? `${file.oldPath} → ` : ''}
                 {file.path}
                 {file.status === 'added' && <span className="sr-only"> (new file)</span>}
