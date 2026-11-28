@@ -238,9 +238,11 @@ loads initial state; `not_implemented` answers resolve to empty state without co
 `projects.changed`, and once after local midnight (tokens today roll over without an event); there is no
 fixed-interval polling. `connectKeybindings` (`lib/keybindings.ts`) loads keyboard rebinds from Settings.
 
-**Toasts** (`components/frame/Toasts.tsx`, `stores/ui.ts`): bottom-left, right of the rail and 12px above the
+**Toasts** (`components/frame/Toasts.tsx`, `stores/ui.ts`): dark raised cards (`bg-raised`, radius 10) with a
+status icon and matching border per level (info accent, success green, warning amber, error red; [ADR 0022](../../adr/0022-dark-toasts.md)),
+kit buttons and a close icon button (`Dismiss: <message>`). Bottom-left, right of the rail and 12px above the
 status bar, so they never cover a screen's action column. Info and success leave after 5 s, warnings after
-10 s, errors stay until Dismiss (`TOAST_DURATION`); hover or focus holds one. A repeat of the same toast
+10 s, errors stay until dismissed (`TOAST_DURATION`); hover or focus holds one. A repeat of the same toast
 (same `key`, or level + agent + message) refreshes it and shows ×N. At most 3 (`MAX_TOASTS`); the oldest
 non-error goes first. `notify` carries an optional `kind` (`needs-permission`, `ready-for-review`,
 `agent-error`) and `requestId`: one toast per agent and kind, and `retireStaleToasts` (subscribed to the

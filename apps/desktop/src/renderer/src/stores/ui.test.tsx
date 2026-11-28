@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { Toasts } from '../components/frame/Toasts';
 import { MAX_TOASTS, retireStaleToasts, toast, useUi } from './ui';
 
@@ -72,6 +72,11 @@ describe('toasts', () => {
     expect(region.className).toMatch(/bottom-\[calc\(var\(--spacing-status\)\+12px\)\]/);
     expect(region.className).not.toMatch(/\bright-/);
     expect(screen.getByRole('alert').textContent).toContain('Push failed');
+    // Dark cards in the app palette; the level is named, not only coloured.
+    expect(screen.getByRole('alert').className).toContain('bg-raised');
+    expect(screen.getByRole('alert').className).toContain('border-bad-line');
+    expect(within(screen.getByRole('alert')).getByRole('img', { name: 'Error' })).toBeTruthy();
+    expect(within(screen.getByRole('status')).queryByRole('img')).toBeNull();
 
     const info = screen.getByRole('status');
     fireEvent.mouseEnter(info);
