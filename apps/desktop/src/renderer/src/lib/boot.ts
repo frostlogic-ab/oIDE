@@ -9,6 +9,7 @@ import { connectSettings, useSettings } from '../stores/settings';
 import { connectNotifications, promptOnScreen, retireStaleToasts } from '../stores/ui';
 import { useRouter } from '../stores/router';
 import { isNotImplemented, oide } from './bridge';
+import { connectAppMenu } from './appMenu';
 import { connectCommands, registerCoreCommands } from './coreCommands';
 import { connectExtensions } from '../extensions/store';
 import { connectKeybindings } from './keybindings';
@@ -98,6 +99,7 @@ export function startStores(): () => void {
     }),
     registerCoreCommands(),
     connectCommands(),
+    connectAppMenu(),
     connectExtensions(),
     connectTelemetry(),
   ];

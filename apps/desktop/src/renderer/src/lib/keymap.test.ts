@@ -240,3 +240,26 @@ describe('mouse back / forward buttons', () => {
     expect(back).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('trigger (the macOS menu bar)', () => {
+  it('runs an action through the active scopes, top first', () => {
+    const km = new Keymap();
+    const low = vi.fn();
+    const high = vi.fn(() => false as const);
+    km.pushScope('app', { 'nav.back': low });
+    km.pushScope('focus', { 'nav.back': high });
+    expect(km.trigger('nav.back')).toBe(true);
+    expect(high).toHaveBeenCalledOnce();
+    expect(low).toHaveBeenCalledOnce();
+  });
+
+  it('returns false when no scope handles the action, and stops at a modal scope', () => {
+    const km = new Keymap();
+    const app = vi.fn();
+    expect(km.trigger('files.terminal')).toBe(false);
+    km.pushScope('app', { 'agent.next': app });
+    km.pushScope('dialog', {}, { modal: true });
+    expect(km.trigger('agent.next')).toBe(false);
+    expect(app).not.toHaveBeenCalled();
+  });
+});

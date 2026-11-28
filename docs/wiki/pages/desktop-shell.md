@@ -277,7 +277,7 @@ placeholders marked `PLACEHOLDER` (the Wall placeholder lists agents with the sh
 
 ### Keymap
 
-`lib/keymap.ts` holds every shortcut in one rebindable map (`DEFAULT_BINDINGS`): J next agent,
+`lib/keymap.ts` holds every shortcut in one rebindable map (`DEFAULT_BINDINGS`, which is `DEFAULT_KEYBINDINGS` from `@oide/protocol` so main's macOS menu bar shows the same keys, see [app-menu](app-menu.md)): J next agent,
 K previous, N next that needs you, Y allow, D deny, Esc back, Mod+K command bar, Mod+Enter send,
 Shift+Tab switch mode, Alt+←/→ history, Mod+Shift+N new window, Mod+Shift+F search in files and Mod+Shift+V Markdown preview / edit (Files screen scope). `Mod` is Cmd on macOS, Ctrl elsewhere. It listens on the
 renderer window only (never OS-global). The mouse's back / forward side buttons (`MouseEvent.button`
@@ -302,6 +302,8 @@ Rebinds live in Settings (`keybindings`: action → combos, only changed actions
 (`portableCombo`: Ctrl on Windows/Linux, Cmd on macOS → `Mod`). Rebinds from older builds' localStorage are
 moved into Settings once. Settings › Keyboard shortcuts is the editor ([screen-settings](screen-settings.md)).
 Extensions' `contributes.commands[].keybinding` are registered with `keymap.define`.
+`keymap.trigger(action)` runs an action through the scopes without a key press (the macOS menu bar's
+Back, Forward, Next Agent and Toggle Terminal); it returns false when no active scope handles it.
 
 ### Command bar
 
