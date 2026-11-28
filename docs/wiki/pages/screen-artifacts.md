@@ -239,12 +239,12 @@ Model, operations and agent tools: [kanban-boards.md](kanban-boards.md). Code: `
   **Start an agent** (Spawn with the ticket, see [kanban-boards.md](kanban-boards.md)),
   **Description** (rendered Markdown with **Edit**: a textarea, Ctrl/Cmd+Enter saves, Esc cancels; a
   note when the description changed meanwhile), **Comments** (author, time, text; delete on hover;
-  Ctrl/Cmd+Enter posts) and Delete card (asks first). Opening another card, closing the card or
-  leaving the board with a description being edited or a comment typed asks **Discard what you
+  Ctrl/Cmd+Enter posts) and Delete card (asks first). Opening another card, closing the card,
+  Start an agent or leaving the board with a description being edited or a comment typed asks **Discard what you
   typed?** (Keep editing / Discard).
 - **Columns and properties** (`BoardSettings.tsx`): a dialog with Properties and Columns tabs.
   Properties: name (saved on blur / Enter), type (a select: changing it converts the values that
-  fit), "On cards", move up / down, delete (says how many
+  fit; when some cards would lose a value it says how many first, with Change type / Cancel), "On cards", move up / down, delete (says how many
   cards lose a value); select options with colour, name and delete, and "New option". Columns: colour,
   name, card count, move, delete (with "Move its N cards to"). Add property (name + type) and Add
   column at the bottom.
