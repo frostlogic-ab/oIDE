@@ -207,7 +207,10 @@ export default function SpawnScreen() {
     atts.attachments.length > 0;
   /** Runs `action` now, or after the user confirms discarding what they entered. */
   const leave = (action: () => void) => {
-    if (dirty && !busy) setPendingLeave({ run: action });
+    // Mid-spawn there is nothing to cancel: `agents.spawn` runs on in main, so closing would only hide
+    // the agents that still appear, and any error with them. Stay until it settles.
+    if (busy) return;
+    if (dirty) setPendingLeave({ run: action });
     else action();
   };
 
@@ -272,7 +275,7 @@ export default function SpawnScreen() {
               Runs <span className="font-mono text-ink-2">claude</span> CLI in its own terminal
             </span>
             <div className="flex-1" />
-            <Button size={36} className="h-[34px]!" onClick={() => leave(cancel)}>
+            <Button size={36} className="h-[34px]!" onClick={() => leave(cancel)} disabled={busy} title={busy ? 'The agent is being spawned' : undefined}>
               Cancel
             </Button>
             <button
@@ -417,7 +420,11 @@ export default function SpawnScreen() {
                 if (p) update({ kind: p.strategy.kind, slots: applyVersions(slotsFromStrategy(p.strategy, form.slots), versions), customPicked: false });
               }}
               options={[
-                ...presets.map((p) => ({ value: p.id, label: p.name, desc: PRESET_HINTS[p.id] ?? p.description, disabled: !strategies.includes(p.strategy.kind) })),
+                ...presets.map((p) => {
+                  // Greyed out without a reason reads as broken: say what is missing.
+                  const off = !strategies.includes(p.strategy.kind);
+                  return { value: p.id, label: p.name, desc: off ? 'Needs a newer claude CLI (subagents).' : (PRESET_HINTS[p.id] ?? p.description), disabled: off };
+                }),
                 { value: 'custom', label: 'Custom', desc: 'Your own mix, set under Advanced.' },
               ]}
               columns={Math.min(4, presets.length + 1)}
