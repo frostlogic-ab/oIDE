@@ -3,7 +3,7 @@ import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { AgentDriver } from '@oide/agent-core';
 import { WorktreeManager, isInside, resolveTool, samePath, setRepoTrustResolver, type GhCli } from '@oide/git';
 import { OideMcpServer, type ArtifactsBackend as McpArtifactsBackend } from '@oide/mcp-server';
-import { boardOpsArea, countBucket, parseBoard, resolveModel, type AgentArtifactFileInput, type ArtifactMeta, type BoardOp, type ModelStrategy, type PermissionMode } from '@oide/protocol';
+import { boardOpsArea, countBucket, parseBoard, resolveModel, serializeBoard, type AgentArtifactFileInput, type ArtifactMeta, type BoardOp, type ModelStrategy, type PermissionMode } from '@oide/protocol';
 import { ArtifactStore, SqliteSecretStore, openStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { CleanupQueue, CleanupScheduler, folderName } from '../reliability/cleanup-queue.js';
@@ -135,16 +135,23 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
   const refuseBoardWrite = (m: ArtifactMeta) => {
     if (m.kind === 'board') throw new Error(`${m.title} is a kanban board: change it with board_update (read it with board_read), not by writing its file.`);
   };
-  /** A board an agent creates holds no agent links and only its own comments. */
-  const checkNewBoard = (agentId: string, input: { kind: string; content?: string; files?: unknown[] }) => {
-    if (input.kind !== 'board') return;
+  /**
+   * A board an agent creates is attributed to that agent, whatever its JSON says: every card and
+   * comment is the agent's (author, name), and no card links an agent. Returns the content to store.
+   */
+  const ownNewBoard = (agentId: string, input: { kind: string; content?: string; files?: unknown[] }): string | undefined => {
+    if (input.kind !== 'board') return input.content;
     if (input.files?.length) throw new Error('A board is one file: give its JSON as content, or leave content out for the default board.');
-    if (input.content === undefined) return;
+    if (input.content === undefined) return undefined;
     const board = parseBoard(input.content);
+    const author = `agent:${agentId}`;
+    const name = extras.agentTitle?.(agentId);
     for (const c of board.cards) {
-      if (c.agents.length) throw new Error('A new board cannot link agents to cards: the user starts agents from a card.');
-      if (c.comments.some((m) => m.author !== `agent:${agentId}`)) throw new Error('A new board can hold only your own comments. Add comments with board_update after creating it.');
+      c.agents = [];
+      c.createdBy = author;
+      c.comments = c.comments.map(({ authorName: _drop, ...m }) => ({ ...m, author, ...(name ? { authorName: name } : {}) }));
     }
+    return serializeBoard(board);
   };
   return {
     files: async (ctx, id) => {
@@ -203,12 +210,12 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
     create: async (ctx, input) => {
       const own = extras.artifactOf?.(ctx.agentId);
       if (own !== undefined) throw new Error(`You are the artifact agent of ${own}: you change only that artifact and cannot create others. Add files to it with artifacts_write instead.`);
-      checkNewBoard(ctx.agentId, input);
+      const content = ownNewBoard(ctx.agentId, input);
       return store.createForAgent(
         {
           title: input.title,
           kind: input.kind,
-          ...(input.content !== undefined ? { content: input.content } : {}),
+          ...(content !== undefined ? { content } : {}),
           ...(input.files?.length ? { files: await decode(ctx.agentId, input.files) } : {}),
           ...(input.entry ? { entry: input.entry } : {}),
           ...(ctx.projectId ? { projectId: ctx.projectId } : {}),

@@ -919,7 +919,10 @@ export class ArtifactStore {
       const plan = this.planOf(files);
       const paths = files.map((f) => f.path);
       let kind = cur.kind;
-      if (internal.autoKind) kind = o.kind ?? (o.entry ? kindOfEntry(o.entry) : undefined) ?? (pickEntry(cur.kind, paths) ? cur.kind : (['design', 'doc', 'board', 'whiteboard'] as const).find((k) => pickEntry(k, paths))) ?? cur.kind;
+      if (internal.autoKind) kind = o.kind ?? (o.entry ? kindOfEntry(o.entry) : undefined) ?? (pickEntry(cur.kind, paths) ? cur.kind : (['design', 'doc', 'whiteboard'] as const).find((k) => pickEntry(k, paths))) ?? cur.kind;
+      // Files handed over by an agent never make a board: boards change only through their operations
+      // (ADR 0022), which keep comment authors and agent links honest.
+      if (kind === 'board') throw new ArtifactError('A retrieval cannot create or replace a kanban board.', 'invalid_input', 'wrong_kind');
       const entry = o.entry ?? pickEntry(kind, paths);
       if (!entry) throw new ArtifactError(`None of the files can open the ${kind}: ${kind === 'design' ? 'no HTML page or React component' : kind === 'doc' ? 'no Markdown file' : 'no Excalidraw file'}.`, 'invalid_input', 'wrong_kind');
       const title = internal.autoTitle ? (cleanTitle(o.title) ?? cur.title) : cur.title;
