@@ -11,7 +11,7 @@ import { oide } from '../../lib/bridge';
 
 const SITE_URL = 'https://getoide.com';
 
-/** 44px title bar: logo (opens getoide.com in the system browser), the Update button when an update is ready, title/breadcrumb slot or command-bar trigger, scope switcher, actions slot. No agent counters: the Wall already shows them. */
+/** 44px title bar: logo (opens getoide.com in the system browser), the Update button when an update is ready, title/breadcrumb slot and/or command-bar trigger, scope switcher, actions slot. No agent counters: the Wall already shows them. */
 export function Header({ def }: { def: ScreenDef }) {
   const setSlot = useUi((s) => s.setHeaderSlot);
   const titleRef = useCallback((el: HTMLDivElement | null) => setSlot('title', el), [setSlot]);
@@ -40,7 +40,7 @@ export function Header({ def }: { def: ScreenDef }) {
         <CommandTrigger />
       ) : (
         <>
-          <div className="flex-1" />
+          {def.commandTrigger ? <CommandTrigger label={def.commandTrigger} /> : <div className="flex-1" />}
           {def.scopeSwitcher && <ScopeSwitcher />}
         </>
       )}
@@ -50,7 +50,8 @@ export function Header({ def }: { def: ScreenDef }) {
   );
 }
 
-function CommandTrigger() {
+/** Opens the command bar (quick open, commands, sessions). `label` is the placeholder text shown in the trigger. */
+function CommandTrigger({ label = 'Spawn an agent, jump to a session, or run a command' }: { label?: string }) {
   const open = useUi((s) => s.openCommandBar);
   const shortcut = useShortcutLabel('commandBar.open');
   return (
@@ -59,10 +60,10 @@ function CommandTrigger() {
       onClick={() => open()}
       aria-haspopup="dialog"
       aria-keyshortcuts={shortcut.replace(' ', '+')}
-      className="flex-[1_1_320px] max-w-[560px] mx-auto h-[30px] flex items-center gap-2 px-3 bg-card border border-line-2 rounded-md text-ink-3 text-[13px] text-left hover:border-line-3"
+      className="flex-[1_1_320px] min-w-0 max-w-[560px] mx-auto h-[30px] flex items-center gap-2 px-3 bg-card border border-line-2 rounded-md text-ink-3 text-[13px] text-left hover:border-line-3"
     >
       <Icon name="search" />
-      <span className="flex-1 truncate">Spawn an agent, jump to a session, or run a command</span>
+      <span className="flex-1 truncate">{label}</span>
       <Kbd className="text-[11px]! px-1.5! py-0.5!">{shortcut}</Kbd>
     </button>
   );

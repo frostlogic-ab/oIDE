@@ -6,7 +6,8 @@ Code: `apps/desktop/src/renderer/src/screens/Files/`. Shares the git store with
 
 ## Layout
 
-- Header: title + shared scope switcher; on the right a "Search" button (`aria-pressed`, Ctrl/Cmd+Shift+F
+- Header: title, the command-bar trigger ("Search files, run a command, or jump to a session",
+  opens Ctrl/Cmd+K quick open, see [Quick open](#quick-open)) + shared scope switcher; on the right a "Search" button (`aria-pressed`, Ctrl/Cmd+Shift+F
   hint) that toggles the Search panel, and a "Terminal" button (`aria-pressed`, Ctrl+` on every
   platform, keymap action `files.terminal`) that shows or hides the terminal panel.
 - Left (270px, "File tree", `TreePanel.tsx`): a toolbar ("FILES" label; 28px icon buttons Search in
