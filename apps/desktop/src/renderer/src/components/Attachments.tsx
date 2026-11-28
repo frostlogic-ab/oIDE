@@ -192,8 +192,10 @@ export function AttachFileButton({ state, disabled, size = 30, variant = 'icon' 
 /**
  * Removable chips for pending attachments: a thumbnail for images, a file icon otherwise, with the
  * name (truncated, full name in the tooltip) and the size. `compact` is the Wall tile's one-line row.
+ * Clicking an image's thumbnail opens it at full size.
  */
 export function AttachmentTray({ state, compact = false, className }: { state: AttachmentsState; compact?: boolean; className?: string }) {
+  const preview = useImagePreview(state);
   if (!state.items.length && !state.error) return null;
   return (
     <div className={`flex flex-col gap-1 min-w-0 ${className ?? ''}`}>
@@ -205,7 +207,9 @@ export function AttachmentTray({ state, compact = false, className }: { state: A
             return (
               <li key={key} title={a.kind === 'file' ? `${name} · ${size} · ${a.path}` : `${name} · ${size}`} className={`shrink-0 inline-flex items-center gap-1.5 rounded-[8px] border border-line-3 bg-raised pl-1 pr-0.5 ${compact ? 'h-6 max-w-[160px]' : 'h-[30px] max-w-[240px]'}`}>
                 {a.kind === 'image' ? (
-                  <img src={imageSrc(a)} alt="" className={`${compact ? 'w-4 h-4' : 'w-[22px] h-[22px]'} rounded-[4px] object-cover bg-chrome`} />
+                  <button type="button" aria-label={`Preview ${name}`} onClick={() => preview.open(key)} className="shrink-0 p-0 border-0 bg-transparent rounded-[4px] cursor-zoom-in hover:opacity-80">
+                    <img src={imageSrc(a)} alt="" className={`block ${compact ? 'w-4 h-4' : 'w-[22px] h-[22px]'} rounded-[4px] object-cover bg-chrome`} />
+                  </button>
                 ) : (
                   <Icon name="file" size={compact ? 12 : 14} className="text-ink-3 mx-0.5" />
                 )}
@@ -233,11 +237,41 @@ export function AttachmentTray({ state, compact = false, className }: { state: A
           </button>
         </div>
       )}
+      {preview.dialog}
     </div>
   );
 }
 
 /** Thumbnails and file chips under a sent user message (Focus transcript); images open larger on click. */
+type ImageAttachment = Extract<MessageAttachment, { kind: 'image' }>;
+
+/**
+ * The image at full size in a dialog, titled with its name and size. Portaled to <body>: callers sit in
+ * transformed (virtualized) lists or inside another dialog, which would clip or stack a fixed overlay.
+ * Esc closes only this dialog, not one it was opened from.
+ */
+export function ImagePreviewDialog({ image, onClose }: { image: ImageAttachment; onClose: () => void }) {
+  return createPortal(
+    <Dialog open onClose={onClose} title={attachmentName(image)} description={formatSize(attachmentBytes(image))} width={960} showClose>
+      <div className="flex justify-center">
+        <img src={imageSrc(image)} alt={attachmentName(image)} className="max-w-full max-h-[70vh] object-contain rounded-[6px]" />
+      </div>
+    </Dialog>,
+    document.body,
+  );
+}
+
+/** Which pending image (by item key) is open in the preview; `null` when none. */
+export function useImagePreview(state: AttachmentsState | undefined) {
+  const [key, setKey] = useState<string | null>(null);
+  const item = key ? state?.items.find((i) => i.key === key) : undefined;
+  const image = item?.attachment.kind === 'image' ? item.attachment : undefined;
+  return {
+    open: setKey,
+    dialog: image ? <ImagePreviewDialog image={image} onClose={() => setKey(null)} /> : null,
+  };
+}
+
 export function MessageAttachments({ attachments }: { attachments: readonly MessageAttachment[] }) {
   const [open, setOpen] = useState<number | null>(null);
   const shown = open !== null ? attachments[open] : undefined;
@@ -263,16 +297,7 @@ export function MessageAttachments({ attachments }: { attachments: readonly Mess
           </span>
         ),
       )}
-      {/* Portaled: transcript rows sit in a transformed (virtualized) list, which would clip a fixed dialog. */}
-      {shown?.kind === 'image' &&
-        createPortal(
-          <Dialog open onClose={() => setOpen(null)} title={attachmentName(shown)} description={formatSize(attachmentBytes(shown))} width={960} showClose>
-            <div className="flex justify-center">
-              <img src={imageSrc(shown)} alt={attachmentName(shown)} className="max-w-full max-h-[70vh] object-contain rounded-[6px]" />
-            </div>
-          </Dialog>,
-          document.body,
-        )}
+      {shown?.kind === 'image' && <ImagePreviewDialog image={shown} onClose={() => setOpen(null)} />}
     </div>
   );
 }

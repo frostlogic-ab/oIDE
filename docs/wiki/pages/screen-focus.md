@@ -107,7 +107,8 @@ Focus composer, Wall question reply and Spawn's goal share `components/Attachmen
   input: images the same way, other files through preload's `attachDropped` (below). **Attach file**
   (paperclip): `dialog.pickFiles`, the native multi-file picker.
 - Chips: thumbnail (images) or file icon, name (truncated; full name and path in the tooltip), size, remove
-  button. Limits, checked here and again in main: images at most 5 MB each and 20 MB together, files at most
+  button. Clicking an image's thumbnail opens it at full size in `ImagePreviewDialog` (portaled; Esc closes only
+  the preview, so the Spawn dialog under it stays open). The same dialog opens sent images in the transcript. Limits, checked here and again in main: images at most 5 MB each and 20 MB together, files at most
   25 MB, at most 10 per message; a refusal shows under the input (`role="alert"`).
 - Sending: `UserMessage` `text` (and `artifact`) carry `attachments`; a send with only attachments says
   "See the attached image.". A message with attachments is never a slash command. Spawn sends them as
@@ -167,6 +168,7 @@ subagent view and Stop subagent, compact confirm, J and Esc). Virtualized rows d
 the Playwright check covers them.
 
 Slash menu and attachments: `lib/slash.test.ts` (grouping, labels, scoring, filter order),
+`components/Attachments.test.tsx` (pending image preview from the tray and the Spawn context row),
 `components/SlashMenu.test.tsx` (~100 commands, rows, ARIA, filter and count, arrows/Page/Home/End with scroll
 into view, Enter/Tab insert, Esc, hover and click), `Focus.test.tsx` (pasted screenshot sent as an image
 attachment, 5 MB refusal, Attach file), `main/services/attachments.test.ts` (picked or worktree paths only, image
