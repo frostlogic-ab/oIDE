@@ -3,7 +3,7 @@ import { extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import type { AgentDriver } from '@oide/agent-core';
 import { WorktreeManager, isInside, resolveTool, samePath, setRepoTrustResolver, type GhCli } from '@oide/git';
 import { OideMcpServer, type ArtifactsBackend as McpArtifactsBackend } from '@oide/mcp-server';
-import { boardOpsArea, countBucket, resolveModel, type AgentArtifactFileInput, type ArtifactMeta, type BoardOp, type ModelStrategy, type PermissionMode } from '@oide/protocol';
+import { boardOpsArea, countBucket, parseBoard, resolveModel, type AgentArtifactFileInput, type ArtifactMeta, type BoardOp, type ModelStrategy, type PermissionMode } from '@oide/protocol';
 import { ArtifactStore, SqliteSecretStore, openStore, type Store } from '@oide/store';
 import type { MainContext } from '../context.js';
 import { CleanupQueue, CleanupScheduler, folderName } from '../reliability/cleanup-queue.js';
@@ -128,6 +128,24 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
     if (!r) throw new Error('Artifact retrieval is not available.');
     return r;
   };
+  /**
+   * Boards change only through board_update (ADR 0022): a raw write of board.json could sign a comment
+   * as the user or another agent, or link agents to cards.
+   */
+  const refuseBoardWrite = (m: ArtifactMeta) => {
+    if (m.kind === 'board') throw new Error(`${m.title} is a kanban board: change it with board_update (read it with board_read), not by writing its file.`);
+  };
+  /** A board an agent creates holds no agent links and only its own comments. */
+  const checkNewBoard = (agentId: string, input: { kind: string; content?: string; files?: unknown[] }) => {
+    if (input.kind !== 'board') return;
+    if (input.files?.length) throw new Error('A board is one file: give its JSON as content, or leave content out for the default board.');
+    if (input.content === undefined) return;
+    const board = parseBoard(input.content);
+    for (const c of board.cards) {
+      if (c.agents.length) throw new Error('A new board cannot link agents to cards: the user starts agents from a card.');
+      if (c.comments.some((m) => m.author !== `agent:${agentId}`)) throw new Error('A new board can hold only your own comments. Add comments with board_update after creating it.');
+    }
+  };
   return {
     files: async (ctx, id) => {
       requireVisible(ctx, id);
@@ -140,6 +158,7 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
     writeFiles: async (ctx, id, change) => {
       requireWritable(ctx.agentId, id);
       const m = requireVisible(ctx, id);
+      refuseBoardWrite(m);
       const files = await decode(ctx.agentId, change.files);
       if (change.content !== undefined) files.push({ path: change.entry ?? m.entry, encoding: 'base64', data: Buffer.from(change.content, 'utf8').toString('base64') });
       return store.writeFilesForAgent(id, { files, ...(change.deletes ? { deletes: change.deletes } : {}), ...(change.entry ? { entry: change.entry } : {}), ...(change.note ? { note: change.note } : {}) }, ctx.agentId);
@@ -160,7 +179,9 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
     },
     write: async (ctx, id, content) => {
       requireWritable(ctx.agentId, id);
-      if (!visible(ctx, (await store.read(id)).meta)) throw new Error(hidden(id));
+      const m = (await store.read(id)).meta;
+      if (!visible(ctx, m)) throw new Error(hidden(id));
+      refuseBoardWrite(m);
       return store.write(id, content, ctx.agentId);
     },
     readBoard: async (ctx, id) => {
@@ -182,6 +203,7 @@ export function mcpArtifacts(store: ArtifactStore, trusted: (projectId: string) 
     create: async (ctx, input) => {
       const own = extras.artifactOf?.(ctx.agentId);
       if (own !== undefined) throw new Error(`You are the artifact agent of ${own}: you change only that artifact and cannot create others. Add files to it with artifacts_write instead.`);
+      checkNewBoard(ctx.agentId, input);
       return store.createForAgent(
         {
           title: input.title,

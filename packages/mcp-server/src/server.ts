@@ -117,7 +117,8 @@ const FinishInput = z.object({
   reason: z.string().max(2000).optional(),
   entry: ArtifactPath.optional(),
   title: z.string().max(200).optional(),
-  kind: ArtifactKind.optional(),
+  // A retrieval brings claude.ai files: never a board (boards change only through board_update, ADR 0022).
+  kind: ArtifactKind.exclude(['board']).optional(),
 });
 
 /** JSON schema of one file handed to oIDE (AgentArtifactFileInput). */

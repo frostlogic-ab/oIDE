@@ -392,7 +392,7 @@ function ArtifactsList({ agent, events }: { agent: AgentSummary; events: readonl
               <span className="flex flex-col gap-0.5 min-w-0">
                 <span className="font-semibold truncate">{a.title}</span>
                 <span className="text-[11.5px] text-ink-3">
-                  {a.kind === 'design' ? 'Design' : a.kind === 'doc' ? 'Doc' : 'Whiteboard'} · {ops.join(', ')}
+                  {a.kind === 'design' ? 'Design' : a.kind === 'doc' ? 'Doc' : a.kind === 'board' ? 'Board' : 'Whiteboard'} · {ops.join(', ')}
                 </span>
               </span>
             </button>
