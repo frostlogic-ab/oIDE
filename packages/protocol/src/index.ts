@@ -12,6 +12,7 @@ export * from './search.js';
 export * from './scripts.js';
 export * from './lsp.js';
 export * from './windows.js';
+export * from './menu.js';
 export * from './telemetry.js';
 export * from './usage.js';
 export * from './ipc.js';

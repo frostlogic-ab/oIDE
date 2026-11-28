@@ -10,7 +10,7 @@ Shell: [desktop-shell](desktop-shell.md). Telemetry: [telemetry](telemetry.md).
 | --- | --- | --- |
 | Any window | Ctrl/Cmd+Shift+N (`app.newWindow` keymap action, rebindable) | `shortcut` |
 | Command bar | "New window" (`oide.newWindow`) | `command` |
-| macOS menu bar | File › New Window | `menu` |
+| macOS menu bar ([app-menu](app-menu.md)) | File › New Window | `menu` |
 | macOS Dock | right-click › New Window | `dock` |
 | Windows taskbar | right-click › New window (jump list task, installed builds; runs `oIDE.exe --oide-new-window`) | `taskbar` |
 | Starting oIDE again | Start menu, desktop shortcut, a second `pnpm dev` | `relaunch` |

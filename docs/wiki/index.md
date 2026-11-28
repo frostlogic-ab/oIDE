@@ -35,6 +35,7 @@ one file per entry (entries up to 2026-11-27 are in the frozen [log.md](log.md))
 - [pages/marketplace.md](pages/marketplace.md): the static index, install flow, Add custom.
 - [pages/artifacts.md](pages/artifacts.md): local artifacts, kinds, versions, MCP tools, claude.ai import rules (never without content), React design preview.
 - [pages/desktop-shell.md](pages/desktop-shell.md): Electron main, preload bridge, renderer shell, keymap.
+- [pages/app-menu.md](pages/app-menu.md): the native macOS menu bar (oIDE, File, Edit, View, Agent, Window, Help): items, shortcuts that follow Settings › Keys, how items reach the window; no menu bar on Windows/Linux.
 - [pages/windows.md](pages/windows.md): several windows on one profile: how to open them, what is shared and what is per window, the active window.
 - [pages/security.md](pages/security.md): hardening, trust, bypass guard rails, credential test.
 - [pages/reliability.md](pages/reliability.md): crash isolation, rotating redacted logs, opt-in local crash reports, DB recovery, Windows cleanup, diagnostics.

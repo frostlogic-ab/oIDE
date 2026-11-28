@@ -4,6 +4,7 @@ import { ArtifactKind } from './artifacts.js';
 import { ScriptRunner } from './scripts.js';
 import { UpdateChannel, UpdateInstallTrigger } from './updates.js';
 import { WindowOpenTrigger } from './windows.js';
+import { AppMenuItem } from './menu.js';
 
 /**
  * Opt-in usage analytics and error reports (docs/wiki/pages/telemetry.md, ADR 0011).
@@ -673,6 +674,11 @@ export const TELEMETRY_EVENTS = {
     from: 'main',
     question: 'Which CLI stream-json events does oIDE not understand yet (protocol drift)?',
     props: z.object({ event_type: CliEventType, count: z.number().int().min(1).max(1_000_000) }),
+  }),
+  app_menu_used: def({
+    from: 'main',
+    question: 'Which macOS menu bar items do people use, and which are never opened?',
+    props: z.object({ item: AppMenuItem }),
   }),
   command_palette_used: def({
     from: 'renderer',

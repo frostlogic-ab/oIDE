@@ -14,6 +14,8 @@
  *   the same scopes, so they go to the previous screen like Alt+Left / Alt+Right.
  */
 
+import { DEFAULT_KEYBINDINGS } from '@oide/protocol';
+
 export type ActionId =
   | 'agent.next'
   | 'agent.prev'
@@ -28,24 +30,8 @@ export type ActionId =
   | 'nav.forward'
   | (string & {});
 
-export const DEFAULT_BINDINGS: Readonly<Record<string, readonly string[]>> = {
-  'agent.next': ['J'],
-  'agent.prev': ['K'],
-  'agent.nextNeedsYou': ['N'],
-  'permission.allow': ['Y'],
-  'permission.deny': ['D'],
-  'view.back': ['Escape'],
-  'commandBar.open': ['Mod+K'],
-  'composer.send': ['Mod+Enter'],
-  'agent.cycleMode': ['Shift+Tab'],
-  'nav.back': ['Alt+ArrowLeft'],
-  'nav.forward': ['Alt+ArrowRight'],
-  'app.newWindow': ['Mod+Shift+N'],
-  'files.search': ['Mod+Shift+F'],
-  // As in VS Code: Ctrl+` on every platform (Cmd+` cycles windows on macOS).
-  'files.terminal': ['Ctrl+`'],
-  'files.togglePreview': ['Mod+Shift+V'],
-};
+/** Built-in shortcuts; shared with main so the macOS menu bar shows the same keys. */
+export const DEFAULT_BINDINGS: Readonly<Record<string, readonly string[]>> = DEFAULT_KEYBINDINGS;
 
 export const ACTION_LABELS: Readonly<Record<string, string>> = {
   'agent.next': 'Next agent',
@@ -341,6 +327,14 @@ export class Keymap {
     if (isEditableTarget(e.target) && !isChorded(e)) return false;
     const combo = comboFromEvent(e);
     return this.dispatch(this.actionsFor(combo), e);
+  }
+
+  /**
+   * Run an action as if its key was pressed, through the same scopes (the macOS menu bar uses this,
+   * lib/appMenu.ts). Returns false when no active scope handles it.
+   */
+  trigger(action: ActionId): boolean {
+    return this.dispatch([action], { key: '', ctrlKey: false, metaKey: false, altKey: false, shiftKey: false, target: null, preventDefault: () => {} });
   }
 
   /**
